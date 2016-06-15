@@ -26,7 +26,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.maxPrecisionForBytes
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.maxPrecisionForBytes
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -52,7 +52,7 @@ import org.apache.spark.sql.types._
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
  */
-private[parquet] class CatalystSchemaConverter(
+private[parquet] class ParquetSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get) {
@@ -125,7 +125,7 @@ private[parquet] class CatalystSchemaConverter(
       val precision = field.getDecimalMetadata.getPrecision
       val scale = field.getDecimalMetadata.getScale
 
-      CatalystSchemaConverter.checkConversionRequirement(
+      ParquetSchemaConverter.checkConversionRequirement(
         maxPrecision == -1 || 1 <= precision && precision <= maxPrecision,
         s"Invalid decimal precision: $typeName cannot store $precision digits (max $maxPrecision)")
 
@@ -163,7 +163,7 @@ private[parquet] class CatalystSchemaConverter(
         }
 
       case INT96 =>
-        CatalystSchemaConverter.checkConversionRequirement(
+        ParquetSchemaConverter.checkConversionRequirement(
           assumeInt96IsTimestamp,
           "INT96 is not supported unless it's interpreted as timestamp. " +
             s"Please try to set ${SQLConf.PARQUET_INT96_AS_TIMESTAMP.key} to true.")
@@ -206,11 +206,11 @@ private[parquet] class CatalystSchemaConverter(
       //
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
       case LIST =>
-        CatalystSchemaConverter.checkConversionRequirement(
+        ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1, s"Invalid list type $field")
 
         val repeatedType = field.getType(0)
-        CatalystSchemaConverter.checkConversionRequirement(
+        ParquetSchemaConverter.checkConversionRequirement(
           repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
 
         if (isElementType(repeatedType, field.getName)) {
@@ -226,17 +226,17 @@ private[parquet] class CatalystSchemaConverter(
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
       // scalastyle:on
       case MAP | MAP_KEY_VALUE =>
-        CatalystSchemaConverter.checkConversionRequirement(
+        ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1 && !field.getType(0).isPrimitive,
           s"Invalid map type: $field")
 
         val keyValueType = field.getType(0).asGroupType()
-        CatalystSchemaConverter.checkConversionRequirement(
+        ParquetSchemaConverter.checkConversionRequirement(
           keyValueType.isRepetition(REPEATED) && keyValueType.getFieldCount == 2,
           s"Invalid map type: $field")
 
         val keyType = keyValueType.getType(0)
-        CatalystSchemaConverter.checkConversionRequirement(
+        ParquetSchemaConverter.checkConversionRequirement(
           keyType.isPrimitive,
           s"Map key type is expected to be a primitive type, but found: $keyType")
 
@@ -311,7 +311,7 @@ private[parquet] class CatalystSchemaConverter(
     Types
       .buildMessage()
       .addFields(catalystSchema.map(convertField): _*)
-      .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+      .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
   }
 
   /**
@@ -322,7 +322,7 @@ private[parquet] class CatalystSchemaConverter(
   }
 
   private def convertField(field: StructField, repetition: Type.Repetition): Type = {
-    CatalystSchemaConverter.checkFieldName(field.name)
+    ParquetSchemaConverter.checkFieldName(field.name)
 
     field.dataType match {
       // ===================
@@ -394,7 +394,7 @@ private[parquet] class CatalystSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
+          .length(ParquetSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
 
       // ========================
@@ -428,7 +428,7 @@ private[parquet] class CatalystSchemaConverter(
           .as(DECIMAL)
           .precision(precision)
           .scale(scale)
-          .length(CatalystSchemaConverter.minBytesForPrecision(precision))
+          .length(ParquetSchemaConverter.minBytesForPrecision(precision))
           .named(field.name)
 
       // ===================================
@@ -535,7 +535,7 @@ private[parquet] class CatalystSchemaConverter(
   }
 }
 
-private[parquet] object CatalystSchemaConverter {
+private[parquet] object ParquetSchemaConverter {
   val SPARK_PARQUET_SCHEMA_NAME = "spark_schema"
 
   // !! HACK ALERT !!
@@ -551,7 +551,7 @@ private[parquet] object CatalystSchemaConverter {
   val EMPTY_MESSAGE = Types
       .buildMessage()
       .required(PrimitiveType.PrimitiveTypeName.INT32).named("dummy")
-      .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+      .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
   EMPTY_MESSAGE.getFields.clear()
 
   def checkFieldName(name: String): Unit = {
