@@ -114,7 +114,7 @@ object SQLConf {
     .createWithDefault(10L * 1024 * 1024)
 
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
-    SQLConfigBuilder("spark.sql.enableFallBackToHdfsForStats")
+    SQLConfigBuilder("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
       " This is useful in determining if a table is small enough to use auto broadcast joins.")
     .booleanConf
