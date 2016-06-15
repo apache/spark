@@ -264,6 +264,9 @@ class SparkContext(object):
                 else:
                     SparkContext._active_spark_context = instance
 
+        cls.__ensure_callback_server()
+
+    def __ensure_callback_server(self):
         gw = SparkContext._gateway
 
         # start callback server

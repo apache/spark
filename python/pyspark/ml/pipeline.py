@@ -15,21 +15,63 @@
 # limitations under the License.
 #
 
-import sys
-
-if sys.version > '3':
-    basestring = str
-
-from pyspark import since, keyword_only, SparkContext
-from pyspark.ml import Estimator, Model, Transformer
+from pyspark import SparkContext
+from pyspark import keyword_only, since
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
-from pyspark.ml.wrapper import JavaParams
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.util import MLReadable, MLWritable
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.mllib.common import inherit_doc, _py2java, _java2py
+
+
+class PipelineWrapper(object):
+    """
+    A pipeline wrapper for :py:class:`Pipeline` and :py:class:`PipelineModel` supports transferring
+    the array of pipeline stages between Python side and Scala side.
+    """
+
+    def _transfer_stages_to_java(self, py_stages):
+        """
+        Transforms the parameter of Python stages to a list of Java stages.
+        """
+
+        def __transfer_stage_to_java(py_stage):
+            py_stage._transfer_params_to_java()
+            return py_stage._java_obj
+
+        return [__transfer_stage_to_java(stage) for stage in py_stages]
+
+    @staticmethod
+    def __get_class(clazz):
+        """
+        Loads class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
+
+    def _transfer_stages_from_java(self, java_sc, java_stages):
+        """
+        Transforms the parameter Python stages from a list of Java stages.
+        """
+
+        def __transfer_stage_from_java(java_stage):
+            stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
+            # Generate a default new instance from the stage_name class.
+            py_stage = self.__get_class(stage_name)()
+            # Load information from java_stage to the instance.
+            py_stage._java_obj = java_stage
+            py_stage._resetUid(_java2py(java_sc, java_stage.uid()))
+            py_stage._transfer_params_from_java()
+            return py_stage
+
+        return [__transfer_stage_from_java(stage) for stage in java_stages]
 
 
 @inherit_doc
-class Pipeline(Estimator, MLReadable, MLWritable):
+class Pipeline(PipelineWrapper, JavaEstimator, MLReadable, MLWritable):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
     of a sequence of stages, each of which is either an
@@ -42,10 +84,68 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     stage. If a stage is a :py:class:`Transformer`, its
     :py:meth:`Transformer.transform` method will be called to produce
     the dataset for the next stage. The fitted model from a
-    :py:class:`Pipeline` is a :py:class:`PipelineModel`, which
+    :py:class:`Pipeline` is an :py:class:`PipelineModel`, which
     consists of fitted models and transformers, corresponding to the
     pipeline stages. If there are no stages, the pipeline acts as an
     identity transformer.
+
+    >>> from pyspark.ml.feature import HashingTF
+    >>> from pyspark.ml.feature import PCA
+    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+    >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
+    >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
+    >>> pl = Pipeline(stages=[hashingTF, pca])
+    >>> model = pl.fit(df)
+    >>> transformed = model.transform(df)
+    >>> transformed.head().words == ["a", "b", "c"]
+    True
+    >>> transformed.head().features
+    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    >>> transformed.head().pca_features
+    DenseVector([1.0, 0.5774])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> pl.save(featurePath)
+    >>> loadedPipeline = Pipeline.load(featurePath)
+    >>> loadedPipeline.uid == pl.uid
+    True
+    >>> len(loadedPipeline.getStages())
+    2
+    >>> [loadedHT, loadedPCA] = loadedPipeline.getStages()
+    >>> type(loadedHT)
+    <class 'pyspark.ml.feature.HashingTF'>
+    >>> type(loadedPCA)
+    <class 'pyspark.ml.feature.PCA'>
+    >>> loadedHT.uid == hashingTF.uid
+    True
+    >>> param = loadedHT.getParam("numFeatures")
+    >>> loadedHT.getOrDefault(param) == hashingTF.getOrDefault(param)
+    True
+    >>> loadedPCA.uid == pca.uid
+    True
+    >>> loadedPCA.getK() == pca.getK()
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = PipelineModel.load(modelPath)
+    >>> [hashingTFinModel, pcaModel] = model.stages
+    >>> [loadedHTinModel, loadedPCAModel] = loadedModel.stages
+    >>> hashingTFinModel.uid == loadedHTinModel.uid
+    True
+    >>> hashingTFinModel.getOrDefault(param) == loadedHTinModel.getOrDefault(param)
+    True
+    >>> pcaModel.uid == loadedPCAModel.uid
+    True
+    >>> pcaModel.pc == loadedPCAModel.pc
+    True
+    >>> pcaModel.explainedVariance == loadedPCAModel.explainedVariance
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -57,29 +157,10 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         __init__(self, stages=None)
         """
-        if stages is None:
-            stages = []
         super(Pipeline, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
-
-    @since("1.3.0")
-    def setStages(self, value):
-        """
-        Set pipeline stages.
-
-        :param value: a list of transformers or estimators
-        :return: the pipeline instance
-        """
-        return self._set(stages=value)
-
-    @since("1.3.0")
-    def getStages(self):
-        """
-        Get pipeline stages.
-        """
-        if self.stages in self._paramMap:
-            return self._paramMap[self.stages]
 
     @keyword_only
     @since("1.3.0")
@@ -93,167 +174,99 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    def _fit(self, dataset):
-        stages = self.getStages()
-        for stage in stages:
-            if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise TypeError(
-                    "Cannot recognize a pipeline stage of type %s." % type(stage))
-        indexOfLastEstimator = -1
-        for i, stage in enumerate(stages):
-            if isinstance(stage, Estimator):
-                indexOfLastEstimator = i
-        transformers = []
-        for i, stage in enumerate(stages):
-            if i <= indexOfLastEstimator:
-                if isinstance(stage, Transformer):
-                    transformers.append(stage)
-                    dataset = stage.transform(dataset)
-                else:  # must be an Estimator
-                    model = stage.fit(dataset)
-                    transformers.append(model)
-                    if i < indexOfLastEstimator:
-                        dataset = model.transform(dataset)
-            else:
-                transformers.append(stage)
-        return PipelineModel(transformers)
-
-    @since("1.4.0")
-    def copy(self, extra=None):
+    @since("1.3.0")
+    def setStages(self, value):
         """
-        Creates a copy of this instance.
+        Set pipeline stages.
 
-        :param extra: extra parameters
-        :returns: new instance
+        :param value: a list of transformers or estimators
+        :return: the pipeline instance
         """
-        if extra is None:
-            extra = dict()
-        that = Params.copy(self, extra)
-        stages = [stage.copy(extra) for stage in that.getStages()]
-        return that.setStages(stages)
+        self._paramMap[self.stages] = value
+        return self
 
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
-
-    @classmethod
-    def _from_java(cls, java_stage):
+    @since("1.3.0")
+    def getStages(self):
         """
-        Given a Java Pipeline, create and return a Python wrapper of it.
-        Used for ML persistence.
+        Get pipeline stages.
         """
-        # Create a new instance of this stage.
-        py_stage = cls()
-        # Load information from java_stage to the instance.
-        py_stages = [JavaParams._from_java(s) for s in java_stage.getStages()]
-        py_stage.setStages(py_stages)
-        py_stage._resetUid(java_stage.uid())
-        return py_stage
+        if self.stages in self._paramMap:
+            return self._paramMap[self.stages]
 
-    def _to_java(self):
+    def _transfer_params_to_java(self):
         """
-        Transfer this instance to a Java Pipeline.  Used for ML persistence.
-
-        :return: Java object equivalent to this instance.
+        Transforms the parameter stages to Java stages.
         """
+        paramMap = self.extractParamMap()
+        assert self.stages in paramMap
+        param = self.stages
+        value = paramMap[param]
 
+        sc = SparkContext._active_spark_context
+        param = self._resolveParam(param)
+        java_param = self._java_obj.getParam(param.name)
         gateway = SparkContext._gateway
-        cls = SparkContext._jvm.org.apache.spark.ml.PipelineStage
-        java_stages = gateway.new_array(cls, len(self.getStages()))
-        for idx, stage in enumerate(self.getStages()):
-            java_stages[idx] = stage._to_java()
+        jvm = SparkContext._jvm
+        stageArray = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(value))
 
-        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
-        _java_obj.setStages(java_stages)
+        for idx, java_stage in enumerate(self._transfer_stages_to_java(self.getStages())):
+            stageArray[idx] = java_stage
 
-        return _java_obj
+        java_value = _py2java(sc, stageArray)
+        self._java_obj.set(java_param.w(java_value))
+
+    def _transfer_params_from_java(self):
+        """
+        Transforms the parameter stages from the companion Java object.
+        """
+        sc = SparkContext._active_spark_context
+        assert self._java_obj.hasParam(self.stages.name)
+        java_param = self._java_obj.getParam(self.stages.name)
+        if self._java_obj.isDefined(java_param):
+            java_stages = _java2py(sc, self._java_obj.getOrDefault(java_param))
+            self._paramMap[self.stages] = self._transfer_stages_from_java(sc, java_stages)
+        else:
+            self._paramMap[self.stages] = []
+
+    def _create_model(self, java_model):
+        return PipelineModel(java_model)
 
 
 @inherit_doc
-class PipelineModel(Model, MLReadable, MLWritable):
+class PipelineModel(PipelineWrapper, JavaModel, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
 
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, stages):
-        super(PipelineModel, self).__init__()
-        self.stages = stages
-
-    def _transform(self, dataset):
-        for t in self.stages:
-            dataset = t.transform(dataset)
-        return dataset
-
-    @since("1.4.0")
-    def copy(self, extra=None):
-        """
-        Creates a copy of this instance.
-
-        :param extra: extra parameters
-        :returns: new instance
-        """
-        if extra is None:
-            extra = dict()
-        stages = [stage.copy(extra) for stage in self.stages]
-        return PipelineModel(stages)
-
+    @property
     @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
-
-    @classmethod
-    def _from_java(cls, java_stage):
+    def stages(self):
         """
-        Given a Java PipelineModel, create and return a Python wrapper of it.
-        Used for ML persistence.
+        Returns stages of the pipeline model.
         """
-        # Load information from java_stage to the instance.
-        py_stages = [JavaParams._from_java(s) for s in java_stage.stages()]
-        # Create a new instance of this stage.
-        py_stage = cls(py_stages)
-        py_stage._resetUid(java_stage.uid())
-        return py_stage
+        sc = SparkContext._active_spark_context
+        java_stages = self._call_java("stages")
+        py_stages = self._transfer_stages_from_java(sc, java_stages)
+        return py_stages
 
-    def _to_java(self):
-        """
-        Transfer this instance to a Java PipelineModel.  Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
-        """
-
-        gateway = SparkContext._gateway
-        cls = SparkContext._jvm.org.apache.spark.ml.Transformer
-        java_stages = gateway.new_array(cls, len(self.stages))
-        for idx, stage in enumerate(self.stages):
-            java_stages[idx] = stage._to_java()
-
-        _java_obj =\
-            JavaParams._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
-
-        return _java_obj
+if __name__ == "__main__":
+    import doctest
+    import pyspark.ml
+    import pyspark.ml.feature
+    from pyspark.sql import SQLContext
+    globs = pyspark.ml.__dict__.copy()
+    globs_feature = pyspark.ml.feature.__dict__.copy()
+    globs.update(globs_feature)
+    # The small batch size here ensures that we see multiple batches,
+    # even in these small test examples:
+    sc = SparkContext("local[2]", "ml.pipeline tests")
+    sqlContext = SQLContext(sc)
+    globs['sc'] = sc
+    globs['sqlContext'] = sqlContext
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    sc.stop()
+    if failure_count:
+        exit(-1)

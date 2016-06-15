@@ -204,33 +204,6 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
-class PipelineTests(PySparkTestCase):
-
-    def test_pipeline(self):
-        dataset = MockDataset()
-        estimator0 = MockEstimator()
-        transformer1 = MockTransformer()
-        estimator2 = MockEstimator()
-        transformer3 = MockTransformer()
-        pipeline = Pipeline(stages=[estimator0, transformer1, estimator2, transformer3])
-        pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
-        model0, transformer1, model2, transformer3 = pipeline_model.stages
-        self.assertEqual(0, model0.dataset_index)
-        self.assertEqual(0, model0.getFake())
-        self.assertEqual(1, transformer1.dataset_index)
-        self.assertEqual(1, transformer1.getFake())
-        self.assertEqual(2, dataset.index)
-        self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
-        self.assertIsNone(transformer3.dataset_index,
-                          "The last transformer shouldn't be called in fit.")
-        dataset = pipeline_model.transform(dataset)
-        self.assertEqual(2, model0.dataset_index)
-        self.assertEqual(3, transformer1.dataset_index)
-        self.assertEqual(4, model2.dataset_index)
-        self.assertEqual(5, transformer3.dataset_index)
-        self.assertEqual(6, dataset.index)
-
-
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """
     A subclass of Params mixed with HasMaxIter, HasInputCol and HasSeed.

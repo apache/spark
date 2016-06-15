@@ -82,8 +82,9 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
         return dataset.withColumn(ouc, concat(dataset[inc], lit(suff), lit(str(suff2))))
 
 
-class Int2StrJVM(object):
-    def __init__(self, suffix, inputCol, outputCol, df):
+class JavaProxyWrapper(object):
+    def __init__(self):
+        super(JavaProxyWrapper, self).__init__()
         int2str = Int2Str(suffix=suffix, inputCol=inputCol, outputCol=outputCol)
         wrapper = TransformerWrapper(df.sql_ctx, int2str)
         sc = SparkContext._active_spark_context
