@@ -1937,7 +1937,7 @@ setMethod("where",
 #'
 #' @param x A SparkDataFrame.
 #' @param ... A character vector of column names or string column names.
-#' If the first argument contains a character vector then the following column names are ignored.
+#'            If the first argument contains a character vector, the followings are ignored.
 #' @return A SparkDataFrame with duplicate rows removed.
 #' @family SparkDataFrame functions
 #' @rdname dropDuplicates
