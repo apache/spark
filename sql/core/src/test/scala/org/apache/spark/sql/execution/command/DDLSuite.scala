@@ -1309,4 +1309,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
   }
 
+  test("create/drop temporary macro") {
+    intercept[AnalysisException] {
+      sql(s"CREATE TEMPORARY MACRO simple_add_error(x int) x + y")
+    }
+    sql("CREATE TEMPORARY MACRO fixed_number() 42")
+    checkAnswer(sql("SELECT fixed_number()"), Row(42))
+    sql("CREATE TEMPORARY MACRO string_len_plus_two(x string) length(x) + 2")
+    checkAnswer(sql("SELECT string_len_plus_two('abc')"), Row(5))
+    sql("CREATE TEMPORARY MACRO simple_add(x int, y int) x + y")
+    checkAnswer(sql("SELECT simple_add(1, 2)"), Row(3))
+    intercept[AnalysisException] {
+      sql(s"SELECT simple_add(1)")
+    }
+    sql("DROP TEMPORARY MACRO fixed_number")
+    intercept[AnalysisException] {
+      sql(s"DROP TEMPORARY MACRO abs")
+    }
+    intercept[AnalysisException] {
+      sql("DROP TEMPORARY MACRO SOME_MACRO")
+    }
+    sql("DROP TEMPORARY MACRO IF EXISTS SOME_MACRO")
+  }
 }

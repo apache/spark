@@ -26,6 +26,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
@@ -587,6 +588,38 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       functionIdentifier.funcName,
       ctx.EXISTS != null,
       ctx.TEMPORARY != null)
+  }
+
+  /**
+   * Create a [[CreateMacroCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE TEMPORARY MACRO macro_name([col_name col_type, ...]) expression;
+   * }}}
+   */
+  override def visitCreateMacro(ctx: CreateMacroContext): LogicalPlan = withOrigin(ctx) {
+    val arguments = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns).map { col =>
+      AttributeReference(col.name, CatalystSqlParser.parseDataType(col.dataType))()
+    }
+    val e = expression(ctx.expression)
+    CreateMacroCommand(
+      ctx.macroName.getText,
+      MacroFunctionWrapper(arguments, e))
+  }
+
+  /**
+   * Create a [[DropMacroCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   DROP TEMPORARY MACRO [IF EXISTS] macro_name;
+   * }}}
+   */
+  override def visitDropMacro(ctx: DropMacroContext): LogicalPlan = withOrigin(ctx) {
+    DropMacroCommand(
+      ctx.macroName.getText,
+      ctx.EXISTS != null)
   }
 
   /**
