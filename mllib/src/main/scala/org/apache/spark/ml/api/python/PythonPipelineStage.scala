@@ -111,6 +111,10 @@ class PythonTransformer(
     callTransformFromPython(dataset)
   }
 
+  def getPythonTransformer: AnyRef = {
+    pfunc.getTransformer
+  }
+
 
   override def copy(extra: ParamMap): PythonTransformer = {
     this.pfunc = this.pfunc.copy(extra)

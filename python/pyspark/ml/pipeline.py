@@ -72,7 +72,7 @@ class PipelineWrapper(object):
             # TODO: Change pure Python PipelineStage back from JVM object.
             if java_stage.getClass().getName()\
                     == "org.apache.spark.ml.api.python.PythonTransformer":
-                return java_stage.pfunc().getTransformer()
+                return java_stage.getPythonTransformer()
             stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
             # Generate a default new instance from the stage_name class.
             py_stage = self.__get_class(stage_name)()
