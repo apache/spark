@@ -340,7 +340,11 @@ case class SortMergeJoinExec(
       ctx.addMutableState(ctx.javaType(leftKeys(i).dataType), value, "")
       val code =
         s"""
-           |$value = ${ev.value};
+           |if (${ev.value} instanceof UTF8String) {
+           |  $value = ${ev.value}.copy();
+           |} else {
+           |  $value = ${ev.value};
+           |} 
          """.stripMargin
       ExprCode(code, "false", value)
     }
