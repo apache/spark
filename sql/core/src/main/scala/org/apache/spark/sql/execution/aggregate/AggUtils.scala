@@ -168,22 +168,6 @@ object AggUtils {
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     // 1. Create an Aggregate Operator for partial aggregations.
-    // val partialAggregate: SparkPlan = {
-    //   val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
-    //   val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-    //   // We will group by the original grouping expression, plus an additional expression for the
-    //   // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
-    //   // expressions will be [key, value].
-    //   createAggregate(
-    //     groupingExpressions = groupingExpressions ++ namedDistinctExpressions,
-    //     aggregateExpressions = aggregateExpressions,
-    //     aggregateAttributes = aggregateAttributes,
-    //     resultExpressions = groupingAttributes ++ distinctAttributes ++
-    //       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-    //     child = child)
-    // }
-
-    // 2. Create an Aggregate Operator for partial merge aggregations.
     val partialMergeAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
@@ -199,7 +183,7 @@ object AggUtils {
         child = child)
     }
 
-    // 3. Create an Aggregate operator for partial aggregation (for distinct)
+    // 2. Create an Aggregate operator for partial aggregation (for distinct)
     val distinctColumnAttributeLookup = distinctExpressions.zip(distinctAttributes).toMap
     val rewrittenDistinctFunctions = functionsWithDistinct.map {
       // Children of an AggregateFunction with DISTINCT keyword has already
@@ -210,37 +194,7 @@ object AggUtils {
           .asInstanceOf[AggregateFunction]
     }
 
-    // val partialDistinctAggregate: SparkPlan = {
-    //   val mergeAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
-    //   // The attributes of the final aggregation buffer, which is presented as input to the
-    //   // result projection:
-    //   val mergeAggregateAttributes = mergeAggregateExpressions.map(_.resultAttribute)
-    //   val (distinctAggregateExpressions, distinctAggregateAttributes) =
-    //     rewrittenDistinctFunctions.zipWithIndex.map { case (func, i) =>
-    //       // We rewrite the aggregate function to a non-distinct aggregation because
-    //       // its input will have distinct arguments.
-    //       // We just keep the isDistinct setting to true, so when users look at the query plan,
-    //       // they still can see distinct aggregations.
-    //       val expr = AggregateExpression(func, Partial, isDistinct = true)
-    //       // Use original AggregationFunction to lookup attributes, which is used to build
-    //       // aggregateFunctionToAttribute
-    //       val attr = functionsWithDistinct(i).resultAttribute
-    //       (expr, attr)
-    //   }.unzip
-
-    //   val partialAggregateResult = groupingAttributes ++
-    //       mergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes) ++
-    //       distinctAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
-    //   createAggregate(
-    //     groupingExpressions = groupingAttributes,
-    //     aggregateExpressions = mergeAggregateExpressions ++ distinctAggregateExpressions,
-    //     aggregateAttributes = mergeAggregateAttributes ++ distinctAggregateAttributes,
-    //     initialInputBufferOffset = (groupingAttributes ++ distinctAttributes).length,
-    //     resultExpressions = partialAggregateResult,
-    //     child = partialMergeAggregate)
-    // }
-
-    // 4. Create an Aggregate Operator for the final aggregation.
+    // 3. Create an Aggregate Operator for the final aggregation.
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
       // The attributes of the final aggregation buffer, which is presented as input to the result
@@ -275,13 +229,14 @@ object AggUtils {
 
   /**
    * Plans a streaming aggregation using the following progression:
-   *  - Partial Aggregation
-   *  - Shuffle
-   *  - Partial Merge (now there is at most 1 tuple per group)
+   *  - Partial Aggregation (now there is at most 1 tuple per group)
    *  - StateStoreRestore (now there is 1 tuple from this batch + optionally one from the previous)
    *  - PartialMerge (now there is at most 1 tuple per group)
    *  - StateStoreSave (saves the tuple for the next batch)
    *  - Complete (output the current result of the aggregation)
+   *
+   *  If the first aggregation needs a shuffle to satisfy its distribution, a map-side partial
+   *  an aggregation and a shuffle are added in `EnsureRequirements`.
    */
   def planStreamingAggregation(
       groupingExpressions: Seq[NamedExpression],
@@ -291,23 +246,8 @@ object AggUtils {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    // val partialAggregate: SparkPlan = {
-    //   val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
-    //   val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-    //   // We will group by the original grouping expression, plus an additional expression for the
-    //   // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
-    //   // expressions will be [key, value].
-    //   createAggregate(
-    //     groupingExpressions = groupingExpressions,
-    //     aggregateExpressions = aggregateExpressions,
-    //     aggregateAttributes = aggregateAttributes,
-    //     resultExpressions = groupingAttributes ++
-    //         aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-    //     child = child)
-    // }
-
     val partialMerged1: SparkPlan = {
-      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregate(
         requiredChildDistributionExpressions =
