@@ -49,10 +49,10 @@ flights_df$date <- as.Date(flights_df$date)
 SFO_df <- flights_df[flights_df$dest == "SFO", ] 
 
 # Convert the local data frame into a SparkDataFrame
-SFO_DF <- createDataFrame(sqlContext, SFO_df)
+SFO_DF <- createDataFrame(SFO_df)
 
 #  Directly create a SparkDataFrame from the source data
-flightsDF <- read.df(sqlContext, flightsCsvPath, source = "csv", header = "true")
+flightsDF <- read.df(flightsCsvPath, source = "csv", header = "true")
 
 # Print the schema of this SparkDataFrame
 printSchema(flightsDF)
@@ -75,8 +75,8 @@ destDF <- select(flightsDF, "dest", "cancelled")
 
 # Using SQL to select columns of data
 # First, register the flights SparkDataFrame as a table
-registerTempTable(flightsDF, "flightsTable")
-destDF <- sql(sqlContext, "SELECT dest, cancelled FROM flightsTable")
+createOrReplaceTempView(flightsDF, "flightsTable")
+destDF <- sql("SELECT dest, cancelled FROM flightsTable")
 
 # Use collect to create a local R data frame
 local_df <- collect(destDF)
