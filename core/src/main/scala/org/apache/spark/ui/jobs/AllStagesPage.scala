@@ -133,3 +133,4 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     }
   }
 }
+
