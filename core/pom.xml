@@ -357,7 +357,8 @@
             <configuration>
               <!-- Execute the shell script to generate the spark build information. -->
               <target>
-                <exec executable="${project.basedir}/../build/spark-build-info">
+                <exec executable="bash">
+                  <arg value="${project.basedir}/../build/spark-build-info"/>
                   <arg value="${project.build.directory}/extra-resources"/>
                   <arg value="${project.version}"/>
                 </exec>
