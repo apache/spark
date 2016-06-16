@@ -23,7 +23,10 @@ import sys
 
 
 def exit_from_command_with_retcode(cmd, retcode):
-    print("[error] running", ' '.join(cmd), "; received return code", retcode)
+    if retcode < 0:
+        print("[error] running", ' '.join(cmd), "; process was terminated by signal", -retcode)
+    else:
+        print("[error] running", ' '.join(cmd), "; received return code", retcode)
     sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
