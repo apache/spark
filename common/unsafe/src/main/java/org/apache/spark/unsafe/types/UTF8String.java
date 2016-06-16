@@ -461,7 +461,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(newBytes);
   }
 
-  private UTF8String copy() {
+  public UTF8String copy() {
     byte[] newBytes = new byte[this.numBytes];
     copyMemory(base, offset, newBytes, BYTE_ARRAY_OFFSET, this.numBytes);
     return UTF8String.fromBytes(newBytes);
