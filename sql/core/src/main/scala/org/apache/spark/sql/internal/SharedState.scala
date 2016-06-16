@@ -43,23 +43,17 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    */
   val listener: SQLListener = createListenerAndUI(sparkContext)
 
-  /**
-   * The base hadoop configuration which is shared among all spark sessions. It is based on the
-   * default hadoop configuration of Spark, with custom configurations inside `hive-site.xml`.
-   */
-  val hadoopConf: Configuration = {
-    val conf = new Configuration(sparkContext.hadoopConfiguration)
+  {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
-      conf.addResource(configFile)
+      sparkContext.hadoopConfiguration.addResource(configFile)
     }
-    conf
   }
 
   /**
    * A catalog that interacts with external systems.
    */
-  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(hadoopConf)
+  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(sparkContext.hadoopConfiguration)
 
   /**
    * A classloader used to load all user-added jar.
@@ -71,7 +65,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     // Set the Hive metastore warehouse path to the one we use
     val tempConf = new SQLConf
     sparkContext.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
-    val hiveWarehouseDir = hadoopConf.get("hive.metastore.warehouse.dir")
+    val hiveWarehouseDir = sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir")
     if (hiveWarehouseDir != null && !tempConf.contains(SQLConf.WAREHOUSE_PATH.key)) {
       // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
       // we will respect the value of hive.metastore.warehouse.dir.
