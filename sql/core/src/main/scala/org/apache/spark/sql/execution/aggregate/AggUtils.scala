@@ -60,7 +60,7 @@ object AggUtils {
   }
 
   private[execution] def addMapSideAggregate(operator: SparkPlan)
-      : (SparkPlan, Seq[SparkPlan]) = operator match {
+      : (SparkPlan, SparkPlan) = operator match {
     case agg @ HashAggregateExec(
         requiredChildDistributionExpressions,
         groupingExpressions,
@@ -69,14 +69,14 @@ object AggUtils {
         initialInputBufferOffset,
         resultExpressions,
         child) =>
-      val newChild = createPartialAggregate(groupingExpressions, aggregateExpressions, child)
-      val parent = agg.copy(
+      val mapSideAgg = createPartialAggregate(groupingExpressions, aggregateExpressions, child)
+      val mergeAgg = agg.copy(
         groupingExpressions = groupingExpressions.map(_.toAttribute),
         aggregateExpressions =
           aggregateExpressions.map(e => e.copy(mode = updateAggregateMode(e.mode))),
-        initialInputBufferOffset = groupingExpressions.length
-      )
-      (parent, newChild :: Nil)
+        initialInputBufferOffset = groupingExpressions.length)
+
+      (mergeAgg, mapSideAgg)
 
     case agg @ SortAggregateExec(
         requiredChildDistributionExpressions,
@@ -86,14 +86,14 @@ object AggUtils {
         initialInputBufferOffset,
         resultExpressions,
         child) =>
-      val newChild = createPartialAggregate(groupingExpressions, aggregateExpressions, child)
-      val parent = agg.copy(
+      val mapSideAgg = createPartialAggregate(groupingExpressions, aggregateExpressions, child)
+      val mergeAgg = agg.copy(
         groupingExpressions = groupingExpressions.map(_.toAttribute),
         aggregateExpressions =
           aggregateExpressions.map(e => e.copy(mode = updateAggregateMode(e.mode))),
-        initialInputBufferOffset = groupingExpressions.length
-      )
-      (parent, newChild :: Nil)
+        initialInputBufferOffset = groupingExpressions.length)
+
+      (mergeAgg, mapSideAgg)
   }
 
   private def createAggregate(

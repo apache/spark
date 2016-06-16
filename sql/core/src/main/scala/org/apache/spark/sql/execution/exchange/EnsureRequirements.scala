@@ -159,25 +159,28 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     // Ensure that the operator's children satisfy their output distribution requirements:
     val childrenWithDist = operator.children.zip(requiredChildDistributions)
 
-    // If necessary, add map-side aggregates
     var (parent, children) = if (AggUtils.isAggregateExec(operator)) {
+      // If an aggregation need a shuffle to satisfy its distribution, a map-side partial an
+      // aggregation and a shuffle are added as children.
       val (child, distribution) = childrenWithDist.head
       if (!child.outputPartitioning.satisfies(distribution)) {
-        AggUtils.addMapSideAggregate(operator)
+        val (mergeAgg, mapSideAgg) = AggUtils.addMapSideAggregate(operator)
+        val newChild = ShuffleExchange(
+          createPartitioning(distribution, defaultNumPreShufflePartitions), mapSideAgg)
+        (mergeAgg, newChild :: Nil)
       } else {
         (operator, child :: Nil)
       }
     } else {
-      (operator, operator.children)
-    }
-
-    children = children.zip(requiredChildDistributions).map {
-      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
-        child
-      case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchangeExec(mode, child)
-      case (child, distribution) =>
-        ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
+      val newChildren = childrenWithDist.map {
+        case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
+          child
+        case (child, BroadcastDistribution(mode)) =>
+          BroadcastExchangeExec(mode, child)
+        case (child, distribution) =>
+          ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
+      }
+      (operator, newChildren)
     }
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),
