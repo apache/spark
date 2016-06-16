@@ -25,7 +25,7 @@ sqlContext <- sparkRSQL.init(sc)
 localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18))
 
 # Convert local data frame to a SparkDataFrame
-df <- createDataFrame(sqlContext, localDF)
+df <- createDataFrame(localDF)
 
 # Print its schema
 printSchema(df)
@@ -35,14 +35,17 @@ printSchema(df)
 
 # Create a DataFrame from a JSON file
 path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
-peopleDF <- read.json(sqlContext, path)
+peopleDF <- read.json(path)
 printSchema(peopleDF)
+# root
+#  |-- age: long (nullable = true)
+#  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
-registerTempTable(peopleDF, "people")
+createOrReplaceTempView(peopleDF, "people")
 
 # SQL statements can be run by using the sql methods provided by sqlContext
-teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
+teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # Call collect to get a local data.frame
 teenagersLocalDF <- collect(teenagers)
