@@ -269,7 +269,6 @@ case class CreateDataSourceTableAsSelectCommand(
 object CreateDataSourceTableUtils extends Logging {
 
   val DATASOURCE_PREFIX = "spark.sql.sources."
-  val DATASOURCE_PATH = "path"
   val DATASOURCE_PROVIDER = DATASOURCE_PREFIX + "provider"
   val DATASOURCE_WRITEJOBUUID = DATASOURCE_PREFIX + "writeJobUUID"
   val DATASOURCE_OUTPUTPATH = DATASOURCE_PREFIX + "output.path"
@@ -383,7 +382,7 @@ object CreateDataSourceTableUtils extends Logging {
         tableType = tableType,
         schema = Nil,
         storage = CatalogStorageFormat(
-          locationUri = options.get(DATASOURCE_PATH),
+          locationUri = None,
           inputFormat = None,
           outputFormat = None,
           serde = None,
