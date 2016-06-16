@@ -2301,7 +2301,6 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 test_that("randomSplit", {
   num <- 4000
   df <- createDataFrame(data.frame(id = 1:num))
-
   weights <- c(2, 3, 5)
   df_list <- randomSplit(df, weights)
   expect_equal(length(weights), length(df_list))
@@ -2316,6 +2315,31 @@ test_that("randomSplit", {
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
+test_that("Change config on SparkSession", {
+  conf <- callJMethod(sparkSession, "conf")
+  property <- paste0("spark.testing.", as.character(runif(1)))
+  value <- as.character(runif(1))
+  callJMethod(conf, "set", property, value)
+
+  value <- as.character(runif(1))
+  l <- list(value)
+  names(l) <- property
+  sparkR.session.getOrCreate(l)
+
+  conf <- callJMethod(sparkSession, "conf")
+  newValue <- callJMethod(conf, "get", property, "")
+
+  expect_equal(value, newValue)
+})
+
+test_that("enableHiveSupport on SparkSession", {
+  setHiveContext(sc)
+  unsetHiveContext()
+  # if we are still here, it must be built with hive
+  conf <- callJMethod(sparkSession, "conf")
+  value <- callJMethod(conf, "get", "spark.sql.catalogImplementation", "")
+  expect_equal(value, "hive")
+})
 
 unlink(parquetPath)
 unlink(jsonPath)

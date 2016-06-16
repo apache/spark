@@ -33,7 +33,6 @@ connExists <- function(env) {
 #' Also terminates the backend this R session is connected to
 #' @export
 sparkR.stop <- function() {
-  .Deprecated("sparkR.session.stop")
   sparkR.session.stop()
 }
 
