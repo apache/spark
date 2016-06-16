@@ -382,59 +382,97 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       for (offer <- offers) {
         val slaveId = offer.getSlaveId.getValue
         val offerId = offer.getId.getValue
-        val resources = remainingResources(offerId)
+        val availableResources = remainingResources(offerId)
+        val offerMem = getResource(availableResources, "mem")
+        val offerCpu = getResource(availableResources, "cpus")
 
-        if (canLaunchTask(slaveId, resources)) {
-          // Create a task
-          launchTasks = true
-          val taskId = newMesosTaskId()
-          val offerCPUs = getResource(resources, "cpus").toInt
-
-          val taskCPUs = executorCores(offerCPUs)
-          val taskMemory = executorMemory(sc)
-
-          slaves.getOrElseUpdate(slaveId, new Slave(offer.getHostname)).taskIDs.add(taskId)
-
-          val (afterCPUResources, cpuResourcesToUse) =
-            partitionResources(resources, "cpus", taskCPUs)
-          val (resourcesLeft, memResourcesToUse) =
-            partitionResources(afterCPUResources.asJava, "mem", taskMemory)
-
-          val taskBuilder = MesosTaskInfo.newBuilder()
-            .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
-            .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
-            .setName("Task " + taskId)
-            .addAllResources(cpuResourcesToUse.asJava)
-            .addAllResources(memResourcesToUse.asJava)
-
-          sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-            MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, taskBuilder.getContainerBuilder)
+        // Catch offer limits
+        calculateUsableResources(
+          sc,
+          offerMem.toInt,
+          offerCpu.toInt
+        ).flatMap(
+          {
+            // Catch "global" limits
+            case (taskCPUs: Int, taskMemory: Int) =>
+              if (numExecutors() >= executorLimit) {
+                logTrace(s"${numExecutors()} exceeds limit of $executorLimit")
+                None
+              } else if (
+                slaves.get(slaveId).map(_.taskFailures).getOrElse(0) >= MAX_SLAVE_FAILURES
+              ) {
+                logTrace(s"Slave $slaveId exceeded limit of $MAX_SLAVE_FAILURES failures")
+                None
+              } else {
+                Some((taskCPUs, taskMemory))
+              }
           }
+        ) match {
+          case Some((taskCPUs: Int, taskMemory: Int)) =>
+            // Create a task
+            launchTasks = true
+            val taskId = newMesosTaskId()
 
-          tasks(offer.getId) ::= taskBuilder.build()
-          remainingResources(offerId) = resourcesLeft.asJava
-          totalCoresAcquired += taskCPUs
-          coresByTaskId(taskId) = taskCPUs
+            slaves.getOrElseUpdate(slaveId, new Slave(offer.getHostname)).taskIDs.add(taskId)
+
+            val (afterCPUResources, cpuResourcesToUse) =
+              partitionResources(availableResources, "cpus", taskCPUs)
+            val (resourcesLeft, memResourcesToUse) =
+              partitionResources(afterCPUResources.asJava, "mem", taskMemory)
+
+            val taskBuilder = MesosTaskInfo.newBuilder()
+              .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
+              .setSlaveId(offer.getSlaveId)
+              .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
+              .setName("Task " + taskId)
+              .addAllResources(cpuResourcesToUse.asJava)
+              .addAllResources(memResourcesToUse.asJava)
+
+            sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
+              MesosSchedulerBackendUtil
+                .setupContainerBuilderDockerInfo(image, sc.conf, taskBuilder.getContainerBuilder)
+            }
+
+            tasks(offer.getId) ::= taskBuilder.build()
+            remainingResources(offerId) = resourcesLeft.asJava
+            totalCoresAcquired += taskCPUs
+            coresByTaskId(taskId) = taskCPUs
+          case None => logDebug(s"Insufficient offer CPU: $offerCpu  MEM: $offerMem")
         }
       }
     }
     tasks.toMap
   }
 
-  private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
-    val offerMem = getResource(resources, "mem")
-    val offerCPUs = getResource(resources, "cpus").toInt
-    val cpus = executorCores(offerCPUs)
-    val mem = executorMemory(sc)
-
-    cpus > 0 &&
-      cpus <= offerCPUs &&
-      cpus + totalCoresAcquired <= maxCores &&
-      mem <= offerMem &&
-      numExecutors() < executorLimit &&
-      slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES
+  /**
+   * Try and fit the resources to the constraints. Return None if it does not match
+   *
+   * @param sc Spark context
+   * @param availableCpus The available CPUs
+   * @param availableMem The available Memory
+   * @return Tuple of CPU (integer cores)  and Memory (integer MB) desired
+   */
+  private[mesos]
+  def calculateUsableResources(sc: SparkContext, availableCpus: Int, availableMem: Int):
+  Option[(Int, Int)] = {
+    val desiredMemory = executorMemory(sc)
+    val desiredCpu = executorCores(availableCpus)
+    if (desiredCpu < 1) {
+      logTrace(s"Executor cores too low at $desiredCpu")
+      None
+    } else if (desiredMemory < availableMem) {
+      logTrace(s"Offer memory $availableMem is less than needed memory $desiredMemory")
+      None
+    } else if (desiredCpu < availableCpus) {
+      logTrace(s"Offer cpu $availableCpus is les than needed cpu $desiredCpu")
+      None
+    } else if (desiredCpu + totalCoresAcquired > maxCores) {
+      logTrace(s"Adding $desiredCpu more cpus to $totalCoresAcquired"
+        + s" would go over $maxCores limit")
+      None
+    } else {
+      Some((desiredCpu, desiredMemory))
+    }
   }
 
   private def executorCores(offerCPUs: Int): Int = {
