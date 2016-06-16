@@ -284,7 +284,7 @@ def exec_sbt(sbt_args=()):
             print(line, end='')
     retcode = sbt_proc.wait()
 
-    if retcode > 0:
+    if retcode != 0:
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
