@@ -1278,7 +1278,8 @@ setMethod("dapplyCollect",
 #'             a key - grouping columns and a data frame - a local R data.frame.
 #'             The output of `func` is a local R data.frame.
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
-#'               It must match the output of func.
+#'               The schema must match to output of `func`. It has to be defined for each
+#'               output column with preferred output column name and corresponding data type.
 #' @family SparkDataFrame functions
 #' @rdname gapply
 #' @name gapply
@@ -1293,6 +1294,8 @@ setMethod("dapplyCollect",
 #' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
 #'   c("a", "b", "c", "d"))
 #'
+#' Here our output contains three columns, the key which is a combination of two
+#' columns with data types integer and string and the mean which is a double.
 #' schema <-  structType(structField("a", "integer"), structField("c", "string"),
 #'   structField("avg", "double"))
 #' df1 <- gapply(
