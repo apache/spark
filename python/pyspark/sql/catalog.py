@@ -234,7 +234,7 @@ class Catalog(object):
 
     @since(2.0)
     def refreshTable(self, tableName):
-        """Invalidate and refresh all the cached the metadata of the given table."""
+        """Invalidate and refresh all the cached metadata of the given table."""
         self._jcatalog.refreshTable(tableName)
 
     def _reset(self):
