@@ -406,6 +406,13 @@ See the [configuration page](configuration.html) for information on Spark config
     If unset it will point to Spark's internal web UI.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.fetchCache.enable</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to `true`, all URIs in `spark.mesos.uris` will be eligible for caching by the [Mesos fetch cache](http://mesos.apache.org/documentation/latest/fetcher/)
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
