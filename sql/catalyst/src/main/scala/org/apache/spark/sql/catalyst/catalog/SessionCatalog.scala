@@ -445,7 +445,7 @@ class SessionCatalog(
   /**
    * List all tables in the specified database, including temporary tables.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(formatDatabaseName(db), "*")
+  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
    * List all matching tables in the specified database, including temporary tables.
