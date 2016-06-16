@@ -21,6 +21,9 @@ import os
 import shutil
 import signal
 import sys
+import tarfile
+import tempfile
+import uuid
 import threading
 from threading import RLock
 from tempfile import NamedTemporaryFile
@@ -72,8 +75,8 @@ class SparkContext(object):
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-                 environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
-                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
+                 environment=None, batchSize=0, serializer=PickleSerializer(),
+                 conf=None, gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -111,15 +114,15 @@ class SparkContext(object):
         self._callsite = first_spark_call() or CallSite(None, None, None)
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
-            self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf, jsc, profiler_cls)
+            self._do_init(master, appName, sparkHome, pyFiles, environment,
+                          batchSize, serializer, conf, jsc, profiler_cls)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
-    def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf, jsc, profiler_cls):
+    def _do_init(self, master, appName, sparkHome, pyFiles,  environment,
+                 batchSize, serializer, conf, jsc, profiler_cls):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -205,6 +208,14 @@ class SparkContext(object):
                 if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
+
+        # Apply requirements file set by spark-submit.
+        for path in self._conf.get("spark.submit.pyRequirements", "").split(","):
+            if path != "":
+                (dirname, filename) = os.path.split(path)
+                reqs_file = os.path.join(SparkFiles.getRootDirectory(), filename)
+                reqs = open(reqs_file).readlines()
+                self.addPyRequirements(reqs)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -813,6 +824,56 @@ class SparkContext(object):
         if sys.version > '3':
             import importlib
             importlib.invalidate_caches()
+
+    def addPyPackage(self, pkg):
+        """
+        Add a package to the spark context, the package must have already been
+        imported by the driver via __import__ semantics. Supports namespace
+        packages by simulating the loading __path__ as a set of modules from
+        the __path__ list in a single package. Example follows:
+
+        import pyspark
+        import foolib
+
+        sc = pyspark.SparkContext()
+        sc.addPyPackage(foolib)
+        # foolib now in workers PYTHONPATH
+        rdd = sc.parallelize([1, 2, 3])
+        doubles = rdd.map(lambda x: foolib.double(x))
+        """
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            tar_path = os.path.join(tmp_dir, pkg.__name__+'.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            for mod in pkg.__path__[::-1]:
+                # adds in reverse to simulate namespace loading path
+                tar.add(mod, arcname=os.path.basename(mod))
+            tar.close()
+            self.addPyFile(tar_path)
+        finally:
+            shutil.rmtree(tmp_dir)
+
+    def addPyRequirements(self, reqs):
+        """
+        Add a list of pip requirements to distribute to workers.
+        The reqs list is composed of pip requirements strings.
+        See https://pip.pypa.io/en/latest/user_guide.html#requirements-files
+        Raises ImportError if the requirement can't be found. Example follows:
+
+        reqs = ['pkg1', 'pkg2', 'pkg3>=1.0,<=2.0']
+        sc.addPyRequirements(reqs)
+        // or load from requirements file
+        sc.addPyRequirements(open('requirements.txt').readlines())
+        """
+        import pip
+        with tempfile.NamedTemporaryFile() as t:
+            t.write('\n'.join(reqs))
+            t.flush()
+            for req in pip.req.parse_requirements(t.name, session=uuid.uuid1()):
+                if not req.check_if_exists():
+                    pip.main(['install', req.req.__str__()])
+                pkg = __import__(req.name)
+                self.addPyPackage(pkg)
 
     def setCheckpointDir(self, dirName):
         """

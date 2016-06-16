@@ -570,6 +570,37 @@ class SparkSubmitSuite
       appArgs.executorMemory should be ("2.3g")
     }
   }
+
+  test("py-requirements will be distributed") {
+    val pyReqs = "requirements.txt"
+
+    val clArgsYarn = Seq(
+      "--master", "yarn",
+      "--deploy-mode", "cluster",
+      "--py-requirements", pyReqs,
+      "mister.py"
+    )
+
+    val appArgsYarn = new SparkSubmitArguments(clArgsYarn)
+    val sysPropsYarn = SparkSubmit.prepareSubmitEnvironment(appArgsYarn)._3
+    appArgsYarn.pyRequirements should be (Utils.resolveURIs(pyReqs))
+    sysPropsYarn("spark.yarn.dist.files") should be (
+      PythonRunner.formatPaths(Utils.resolveURIs(pyReqs)).mkString(","))
+    sysPropsYarn("spark.submit.pyRequirements") should be (
+      PythonRunner.formatPaths(Utils.resolveURIs(pyReqs)).mkString(","))
+
+    val clArgs = Seq(
+      "--master", "local",
+      "--py-requirements", pyReqs,
+      "mister.py"
+    )
+
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs)._3
+    appArgs.pyRequirements should be (Utils.resolveURIs(pyReqs))
+    sysProps("spark.submit.pyRequirements") should be (
+      PythonRunner.formatPaths(Utils.resolveURIs(pyReqs)).mkString(","))
+  }
   // scalastyle:on println
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.

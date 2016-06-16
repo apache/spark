@@ -64,6 +64,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
+  var pyRequirements: String = null
   var isR: Boolean = false
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
@@ -305,6 +306,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  numExecutors            $numExecutors
     |  files                   $files
     |  pyFiles                 $pyFiles
+    |  pyRequiremenst          $pyRequirements
     |  archives                $archives
     |  mainClass               $mainClass
     |  primaryResource         $primaryResource
@@ -395,6 +397,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case PY_FILES =>
         pyFiles = Utils.resolveURIs(value)
+
+      case PY_REQUIREMENTS =>
+        pyRequirements = Utils.resolveURIs(value)
 
       case ARCHIVES =>
         archives = Utils.resolveURIs(value)
@@ -507,6 +512,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              search for the maven coordinates given with --packages.
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
+        |  --py-requirements REQS      Pip requirements file with dependencies that will be fetched
+        |                              and placed on PYTHONPATH
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |
