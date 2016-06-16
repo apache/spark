@@ -286,7 +286,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   override def listTables(db: String): Seq[String] = synchronized {
     requireDbExists(db)
-    catalog(db).tables.keySet.toSeq
+    catalog(db).tables.keySet.toSeq.sorted
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
