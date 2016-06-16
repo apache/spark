@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -338,14 +339,12 @@ case class SortMergeJoinExec(
     vars.zipWithIndex.map { case (ev, i) =>
       val value = ctx.freshName("value")
       ctx.addMutableState(ctx.javaType(leftKeys(i).dataType), value, "")
-      val code =
-        s"""
-           |if (${ev.value} instanceof UTF8String) {
-           |  $value = ${ev.value}.copy();
-           |} else {
-           |  $value = ${ev.value};
-           |}
-         """.stripMargin
+      val code = leftKeys(i).dataType match {
+        case StringType | _: StructType | _: ArrayType | _: MapType =>
+          s"$value = ${ev.value}.copy();"
+        case _ =>
+          s"$value = ${ev.value};"
+      }
       ExprCode(code, "false", value)
     }
   }
