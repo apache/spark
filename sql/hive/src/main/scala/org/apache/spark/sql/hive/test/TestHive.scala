@@ -449,7 +449,7 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _) => tbl :: Nil
+      case CacheTableCommand(tbl, _, _) => tbl.table :: Nil
       case _ => Nil
     }
 
