@@ -34,6 +34,8 @@ trait PythonTransformerWrapper {
 
   def transformSchema(schema: StructType): StructType
 
+  def getTransformer: AnyRef
+
   def copy(extra: ParamMap): PythonTransformerWrapper
 
   def getLastFailure: String
