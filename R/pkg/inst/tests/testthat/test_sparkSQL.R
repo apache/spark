@@ -2146,6 +2146,71 @@ test_that("repartition by columns on DataFrame", {
   expect_equal(nrow(df1), 2)
 })
 
+test_that("gapply() on a DataFrame", {
+  df <- createDataFrame (
+    list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
+    c("a", "b", "c", "d"))
+  expected <- collect(df)
+  df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
+  actual <- collect(df1)
+  expect_identical(actual, expected)
+
+  # Computes the sum of second column by grouping on the first and third columns
+  # and checks if the sum is larger than 2
+  schema <- structType(structField("a", "integer"), structField("e", "boolean"))
+  df2 <- gapply(
+    df,
+    list(df$"a", df$"c"),
+    function(key, x) {
+      y <- data.frame(key[1], sum(x$b) > 2)
+    },
+    schema)
+  actual <- collect(df2)$e
+  expected <- c(TRUE, TRUE)
+  expect_identical(actual, expected)
+
+  # Computes the arithmetic mean of the second column by grouping
+  # on the first and third columns. Output the groupping value and the average.
+  schema <-  structType(structField("a", "integer"), structField("c", "string"),
+               structField("avg", "double"))
+  df3 <- gapply(
+    df,
+    list("a", "c"),
+    function(key, x) {
+      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+    },
+    schema)
+  actual <- collect(df3)
+  actual <-  actual[order(actual$a), ]
+  rownames(actual) <- NULL
+  expected <- collect(select(df, "a", "b", "c"))
+  expected <- data.frame(aggregate(expected$b, by = list(expected$a, expected$c), FUN = mean))
+  colnames(expected) <- c("a", "c", "avg")
+  expected <-  expected[order(expected$a), ]
+  rownames(expected) <- NULL
+  expect_identical(actual, expected)
+
+  irisDF <- suppressWarnings(createDataFrame (iris))
+  schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
+  # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
+  df4 <- gapply(
+    cols = list("Sepal_Length"),
+    irisDF,
+    function(key, x) {
+      y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
+    },
+    schema)
+  actual <- collect(df4)
+  actual <- actual[order(actual$Sepal_Length), ]
+  rownames(actual) <- NULL
+  agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Sepal.Length), FUN = mean),
+                    stringsAsFactors = FALSE)
+  colnames(agg_local_df) <- c("Sepal_Length", "Avg")
+  expected <-  agg_local_df[order(agg_local_df$Sepal_Length), ]
+  rownames(expected) <- NULL
+  expect_identical(actual, expected)
+})
+
 test_that("Window functions on a DataFrame", {
   setHiveContext(sc)
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),

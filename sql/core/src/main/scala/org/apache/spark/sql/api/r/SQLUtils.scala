@@ -26,7 +26,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.{DataFrame, RelationalGroupedDataset, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types._
 
@@ -146,15 +146,25 @@ private[sql] object SQLUtils {
       packageNames: Array[Byte],
       broadcastVars: Array[Object],
       schema: StructType): DataFrame = {
-    val bv = broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
-    val realSchema =
-      if (schema == null) {
-        SERIALIZED_R_DATA_SCHEMA
-      } else {
-        schema
-      }
+    val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
+    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
     df.mapPartitionsInR(func, packageNames, bv, realSchema)
   }
+
+  /**
+   * The helper function for gapply() on R side.
+   */
+  def gapply(
+      gd: RelationalGroupedDataset,
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      schema: StructType): DataFrame = {
+    val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
+    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
+    gd.flatMapGroupsInR(func, packageNames, bv, realSchema)
+  }
+
 
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
     val localDF: Array[Row] = df.collect()
