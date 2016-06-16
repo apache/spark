@@ -41,6 +41,7 @@ class BlockReplicationObjectives extends SparkFunSuite with Matchers {
     val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
       objectives,
       blockManagerIds,
+      Set.empty,
       blockId,
       candidateBMId)
 
@@ -57,6 +58,7 @@ class BlockReplicationObjectives extends SparkFunSuite with Matchers {
     val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
       objectives,
       blockManagerIds,
+      Set.empty,
       blockId,
       candidateBMId)
 

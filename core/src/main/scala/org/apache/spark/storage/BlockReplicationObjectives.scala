@@ -71,14 +71,27 @@ case object NoTwoReplicasInSameRack
 }
 
 object BlockReplicationOptimizer extends Logging {
+
+  /**
+   * Get a minimal set of peers that meet the objectives. This is a "best-effort" implementation.
+   *
+   * @param objectives set of block replication objectives
+   * @param peers set of candidate peers
+   * @param peersReplicatedTo set of peers we have already replicated to. Empty set if no
+   *                          replicas so far
+   * @param blockId block Id of the block being replicated, as a source of randomness
+   * @param blockManagerId current blockManagerId, so we know where we are
+   * @return a tuple of set of optimal peers, and the objectives satisfied by the peers.
+   *         Since this is a best-effort implemenation, all objectives might have been met.
+   */
   def getPeersToMeetObjectives(objectives: Set[BlockReplicationObjective],
     peers: Set[BlockManagerId],
+    peersReplicatedTo: Set[BlockManagerId],
     blockId: BlockId,
     blockManagerId: BlockManagerId): (Set[BlockManagerId], Set[BlockReplicationObjective]) = {
-    val peersMap =
-      peers.map(p => p -> objectives.filter(_.isObjectiveMet(blockManagerId, Set(p)))).toMap
+
     val random = new Random(blockId.hashCode)
-    getOptimalPeers(peers, objectives, Set.empty, Set.empty, random, blockManagerId)
+    getOptimalPeers(peers, objectives, Set.empty, peersReplicatedTo, random, blockManagerId)
   }
 
   /**
@@ -99,12 +112,12 @@ object BlockReplicationOptimizer extends Logging {
    */
   @tailrec
   private def getOptimalPeers(peers: Set[BlockManagerId],
-                              objectivesLeft: Set[BlockReplicationObjective],
-                              objectivesMet: Set[BlockReplicationObjective],
-                              optimalPeers: Set[BlockManagerId],
-                              random: Random,
-                              blockManagerId: BlockManagerId
-                             ): (Set[BlockManagerId], Set[BlockReplicationObjective]) = {
+    objectivesLeft: Set[BlockReplicationObjective],
+    objectivesMet: Set[BlockReplicationObjective],
+    optimalPeers: Set[BlockManagerId],
+    random: Random,
+    blockManagerId: BlockManagerId
+    ): (Set[BlockManagerId], Set[BlockReplicationObjective]) = {
 
     logDebug(s"Objectives left : ${objectivesLeft.mkString(", ")}")
     logDebug(s"Objectives met : ${objectivesMet.mkString(", ")}")

@@ -104,6 +104,7 @@ class PrioritizationWithObjectives
     val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
       objectives,
       peers.toSet,
+      peersReplicatedTo,
       blockId,
       blockManagerId
     )
