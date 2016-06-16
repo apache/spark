@@ -835,8 +835,36 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val j = ctx.freshName("j")
     val values = ctx.freshName("values")
 
+    val isPrimitiveFrom = ctx.isPrimitiveType(fromType)
+    val isPrimitiveTo = ctx.isPrimitiveType(toType)
+
     (c, evPrim, evNull) =>
-      s"""
+      if (isPrimitiveFrom && isPrimitiveTo) {
+        // ensure no null in input and output arrays
+        val javaDTFrom = ctx.javaType(fromType)
+        val javaDTTo = ctx.javaType(toType)
+        if (javaDTFrom == javaDTTo) {
+          val boxedTypeTo = ctx.primitiveTypeName(javaDTTo)
+          s"""
+           final ${javaDTTo}[] $values = $c.to${boxedTypeTo}Array();
+           $evPrim = new $arrayClass($values);
+         """
+        } else {
+          s"""
+           final int $size = $c.numElements();
+           final ${javaDTTo}[] $values = new ${javaDTTo}[$c.numElements()];
+           for (int $j = 0; $j < $size; $j ++) {
+             ${ctx.javaType(fromType)} $fromElementPrim =
+             ${ctx.getValue(c, fromType, j)};
+             ${castCode(ctx, fromElementPrim,
+                 "false", toElementPrim, toElementNull, toType, elementCast)}
+             $values[$j] = $toElementPrim;
+           }
+           $evPrim = new $arrayClass($values);
+         """
+        }
+      } else {
+        s"""
         final int $size = $c.numElements();
         final Object[] $values = new Object[$size];
         for (int $j = 0; $j < $size; $j ++) {
@@ -856,7 +884,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
           }
         }
         $evPrim = new $arrayClass($values);
-      """
+        """
+      }
   }
 
   private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext): CastFunction = {
