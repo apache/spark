@@ -98,7 +98,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   override def resetCommand(line: String): Unit = {
     super.resetCommand(line)
     initializeSpark()
-    echo("Note that after :reset, state of SparkSession and SparkContext are unchanged.")
+    echo("Note that after :reset, state of SparkSession and SparkContext is unchanged.")
   }
 }
 
