@@ -2272,6 +2272,12 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   expect_equal(collect(before), collect(after))
 })
 
+test_that("randomSplit", {
+  df <- createDataFrame(data.frame(id=1:1000))
+  df_list <- randomSplit(df, c(2, 3, 5), 0)
+  expect_equal(1000, sum(sapply(df_list, count)))
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
