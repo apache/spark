@@ -110,9 +110,9 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     session.stop()
   }
 
-  test("SPARK-15991: Set Hadoop conf through session.sparkContext.hadoopConfiguration") {
+  test("SPARK-15991: Set global Hadoop conf") {
     val session = SparkSession.builder().master("local").getOrCreate()
-    val mySpecialKey = "mai.special.key.15991"
+    val mySpecialKey = "my.special.key.15991"
     val mySpecialValue = "msv"
     try {
       session.sparkContext.hadoopConfiguration.set(mySpecialKey, mySpecialValue)
