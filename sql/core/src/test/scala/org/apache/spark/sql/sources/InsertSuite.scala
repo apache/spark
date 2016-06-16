@@ -95,7 +95,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       """.stripMargin)
     }.getMessage
     assert(
-      message.contains("generates the same number of columns as its schema"),
+      message.contains("requires that the data to be inserted have the same number of columns"),
       "SELECT clause generating a different number of columns should not be not allowed."
     )
   }
