@@ -25,6 +25,7 @@ if sys.version > '3':
 import traceback
 
 from pyspark import SparkContext, since
+from pyspark.serializers import PickleSerializer
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import _parse_datatype_json_string
@@ -279,7 +280,7 @@ class TransformerWrapper(object):
         return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
 
     def getTransformer(self):
-        return self.transformer
+        return bytearray(PickleSerializer().dumps(self.transformer))
 
     def transform(self, jdf):
         # Clear the failure

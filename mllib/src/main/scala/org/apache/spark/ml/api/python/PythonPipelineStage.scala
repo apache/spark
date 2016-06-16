@@ -34,7 +34,7 @@ trait PythonTransformerWrapper {
 
   def transformSchema(schema: StructType): StructType
 
-  def getTransformer: AnyRef
+  def getTransformer: Array[Byte]
 
   def copy(extra: ParamMap): PythonTransformerWrapper
 
@@ -111,7 +111,7 @@ class PythonTransformer(
     callTransformFromPython(dataset)
   }
 
-  def getPythonTransformer: AnyRef = {
+  def getPythonTransformer: Array[Byte] = {
     pfunc.getTransformer
   }
 
