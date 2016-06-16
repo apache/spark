@@ -344,7 +344,7 @@ case class SortMergeJoinExec(
            |  $value = ${ev.value}.copy();
            |} else {
            |  $value = ${ev.value};
-           |} 
+           |}
          """.stripMargin
       ExprCode(code, "false", value)
     }
