@@ -378,59 +378,63 @@ class DAGScheduler(
    * the provided firstJobId.
    */
   private def getParentStages(rdd: RDD[_], firstJobId: Int): List[Stage] = {
-    val parents = new HashSet[Stage]
-    val visited = new HashSet[RDD[_]]
-    // We are manually maintaining a stack here to prevent StackOverflowError
-    // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(r: RDD[_]) {
-      if (!visited(r)) {
-        visited += r
-        // Kind of ugly: need to register RDDs with the cache here since
-        // we can't do it in its constructor because # of partitions is unknown
-        for (dep <- r.dependencies) {
-          dep match {
-            case shufDep: ShuffleDependency[_, _, _] =>
-              parents += getShuffleMapStage(shufDep, firstJobId)
-            case _ =>
-              waitingForVisit.push(dep.rdd)
-          }
-        }
-      }
-    }
-    waitingForVisit.push(rdd)
-    while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
-    }
-    parents.toList
+    getShuffleDependencies(rdd).map { shuffleDep =>
+      getShuffleMapStage(shuffleDep, firstJobId)
+    }.toList
   }
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
   private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
-    val parents = new Stack[ShuffleDependency[_, _, _]]
+    val ancestors = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
-    def visit(r: RDD[_]) {
-      if (!visited(r)) {
-        visited += r
-        for (dep <- r.dependencies) {
-          dep match {
-            case shufDep: ShuffleDependency[_, _, _] =>
-              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
-                parents.push(shufDep)
-              }
-            case _ =>
-          }
-          waitingForVisit.push(dep.rdd)
+    waitingForVisit.push(rdd)
+    while (waitingForVisit.nonEmpty) {
+      val toVisit = waitingForVisit.pop()
+      if (!visited(toVisit)) {
+        visited += toVisit
+        getShuffleDependencies(toVisit).foreach { shuffleDep =>
+          if (!shuffleToMapStage.contains(shuffleDep.shuffleId)) {
+            ancestors.push(shuffleDep)
+            waitingForVisit.push(shuffleDep.rdd)
+          } // Otherwise, the dependency and its ancestors have already been registered.
         }
       }
     }
+    ancestors
+  }
 
+  /**
+   * Returns shuffle dependencies that are immediate parents of the given RDD.
+   *
+   * This function will not return more distant ancestors.  For example, if C has a shuffle
+   * dependency on B which has a shuffle dependency on A:
+   *
+   * A <-- B <-- C
+   *
+   * calling this function with rdd C will only return the B <-- C dependency.
+   *
+   * This function is scheduler-visible for the purpose of unit testing.
+   */
+  private[scheduler] def getShuffleDependencies(
+      rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
+    val parents = new HashSet[ShuffleDependency[_, _, _]]
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new Stack[RDD[_]]
     waitingForVisit.push(rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      val toVisit = waitingForVisit.pop()
+      if (!visited(toVisit)) {
+        visited += toVisit
+        toVisit.dependencies.foreach {
+          case shuffleDep: ShuffleDependency[_, _, _] =>
+            parents += shuffleDep
+          case dependency =>
+            waitingForVisit.push(dependency.rdd)
+        }
+      }
     }
     parents
   }

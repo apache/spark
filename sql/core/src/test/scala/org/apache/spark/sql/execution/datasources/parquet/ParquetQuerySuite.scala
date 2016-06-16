@@ -574,7 +574,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in ArrayType") {
@@ -592,7 +592,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         containsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in MapType") {
@@ -612,7 +612,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         valueContainsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("returning batch for wide table") {

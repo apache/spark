@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable
 import scala.util.Try
 
-import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.SparkSession
@@ -75,7 +75,7 @@ class ListingFileCatalog(
 
   protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
     } else {
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(hadoopConf, this.getClass)
@@ -83,8 +83,9 @@ class ListingFileCatalog(
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         logInfo(s"Listing $path on driver")
-        Try(HadoopFsRelation.listLeafFiles(fs, fs.getFileStatus(path), pathFilter)).
-          getOrElse(Array.empty)
+        Try {
+          HadoopFsRelation.listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
+        }.getOrElse(Array.empty[FileStatus])
       }
       mutable.LinkedHashSet(statuses: _*)
     }

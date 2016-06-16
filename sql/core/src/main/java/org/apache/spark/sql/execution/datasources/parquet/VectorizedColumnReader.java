@@ -259,7 +259,7 @@ public class VectorizedColumnReader {
           for (int i = rowId; i < rowId + num; ++i) {
             // TODO: Convert dictionary of Binaries to dictionary of Longs
             Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putLong(i, CatalystRowConverter.binaryToSQLTimestamp(v));
+            column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
           }
         } else {
           throw new NotImplementedException();
@@ -280,12 +280,12 @@ public class VectorizedColumnReader {
         if (DecimalType.is32BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putInt(i, (int) CatalystRowConverter.binaryToUnscaledLong(v));
+            column.putInt(i, (int) ParquetRowConverter.binaryToUnscaledLong(v));
           }
         } else if (DecimalType.is64BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putLong(i, CatalystRowConverter.binaryToUnscaledLong(v));
+            column.putLong(i, ParquetRowConverter.binaryToUnscaledLong(v));
           }
         } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
@@ -375,7 +375,7 @@ public class VectorizedColumnReader {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
               // Read 12 bytes for INT96
-              CatalystRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
+              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
         } else {
           column.putNull(rowId + i);
         }
@@ -394,7 +394,7 @@ public class VectorizedColumnReader {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putInt(rowId + i,
-              (int) CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+              (int) ParquetRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
         } else {
           column.putNull(rowId + i);
         }
@@ -403,7 +403,7 @@ public class VectorizedColumnReader {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putLong(rowId + i,
-              CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+              ParquetRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
         } else {
           column.putNull(rowId + i);
         }

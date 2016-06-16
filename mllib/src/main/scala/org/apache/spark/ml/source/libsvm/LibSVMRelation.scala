@@ -141,7 +141,7 @@ class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Map[String, String] = {
-    def computeNumFeatures(): Int = {
+    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
       val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
       val path = if (dataFiles.length == 1) {
         dataFiles.head.getPath.toUri.toString
@@ -154,10 +154,6 @@ class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
       val sc = sparkSession.sparkContext
       val parsed = MLUtils.parseLibSVMFile(sc, path, sc.defaultParallelism)
       MLUtils.computeNumFeatures(parsed)
-    }
-
-    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
-      computeNumFeatures()
     }
 
     new CaseInsensitiveMap(options + ("numFeatures" -> numFeatures.toString))
