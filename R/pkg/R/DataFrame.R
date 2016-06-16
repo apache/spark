@@ -2925,7 +2925,7 @@ setMethod("write.jdbc",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- createDataFrame(data.frame(id=1:1000))
+#' df <- createDataFrame(data.frame(id = 1:1000))
 #' df_list <- randomSplit(df, c(2, 3, 5), 0)
 #' sapply(df_list, count)
 #'}
