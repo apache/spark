@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.io.Source
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -74,40 +72,16 @@ class DecisionTreeClassifierSuite
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  test("classification with class weights") {
-    val buf = Source.fromFile("/Users/yueweina/Documents/spark/data/mllib/unbalenced_train.csv")
-      .getLines
-    val header = buf.take(1).next()
-    var data = new Array[LabeledPoint](1000)
-    var idx : Int = 0
-    for (row <- buf) {
-      val cols = row.split(",").map(_.trim)
-      // scala style: off println
-      // println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}|${cols(4)}")
-      // println( cols(0).getClass)
-      // scala style: on println
-      data(idx) = new LabeledPoint(cols(0).toDouble,
-        Vectors.dense(cols(1).toDouble, cols(2).toDouble))
-      idx += 1
-    }
-    // scalastyle:off println
-    // println(data)
-    // scalastyle:on println
-    val IrIsRDD = sc.parallelize(data)
+  test("Binary classification with setting explicit uniform class weights") {
     val dt = new DecisionTreeClassifier()
-      .setImpurity("weightedgini")
-      .setMaxDepth(3)
-      .setMaxBins(400)
-      .setMinInstancesPerNode(1)
-      .setClassWeights(Array(1, 1000))
-    val categoricalFeatures: Map[Int, Int] = Map()
-    val newData: DataFrame = TreeTests.setMetadata(IrIsRDD, categoricalFeatures, 2)
-    val newTree = dt.fit(newData)
-    val predoutput = newTree.transform(newData)
-    // scalastyle:off println
-    predoutput.show(1000)
-    // println(newTree.toDebugString)
-    // scalastyle:on println
+      .setImpurity("WeightedGini")
+      .setMaxDepth(2)
+      .setMaxBins(100)
+      .setSeed(1)
+      .setClassWeights(Array(1, 1))
+    val categoricalFeatures = Map(0 -> 3, 1 -> 3)
+    val numClasses = 2
+    compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
 
   test("Binary classification stump with ordered categorical features") {

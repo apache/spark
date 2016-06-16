@@ -132,7 +132,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
 @Since("1.4.0")
 @Experimental
 object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifier] {
-  /** Accessor for supported impurities: entropy, gini */
+  /** Accessor for supported impurities: entropy, gini, weightedgini */
   @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 
