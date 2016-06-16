@@ -282,7 +282,7 @@ class TransformerWrapper(object):
     def getTransformer(self):
         self.failure = None
         try:
-            return bytearray(PickleSerializer().dumps(self.transformer))
+            return self.transformer
         except:
             self.failure = traceback.format_exc()
 
