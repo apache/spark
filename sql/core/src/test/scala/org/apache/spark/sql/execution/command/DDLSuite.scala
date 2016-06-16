@@ -1280,17 +1280,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   test("truncate table - datasource table") {
     import testImplicits._
     val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
-    data.write.saveAsTable("rectangles")
-    spark.catalog.cacheTable("rectangles")
-    assume(spark.table("rectangles").collect().nonEmpty, "bad test; table was empty to begin with")
-    assume(spark.catalog.isCached("rectangles"), "bad test; table was not cached to begin with")
-    sql("TRUNCATE TABLE rectangles")
-    assert(spark.table("rectangles").collect().isEmpty)
-    assert(!spark.catalog.isCached("rectangles"))
+
+    // Test both a Hive compatible and incompatible code path.
+    Seq("json", "parquet").foreach { format =>
+      withTable("rectangles") {
+        data.write.format(format).saveAsTable("rectangles")
+        assume(spark.table("rectangles").collect().nonEmpty,
+          "bad test; table was empty to begin with")
+        sql("TRUNCATE TABLE rectangles")
+        assert(spark.table("rectangles").collect().isEmpty)
+      }
+    }
+
     // truncating partitioned data source tables is not supported
-    data.write.partitionBy("length").saveAsTable("rectangles2")
-    assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
-    assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    withTable("rectangles", "rectangles2") {
+      data.write.saveAsTable("rectangles")
+      data.write.partitionBy("length").saveAsTable("rectangles2")
+      assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
+      assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    }
   }
 
   test("truncate table - external table, temporary table, view (not allowed)") {
