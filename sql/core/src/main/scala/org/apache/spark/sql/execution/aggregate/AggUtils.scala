@@ -291,20 +291,20 @@ object AggUtils {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    val partialAggregate: SparkPlan = {
-      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
-      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      // We will group by the original grouping expression, plus an additional expression for the
-      // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
-      // expressions will be [key, value].
-      createAggregate(
-        groupingExpressions = groupingExpressions,
-        aggregateExpressions = aggregateExpressions,
-        aggregateAttributes = aggregateAttributes,
-        resultExpressions = groupingAttributes ++
-            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = child)
-    }
+    // val partialAggregate: SparkPlan = {
+    //   val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
+    //   val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+    //   // We will group by the original grouping expression, plus an additional expression for the
+    //   // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
+    //   // expressions will be [key, value].
+    //   createAggregate(
+    //     groupingExpressions = groupingExpressions,
+    //     aggregateExpressions = aggregateExpressions,
+    //     aggregateAttributes = aggregateAttributes,
+    //     resultExpressions = groupingAttributes ++
+    //         aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+    //     child = child)
+    // }
 
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
@@ -312,13 +312,13 @@ object AggUtils {
       createAggregate(
         requiredChildDistributionExpressions =
             Some(groupingAttributes),
-        groupingExpressions = groupingAttributes,
+        groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = partialAggregate)
+        child = child)
     }
 
     val restored = StateStoreRestoreExec(groupingAttributes, None, partialMerged1)
