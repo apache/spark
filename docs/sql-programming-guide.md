@@ -440,7 +440,7 @@ df = spark.sql("SELECT * FROM table")
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 spark <- sparkRSQL.init(sc)
-df <- sql(spark, "SELECT * FROM table")
+df <- sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
 
