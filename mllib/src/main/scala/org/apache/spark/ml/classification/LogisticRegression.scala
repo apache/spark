@@ -937,42 +937,41 @@ class BinaryLogisticRegressionSummary private[classification] (
  * Two LogisticAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * @param coefficients The coefficients corresponding to the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
- * @param featuresStd The standard deviation values of the features.
- * @param featuresMean The mean values of the features.
  */
 private class LogisticAggregator(
-    coefficients: Vector,
+    numFeatures: Int,
     numClasses: Int,
-    fitIntercept: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    fitIntercept: Boolean) extends Serializable {
 
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val coefficientsArray = coefficients match {
-    case dv: DenseVector => dv.values
-    case _ =>
-      throw new IllegalArgumentException(
-        s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
-  }
+//  private val coefficientsArray = coefficients match {
+//    case dv: DenseVector => dv.values
+//    case _ =>
+//      throw new IllegalArgumentException(
+//        s"coefficients only supports dense vector b ut got type ${coefficients.getClass}.")
+//  }
 
-  private val dim = if (fitIntercept) coefficientsArray.length - 1 else coefficientsArray.length
-
-  private val gradientSumArray = Array.ofDim[Double](coefficientsArray.length)
+//  private val dim = if (fitIntercept) coefficientsArray.length - 1 else coefficientsArray.length
+  private val dim = numFeatures//if (fitIntercept) featuresStd.length else featuresStd.length
+  private val gradientSumArray = Array.ofDim[Double](dim)
 
   /**
    * Add a new training instance to this LogisticAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
+   * @param coefficients The coefficients corresponding to the features.
+   * @param featuresStd The standard deviation values of the features.
    * @return This LogisticAggregator object.
    */
-  def add(instance: Instance): this.type = {
+  def add(instance: Instance,
+          coefficients: Vector,
+          featuresStd: Array[Double]): this.type = {
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $dim but got ${features.size}.")
@@ -980,7 +979,12 @@ private class LogisticAggregator(
 
       if (weight == 0.0) return this
 
-      val localCoefficientsArray = coefficientsArray
+      val coefficientsArray = coefficients match {
+        case dv: DenseVector => dv.values
+        case _ =>
+          throw new IllegalArgumentException(
+            s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
+      }
       val localGradientSumArray = gradientSumArray
 
       numClasses match {
@@ -990,11 +994,11 @@ private class LogisticAggregator(
             var sum = 0.0
             features.foreachActive { (index, value) =>
               if (featuresStd(index) != 0.0 && value != 0.0) {
-                sum += localCoefficientsArray(index) * (value / featuresStd(index))
+                sum += coefficientsArray(index) * (value / featuresStd(index))
               }
             }
             sum + {
-              if (fitIntercept) localCoefficientsArray(dim) else 0.0
+              if (fitIntercept) coefficientsArray(dim) else 0.0
             }
           }
 
@@ -1086,13 +1090,17 @@ private class LogisticCostFun(
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
     val coeffs = Vectors.fromBreeze(coefficients)
+    val n = coeffs.size
+    val localFeaturesStd = featuresStd
+
 
     val logisticAggregator = {
-      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
+      val seqOp = (c: LogisticAggregator, instance: Instance) =>
+        c.add(instance, coeffs, localFeaturesStd)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
+        new LogisticAggregator(n, numClasses, fitIntercept)
       )(seqOp, combOp)
     }
 
