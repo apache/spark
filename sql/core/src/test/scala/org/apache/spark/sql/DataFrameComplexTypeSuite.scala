@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.debug.codegenString
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -26,36 +27,53 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("primitive type on array") {
+  test("create an array") {
     val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("Array(v + 2, v + 3)").collect
+    df.selectExpr("Array(v + 3, v + 4)").collect
   }
 
-  test("array on array") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("Array(Array(v, v + 1, v + 2)," +
-                         "null," +
-                         "Array(v, v - 1, v - 2))").collect
-  }
-
-  test("primitive type on map") {
+  test("create an map") {
     val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
     df.selectExpr("map(v + 3, v + 4)").collect
   }
 
-  test("map on map") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("map(map(v, v + 3), map(v, v + 4))").collect
-  }
-
-  test("primitive type on struct") {
+  test("create an struct") {
     val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
     df.selectExpr("struct(v + 3, v + 4)").collect
   }
 
-  test("struct on struct") {
+  def validate(df: DataFrame): Unit = {
+    val logicalPlan = df.logicalPlan
+    val queryExecution = sqlContext.sessionState.executePlan(logicalPlan)
+    val cg = codegenString(queryExecution.executedPlan)
+
+    if (cg.contains("Found 0 WholeStageCodegen subtrees")) {
+      return
+    }
+
+    if ("zeroOutNullBytes".r.findFirstIn(cg).isDefined) {
+      fail(
+        s"""
+       |=== FAIL: generated code must not include: zeroOutNullBytes ===
+       |$cg
+       """.stripMargin
+      )
+    }
+  }
+
+  test ("check elimination of zeroOutNullBytes on array") {
     val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("struct(struct(v + 3), null, struct(v + 4))").collect
+    validate(df.selectExpr("Array(v + 3, v + 4)"))
+  }
+
+  test ("check elimination of zeroOutNullBytes on map") {
+    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    validate(df.selectExpr("struct(v + 3, v + 4)"))
+  }
+
+  test ("check elimination of zeroOutNullBytes on struct") {
+    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    validate(df.selectExpr("Array(v + 3, v + 4)"))
   }
 
   test("UDF on struct") {

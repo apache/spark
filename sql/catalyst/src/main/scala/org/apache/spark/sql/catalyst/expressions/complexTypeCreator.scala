@@ -54,7 +54,6 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       this.$values = new Object[${children.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -133,7 +132,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
     ev.copy(code = s"""
-      final boolean ${ev.isNull} = false;
       $keyArray = new Object[${keys.size}];
       $valueArray = new Object[${values.size}];""" +
       ctx.splitExpressions(
@@ -206,7 +204,6 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
       this.$values = new Object[${children.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
@@ -297,7 +294,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
       $values = new Object[${valExprs.size}];""" +
       ctx.splitExpressions(
         ctx.INPUT_ROW,
