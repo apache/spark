@@ -545,6 +545,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_POLLING_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.pollingDelay")
+      .internal()
+      .doc("How long in milliseconds to delay polling new data when no data is available")
+      .longConf
+      .createWithDefault(10L)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
