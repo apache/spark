@@ -136,7 +136,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    this.sparkSchema = new CatalystSchemaConverter(configuration).convert(requestedSchema);
+    this.sparkSchema = new ParquetSchemaConverter(configuration).convert(requestedSchema);
     this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
@@ -196,7 +196,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
       this.requestedSchema = builder.named("spark_schema");
     }
-    this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
+    this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
