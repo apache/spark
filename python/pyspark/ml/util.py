@@ -280,7 +280,11 @@ class TransformerWrapper(object):
         return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
 
     def getTransformer(self):
-        return bytearray(PickleSerializer().dumps(self.transformer))
+        self.failure = None
+        try:
+            return bytearray(PickleSerializer().dumps(self.transformer))
+        except:
+            self.failure = traceback.format_exc()
 
     def transform(self, jdf):
         # Clear the failure

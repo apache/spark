@@ -112,13 +112,22 @@ class PythonTransformer(
   }
 
   def getPythonTransformer: Array[Byte] = {
-    pfunc.getTransformer
+    callGetTransformerFromPython
   }
 
 
   override def copy(extra: ParamMap): PythonTransformer = {
     this.pfunc = this.pfunc.copy(extra)
     this
+  }
+
+  def callGetTransformerFromPython: Array[Byte] = {
+    val result = pfunc.getTransformer
+    val failure = pfunc.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    result
   }
 
   def callTransformFromPython(dataset: Dataset[_]): DataFrame = {
