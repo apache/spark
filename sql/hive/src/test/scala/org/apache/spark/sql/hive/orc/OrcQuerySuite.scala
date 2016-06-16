@@ -52,7 +52,6 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
-
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
@@ -204,6 +203,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("simple select queries") {
+    val data = (0 until 10).map(i => (i, i.toString))
     withOrcTable((0 until 10).map(i => (i, i.toString)), "t") {
       checkAnswer(
         sql("SELECT `_1` FROM t where t.`_1` > 5"),

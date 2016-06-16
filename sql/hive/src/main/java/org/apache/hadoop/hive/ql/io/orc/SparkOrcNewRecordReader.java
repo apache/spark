@@ -33,7 +33,8 @@ import java.util.List;
  * NameNode calls in OrcRelation.
  */
 public class SparkOrcNewRecordReader extends
-    org.apache.hadoop.mapreduce.RecordReader<NullWritable, OrcStruct> {
+    org.apache.hadoop.mapreduce.RecordReader<NullWritable, OrcStruct>
+    implements SparkOrcNewRecordReaderBase {
   private final org.apache.hadoop.hive.ql.io.orc.RecordReader reader;
   private final int numColumns;
   OrcStruct value;
@@ -88,6 +89,7 @@ public class SparkOrcNewRecordReader extends
     }
   }
 
+  @Override
   public ObjectInspector getObjectInspector() {
     return objectInspector;
   }

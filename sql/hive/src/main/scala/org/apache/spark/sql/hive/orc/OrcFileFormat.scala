@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.orc
 import java.net.URI
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -28,7 +30,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspec
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
-import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.{RecordReader => MReduceRecordReader, _}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
 import org.apache.spark.internal.Logging
@@ -40,7 +42,7 @@ import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{AtomicType, DateType, StructType, TimestampType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -121,6 +123,11 @@ private[sql] class OrcFileFormat
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
+    val enableVectorizedReader: Boolean =
+      sparkSession.sessionState.conf.orcVectorizedReaderEnabled &&
+      dataSchema.forall(f => f.dataType.isInstanceOf[AtomicType] &&
+        !f.dataType.isInstanceOf[DateType] && !f.dataType.isInstanceOf[TimestampType])
+
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
@@ -134,7 +141,7 @@ private[sql] class OrcFileFormat
         val physicalSchema = maybePhysicalSchema.get
         OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
 
-        val orcRecordReader = {
+        val orcRecordReader: MReduceRecordReader[_, org.apache.hadoop.hive.ql.io.orc.OrcStruct] = {
           val job = Job.getInstance(conf)
           FileInputFormat.setInputPaths(job, file.filePath)
 
@@ -147,14 +154,23 @@ private[sql] class OrcFileFormat
           // Specifically would be helpful for partitioned datasets.
           val orcReader = OrcFile.createReader(
             new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
-          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
+
+          if (enableVectorizedReader) {
+            val conf = job.getConfiguration.asInstanceOf[JobConf]
+            val columnIDs =
+              requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).asJava
+            new VectorizedSparkOrcNewRecordReader(orcReader, conf, fileSplit, columnIDs)
+          } else {
+            new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
+          }
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         OrcRelation.unwrapOrcStructs(
           conf,
           requiredSchema,
-          Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
+          Some(orcRecordReader.asInstanceOf[SparkOrcNewRecordReaderBase]
+            .getObjectInspector.asInstanceOf[StructObjectInspector]),
           new RecordReaderIterator[OrcStruct](orcRecordReader))
       }
     }
