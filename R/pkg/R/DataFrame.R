@@ -1960,7 +1960,9 @@ setMethod("dropDuplicates",
             if (length(cols) == 0) {
               sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(columns(x)))
             } else {
-              if (!all(sapply(cols, function(c) { is.character(c) }))) { stop }
+              if (!all(sapply(cols, function(c) { is.character(c) }))) {
+                stop("all columns names should be characters")
+              }
               col <- cols[[1]]
               if (length(col) > 1) {
                 sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(col))
