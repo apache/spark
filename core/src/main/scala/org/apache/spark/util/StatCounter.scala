@@ -104,8 +104,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   def min: Double = minValue
 
-  /** Return the variance of the values. */
-  def variance: Double = sampleVariance
+  /** Return the population variance of the values. */
+  def variance: Double = popVariance
 
   /** Return the population variance of the values. */
   def popVariance: Double = {
@@ -128,8 +128,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     }
   }
 
-  /** Return the standard deviation of the values. */
-  def stdev: Double = math.sqrt(sampleVariance)
+  /** Return the population standard deviation of the values. */
+  def stdev: Double = math.sqrt(variance)
 
   /** Return the population standard deviation of the values. */
   def popStdev: Double = math.sqrt(popVariance)
