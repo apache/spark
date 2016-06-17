@@ -24,11 +24,13 @@ import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.clustering.{PowerIterationClustering => MLlibPowerIterationClustering}
+import org.apache.spark.mllib.clustering.{PowerIterationClusteringModel => MLlibPowerIterationClusteringModel}
+import org.apache.spark.mllib.clustering.PowerIterationClustering.Assignment
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /*
  * Common params for PowerIterationClustering and PowerIterationClusteringModel
@@ -36,7 +38,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 private[clustering] trait PowerIterationClusteringParams extends Params with HasMaxIter
   with HasFeaturesCol with HasPredictionCol {
 
-  /*
+  /**
    * The number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
@@ -66,10 +68,10 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   def getInitMode: String = $(initMode)
 
   /**
-    * Validates and transforms the input schema.
-    * @param schema input schema
-    * @return output schema
-    */
+   * Validates and transforms the input schema.
+   * @param schema input schema
+   * @return output schema
+   */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
@@ -80,18 +82,33 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 @Since("2.0.0")
 @Experimental
 class PowerIterationClusteringModel private[ml] (
-    @Since("2.0.0") override val uid: String)
+    @Since("2.0.0") override val uid: String,
+    private val parentModel: MLlibPowerIterationClusteringModel)
   extends Model[PowerIterationClusteringModel] with PowerIterationClusteringParams with MLWritable {
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): PowerIterationClusteringModel = {
-    val copied = new PowerIterationClusteringModel(uid)
+    val copied = new PowerIterationClusteringModel(uid, parentModel)
     copyValues(copied, extra).setParent(this.parent)
   }
 
+  def assignments: RDD[Assignment] = parentModel.assignments
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def saveK(value: Int): this.type = set(k, value)
+
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def saveInitMode(value: String): this.type = set(initMode, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def saveMaxIter(value: Int): this.type = set(maxIter, value)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf((vector: Vector) => predict(vector))
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    predict(dataset)
   }
 
   @Since("2.0.0")
@@ -99,7 +116,22 @@ class PowerIterationClusteringModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = ???
+  private[clustering] def predict(features: Dataset[_]): DataFrame = {
+    val sparkSession = features.sparkSession
+    val powerIterationClustering = new PowerIterationClustering().setK($(k))
+      .setInitMode($(initMode))
+      .setMaxIter($(maxIter))
+    val model = powerIterationClustering.fit(features)
+    model.saveK($(k))
+      .saveInitMode($(initMode))
+      .saveMaxIter($(maxIter))
+    val rows: RDD[Row] = model.assignments.map {
+      case assignment: Assignment => Row(assignment.cluster)
+    }
+    val schema = new StructType(Array(StructField("cluster", IntegerType)))
+    val predict = sparkSession.createDataFrame(rows, schema)
+    features.withColumn($(predictionCol), predict.col("cluster"))
+  }
 
   @Since("2.0.0")
   override def write: MLWriter =
@@ -113,15 +145,15 @@ class PowerIterationClusteringModel private[ml] (
   }
 
   /**
-    * Return true if there exists summary of model.
-    */
+   * Return true if there exists summary of model.
+   */
   @Since("2.0.0")
   def hasSummary: Boolean = trainingSummary.nonEmpty
 
   /**
-    * Gets summary of model on training set. An exception is
-    * thrown if `trainingSummary == None`.
-    */
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
   @Since("2.0.0")
   def summary: PowerIterationClusteringSummary = trainingSummary.getOrElse {
     throw new SparkException(
@@ -137,19 +169,34 @@ object PowerIterationClusteringModel extends MLReadable[PowerIterationClustering
     new PowerIterationClusteringModelReader()
 
   @Since("2.0.0")
-  override def load(path: String): PowerIterationClusteringModel = ???
+  override def load(path: String): PowerIterationClusteringModel = super.load(path)
 
   /** [[MLWriter]] instance for [[PowerIterationClusteringModel]] */
   private[PowerIterationClusteringModel] class PowerIterationClusteringModelWriter
   (instance: PowerIterationClusteringModel) extends MLWriter {
 
-    override protected def saveImpl(path: String): Unit = ???
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      MLlibPowerIterationClusteringModel.SaveLoadV1_0.save(sc, instance.parentModel, path)
+    }
   }
 
   private class PowerIterationClusteringModelReader
     extends MLReader[PowerIterationClusteringModel] {
 
-    override def load(path: String): PowerIterationClusteringModel = ???
+    /** Checked against metadata when loading model */
+    private val className = classOf[PowerIterationClusteringModel].getName
+
+    override def load(path: String): PowerIterationClusteringModel = {
+
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val parentModel = MLlibPowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
+
+      val model = new PowerIterationClusteringModel(metadata.uid, parentModel)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
 
@@ -192,7 +239,22 @@ class PowerIterationClustering @Since("2.0.0") (
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): PowerIterationClusteringModel = ???
+  override def fit(dataset: Dataset[_]): PowerIterationClusteringModel = {
+    val rdd: RDD[(Long, Long, Double)] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => point.asInstanceOf[(Long, Long, Double)]
+    }
+
+    val algo = new MLlibPowerIterationClustering()
+      .setK($(k))
+      .setInitializationMode($(initMode))
+      .setMaxIterations($(maxIter))
+    val parentModel = algo.run(rdd)
+    val model = copyValues(new PowerIterationClusteringModel(uid, parentModel).setParent(this))
+    model.saveK($(k))
+      .saveInitMode($(initMode))
+      .saveMaxIter($(maxIter))
+    model
+  }
 
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
