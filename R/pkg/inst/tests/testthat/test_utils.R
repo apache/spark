@@ -18,7 +18,7 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session.getOrCreate()
+sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists

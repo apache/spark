@@ -16,8 +16,7 @@
 #
 library(SparkR)
 
-sparkSession <- sparkR.session.getOrCreate()
-sc <- SparkR:::callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+sparkSession <- sparkR.session()
 
 helloTest <- SparkR:::callJStatic("sparkR.test.hello",
                                   "helloWorld",

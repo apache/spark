@@ -56,7 +56,7 @@ test_that("Check masked functions", {
 
 # test_that("repeatedly starting and stopping SparkR", {
 #   for (i in 1:4) {
-#     sparkR.session.getOrCreate()
+#     sparkR.session(enableHiveSupport = FALSE)
 #     df <- createDataFrame(data.frame(dummy=1:i))
 #     expect_equal(count(df), i)
 #     sparkR.session.stop()

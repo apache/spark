@@ -17,7 +17,7 @@
 library(SparkR)
 library(sparkPackageTest)
 
-sparkSession <- sparkR.session.getOrCreate()
+sparkSession <- sparkR.session()
 
 run1 <- myfunc(5L)
 

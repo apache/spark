@@ -23,6 +23,7 @@ import java.util.{Map => JMap}
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
@@ -34,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.types._
 
-private[sql] object SQLUtils {
+private[sql] object SQLUtils extends Logging {
   SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
 
   private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
@@ -49,6 +50,10 @@ private[sql] object SQLUtils {
     val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
       SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
     } else {
+      if (enableHiveSupport) {
+        logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
+          "Spark is not built with Hive; falling back to without Hive support.")
+      }
       SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
     }
     setSparkContextSessionConf(spark, sparkConfigMap)

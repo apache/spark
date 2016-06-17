@@ -18,7 +18,7 @@
 context("basic RDD functions")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session.getOrCreate()
+sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data

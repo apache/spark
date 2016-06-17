@@ -28,9 +28,8 @@ connExists <- function(env) {
   })
 }
 
-#' Stop the Spark context.
-#'
-#' Also terminates the backend this R session is connected to
+#' @rdname sparkR.session.stop
+#' @name sparkR.stop
 #' @export
 sparkR.stop <- function() {
   sparkR.session.stop()
@@ -39,6 +38,8 @@ sparkR.stop <- function() {
 #' Stop the Spark Session and Spark Context.
 #'
 #' Also terminates the backend this R session is connected to.
+#' @rdname sparkR.session.stop
+#' @name sparkR.session.stop
 #' @export
 #' @note since 2.0.0
 sparkR.session.stop <- function() {
@@ -120,7 +121,7 @@ sparkR.init <- function(
   sparkExecutorEnv = list(),
   sparkJars = "",
   sparkPackages = "") {
-  .Deprecated("sparkR.session.getOrCreate")
+  .Deprecated("sparkR.session")
   sparkR.sparkContext(master,
      appName,
      sparkHome,
@@ -264,14 +265,14 @@ sparkR.sparkContext <- function(
 #'}
 
 sparkRSQL.init <- function(jsc = NULL) {
-  .Deprecated("sparkR.session.getOrCreate")
+  .Deprecated("sparkR.session")
 
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     return(get(".sparkRsession", envir = .sparkREnv))
   }
 
   # Default to without Hive support for backward compatibility.
-  sparkR.session.getOrCreate(enableHiveSupport = FALSE)
+  sparkR.session(enableHiveSupport = FALSE)
 }
 
 #' Initialize a new HiveContext.
@@ -290,14 +291,14 @@ sparkRSQL.init <- function(jsc = NULL) {
 #'}
 
 sparkRHive.init <- function(jsc = NULL) {
-  .Deprecated("sparkR.session.getOrCreate")
+  .Deprecated("sparkR.session")
 
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     return(get(".sparkRsession", envir = .sparkREnv))
   }
 
   # Default to without Hive support for backward compatibility.
-  sparkR.session.getOrCreate(enableHiveSupport = TRUE)
+  sparkR.session(enableHiveSupport = TRUE)
 }
 
 #' Get the existing SparkSession or initialize a new SparkSession.
@@ -309,33 +310,32 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param appName Application name to register with cluster manager
 #' @param sparkHome Spark Home directory
 #' @param sparkConfig Named list of Spark configuration to set on worker nodes
-#' @param sparkExecutorConfig Named list of Spark configuration to be used when launching executors
+#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
 #' @param sparkJars Character vector of jar files to pass to the worker nodes
 #' @param sparkPackages Character vector of packages from spark-packages.org
 #' @param enableHiveSupport Enable support for Hive
 #' @export
 #' @examples
 #'\dontrun{
-#' sparkR.session.getOrCreate()
+#' sparkR.session()
 #' df <- read.json(path)
 #'
-#' sparkR.session.getOrCreate("local[2]", "SparkR", "/home/spark")
-#' sparkR.session.getOrCreate("yarn-client", "SparkR", "/home/spark",
+#' sparkR.session("local[2]", "SparkR", "/home/spark")
+#' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                            list(spark.executor.memory="4g"),
 #'                            list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                            c("one.jar", "two.jar", "three.jar"),
 #'                            c("com.databricks:spark-avro_2.10:2.0.1"))
-#' sparkR.session.getOrCreate(spark.master = "yarn-client",
+#' sparkR.session(spark.master = "yarn-client",
 #'                            spark.executor.memory = "4g")
 #'}
 #' @note since 2.0.0
 
-sparkR.session.getOrCreate <- function(
+sparkR.session <- function(
   master = "",
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),
   sparkConfig = list(),
-  sparkExecutorConfig = list(),
   sparkJars = "",
   sparkPackages = "",
   enableHiveSupport = TRUE,
@@ -355,9 +355,9 @@ sparkR.session.getOrCreate <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
-  sparkExecutorConfigMap <- convertNamedListToEnv(sparkExecutorConfig)
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorConfigMap,
+    sparkExecutorEnvMap <- new.env()
+    sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
        sparkJars, sparkPackages)
     stopifnot(exists(".sparkRjsc", envir = .sparkREnv))
   }

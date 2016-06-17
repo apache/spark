@@ -60,7 +60,7 @@ unsetHiveContext <- function() {
 
 # Tests for SparkSQL functions in SparkR
 
-sparkSession <- sparkR.session.getOrCreate()
+sparkSession <- sparkR.session()
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockLines <- c("{\"name\":\"Michael\"}",
@@ -96,8 +96,8 @@ test_that("calling sparkRSQL.init returns existing SparkSession", {
   expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
 })
 
-test_that("calling sparkR.session.getOrCreate returns existing SparkSession", {
-  expect_equal(sparkR.session.getOrCreate(), sparkSession)
+test_that("calling sparkR.session returns existing SparkSession", {
+  expect_equal(sparkR.session(), sparkSession)
 })
 
 test_that("infer types and check types", {
@@ -2324,7 +2324,7 @@ test_that("Change config on SparkSession", {
   value <- as.character(runif(1))
   l <- list(value)
   names(l) <- property
-  sparkR.session.getOrCreate(l)
+  sparkR.session(l)
 
   conf <- callJMethod(sparkSession, "conf")
   newValue <- callJMethod(conf, "get", property, "")

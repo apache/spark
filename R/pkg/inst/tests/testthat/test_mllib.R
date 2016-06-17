@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib functions")
 
 # Tests for MLlib functions in SparkR
-sparkSession <- sparkR.session.getOrCreate()
+sparkSession <- sparkR.session()
 
 test_that("formula of spark.glm", {
   training <- suppressWarnings(createDataFrame(iris))
