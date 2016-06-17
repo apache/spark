@@ -214,12 +214,18 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      intercept[AnalysisException] {
+      var e = intercept[AnalysisException] {
+        spark.emptyDataFrame.write.format("text").mode("overwrite").save(path)
+      }
+      assert(e.getMessage.contains("Cannot write dataset with no fields"))
+      e = intercept[AnalysisException] {
         spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
       }
-      intercept[AnalysisException] {
-        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
+      assert(e.getMessage.contains("Cannot use all columns for partition columns"))
+      e = intercept[AnalysisException] {
+        spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
       }
+      assert(e.getMessage.contains("Cannot use all columns for partition columns"))
     }
   }
 
