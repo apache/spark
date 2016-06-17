@@ -2914,8 +2914,8 @@ setMethod("write.jdbc",
 #' Return a list of randomly split dataframes with the provided weights.
 #'
 #' @param x A SparkDataFrame
-#' @param weights a vector of weights for splits, will be normalized if they don't sum to 1
-#' @param seed Randomness seed value
+#' @param weights A vector of weights for splits, will be normalized if they don't sum to 1
+#' @param seed A seed to use for random split
 #'
 #' @family SparkDataFrame functions
 #' @rdname randomSplit

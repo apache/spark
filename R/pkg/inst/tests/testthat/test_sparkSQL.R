@@ -2273,11 +2273,21 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 })
 
 test_that("randomSplit", {
-  df <- createDataFrame(data.frame(id = 1:1000))
-  df_list <- randomSplit(df, c(2, 3, 5))
-  expect_equal(1000, sum(sapply(df_list, count)))
-  df_list <- randomSplit(df, c(2, 3, 5), 0)
-  expect_equal(1000, sum(sapply(df_list, count)))
+  num <- 4000
+  df <- createDataFrame(data.frame(id = 1:num))
+
+  weights <- c(2, 3, 5)
+  df_list <- randomSplit(df, weights)
+  expect_equal(length(weights), length(df_list))
+  counts <- sapply(df_list, count)
+  expect_equal(num, sum(counts))
+  expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
+
+  df_list <- randomSplit(df, weights, 0)
+  expect_equal(length(weights), length(df_list))
+  counts <- sapply(df_list, count)
+  expect_equal(num, sum(counts))
+  expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
 unlink(parquetPath)
