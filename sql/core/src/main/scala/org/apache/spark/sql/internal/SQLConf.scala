@@ -215,7 +215,8 @@ object SQLConf {
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.parquet.filterPushdown")
-    .doc("Enables Parquet filter push-down optimization when set to true.")
+    .doc("Enables Parquet filter push-down optimization when set to true and vectorized parquet " +
+      "decoding is not being used.")
     .booleanConf
     .createWithDefault(true)
 
@@ -236,7 +237,8 @@ object SQLConf {
 
   val PARQUET_VECTORIZED_READER_ENABLED =
     SQLConfigBuilder("spark.sql.parquet.enableVectorizedReader")
-      .doc("Enables vectorized parquet decoding.")
+      .doc("Enables vectorized parquet decoding when set to true and all the data types of " +
+        "the table schemas are atomic types.")
       .booleanConf
       .createWithDefault(true)
 
