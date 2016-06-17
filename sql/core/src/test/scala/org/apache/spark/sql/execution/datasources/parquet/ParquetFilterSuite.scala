@@ -452,8 +452,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           val df = spark.read.parquet(path).filter("a = 2")
 
           // The result should be single row.
-          // When a filter is pushed to Parquet, Parquet can apply it to every row group.
-          // So, we can check the number of rows returned from the Parquet
+          // When a filter is pushed to Parquet, Parquet can apply it to every row group and
+          // then every row. So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
           assert(stripSparkFilter(df).count == 1)
         }
@@ -524,8 +524,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           val path = s"${dir.getCanonicalPath}/table1"
           (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
 
-          // When a filter is pushed to Parquet, Parquet can apply it to every row group.
-          // So, we can check the number of rows returned from the Parquet
+          // When a filter is pushed to Parquet, Parquet can apply it to every row group and
+          // then every row. So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
           val df = spark.read.parquet(path).where("b in (0,2)")
           assert(stripSparkFilter(df).count == 3)
@@ -559,8 +559,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         withTempPath { dir =>
           val path = s"${dir.getCanonicalPath}/table1"
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-          // When a filter is pushed to Parquet, Parquet can apply it to every row group.
-          // So, we can check the number of rows returned from the Parquet
+          // When a filter is pushed to Parquet, Parquet can apply it to every row group and
+          // then every row. So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
           val df = spark.read.parquet(path).where("a > 2")
           val numExpectedRows = if (pushDown == "true") 1 else 3
