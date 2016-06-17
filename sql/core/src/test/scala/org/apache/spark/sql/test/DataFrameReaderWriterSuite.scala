@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.test
 
+import java.io.File
+
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -79,10 +83,17 @@ class DefaultSource
 }
 
 
-class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
+class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
-  private def newMetadataDir =
-    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+  private val input = Utils.createTempDir(namePrefix = "input").getCanonicalPath
+  private var output: String = _
+  private var schema: StructType = new StructType().add("s", "string")
+
+  before {
+    val f = Utils.createTempDir(namePrefix = "output")
+    f.delete()
+    output = f.getCanonicalPath
+  }
 
   test("writeStream cannot be called on non-streaming datasets") {
     val e = intercept[AnalysisException] {
@@ -160,7 +171,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
   test("paths") {
     val df = spark.read
       .format("org.apache.spark.sql.test")
-      .option("checkpointLocation", newMetadataDir)
       .load("/test")
 
     assert(LastOptions.parameters("path") == "/test")
@@ -169,7 +179,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
 
     df.write
       .format("org.apache.spark.sql.test")
-      .option("checkpointLocation", newMetadataDir)
       .save("/test")
 
     assert(LastOptions.parameters("path") == "/test")
@@ -193,7 +202,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
-      .option("checkpointLocation", newMetadataDir)
       .save("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
@@ -227,5 +235,65 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
         spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
       }
     }
+  }
+
+  test("load API") {
+    spark.read.format("org.apache.spark.sql.test").load()
+    spark.read.format("org.apache.spark.sql.test").load(input)
+    spark.read.format("org.apache.spark.sql.test").load(input, input, input)
+    spark.read.format("org.apache.spark.sql.test").load(Seq(input, input): _*)
+    Option(input).map(spark.read.format("org.apache.spark.sql.test").load)
+  }
+
+  test("text API") {
+    spark.read.text()
+    spark.read.text(input)
+    spark.read.text(input, input, input)
+    spark.read.text(Seq(input, input): _*).write.text(output)
+    Option(input).map(spark.read.text)
+  }
+
+  test("textFile API") {
+    spark.read.textFile()
+    spark.read.textFile(input)
+    spark.read.textFile(input, input, input)
+    spark.read.textFile(Seq(input, input): _*).write.text(output)
+    Option(input).map(spark.read.textFile)
+  }
+
+  test("csv API") {
+    spark.read.schema(schema).csv()
+    spark.read.schema(schema).csv(input)
+    spark.read.schema(schema).csv(input, input, input)
+    spark.read.schema(schema).csv(Seq(input, input): _*).write.csv(output)
+    Option(input).map(spark.read.schema(schema).csv)
+  }
+
+  test("json API") {
+    spark.read.schema(schema).json()
+    spark.read.schema(schema).json(input)
+    spark.read.schema(schema).json(input, input, input)
+    spark.read.schema(schema).json(Seq(input, input): _*).write.json(output)
+    Option(input).map(spark.read.schema(schema).json)
+  }
+
+  test("parquet API") {
+    spark.read.schema(schema).parquet()
+    spark.read.schema(schema).parquet(input)
+    spark.read.schema(schema).parquet(input, input, input)
+    spark.read.schema(schema).parquet(Seq(input, input): _*).write.parquet(output)
+    Option(input).map(spark.read.schema(schema).parquet)
+  }
+
+  /**
+   * This only tests whether API compiles, but does not run it as orc()
+   * cannot be run with Hive classes.
+   */
+  ignore("orc API") {
+    spark.read.schema(schema).orc()
+    spark.read.schema(schema).orc(input)
+    spark.read.schema(schema).orc(input, input, input)
+    spark.read.schema(schema).orc(Seq(input, input): _*).write.orc(output)
+    Option(input).map(spark.read.schema(schema).orc)
   }
 }
