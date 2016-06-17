@@ -137,7 +137,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  ignore("minimize delay between batch construction and execution") {
+  test("minimize delay between batch construction and execution") {
 
     // For each batch, we would retrieve new data's offsets and log them before we run the execution
     // This checks whether the key of the offset log is the expected batch id
@@ -164,6 +164,7 @@ class StreamSuite extends StreamTest {
       /* -- batch 0 ----------------------- */
       // Add some data in batch 0
       AddData(inputData, 1, 2, 3),
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000), // 10 seconds
 
       /* -- batch 1 ----------------------- */
@@ -174,6 +175,7 @@ class StreamSuite extends StreamTest {
       CheckSinkLatestBatchId(0),
       // Add some data in batch 1
       AddData(inputData, 4, 5, 6),
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000),
 
       /* -- batch _ ----------------------- */
@@ -183,8 +185,11 @@ class StreamSuite extends StreamTest {
       CheckOffsetLogLatestBatchId(1),
       CheckSinkLatestBatchId(1),
 
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000),
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000),
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000),
 
       /* -- batch __ ---------------------- */
@@ -201,6 +206,7 @@ class StreamSuite extends StreamTest {
 
       /* -- batch 1 rerun ----------------- */
       // this batch 1 would re-run because the latest batch id logged in offset log is 1
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000),
 
       /* -- batch 2 ----------------------- */
@@ -211,6 +217,7 @@ class StreamSuite extends StreamTest {
       CheckSinkLatestBatchId(1),
       // Add some data in batch 2
       AddData(inputData, 7, 8, 9),
+      EnsureManualClockInWaitingState,
       AdvanceManualClock(10 * 1000),
 
       /* -- batch 3 ----------------------- */
