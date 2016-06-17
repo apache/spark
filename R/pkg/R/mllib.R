@@ -25,22 +25,26 @@
 # - a set of methods that reflect the arguments of the other languages supported by Spark. These
 #   methods are prefixed with the `spark.` prefix: spark.glm, spark.kmeans, etc.
 
-#' @title S4 class that represents a generalized linear model
+#' S4 class that represents a generalized linear model
+#'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a NaiveBayesModel
+#' S4 class that represents a NaiveBayesModel
+#'
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
 #' @export
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a AFTSurvivalRegressionModel
+#' S4 class that represents a AFTSurvivalRegressionModel
+#'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
 #' @export
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a KMeansModel
+#' S4 class that represents a KMeansModel
+#'
 #' @param jobj a Java object reference to the backing Scala KMeansModel
 #' @export
 setClass("KMeansModel", representation(jobj = "jobj"))
@@ -197,7 +201,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#' Make predictions from a generalized linear model
+#' Predicted values based on model
 #'
 #' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #' similarly to R's predict().
@@ -218,9 +222,9 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Make predictions from a naive Bayes model
+#' Predicted values based on model
 #'
-#' Makes predictions from a model produced by spark.naiveBayes(),
+#' Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
 #' similarly to R package e1071's predict.
 #'
 #' @param object A fitted naive Bayes model
@@ -357,9 +361,9 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
-#' Make predictions from a k-means model
+#' Predicted values based on model
 #'
-#' Make predictions from a model produced by spark.kmeans().
+#' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
 #' @param object A fitted k-means model
 #' @param newData SparkDataFrame for testing
@@ -402,6 +406,8 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
         return(new("NaiveBayesModel", jobj = jobj))
     })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the Bernoulli naive Bayes model to the input path.
 #'
 #' @param object A fitted Bernoulli naive Bayes model
@@ -428,6 +434,8 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the AFT survival regression model to the input path.
 #'
 #' @param object A fitted AFT survival regression model
@@ -453,6 +461,8 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the generalized linear model to the input path.
 #'
 #' @param object A fitted generalized linear model
@@ -478,6 +488,8 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the k-means model to the input path.
 #'
 #' @param object A fitted k-means model
@@ -582,9 +594,9 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             return(list(coefficients = coefficients))
           })
 
-#' Make predictions from an AFT survival regression model
+#' Predicted values based on model
 #'
-#' Make predictions from a model produced by spark.survreg(),
+#' Makes predictions from an AFT survival regression model or a model produced by spark.survreg(),
 #' similarly to R package survival's predict.
 #'
 #' @param object A fitted AFT survival regression model

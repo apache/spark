@@ -23,9 +23,11 @@ NULL
 setOldClass("jobj")
 setOldClass("structType")
 
-#' @title S4 class that represents a SparkDataFrame
-#' @description DataFrames can be created using functions like \link{createDataFrame},
-#'              \link{read.json}, \link{table} etc.
+#' S4 class that represents a SparkDataFrame
+#'
+#' DataFrames can be created using functions like \link{createDataFrame},
+#' \link{read.json}, \link{table} etc.
+#'
 #' @family SparkDataFrame functions
 #' @rdname SparkDataFrame
 #' @docType class
@@ -629,8 +631,6 @@ setMethod("repartition",
 #'
 #' @param x A SparkDataFrame
 #' @return A StringRRDD of JSON objects
-#' @family SparkDataFrame functions
-#' @rdname tojson
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -648,7 +648,7 @@ setMethod("toJSON",
             RDD(jrdd, serializedMode = "string")
           })
 
-#' write.json
+#' Save the contents of SparkDataFrame as a JSON file
 #'
 #' Save the contents of a SparkDataFrame as a JSON file (one object per line). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
@@ -675,7 +675,7 @@ setMethod("write.json",
             invisible(callJMethod(write, "json", path))
           })
 
-#' write.parquet
+#' Save the contents of SparkDataFrame as a Parquet file, preserving the schema.
 #'
 #' Save the contents of a SparkDataFrame as a Parquet file, preserving the schema. Files written out
 #' with this method can be read back in as a SparkDataFrame using read.parquet().
@@ -713,9 +713,9 @@ setMethod("saveAsParquetFile",
             write.parquet(x, path)
           })
 
-#' write.text
+#' Save the content of SparkDataFrame in a text file at the specified path.
 #'
-#' Saves the content of the SparkDataFrame in a text file at the specified path.
+#' Save the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
 #' Each row becomes a new line in the output file.
 #'
@@ -820,8 +820,6 @@ setMethod("sample_frac",
             sample(x, withReplacement, fraction, seed)
           })
 
-#' nrow
-#'
 #' Returns the number of rows in a SparkDataFrame
 #'
 #' @param x A SparkDataFrame
@@ -874,6 +872,8 @@ setMethod("ncol",
             length(columns(x))
           })
 
+#' Returns the dimensions of SparkDataFrame
+#'
 #' Returns the dimensions (number of rows and columns) of a SparkDataFrame
 #' @param x a SparkDataFrame
 #'
@@ -2012,8 +2012,9 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' Merges two data frames
+#'
 #' @name merge
-#' @title Merges two data frames
 #' @param x the first data frame to be joined
 #' @param y the second data frame to be joined
 #' @param by a character vector specifying the join columns. If by is not
@@ -2127,7 +2128,6 @@ setMethod("merge",
             joinRes
           })
 
-#'
 #' Creates a list of columns by replacing the intersected ones with aliases.
 #' The name of the alias column is formed by concatanating the original column name and a suffix.
 #'
@@ -2182,8 +2182,9 @@ setMethod("unionAll",
             dataFrame(unioned)
           })
 
-#' @title Union two or more SparkDataFrames
-#' @description Returns a new SparkDataFrame containing rows of all parameters.
+#' Union two or more SparkDataFrames
+#'
+#' Returns a new SparkDataFrame containing rows of all parameters.
 #'
 #' @rdname rbind
 #' @name rbind
@@ -2254,20 +2255,22 @@ setMethod("except",
             dataFrame(excepted)
           })
 
-#' Save the contents of the SparkDataFrame to a data source
+#' Save the contents of SparkDataFrame to a data source.
 #'
 #' The data source is specified by the `source` and a set of options (...).
 #' If `source` is not specified, the default data source configured by
 #' spark.sql.sources.default will be used.
 #'
-#' Additionally, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes: \cr
-#'  append: Contents of this SparkDataFrame are expected to be appended to existing data. \cr
-#'  overwrite: Existing data is expected to be overwritten by the contents of this
-#'     SparkDataFrame. \cr
-#'  error: An exception is expected to be thrown. \cr
-#'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
-#'     and to not change the existing data. \cr
+#' Additionally, mode is used to specify the behavior of the save operation when data already
+#' exists in the data source. There are four modes:
+#' \itemize{
+#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'         SparkDataFrame.
+#'   \item error: An exception is expected to be thrown.
+#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'         and to not change the existing data.
+#' }
 #'
 #' @param df A SparkDataFrame
 #' @param path A name for the table
@@ -2315,8 +2318,6 @@ setMethod("saveDF",
             write.df(df, path, source, mode, ...)
           })
 
-#' saveAsTable
-#'
 #' Save the contents of the SparkDataFrame to a data source as a table
 #'
 #' The data source is specified by the `source` and a set of options (...).
@@ -2543,11 +2544,12 @@ setMethod("fillna",
             dataFrame(sdf)
           })
 
+#' Download data from a SparkDataFrame into a data.frame
+#'
 #' This function downloads the contents of a SparkDataFrame into an R's data.frame.
 #' Since data.frames are held in memory, ensure that you have enough memory
 #' in your system to accommodate the contents.
 #'
-#' @title Download data from a SparkDataFrame into a data.frame
 #' @param x a SparkDataFrame
 #' @return a data.frame
 #' @family SparkDataFrame functions
@@ -2563,13 +2565,14 @@ setMethod("as.data.frame",
             as.data.frame(collect(x), row.names, optional, ...)
           })
 
+#' Attach SparkDataFrame to R search path
+#'
 #' The specified SparkDataFrame is attached to the R search path. This means that
 #' the SparkDataFrame is searched by R when evaluating a variable, so columns in
 #' the SparkDataFrame can be accessed by simply giving their names.
 #'
 #' @family SparkDataFrame functions
 #' @rdname attach
-#' @title Attach SparkDataFrame to R search path
 #' @param what (SparkDataFrame) The SparkDataFrame to attach
 #' @param pos (integer) Specify position in search() where to attach.
 #' @param name (character) Name to use for the attached SparkDataFrame. Names
@@ -2590,13 +2593,15 @@ setMethod("attach",
           })
 
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
+#'
+#' Evaluate a R expression in an environment constructed from a SparkDataFrame
 #' with() allows access to columns of a SparkDataFrame by simply referring to
 #' their name. It appends every column of a SparkDataFrame into a new
 #' environment. Then, the given expression is evaluated in this new
 #' environment.
 #'
 #' @rdname with
-#' @title Evaluate a R expression in an environment constructed from a SparkDataFrame
+#' @family SparkDataFrame functions
 #' @param data (SparkDataFrame) SparkDataFrame to use for constructing an environment.
 #' @param expr (expression) Expression to evaluate.
 #' @param ... arguments to be passed to future methods.
@@ -2612,10 +2617,12 @@ setMethod("with",
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })
 
+#' Compactly display the structure of a dataset
+#'
 #' Display the structure of a SparkDataFrame, including column names, column types, as well as a
 #' a small sample of rows.
+#'
 #' @name str
-#' @title Compactly display the structure of a dataset
 #' @rdname str
 #' @family SparkDataFrame functions
 #' @param object a SparkDataFrame
@@ -2728,10 +2735,11 @@ setMethod("drop",
             base::drop(x)
           })
 
+#' Compute histogram statistics for given column
+#'
 #' This function computes a histogram for a given SparkR Column.
 #'
 #' @name histogram
-#' @title Histogram
 #' @param nbins the number of bins (optional). Default value is 10.
 #' @param df the SparkDataFrame containing the Column to build the histogram from.
 #' @param colname the name of the column to build the histogram from.
@@ -2847,18 +2855,21 @@ setMethod("histogram",
             return(histStats)
           })
 
-#' Saves the content of the SparkDataFrame to an external database table via JDBC
+#' Save the content of SparkDataFrame to an external database table via JDBC.
 #'
-#' Additional JDBC database connection properties can be set (...)
+#' Save the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
+#' database connection properties can be set (...)
 #'
 #' Also, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes: \cr
-#'  append: Contents of this SparkDataFrame are expected to be appended to existing data. \cr
-#'  overwrite: Existing data is expected to be overwritten by the contents of this
-#'     SparkDataFrame. \cr
-#'  error: An exception is expected to be thrown. \cr
-#'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
-#'     and to not change the existing data. \cr
+#' data already exists in the data source. There are four modes:
+#' \itemize{
+#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'         SparkDataFrame.
+#'   \item error: An exception is expected to be thrown.
+#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'         and to not change the existing data.
+#' }
 #'
 #' @param x A SparkDataFrame
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
