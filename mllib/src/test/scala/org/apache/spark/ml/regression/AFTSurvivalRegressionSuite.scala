@@ -350,8 +350,8 @@ class AFTSurvivalRegressionSuite
   test("SPARK-15892: Incorrectly merged AFTAggregator with zero total count") {
     // This `dataset` will contain an empty partition because it has five rows but
     // the parallelism is bigger than that. Because the issue was about `AFTAggregator`s
-    // being merged incorrectly when it has an empty partition, running the codes below
-    // should not throw an exception.
+    // being merged incorrectly when it has an empty partition, the trained model always has
+    // 1.0 scale from Euler's number for 0.
     val points = sc.parallelize(Seq(
       AFTPoint(Vectors.dense(1.560, -0.605), 1.218, 1.0),
       AFTPoint(Vectors.dense(0.346, 2.158), 2.949, 0.0),
