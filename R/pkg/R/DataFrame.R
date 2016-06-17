@@ -455,8 +455,14 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
+#' (Deprecated) Register Temporary Table
+#' Registers a SparkDataFrame as a Temporary Table in the SQLContext
+#' @param x A SparkDataFrame
 #' @param tableName A character vector containing the name of the table
-#' @rdname createOrReplaceTempView
+#'
+#' @family SparkDataFrame functions
+#' @seealso \link{createOrReplaceTempView}
+#' @rdname registerTempTable-deprecated
 #' @name registerTempTable
 #' @export
 setMethod("registerTempTable",
