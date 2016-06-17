@@ -60,7 +60,7 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
     PowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
   }
 
-  private[clustering]
+  private[spark]
   object SaveLoadV1_0 {
 
     private val thisFormatVersion = "1.0"
