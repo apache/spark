@@ -421,6 +421,13 @@ object SparkHadoopUtil {
 
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
+  // Just load HdfsConfiguration into the class loader to add
+  // hdfs-site.xml as a default configuration file otherwise
+  // some HDFS related configurations doesn't ship to Executors and
+  // it can cause UnknownHostException when NameNode HA is enabled.
+  // See SPARK-11227 for more details.
+  Utils.classForName("org.apache.hadoop.hdfs.HdfsConfiguration")
+
   /**
    * Number of records to update input metrics when reading from HadoopRDDs.
    *
