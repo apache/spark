@@ -102,8 +102,17 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
+  /**
+   * An array that stores the weights of class labels. All elements must be non-negative.
+   * (default = Array(1, 1))
+   * @group Param
+   */
+  final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
+    " that stores the weights of class labels. All elements must be non-negative.")
+
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
-    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
+    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10,
+    classWeights -> Array(1.0, 1.0))
 
   /** @group setParam */
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
@@ -143,6 +152,12 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
+
+  /** @group SetParam */
+  def setClassWeights(value: Array[Double]): this.type = set(classWeights, value)
+
+  /** @group GetParam */
+  final def getClassWeights: Array[Double] = $(classWeights)
 
   /**
    * Specifies how often to checkpoint the cached node IDs.
@@ -186,14 +201,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 private[ml] trait TreeClassifierParams extends Params {
 
   /**
-   * An array that stores the weights of class labels. All elements must be non-negative.
-   * (default = Array(1, 1))
-   * @group expertParam
-   */
-  final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
-    " that stores the weights of class labels. All elements must be non-negative.")
-
-  /**
    * Criterion used for information gain calculation (case-insensitive).
    * Supported: "entropy", "gini" and "weightedgini".
    * (default = gini)
@@ -204,13 +211,7 @@ private[ml] trait TreeClassifierParams extends Params {
     s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
     (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
 
-  setDefault(impurity -> "gini", classWeights -> Array(1.0, 1.0))
-
-  /** @group expertSetParam */
-  def setClassWeights(value: Array[Double]): this.type = set(classWeights, value)
-
-  /** @group expertGetParam */
-  final def getClassWeights: Array[Double] = $(classWeights)
+  setDefault(impurity -> "gini")
 
   /** @group setParam */
   def setImpurity(value: String): this.type = set(impurity, value)
@@ -331,7 +332,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       numClasses: Int,
       oldAlgo: OldAlgo.Algo,
       oldImpurity: OldImpurity,
-      classWeights: Array[Double]): OldStrategy = {
+      classWeights: Array[Double] = Array()): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo,
       oldImpurity, getSubsamplingRate, classWeights)
   }
