@@ -137,7 +137,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("minimize delay between batch construction and execution") {
+  ignore("minimize delay between batch construction and execution") {
 
     // For each batch, we would retrieve new data's offsets and log them before we run the execution
     // This checks whether the key of the offset log is the expected batch id
