@@ -54,11 +54,11 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
+    def __init__(self, jgd, sql_ctx):
+        self._jgd = jgd
         self.sql_ctx = sql_ctx
 
-    @ignore_unicode_prefix
+    @ignore_unicode_prefixs
     @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
@@ -83,11 +83,11 @@ class GroupedData(object):
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -187,9 +187,9 @@ class GroupedData(object):
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
-            jgd = self._jdf.pivot(pivot_col)
+            jgd = self._jgd.pivot(pivot_col)
         else:
-            jgd = self._jdf.pivot(pivot_col, values)
+            jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self.sql_ctx)
 
 
