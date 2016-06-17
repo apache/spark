@@ -466,12 +466,9 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 #' @export
 setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
-#' @rdname dropduplicates
+#' @rdname dropDuplicates
 #' @export
-setGeneric("dropDuplicates",
-           function(x, colNames = columns(x)) {
-             standardGeneric("dropDuplicates")
-           })
+setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
 
 #' @rdname nafunctions
 #' @export

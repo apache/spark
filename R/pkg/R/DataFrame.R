@@ -1936,10 +1936,11 @@ setMethod("where",
 #' the subset of columns.
 #'
 #' @param x A SparkDataFrame.
-#' @param colnames A character vector of column names.
+#' @param ... A character vector of column names or string column names.
+#'            If the first argument contains a character vector, the followings are ignored.
 #' @return A SparkDataFrame with duplicate rows removed.
 #' @family SparkDataFrame functions
-#' @rdname dropduplicates
+#' @rdname dropDuplicates
 #' @name dropDuplicates
 #' @export
 #' @examples
@@ -1949,14 +1950,26 @@ setMethod("where",
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' dropDuplicates(df)
+#' dropDuplicates(df, "col1", "col2")
 #' dropDuplicates(df, c("col1", "col2"))
 #' }
 setMethod("dropDuplicates",
           signature(x = "SparkDataFrame"),
-          function(x, colNames = columns(x)) {
-            stopifnot(class(colNames) == "character")
-
-            sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(colNames))
+          function(x, ...) {
+            cols <- list(...)
+            if (length(cols) == 0) {
+              sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(columns(x)))
+            } else {
+              if (!all(sapply(cols, function(c) { is.character(c) }))) {
+                stop("all columns names should be characters")
+              }
+              col <- cols[[1]]
+              if (length(col) > 1) {
+                sdf <- callJMethod(x@sdf, "dropDuplicates", as.list(col))
+              } else {
+                sdf <- callJMethod(x@sdf, "dropDuplicates", cols)
+              }
+            }
             dataFrame(sdf)
           })
 
