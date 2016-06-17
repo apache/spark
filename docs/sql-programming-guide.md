@@ -25,7 +25,7 @@ the `spark-shell`, `pyspark` shell, or `sparkR` shell.
 One use of Spark SQL is to execute SQL queries.
 Spark SQL can also be used to read data from an existing Hive installation. For more on how to
 configure this feature, please refer to the [Hive Tables](#hive-tables) section. When running
-SQL from within another programming language the results will be returned as a [Dataset\[Row\]](#datasets).
+SQL from within another programming language the results will be returned as a [DataFrame](#datasets-and-dataframes).
 You can also interact with the SQL interface using the [command-line](#running-the-spark-sql-cli)
 or over [JDBC/ODBC](#running-the-thrift-jdbcodbc-server).
 
@@ -34,7 +34,7 @@ or over [JDBC/ODBC](#running-the-thrift-jdbcodbc-server).
 A Dataset is a new interface added in Spark 1.6 that tries to provide the benefits of RDDs (strong
 typing, ability to use powerful lambda functions) with the benefits of Spark SQL's optimized
 execution engine. A Dataset can be [constructed](#creating-datasets) from JVM objects and then
-manipulated using functional transformations (map, flatMap, filter, etc.).
+manipulated using functional transformations (`map`, `flatMap`, `filter`, etc.).
 
 The Dataset API is the successor of the DataFrame API, which was introduced in Spark 1.3. In Spark
 2.0, Datasets and DataFrames are unified, and DataFrames are now equivalent to Datasets of `Row`s.
@@ -57,7 +57,7 @@ Throughout this document, we will often refer to Scala/Java Datasets of `Row`s a
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-The entry point into all functionality in Spark SQL is the [`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build()`:
 
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
@@ -76,7 +76,7 @@ import spark.implicits._
 
 <div data-lang="java" markdown="1">
 
-The entry point into all functionality in Spark SQL is the [`SparkSession`](api/java/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build()`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/java/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build()`:
 
 {% highlight java %}
 import org.apache.spark.sql.SparkSession
@@ -91,10 +91,11 @@ SparkSession spark = SparkSession.build()
 
 <div data-lang="python"  markdown="1">
 
-The entry point into all relational functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build`:
 
 {% highlight python %}
 from pyspark.sql import SparkSession
+
 spark = SparkSession.build \
   .master("local") \
   .appName("Word Count") \
@@ -106,32 +107,33 @@ spark = SparkSession.build \
 
 <div data-lang="r"  markdown="1">
 
-The entry point into all relational functionality in Spark is the
-`SQLContext` class. To create a basic `SQLContext`, all you need is a `SparkContext`.
+Unlike Scala, Java, and Python API, we haven't finished migrating `SQLContext` to `SparkSession` for SparkR yet, so
+the entry point into all relational functionality in SparkR is still the
+`SQLContext` class in Spark 2.0. To create a basic `SQLContext`, all you need is a `SparkContext`.
 
 {% highlight r %}
 spark <- sparkRSQL.init(sc)
 {% endhighlight %}
 
+Note that when invoked for the first time, `sparkRSQL.init()` initializes a global `SQLContext` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SQLContext` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SQLContext` instance around.
 </div>
 </div>
 
-`SparkSession` in Spark 2.0 provides builtin support for Hive features including the ability to
+`SparkSession` (or `SQLContext` for SparkR) in Spark 2.0 provides builtin support for Hive features including the ability to
 write queries using HiveQL, access to Hive UDFs, and the ability to read data from Hive tables.
 To use these features, you do not need to have an existing Hive setup.
 
 ## Creating DataFrames
 
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
-from a Hive table, or from [data sources](#data-sources).
+from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
 {% highlight scala %}
 val spark: SparkSession // An existing SparkSession.
-
 val df = spark.read.json("examples/src/main/resources/people.json")
 
 // Displays the content of the DataFrame to stdout
@@ -141,6 +143,11 @@ df.show()
 </div>
 
 <div data-lang="java" markdown="1">
+With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
+from a Hive table, or from [Spark data sources](#data-sources).
+
+As an example, the following creates a DataFrame based on the content of a JSON file:
+
 {% highlight java %}
 SparkSession spark = ...; // An existing SparkSession.
 Dataset<Row> df = spark.read().json("examples/src/main/resources/people.json");
@@ -152,10 +159,13 @@ df.show();
 </div>
 
 <div data-lang="python"  markdown="1">
-{% highlight python %}
-from pyspark.sql import SparkSession
-spark = SparkSession(sc)
+With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
+from a Hive table, or from [Spark data sources](#data-sources).
 
+As an example, the following creates a DataFrame based on the content of a JSON file:
+
+{% highlight python %}
+# spark is an existing SparkSession
 df = spark.read.json("examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame to stdout
@@ -165,9 +175,12 @@ df.show()
 </div>
 
 <div data-lang="r"  markdown="1">
-{% highlight r %}
-spark <- SQLContext(sc)
+With a `SQLContext`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
+from a Hive table, or from [Spark data sources](#data-sources).
 
+As an example, the following creates a DataFrame based on the content of a JSON file:
+
+{% highlight r %}
 df <- read.json("examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame to stdout
@@ -175,7 +188,6 @@ showDF(df)
 {% endhighlight %}
 
 </div>
-
 </div>
 
 
@@ -303,8 +315,7 @@ latter form, which is future proof and won't break with column names that
 are also attributes on the DataFrame class.
 
 {% highlight python %}
-from pyspark.sql import SparkSession
-spark = SparkSession(sc)
+# spark is an existing SparkSession
 
 # Create the DataFrame
 df = spark.read.json("examples/src/main/resources/people.json")
@@ -412,10 +423,10 @@ In addition to simple column references and expressions, DataFrames also have a 
 
 ## Running SQL Queries Programmatically
 
-The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
-
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
+The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
+
 {% highlight scala %}
 val spark = ... // An existing SparkSession
 val df = spark.sql("SELECT * FROM table")
@@ -423,6 +434,8 @@ val df = spark.sql("SELECT * FROM table")
 </div>
 
 <div data-lang="java" markdown="1">
+The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `Dataset<Row>`.
+
 {% highlight java %}
 SparkSession spark = ... // An existing SparkSession
 Dataset<Row> df = spark.sql("SELECT * FROM table")
@@ -430,16 +443,18 @@ Dataset<Row> df = spark.sql("SELECT * FROM table")
 </div>
 
 <div data-lang="python"  markdown="1">
+The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
+
 {% highlight python %}
-from pyspark.sql import SparkSession
-spark = SparkSession(sc)
+# spark is an existing SparkSession
 df = spark.sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
 
 <div data-lang="r"  markdown="1">
+The `sql` function enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
+
 {% highlight r %}
-spark <- sparkRSQL.init(sc)
 df <- sql("SELECT * FROM table")
 {% endhighlight %}
 </div>
@@ -449,7 +464,7 @@ df <- sql("SELECT * FROM table")
 
 ## Creating Datasets
 
-Datasets are similar to RDDs, however, instead of using Java Serialization or Kryo they use
+Datasets are similar to RDDs, however, instead of using Java serialization or Kryo they use
 a specialized [Encoder](api/scala/index.html#org.apache.spark.sql.Encoder) to serialize the objects
 for processing or transmitting over the network. While both encoders and standard serialization are
 responsible for turning an object into bytes, encoders are code generated dynamically and use a format
@@ -479,8 +494,30 @@ val people = spark.read.json(path).as[Person]
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-JavaSparkContext sc = ...; // An existing JavaSparkContext.
-SparkSession spark = new org.apache.spark.sql.SparkSession(sc);
+SparkSession spark = ... // An existing SparkSession
+
+// Encoders for most common types are provided in class Encoders.
+Dataset<Integer> ds = spark.createDataset(Arrays.asList(1, 2, 3), Encoders.INT());
+ds.map(new MapFunction<Integer, Integer>() {
+  @Override
+  public Integer call(Integer value) throws Exception {
+    return value + 1;
+  }
+}, Encoders.INT()); // Returns: [2, 3, 4]
+
+Person person = new Person();
+person.setName("Andy");
+person.setAge(32);
+
+// Encoders are also created for Java beans.
+Dataset<Person> ds = spark.createDataset(
+  Collections.singletonList(person),
+  Encoders.bean(Person.class)
+);
+
+// DataFrames can be converted to a Dataset by providing a class. Mapping will be done by name.
+String path = "examples/src/main/resources/people.json";
+Dataset<Person> people = spark.read().json(path).as(Encoders.bean(Person.class));
 {% endhighlight %}
 
 </div>
@@ -506,7 +543,7 @@ The Scala interface for Spark SQL supports automatically converting an RDD conta
 to a DataFrame. The case class
 defines the schema of the table. The names of the arguments to the case class are read using
 reflection and become the names of the columns. Case classes can also be nested or contain complex
-types such as Sequences or Arrays. This RDD can be implicitly converted to a DataFrame and then be
+types such as `Seq`s or `Array`s. This RDD can be implicitly converted to a DataFrame and then be
 registered as a table. Tables can be used in subsequent SQL statements.
 
 {% highlight scala %}
@@ -732,8 +769,8 @@ import org.apache.spark.sql.Row;
 // Import RowFactory.
 import org.apache.spark.sql.RowFactory;
 
-// sc is an existing JavaSparkContext.
-SparkSession spark = new org.apache.spark.sql.SparkSession(sc);
+SparkSession spark = ...; // An existing SparkSession.
+JavaSparkContext sc = spark.sparkContext
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
@@ -1592,9 +1629,6 @@ line must contain a separate, self-contained valid JSON object. As a consequence
 a regular multi-line JSON file will most often fail.
 
 {% highlight r %}
-# sc is an existing SparkContext.
-spark <- sparkRSQL.init(sc)
-
 # A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
 path <- "examples/src/main/resources/people.json"
@@ -1711,8 +1745,7 @@ Instead, use `spark.sql.warehouse.dir` to specify the default location of databa
 You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight python %}
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+# spark is an existing SparkSession
 
 spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
@@ -1729,9 +1762,6 @@ results = spark.sql("FROM src SELECT key, value").collect()
 When working with Hive one must construct a `HiveContext`, which inherits from `SparkSession`, and
 adds support for finding tables in the MetaStore and writing queries using HiveQL.
 {% highlight r %}
-# sc is an existing SparkContext.
-spark <- sparkRHive.init(sc)
-
 sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
