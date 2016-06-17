@@ -176,8 +176,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
       numClasses: Int,
       oldAlgo: OldAlgo.Algo,
       oldImpurity: OldImpurity,
-      subsamplingRate: Double,
-      classWeights: Array[Double]): OldStrategy = {
+      subsamplingRate: Double): OldStrategy = {
     val strategy = OldStrategy.defaultStrategy(oldAlgo)
     strategy.impurity = oldImpurity
     strategy.checkpointInterval = getCheckpointInterval
@@ -190,7 +189,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
     strategy.subsamplingRate = subsamplingRate
-    strategy.classWeights = classWeights
+    strategy.classWeights = getClassWeights
     strategy
   }
 }
@@ -331,10 +330,9 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       categoricalFeatures: Map[Int, Int],
       numClasses: Int,
       oldAlgo: OldAlgo.Algo,
-      oldImpurity: OldImpurity,
-      classWeights: Array[Double] = Array()): OldStrategy = {
+      oldImpurity: OldImpurity): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo,
-      oldImpurity, getSubsamplingRate, classWeights)
+      oldImpurity, getSubsamplingRate)
   }
 }
 
@@ -477,7 +475,8 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
       categoricalFeatures: Map[Int, Int],
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2,
-      oldAlgo, OldVariance, classWeights = Array(1.0, 1.0))
+      oldAlgo, OldVariance)
+
     // NOTE: The old API does not support "seed" so we ignore it.
     new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
   }
