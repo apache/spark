@@ -177,6 +177,12 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("load API - empty path") {
+    val res = Seq.empty[String].toDF("value")
+    checkAnswer(spark.read.text(), res)
+    checkAnswer(spark.read.textFile().toDF(), res)
+  }
+
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
   }

@@ -217,6 +217,23 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("illegal format name") {
+    val e = intercept[AnalysisException] {
+      spark.read.format("illegal").load("/test")
+    }
+    assert(e.getMessage.contains("Failed to find data source: illegal"))
+  }
+
+  test("empty partitionBy") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val input = spark.range(10).toDF()
+      input.write.format("parquet").mode("overwrite").partitionBy().save(path)
+      val output = spark.read.parquet(path)
+      checkAnswer(input, output)
+    }
+  }
+
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath

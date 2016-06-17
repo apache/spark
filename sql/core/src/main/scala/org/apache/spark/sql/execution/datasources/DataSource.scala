@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -376,6 +377,9 @@ case class DataSource(
 
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
+          if (allPaths.isEmpty && !format.isInstanceOf[TextFileFormat]) {
+            throw new IllegalArgumentException(s"'path' is not specified")
+          }
           format.inferSchema(
             sparkSession,
             caseInsensitiveOptions,

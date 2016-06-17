@@ -425,6 +425,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     assert(e.contains("Can not create a Path from an empty string"))
   }
 
+  test("load API - empty path") {
+    val expectedErrorMsg = "'path' is not specified"
+    var e = intercept[IllegalArgumentException] {
+      spark.read.parquet()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+
+    e = intercept[IllegalArgumentException] {
+      spark.read.format("parquet").load()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+  }
+
   test("illegal compression") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath

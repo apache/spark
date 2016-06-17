@@ -1675,6 +1675,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(e.contains("Can not create a Path from an empty string"))
   }
 
+  test("load API - empty path") {
+    val expectedErrorMsg = "'path' is not specified"
+    var e = intercept[IllegalArgumentException] {
+      spark.read.json()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+
+    e = intercept[IllegalArgumentException] {
+      spark.read.format("json").load()
+    }.getMessage
+    assert(e.contains(expectedErrorMsg))
+  }
+
   test("illegal compression") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
