@@ -203,7 +203,7 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
+    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
     ;
 

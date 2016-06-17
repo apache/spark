@@ -166,6 +166,74 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     sql("DROP TABLE tmp_table")
   }
 
+  test("INSERT OVERWRITE - partition IF NOT EXISTS") {
+    withTempDir { tmpDir =>
+      val table = "table_with_partition"
+      withTable(table) {
+        val selQuery = s"select c1, p1, p2 from $table"
+        sql(
+          s"""
+             |CREATE TABLE $table(c1 string)
+             |PARTITIONED by (p1 string,p2 string)
+             |location '${tmpDir.toURI.toString}'
+           """.stripMargin)
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $table
+             |partition (p1='a',p2='b')
+             |SELECT 'blarr'
+           """.stripMargin)
+        checkAnswer(
+          sql(selQuery),
+          Row("blarr", "a", "b"))
+
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $table
+             |partition (p1='a',p2='b')
+             |SELECT 'blarr2'
+           """.stripMargin)
+        checkAnswer(
+          sql(selQuery),
+          Row("blarr2", "a", "b"))
+
+        var e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $table
+               |partition (p1='a',p2) IF NOT EXISTS
+               |SELECT 'blarr3', 'newPartition'
+             """.stripMargin)
+        }
+        assert(e.getMessage.contains(
+          "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
+
+        e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $table
+               |partition (p1='a',p2) IF NOT EXISTS
+               |SELECT 'blarr3', 'b'
+             """.stripMargin)
+        }
+        assert(e.getMessage.contains(
+          "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
+
+        // If the partition already exists, the insert will overwrite the data
+        // unless users specify IF NOT EXISTS
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $table
+             |partition (p1='a',p2='b') IF NOT EXISTS
+             |SELECT 'blarr3'
+           """.stripMargin)
+        checkAnswer(
+          sql(selQuery),
+          Row("blarr2", "a", "b"))
+      }
+    }
+  }
+
   test("Insert ArrayType.containsNull == false") {
     val schema = StructType(Seq(
       StructField("a", ArrayType(StringType, containsNull = false))))
