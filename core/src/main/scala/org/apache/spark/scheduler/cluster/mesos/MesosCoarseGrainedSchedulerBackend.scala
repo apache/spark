@@ -389,8 +389,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         // Catch offer limits
         calculateUsableResources(
           sc,
-          offerMem.toInt,
-          offerCpu.toInt
+          offerCpu.toInt,
+          offerMem.toInt
         ).flatMap(
           {
             // Catch "global" limits
@@ -460,10 +460,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     if (desiredCpu < 1) {
       logTrace(s"Executor cores too low at $desiredCpu")
       None
-    } else if (desiredMemory < availableMem) {
+    } else if (desiredMemory > availableMem) {
       logTrace(s"Offer memory $availableMem is less than needed memory $desiredMemory")
       None
-    } else if (desiredCpu < availableCpus) {
+    } else if (desiredCpu > availableCpus) {
       logTrace(s"Offer cpu $availableCpus is les than needed cpu $desiredCpu")
       None
     } else if (desiredCpu + totalCoresAcquired > maxCores) {
