@@ -74,15 +74,11 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
       // We are inserting into an InsertableRelation or HadoopFsRelation.
       case i @ InsertIntoTable(
       l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _), _, child, _, _) =>
-        // First, make sure the data to be inserted have the same number of fields with the
-        // schema of the relation.
         if (l.output.size != child.output.size) {
-          sys.error(
-            s"$l requires that the data to be inserted have the same number of columns as the " +
-              s"target table: target table has ${l.output.size} column(s) but " +
-              s"the inserted data has ${child.output.size} column(s).")
+          i
+        } else {
+          castAndRenameChildOutput(i, l.output, child)
         }
-        castAndRenameChildOutput(i, l.output, child)
   }
 
   /** If necessary, cast data types and rename fields to the expected types and names. */
@@ -119,11 +115,21 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
+  def checkNumberOfColumns(sourceTable: LogicalPlan, targetTable: LogicalRelation): Unit = {
+    if (sourceTable.output.size != targetTable.output.size) {
+      failAnalysis(
+        s"$targetTable requires that the data to be inserted have the same number of " +
+          s"columns as the target table: target table has ${targetTable.output.size} " +
+          s"column(s) but the inserted data has ${sourceTable.output.size} column(s).")
+    }
+  }
+
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case i @ logical.InsertIntoTable(
         l @ LogicalRelation(t: InsertableRelation, _, _),
         partition, query, overwrite, ifNotExists) =>
+        checkNumberOfColumns(query, l)
         // Right now, we do not support insert into a data source table with partition specs.
         if (partition.nonEmpty) {
           failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
@@ -141,7 +147,8 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
       case logical.InsertIntoTable(
-        LogicalRelation(r: HadoopFsRelation, _, _), part, query, overwrite, _) =>
+        l @ LogicalRelation(r: HadoopFsRelation, _, _), part, query, overwrite, _) =>
+        checkNumberOfColumns(query, l)
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
         val existingPartitionColumns = r.partitionSchema.fieldNames.toSet
