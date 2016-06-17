@@ -160,5 +160,3 @@ test_that("Pipelined operations on RDDs created using textFile", {
 
   unlink(fileName)
 })
-
-sparkR.session.stop()

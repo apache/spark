@@ -220,5 +220,3 @@ test_that("test partitionBy with string keys", {
   expect_equal(sortKeyValueList(actual_first), sortKeyValueList(expected_first))
   expect_equal(sortKeyValueList(actual_second), sortKeyValueList(expected_second))
 })
-
-sparkR.session.stop()

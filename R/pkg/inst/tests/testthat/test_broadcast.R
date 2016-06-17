@@ -47,5 +47,3 @@ test_that("without using broadcast variable", {
   expected <- list(sum(randomMat) * 1, sum(randomMat) * 2)
   expect_equal(actual, expected)
 })
-
-sparkR.session.stop()

@@ -2316,20 +2316,29 @@ test_that("randomSplit", {
 })
 
 test_that("Change config on SparkSession", {
+  # first, set it to a random but known value
   conf <- callJMethod(sparkSession, "conf")
   property <- paste0("spark.testing.", as.character(runif(1)))
-  value <- as.character(runif(1))
-  callJMethod(conf, "set", property, value)
+  value1 <- as.character(runif(1))
+  callJMethod(conf, "set", property, value1)
 
-  value <- as.character(runif(1))
-  l <- list(value)
+  # next, change the same property to the new value
+  value2 <- as.character(runif(1))
+  l <- list(value2)
   names(l) <- property
-  sparkR.session(l)
+  sparkR.session(sparkConfig = l)
 
   conf <- callJMethod(sparkSession, "conf")
   newValue <- callJMethod(conf, "get", property, "")
+  expect_equal(value2, newValue)
 
-  expect_equal(value, newValue)
+  value <- as.character(runif(1))
+  sparkR.session(spark.app.name = "sparkSession test", spark.testing.r.session.r = value)
+  conf <- callJMethod(sparkSession, "conf")
+  appNameValue <- callJMethod(conf, "get", "spark.app.name", "")
+  testValue <- callJMethod(conf, "get", "spark.testing.r.session.r", "")
+  expect_equal(appNameValue, "sparkSession test")
+  expect_equal(testValue, value)
 })
 
 test_that("enableHiveSupport on SparkSession", {

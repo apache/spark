@@ -65,5 +65,3 @@ test_that("take() gives back the original elements in correct count and order", 
   expect_equal(length(take(numListRDD, 0)), 0)
   expect_equal(length(take(numVectorRDD, 0)), 0)
 })
-
-sparkR.session.stop()

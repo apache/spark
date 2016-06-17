@@ -88,5 +88,3 @@ test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
   unlink(fileName1, recursive = TRUE)
   unlink(fileName2, recursive = TRUE)
 })
-
-sparkR.session.stop()

@@ -182,5 +182,3 @@ test_that("overrideEnvs", {
   expect_equal(config[["param_only"]], "blah")
   expect_equal(config[["config_only"]], "ok")
 })
-
-sparkR.session.stop()

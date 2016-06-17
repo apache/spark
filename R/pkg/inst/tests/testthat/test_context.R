@@ -54,6 +54,17 @@ test_that("Check masked functions", {
                sort(namesOfMaskedCompletely, na.last = TRUE))
 })
 
+test_that("repeatedly starting and stopping SparkR", {
+  for (i in 1:4) {
+    sc <- suppressWarnings(sparkR.init())
+    rdd <- parallelize(sc, 1:20, 2L)
+    expect_equal(count(rdd), 20)
+    suppressWarnings(sparkR.stop())
+  }
+})
+
+# Does not work consistently even with Hive off
+# nolint start
 # test_that("repeatedly starting and stopping SparkR", {
 #   for (i in 1:4) {
 #     sparkR.session(enableHiveSupport = FALSE)
@@ -63,6 +74,7 @@ test_that("Check masked functions", {
 #     Sys.sleep(5) # Need more time to shutdown Hive metastore
 #   }
 # })
+# nolint end
 
 test_that("rdd GC across sparkR.stop", {
   sc <- sparkR.sparkContext() # sc should get id 0

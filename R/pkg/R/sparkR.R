@@ -87,7 +87,7 @@ sparkR.session.stop <- function() {
   clearJobjs()
 }
 
-#' Initialize a new Spark Context.
+#' (Deprecated) Initialize a new Spark Context.
 #'
 #' This function initializes a new SparkContext. For details on how to initialize
 #' and use SparkR, refer to SparkR programming guide at
@@ -100,6 +100,8 @@ sparkR.session.stop <- function() {
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
 #' @param sparkJars Character vector of jar files to pass to the worker nodes
 #' @param sparkPackages Character vector of packages from spark-packages.org
+#' @seealso \link{sparkR.session}
+#' @rdname sparkR.init-deprecated
 #' @export
 #' @examples
 #'\dontrun{
@@ -248,7 +250,7 @@ sparkR.sparkContext <- function(
   sc
 }
 
-#' Initialize a new SQLContext.
+#' (Deprecated) Initialize a new SQLContext.
 #'
 #' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
@@ -257,6 +259,8 @@ sparkR.sparkContext <- function(
 #' This API is deprecated and kept for backward compatibility only.
 #'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @seealso \link{sparkR.session}
+#' @rdname sparkRSQL.init-deprecated
 #' @export
 #' @examples
 #'\dontrun{
@@ -275,7 +279,7 @@ sparkRSQL.init <- function(jsc = NULL) {
   sparkR.session(enableHiveSupport = FALSE)
 }
 
-#' Initialize a new HiveContext.
+#' (Deprecated) Initialize a new HiveContext.
 #'
 #' This function creates a HiveContext from an existing JavaSparkContext
 #'
@@ -283,6 +287,8 @@ sparkRSQL.init <- function(jsc = NULL) {
 #' This API is deprecated and kept for backward compatibility only.
 #'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
+#' @seealso \link{sparkR.session}
+#' @rdname sparkRHive.init-deprecated
 #' @export
 #' @examples
 #'\dontrun{
@@ -303,17 +309,17 @@ sparkRHive.init <- function(jsc = NULL) {
 
 #' Get the existing SparkSession or initialize a new SparkSession.
 #'
-#' Additional Spark properties can be set (...), and these named parameters takes priority over
+#' Additional Spark properties can be set (...), and these named parameters take priority over
 #' over values in master, appName, named lists of sparkConfig.
 #'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
 #' @param sparkHome Spark Home directory
 #' @param sparkConfig Named list of Spark configuration to set on worker nodes
-#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
 #' @param sparkJars Character vector of jar files to pass to the worker nodes
 #' @param sparkPackages Character vector of packages from spark-packages.org
-#' @param enableHiveSupport Enable support for Hive
+#' @param enableHiveSupport Enable support for Hive, fallback if not built with Hive support; once
+#'        set, this cannot be turned off on an existing session
 #' @export
 #' @examples
 #'\dontrun{
@@ -322,12 +328,10 @@ sparkRHive.init <- function(jsc = NULL) {
 #'
 #' sparkR.session("local[2]", "SparkR", "/home/spark")
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
-#'                            list(spark.executor.memory="4g"),
-#'                            list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
-#'                            c("one.jar", "two.jar", "three.jar"),
-#'                            c("com.databricks:spark-avro_2.10:2.0.1"))
-#' sparkR.session(spark.master = "yarn-client",
-#'                            spark.executor.memory = "4g")
+#'                list(spark.executor.memory="4g"),
+#'                c("one.jar", "two.jar", "three.jar"),
+#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note since 2.0.0
 
@@ -347,10 +351,10 @@ sparkR.session <- function(
     paramMap <- convertNamedListToEnv(namedParams)
     # Override for certain named parameters
     if (exists("spark.master", envir = paramMap)) {
-      master = paramMap[["spark.master"]]
+      master <- paramMap[["spark.master"]]
     }
     if (exists("spark.app.name", envir = paramMap)) {
-      appName = paramMap[["spark.app.name"]]
+      appName <- paramMap[["spark.app.name"]]
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
@@ -365,8 +369,10 @@ sparkR.session <- function(
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     sparkSession <- get(".sparkRsession", envir = .sparkREnv)
     # Apply config to Spark Context and Spark Session if already there
+    # Cannot change enableHiveSupport
     callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                 "setSparkContextSessionConf",
+                sparkSession,
                 sparkConfigMap)
   } else {
     jsc <- get(".sparkRjsc", envir = .sparkREnv)

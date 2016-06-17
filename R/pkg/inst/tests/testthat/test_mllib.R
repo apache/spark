@@ -453,5 +453,3 @@ test_that("spark.survreg", {
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })
-
-sparkR.session.stop()

@@ -6,7 +6,7 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 #useDynLib(SparkR, stringHashCode)
 
 # S3 methods exported
-export("sparkR.session.getOrCreate")
+export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
 export("sparkR.session.stop")

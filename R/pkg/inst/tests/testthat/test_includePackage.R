@@ -56,5 +56,3 @@ test_that("use include package", {
     actual <- collect(data)
   }
 })
-
-sparkR.session.stop()

@@ -18,16 +18,16 @@
 .First <- function() {
   home <- Sys.getenv("SPARK_HOME")
   .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
-  Sys.setenv(NOAWT=1)
+  Sys.setenv(NOAWT = 1)
 
   # Make sure SparkR package is the last loaded one
   old <- getOption("defaultPackages")
   options(defaultPackages = c(old, "SparkR"))
 
-  spark <- SparkR::sparkR.session.getOrCreate()
-  assign("spark", spark, envir=.GlobalEnv)
+  spark <- SparkR::sparkR.session()
+  assign("spark", spark, envir = .GlobalEnv)
   sc <- SparkR:::callJMethod(spark, "sparkContext")
-  assign("sc", sc, envir=.GlobalEnv)
+  assign("sc", sc, envir = .GlobalEnv)
   sparkVer <- SparkR:::callJMethod(sc, "version")
   cat("\n Welcome to")
   cat("\n")
