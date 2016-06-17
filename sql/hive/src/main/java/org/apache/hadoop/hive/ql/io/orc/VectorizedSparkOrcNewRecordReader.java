@@ -17,9 +17,19 @@
 
 package org.apache.hadoop.hive.ql.io.orc;
 
-import org.apache.hadoop.conf.Configuration;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
+import org.apache.commons.lang.NotImplementedException;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.common.type.Decimal128;
+import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterFactory;
@@ -33,8 +43,13 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
-import java.io.IOException;
-import java.util.List;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * This is based on hive-exec-1.2.1
@@ -43,7 +58,7 @@ import java.util.List;
  * NameNode calls in OrcRelation.
  */
 public class VectorizedSparkOrcNewRecordReader
-    extends org.apache.hadoop.mapreduce.RecordReader<NullWritable, OrcStruct>
+    extends org.apache.hadoop.mapreduce.RecordReader<NullWritable, InternalRow>
     implements SparkOrcNewRecordReaderBase {
   private final org.apache.hadoop.mapred.RecordReader<NullWritable, VectorizedRowBatch> reader;
   private final int numColumns;
@@ -56,6 +71,8 @@ public class VectorizedSparkOrcNewRecordReader
   private final VectorExpressionWriter [] valueWriters;
   private long numRowsOfBatch = 0;
   private int indexOfRow = 0;
+
+  private final Row row;
 
   public VectorizedSparkOrcNewRecordReader(
       Reader file,
@@ -78,6 +95,7 @@ public class VectorizedSparkOrcNewRecordReader
       throw new RuntimeException(e);
     }
     this.progress = reader.getProgress();
+    this.row = new Row(this.internalValue.cols, columnIDs);
   }
 
   @Override
@@ -92,12 +110,14 @@ public class VectorizedSparkOrcNewRecordReader
   }
 
   @Override
-  public OrcStruct getCurrentValue() throws IOException,
+  public InternalRow getCurrentValue() throws IOException,
       InterruptedException {
     if (indexOfRow >= numRowsOfBatch) {
       return null;
     }
-    try {
+    // try {
+    row.rowId = indexOfRow;
+      /*
       for (int p = 0; p < internalValue.numCols; p++) {
         // Only when this column is a required column, we populate the data.
         if (columnIDs.contains(p)) {
@@ -108,12 +128,13 @@ public class VectorizedSparkOrcNewRecordReader
           }
         }
       }
-    } catch (HiveException e) {
-      throw new RuntimeException(e);
-    }
+      */
+    // } catch (HiveException e) {
+    //  throw new RuntimeException(e);
+    // }
     indexOfRow++;
 
-    return value;
+    return row; // value;
   }
 
   @Override
@@ -157,5 +178,122 @@ public class VectorizedSparkOrcNewRecordReader
   @Override
   public ObjectInspector getObjectInspector() {
     return objectInspector;
+  }
+
+  /**
+   * Adapter class to return an internal row.
+   */
+  public static final class Row extends InternalRow {
+    protected int rowId;
+    private List<Integer> columnIDs;
+    private final ColumnVector[] columns;
+
+    private Row(ColumnVector[] columns, List<Integer> columnIDs) {
+      this.columns = columns;
+      this.columnIDs = columnIDs;
+    }
+
+    @Override
+    public int numFields() { return columns.length; }
+
+    @Override
+    public boolean anyNull() {
+      for (int i = 0; i < columns.length; i++) {
+        if (columnIDs.contains(i) && columns[i].isNull[rowId]) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    @Override
+    public boolean isNullAt(int ordinal) { return columns[columnIDs.get(ordinal)].isNull[rowId]; }
+
+    @Override
+    public boolean getBoolean(int ordinal) {
+      return ((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId] > 0;
+    }
+
+    @Override
+    public byte getByte(int ordinal) {
+      return (byte)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public short getShort(int ordinal) {
+      return (short)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public int getInt(int ordinal) {
+      return (int)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public long getLong(int ordinal) {
+      return (long)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public float getFloat(int ordinal) {
+      return (float)((DoubleColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public double getDouble(int ordinal) {
+      return (double)((DoubleColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public Decimal getDecimal(int ordinal, int precision, int scale) {
+      return Decimal.apply(
+        ((DecimalColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId].getHiveDecimal()
+          .bigDecimalValue(),
+        precision, scale);
+    }
+
+    @Override
+    public UTF8String getUTF8String(int ordinal) {
+      BytesColumnVector bv = ((BytesColumnVector)columns[columnIDs.get(ordinal)]);
+      String str = new String(bv.vector[rowId], bv.start[rowId], bv.length[rowId],
+        StandardCharsets.UTF_8);
+      return UTF8String.fromString(str);
+      // new String(((BytesColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId]));
+    }
+
+    @Override
+    public byte[] getBinary(int ordinal) {
+      return (byte[])((BytesColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+    }
+
+    @Override
+    public CalendarInterval getInterval(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public InternalRow getStruct(int ordinal, int numFields) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public ArrayData getArray(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public MapData getMap(int ordinal) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public Object get(int ordinal, DataType dataType) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public InternalRow copy() {
+      throw new NotImplementedException();
+    }
   }
 }

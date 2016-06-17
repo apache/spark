@@ -141,37 +141,40 @@ private[sql] class OrcFileFormat
         val physicalSchema = maybePhysicalSchema.get
         OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
 
-        val orcRecordReader: MReduceRecordReader[_, org.apache.hadoop.hive.ql.io.orc.OrcStruct] = {
-          val job = Job.getInstance(conf)
-          FileInputFormat.setInputPaths(job, file.filePath)
+        // val orcRecordReader:
+        // MReduceRecordReader[_, org.apache.hadoop.hive.ql.io.orc.OrcStruct] = {
+        val job = Job.getInstance(conf)
+        FileInputFormat.setInputPaths(job, file.filePath)
 
-          val fileSplit = new FileSplit(
-            new Path(new URI(file.filePath)), file.start, file.length, Array.empty
-          )
-          // Custom OrcRecordReader is used to get
-          // ObjectInspector during recordReader creation itself and can
-          // avoid NameNode call in unwrapOrcStructs per file.
-          // Specifically would be helpful for partitioned datasets.
-          val orcReader = OrcFile.createReader(
-            new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
+        val fileSplit = new FileSplit(
+          new Path(new URI(file.filePath)), file.start, file.length, Array.empty
+        )
+        // Custom OrcRecordReader is used to get
+        // ObjectInspector during recordReader creation itself and can
+        // avoid NameNode call in unwrapOrcStructs per file.
+        // Specifically would be helpful for partitioned datasets.
+        val orcReader = OrcFile.createReader(
+          new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
 
-          if (enableVectorizedReader) {
-            val conf = job.getConfiguration.asInstanceOf[JobConf]
-            val columnIDs =
-              requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).asJava
+        if (enableVectorizedReader) {
+          val conf = job.getConfiguration.asInstanceOf[JobConf]
+          val columnIDs =
+            requiredSchema.map(a => physicalSchema.fieldIndex(a.name): Integer).sorted.asJava
+          val orcRecordReader =
             new VectorizedSparkOrcNewRecordReader(orcReader, conf, fileSplit, columnIDs)
-          } else {
+          new RecordReaderIterator[InternalRow](orcRecordReader)
+        } else {
+          val orcRecordReader =
             new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
-          }
+          // Unwraps `OrcStruct`s to `UnsafeRow`s
+          OrcRelation.unwrapOrcStructs(
+            conf,
+            requiredSchema,
+            Some(orcRecordReader.asInstanceOf[SparkOrcNewRecordReaderBase]
+              .getObjectInspector.asInstanceOf[StructObjectInspector]),
+            new RecordReaderIterator[OrcStruct](orcRecordReader))
         }
-
-        // Unwraps `OrcStruct`s to `UnsafeRow`s
-        OrcRelation.unwrapOrcStructs(
-          conf,
-          requiredSchema,
-          Some(orcRecordReader.asInstanceOf[SparkOrcNewRecordReaderBase]
-            .getObjectInspector.asInstanceOf[StructObjectInspector]),
-          new RecordReaderIterator[OrcStruct](orcRecordReader))
+        // }
       }
     }
   }
