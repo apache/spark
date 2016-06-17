@@ -457,6 +457,32 @@ setMethod("createOrReplaceTempView",
               invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
+#' (Deprecated) Register Temporary Table
+#' Registers a SparkDataFrame as a Temporary Table in the SQLContext
+#' @param x A SparkDataFrame
+#' @param tableName A character vector containing the name of the table
+#'
+#' @family SparkDataFrame functions
+#' @seealso \link{createOrReplaceTempView}
+#' @rdname registerTempTable-deprecated
+#' @name registerTempTable
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' registerTempTable(df, "json_df")
+#' new_df <- sql("SELECT * FROM json_df")
+#'}
+setMethod("registerTempTable",
+          signature(x = "SparkDataFrame", tableName = "character"),
+          function(x, tableName) {
+              .Deprecated("createOrReplaceTempView")
+              invisible(callJMethod(x@sdf, "createOrReplaceTempView", tableName))
+          })
+
 #' insertInto
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SQL Context.
@@ -1286,7 +1312,7 @@ setMethod("dapplyCollect",
 #' @name gapply
 #' @export
 #' @examples
-#' 
+#'
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping
 #' on the first and third columns. Output the grouping values and the average.
@@ -1317,7 +1343,7 @@ setMethod("dapplyCollect",
 #' Fits linear models on iris dataset by grouping on the 'Species' column and
 #' using 'Sepal_Length' as a target variable, 'Sepal_Width', 'Petal_Length'
 #' and 'Petal_Width' as training features.
-#' 
+#'
 #' df <- createDataFrame (iris)
 #' schema <- structType(structField("(Intercept)", "double"),
 #'   structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
