@@ -446,6 +446,13 @@ setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
+#' @rdname createOrReplaceTempView
+#' @export
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -553,10 +560,7 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
 #' @rdname createOrReplaceTempView
 #' @export
-setGeneric("createOrReplaceTempView",
-           function(x, viewName) {
-             standardGeneric("createOrReplaceTempView")
-           })
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
 #' @rdname sample
 #' @export
