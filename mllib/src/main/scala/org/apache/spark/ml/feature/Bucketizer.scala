@@ -93,11 +93,13 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     attr.toStructField()
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }

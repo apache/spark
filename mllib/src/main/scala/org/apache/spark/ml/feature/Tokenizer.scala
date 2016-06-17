@@ -47,6 +47,7 @@ class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
 
@@ -154,6 +155,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 }
 

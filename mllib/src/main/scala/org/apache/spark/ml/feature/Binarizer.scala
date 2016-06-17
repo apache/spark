@@ -103,6 +103,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     val outputColName = $(outputCol)
@@ -122,6 +123,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     StructType(schema.fields :+ outCol)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
 }
 

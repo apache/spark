@@ -97,12 +97,14 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
   }
 
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkNumericType(schema, $(labelCol))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): ChiSqSelector = defaultCopy(extra)
 }
 
@@ -154,6 +156,7 @@ final class ChiSqSelectorModel private[ml] (
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
   }
 
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField = prepOutputField(schema)
@@ -176,6 +179,7 @@ final class ChiSqSelectorModel private[ml] (
     newAttributeGroup.toStructField()
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): ChiSqSelectorModel = {
     val copied = new ChiSqSelectorModel(uid, chiSqSelector)
     copyValues(copied, extra).setParent(parent)

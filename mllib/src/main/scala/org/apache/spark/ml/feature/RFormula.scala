@@ -177,6 +177,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
   }
 
+  @Since("1.5.0")
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
     if (hasLabelCol(schema)) {
@@ -187,8 +188,10 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
+  @Since("2.0.0")
   override def toString: String = s"RFormula(${get(formula).getOrElse("")}) (uid=$uid)"
 }
 
@@ -221,6 +224,7 @@ class RFormulaModel private[feature](
     transformLabel(pipelineModel.transform(dataset))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
     val withFeatures = pipelineModel.transformSchema(schema)
@@ -239,9 +243,11 @@ class RFormulaModel private[feature](
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
     new RFormulaModel(uid, resolvedFormula, pipelineModel))
 
+  @Since("2.0.0")
   override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"
 
   private def transformLabel(dataset: Dataset[_]): DataFrame = {

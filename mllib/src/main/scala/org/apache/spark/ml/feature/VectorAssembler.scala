@@ -110,6 +110,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
@@ -126,6 +127,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 

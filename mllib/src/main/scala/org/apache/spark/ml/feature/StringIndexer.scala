@@ -95,10 +95,12 @@ class StringIndexer @Since("1.4.0") (
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
 }
 
@@ -187,6 +189,7 @@ class StringIndexerModel (
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     if (schema.fieldNames.contains($(inputCol))) {
       validateAndTransformSchema(schema)
@@ -196,6 +199,7 @@ class StringIndexerModel (
     }
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StringIndexerModel = {
     val copied = new StringIndexerModel(uid, labels)
     copyValues(copied, extra).setParent(parent)
@@ -290,6 +294,7 @@ class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   final def getLabels: Array[String] = $(labels)
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
     val inputDataType = schema(inputColName).dataType
@@ -327,6 +332,7 @@ class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
       indexer(dataset($(inputCol)).cast(DoubleType)).as(outputColName))
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): IndexToString = {
     defaultCopy(extra)
   }

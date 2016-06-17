@@ -120,10 +120,12 @@ class StandardScaler @Since("1.4.0") (
     copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 
@@ -171,10 +173,12 @@ class StandardScalerModel private[ml] (
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScalerModel = {
     val copied = new StandardScalerModel(uid, std, mean)
     copyValues(copied, extra).setParent(parent)

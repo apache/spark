@@ -184,10 +184,12 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): CountVectorizer = defaultCopy(extra)
 }
 
@@ -268,10 +270,12 @@ class CountVectorizerModel(
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): CountVectorizerModel = {
     val copied = new CountVectorizerModel(uid, vocabulary).setParent(parent)
     copyValues(copied, extra)

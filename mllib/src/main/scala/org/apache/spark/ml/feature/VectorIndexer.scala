@@ -132,6 +132,7 @@ class VectorIndexer @Since("1.4.0") (
     copyValues(model)
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
@@ -142,6 +143,7 @@ class VectorIndexer @Since("1.4.0") (
     SchemaUtils.appendColumn(schema, $(outputCol), dataType)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 
@@ -366,6 +368,7 @@ class VectorIndexerModel private[ml] (
     dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val dataType = new VectorUDT
     require(isDefined(inputCol),
@@ -425,6 +428,7 @@ class VectorIndexerModel private[ml] (
     newAttributeGroup.toStructField()
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorIndexerModel = {
     val copied = new VectorIndexerModel(uid, numFeatures, categoryMaps)
     copyValues(copied, extra).setParent(parent)

@@ -185,10 +185,12 @@ final class Word2Vec @Since("1.4.0") (
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Word2Vec = defaultCopy(extra)
 }
 
@@ -281,10 +283,12 @@ class Word2VecModel private[ml] (
     dataset.withColumn($(outputCol), word2Vec(col($(inputCol))))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Word2VecModel = {
     val copied = new Word2VecModel(uid, wordVectors)
     copyValues(copied, extra).setParent(parent)

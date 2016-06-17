@@ -67,6 +67,7 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
 
   override protected def outputDataType: DataType = new VectorUDT()
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
 }
 

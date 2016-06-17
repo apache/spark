@@ -71,6 +71,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
@@ -174,6 +175,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
     dataset.select(col("*"), encode(col(inputColName).cast(DoubleType)).as(outputColName, metadata))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
 }
 

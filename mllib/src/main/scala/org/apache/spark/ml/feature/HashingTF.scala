@@ -102,6 +102,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[ArrayType],
@@ -110,6 +111,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
 }
 

@@ -105,6 +105,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.sameType(ArrayType(StringType)),
@@ -112,6 +113,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     SchemaUtils.appendColumn(schema, $(outputCol), inputType, schema($(inputCol)).nullable)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
 }
 
