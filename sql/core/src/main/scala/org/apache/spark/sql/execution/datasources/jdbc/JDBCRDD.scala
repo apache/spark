@@ -40,6 +40,16 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
+
+  override def hashCode(): Int = idx
+
+  override def equals(other: Any): Boolean = {
+    other match {
+      case partition: JDBCPartition =>
+        whereClause.compareToIgnoreCase(whereClause) == 0 && idx == partition.idx
+      case _ => false
+    }
+  }
 }
 
 private[sql] object JDBCRDD extends Logging {
