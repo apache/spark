@@ -55,7 +55,7 @@ private[util] sealed trait BaseReadWrite {
    * Sets the Spark Session to use for saving/loading.
    */
   @Since("2.0.0")
-  def context(sparkSession: SparkSession): this.type = {
+  def session(sparkSession: SparkSession): this.type = {
     optionSparkSession = Option(sparkSession)
     this
   }
@@ -128,7 +128,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   }
 
   // override for Java compatibility
-  override def context(sparkSession: SparkSession): this.type = super.context(sparkSession)
+  override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
 
   // override for Java compatibility
   override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
@@ -175,7 +175,7 @@ abstract class MLReader[T] extends BaseReadWrite {
   def load(path: String): T
 
   // override for Java compatibility
-  override def context(sparkSession: SparkSession): this.type = super.context(sparkSession)
+  override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
 
   // override for Java compatibility
   override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
