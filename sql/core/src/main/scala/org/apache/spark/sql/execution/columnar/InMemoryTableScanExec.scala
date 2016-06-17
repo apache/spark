@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.ByteOrder.nativeOrder
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.lang.StringUtils
 
@@ -33,7 +37,8 @@ import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{AccumulatorContext, CollectionAccumulator, LongAccumulator}
 
@@ -56,7 +61,35 @@ private[sql] object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow) {
+  def column(columnarIterator: ColumnarIterator, index: Int): ColumnVector = {
+    val ordinal = columnarIterator.getColumnIndexes(index)
+    val dataType = columnarIterator.getColumnTypes(index)
+    val buffer = ByteBuffer.wrap(buffers(ordinal)).order(nativeOrder)
+    val accessor: BasicColumnAccessor[_] = dataType match {
+      case BooleanType => new BooleanColumnAccessor(buffer)
+      case ByteType => new ByteColumnAccessor(buffer)
+      case ShortType => new ShortColumnAccessor(buffer)
+      case IntegerType | DateType => new IntColumnAccessor(buffer)
+      case LongType | TimestampType => new LongColumnAccessor(buffer)
+      case FloatType => new FloatColumnAccessor(buffer)
+      case DoubleType => new DoubleColumnAccessor(buffer)
+    }
+
+    val (out, nullsBuffer) = if (accessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = accessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(numRows);
+    } else {
+      val buffer = accessor.getByteBuffer
+      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      nullsBuffer.rewind()
+      (buffer, nullsBuffer)
+    }
+
+    org.apache.spark.sql.execution.vectorized.ColumnVector.allocate(
+      numRows, dataType, true, out, nullsBuffer)
+  }
+}
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
@@ -290,6 +323,10 @@ private[sql] case class InMemoryTableScanExec(
   lazy val readPartitions = sparkContext.longAccumulator
   lazy val readBatches = sparkContext.longAccumulator
 
+  def incrementReadPartitionAccumulator(): Unit = {
+    readPartitions.add(1)
+  }
+
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -352,9 +389,11 @@ private[sql] case class InMemoryTableScanExec(
         case other => other
       }.toArray
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
-      if (enableAccumulators && columnarIterator.hasNext) {
-        readPartitions.add(1)
+      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray,
+        if (!enableAccumulators) null else this)
+      if (enableAccumulators && !columnarIterator.isSupportColumnarCodeGen &&
+        columnarIterator.hasNext) {
+        incrementReadPartitionAccumulator
       }
       columnarIterator
     }
