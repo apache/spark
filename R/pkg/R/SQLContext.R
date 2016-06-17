@@ -364,9 +364,10 @@ parquetFile <- function(x, ...) {
 
 #' Create a SparkDataFrame from a text file.
 #'
-#' Loads a text file and returns a SparkDataFrame with a single string column named "value".
-#' If the directory structure of the text files contains partitioning information, those are
-#' ignored in the resulting DataFrame.
+#' Loads text files and returns a SparkDataFrame whose schema starts with
+#' a string column named "value", and followed by partitioned columns if
+#' there are any.
+#'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -410,7 +411,7 @@ read.text <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' new_df <- sql("SELECT * FROM table")
 #' }
 #' @name sql
@@ -442,7 +443,7 @@ sql <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' new_df <- tableToDF("table")
 #' }
 #' @note since 2.0.0
@@ -528,7 +529,7 @@ tableNames <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' cacheTable("table")
 #' }
 #' @name cacheTable
@@ -557,7 +558,7 @@ cacheTable <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' uncacheTable("table")
 #' }
 #' @name uncacheTable
@@ -607,7 +608,7 @@ clearCache <- function() {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- read.df(path, "parquet")
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' dropTempTable("table")
 #' }
 #' @name dropTempTable

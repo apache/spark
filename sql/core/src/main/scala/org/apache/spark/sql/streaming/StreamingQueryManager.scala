@@ -19,49 +19,50 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * :: Experimental ::
- * A class to manage all the [[ContinuousQuery]] active on a [[SparkSession]].
+ * A class to manage all the [[StreamingQuery]] active on a [[SparkSession]].
  *
  * @since 2.0.0
  */
 @Experimental
-class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
-  private val listenerBus = new ContinuousQueryListenerBus(sparkSession.sparkContext.listenerBus)
-  private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
+  private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
+  private val activeQueries = new mutable.HashMap[Long, StreamingQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
-  private var lastTerminatedQuery: ContinuousQuery = null
+  private var lastTerminatedQuery: StreamingQuery = null
 
   /**
    * Returns a list of active queries associated with this SQLContext
    *
    * @since 2.0.0
    */
-  def active: Array[ContinuousQuery] = activeQueriesLock.synchronized {
+  def active: Array[StreamingQuery] = activeQueriesLock.synchronized {
     activeQueries.values.toArray
   }
 
   /**
-   * Returns an active query from this SQLContext or throws exception if bad name
+   * Returns the query if there is an active query with the given id, or null.
    *
    * @since 2.0.0
    */
-  def get(name: String): ContinuousQuery = activeQueriesLock.synchronized {
-    activeQueries.getOrElse(name,
-      throw new IllegalArgumentException(s"There is no active query with name $name"))
+  def get(id: Long): StreamingQuery = activeQueriesLock.synchronized {
+    activeQueries.get(id).orNull
   }
 
   /**
@@ -80,7 +81,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws ContinuousQueryException, if any query has terminated with an exception
+   * @throws StreamingQueryException, if any query has terminated with an exception
    *
    * @since 2.0.0
    */
@@ -112,7 +113,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws ContinuousQueryException, if any query has terminated with an exception
+   * @throws StreamingQueryException, if any query has terminated with an exception
    *
    * @since 2.0.0
    */
@@ -145,43 +146,89 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   }
 
   /**
-   * Register a [[ContinuousQueryListener]] to receive up-calls for life cycle events of
-   * [[ContinuousQuery]].
+   * Register a [[StreamingQueryListener]] to receive up-calls for life cycle events of
+   * [[StreamingQuery]].
    *
    * @since 2.0.0
    */
-  def addListener(listener: ContinuousQueryListener): Unit = {
+  def addListener(listener: StreamingQueryListener): Unit = {
     listenerBus.addListener(listener)
   }
 
   /**
-   * Deregister a [[ContinuousQueryListener]].
+   * Deregister a [[StreamingQueryListener]].
    *
    * @since 2.0.0
    */
-  def removeListener(listener: ContinuousQueryListener): Unit = {
+  def removeListener(listener: StreamingQueryListener): Unit = {
     listenerBus.removeListener(listener)
   }
 
   /** Post a listener event */
-  private[sql] def postListenerEvent(event: ContinuousQueryListener.Event): Unit = {
+  private[sql] def postListenerEvent(event: StreamingQueryListener.Event): Unit = {
     listenerBus.post(event)
   }
 
-  /** Start a query */
+  /**
+   * Start a [[StreamingQuery]].
+   * @param userSpecifiedName Query name optionally specified by the user.
+   * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
+   * @param df Streaming DataFrame.
+   * @param sink  Sink to write the streaming outputs.
+   * @param outputMode  Output mode for the sink.
+   * @param useTempCheckpointLocation  Whether to use a temporary checkpoint location when the user
+   *                                   has not specified one. If false, then error will be thrown.
+   * @param recoverFromCheckpointLocation  Whether to recover query from the checkpoint location.
+   *                                       If false and the checkpoint location exists, then error
+   *                                       will be thrown.
+   * @param trigger [[Trigger]] for the query.
+   * @param triggerClock [[Clock]] to use for the triggering.
+   */
   private[sql] def startQuery(
-      name: String,
-      checkpointLocation: String,
+      userSpecifiedName: Option[String],
+      userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
       sink: Sink,
       outputMode: OutputMode,
+      useTempCheckpointLocation: Boolean = false,
+      recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
-      triggerClock: Clock = new SystemClock()): ContinuousQuery = {
+      triggerClock: Clock = new SystemClock()): StreamingQuery = {
     activeQueriesLock.synchronized {
-      if (activeQueries.contains(name)) {
+      val id = StreamExecution.nextId
+      val name = userSpecifiedName.getOrElse(s"query-$id")
+      if (activeQueries.values.exists(_.name == name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
+      val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
+        new Path(userSpecified).toUri.toString
+      }.orElse {
+        df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
+          new Path(location, name).toUri.toString
+        }
+      }.getOrElse {
+        if (useTempCheckpointLocation) {
+          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+        } else {
+          throw new AnalysisException(
+            "checkpointLocation must be specified either " +
+              """through option("checkpointLocation", ...) or """ +
+              s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+        }
+      }
+
+      // If offsets have already been created, we trying to resume a query.
+      if (!recoverFromCheckpointLocation) {
+        val checkpointPath = new Path(checkpointLocation, "offsets")
+        val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
+        if (fs.exists(checkpointPath)) {
+          throw new AnalysisException(
+            s"This query does not support recovering from checkpoint location. " +
+              s"Delete $checkpointPath to start over.")
+        }
+      }
+
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
@@ -203,6 +250,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
       }
       val query = new StreamExecution(
         sparkSession,
+        id,
         name,
         checkpointLocation,
         logicalPlan,
@@ -211,15 +259,15 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
         triggerClock,
         outputMode)
       query.start()
-      activeQueries.put(name, query)
+      activeQueries.put(id, query)
       query
     }
   }
 
-  /** Notify (by the ContinuousQuery) that the query has been terminated */
-  private[sql] def notifyQueryTermination(terminatedQuery: ContinuousQuery): Unit = {
+  /** Notify (by the StreamingQuery) that the query has been terminated */
+  private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesLock.synchronized {
-      activeQueries -= terminatedQuery.name
+      activeQueries -= terminatedQuery.id
     }
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {

@@ -445,7 +445,7 @@ class SessionCatalog(
   /**
    * List all tables in the specified database, including temporary tables.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(formatDatabaseName(db), "*")
+  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
    * List all matching tables in the specified database, including temporary tables.
@@ -855,7 +855,8 @@ class SessionCatalog(
       .map { f => FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    dbFunctions ++ loadedFunctions
+    (dbFunctions ++ loadedFunctions)
+      .filterNot(f => FunctionRegistry.functionSet.contains(f.funcName))
   }
 
 

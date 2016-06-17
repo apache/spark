@@ -2587,7 +2587,7 @@ object functions {
    *   09:00:25-09:01:25 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2641,7 +2641,7 @@ object functions {
    *   09:00:20-09:01:20 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2683,7 +2683,7 @@ object functions {
    *   09:02:00-09:03:00 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.

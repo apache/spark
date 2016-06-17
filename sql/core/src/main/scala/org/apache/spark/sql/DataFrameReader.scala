@@ -22,7 +22,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.Partition
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -30,12 +29,11 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
-import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to load a [[Dataset]] from external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
+ * key-value stores, etc). Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */
@@ -160,36 +158,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           options = extraOptions.toMap).resolveRelation())
     }
   }
-
-  /**
-   * :: Experimental ::
-   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
-   * (e.g. external key-value stores).
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def stream(): DataFrame = {
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap)
-    Dataset.ofRows(sparkSession, StreamingRelation(dataSource))
-  }
-
-  /**
-   * :: Experimental ::
-   * Loads input in as a [[DataFrame]], for data streams that read from some path.
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def stream(path: String): DataFrame = {
-    option("path", path).stream()
-  }
-
   /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
@@ -450,14 +418,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
+   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * "value", and followed by partitioned columns if there are any.
    *
-   * If the directory structure of the text files contains partitioning information, those are
-   * ignored in the resulting Dataset. To include partitioning information as columns, use
-   * `read.format("text").load("...")`.
-   *
-   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * Each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -467,12 +431,33 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * }}}
    *
    * @param paths input path
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+
+  /**
+   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
+   *
+   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * {{{
+   *   // Scala:
+   *   spark.read.textFile("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   spark.read().textFile("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param paths input path
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).select("value")
-      .as[String](sparkSession.implicits.newStringEncoder)
+  def textFile(paths: String*): Dataset[String] = {
+    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

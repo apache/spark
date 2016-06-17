@@ -39,15 +39,15 @@ private case class KillTask(taskId: Long, interruptThread: Boolean)
 private case class StopExecutor()
 
 /**
- * Calls to [[LocalSchedulerBackendEndpoint]] are all serialized through LocalEndpoint. Using an
- * RpcEndpoint makes the calls on [[LocalSchedulerBackendEndpoint]] asynchronous, which is necessary
- * to prevent deadlock between [[LocalSchedulerBackendEndpoint]] and the [[TaskSchedulerImpl]].
+ * Calls to [[LocalSchedulerBackend]] are all serialized through LocalEndpoint. Using an
+ * RpcEndpoint makes the calls on [[LocalSchedulerBackend]] asynchronous, which is necessary
+ * to prevent deadlock between [[LocalSchedulerBackend]] and the [[TaskSchedulerImpl]].
  */
 private[spark] class LocalEndpoint(
     override val rpcEnv: RpcEnv,
     userClassPath: Seq[URL],
     scheduler: TaskSchedulerImpl,
-    executorBackend: LocalSchedulerBackendEndpoint,
+    executorBackend: LocalSchedulerBackend,
     private val totalCores: Int)
   extends ThreadSafeRpcEndpoint with Logging {
 
@@ -93,9 +93,9 @@ private[spark] class LocalEndpoint(
 /**
  * Used when running a local version of Spark where the executor, backend, and master all run in
  * the same JVM. It sits behind a [[TaskSchedulerImpl]] and handles launching tasks on a single
- * Executor (created by the [[LocalSchedulerBackendEndpoint]]) running locally.
+ * Executor (created by the [[LocalSchedulerBackend]]) running locally.
  */
-private[spark] class LocalSchedulerBackendEndpoint(
+private[spark] class LocalSchedulerBackend(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
     val totalCores: Int)

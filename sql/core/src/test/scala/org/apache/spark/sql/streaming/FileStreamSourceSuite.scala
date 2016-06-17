@@ -107,11 +107,11 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       schema: Option[StructType] = None): DataFrame = {
     val reader =
       if (schema.isDefined) {
-        spark.read.format(format).schema(schema.get)
+        spark.readStream.format(format).schema(schema.get)
       } else {
-        spark.read.format(format)
+        spark.readStream.format(format)
       }
-    reader.stream(path)
+    reader.load(path)
   }
 
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
@@ -153,14 +153,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       format: Option[String],
       path: Option[String],
       schema: Option[StructType] = None): StructType = {
-    val reader = spark.read
+    val reader = spark.readStream
     format.foreach(reader.format)
     schema.foreach(reader.schema)
     val df =
       if (path.isDefined) {
-        reader.stream(path.get)
+        reader.load(path.get)
       } else {
-        reader.stream()
+        reader.load()
       }
     df.queryExecution.analyzed
       .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head

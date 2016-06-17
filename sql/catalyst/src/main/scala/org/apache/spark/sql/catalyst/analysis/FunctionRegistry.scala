@@ -396,6 +396,8 @@ object FunctionRegistry {
     fr
   }
 
+  val functionSet: Set[String] = builtin.listFunction().toSet
+
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {

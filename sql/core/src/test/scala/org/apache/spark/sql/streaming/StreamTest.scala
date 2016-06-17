@@ -188,8 +188,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
       new AssertOnQuery(condition, message)
     }
 
-    def apply(message: String)(condition: StreamExecution => Boolean): AssertOnQuery = {
-      new AssertOnQuery(condition, message)
+    def apply(message: String)(condition: StreamExecution => Unit): AssertOnQuery = {
+      new AssertOnQuery(s => { condition; true }, message)
     }
   }
 
@@ -305,13 +305,13 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
               spark
                 .streams
                 .startQuery(
-                  StreamExecution.nextName,
-                  metadataRoot,
+                  None,
+                  Some(metadataRoot),
                   stream,
                   sink,
                   outputMode,
-                  trigger,
-                  triggerClock)
+                  trigger = trigger,
+                  triggerClock = triggerClock)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -353,7 +353,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
             try failAfter(streamingTimeout) {
-              val thrownException = intercept[ContinuousQueryException] {
+              val thrownException = intercept[StreamingQueryException] {
                 currentStream.awaitTermination()
               }
               eventually("microbatch thread not stopped after termination with failure") {
@@ -563,7 +563,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         case e: ExpectException[_] =>
           val thrownException =
             withClue(s"Did not throw ${e.t.runtimeClass.getSimpleName} when expected.") {
-              intercept[ContinuousQueryException] {
+              intercept[StreamingQueryException] {
                 failAfter(testTimeout) {
                   awaitTermFunc()
                 }

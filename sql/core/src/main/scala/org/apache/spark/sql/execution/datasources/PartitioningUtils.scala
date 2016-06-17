@@ -159,7 +159,7 @@ private[sql] object PartitioningUtils {
    *     Seq(
    *       Literal.create(42, IntegerType),
    *       Literal.create("hello", StringType),
-   *       Literal.create(3.14, FloatType)))
+   *       Literal.create(3.14, DoubleType)))
    * }}}
    * and the path when we stop the discovery is:
    * {{{
