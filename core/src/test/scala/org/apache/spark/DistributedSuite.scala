@@ -223,7 +223,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("compute when only some partitions fit in memory") {
     val size = 10000
-    val numPartitions = 10
+    val numPartitions = 20
     val conf = new SparkConf()
       .set("spark.storage.unrollMemoryThreshold", "1024")
       .set("spark.testing.memory", size.toString)

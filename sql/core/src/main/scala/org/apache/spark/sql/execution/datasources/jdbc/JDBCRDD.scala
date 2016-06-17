@@ -374,6 +374,7 @@ private[sql] class JDBCRDD(
     var nextValue: InternalRow = null
 
     context.addTaskCompletionListener{ context => close() }
+    val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     val conn = getConnection()
     val dialect = JdbcDialects.get(url)
@@ -398,6 +399,7 @@ private[sql] class JDBCRDD(
 
     def getNext(): InternalRow = {
       if (rs.next()) {
+        inputMetrics.incRecordsRead(1)
         var i = 0
         while (i < conversions.length) {
           val pos = i + 1
