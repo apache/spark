@@ -30,8 +30,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
   // values before calculate max, min, etc.
-  private[this] var _value = initValue
-  private var _zeroValue = initValue
+  protected[this] var _value = initValue
+  protected var _zeroValue = initValue
 
   override def copy(): SQLMetric = {
     val newAcc = new SQLMetric(metricType, _value)
@@ -62,11 +62,43 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   }
 }
 
+class SQLDiffMetric(metricType: String, startTime: Long = 0L, initValue: Long = 0L)
+    extends SQLMetric(metricType, initValue) {
+
+  private[this] val _baseValue = startTime
+
+  override def copy(): SQLMetric = {
+    val newAcc = new SQLDiffMetric(metricType, baseValue, super.value)
+    newAcc._zeroValue = initValue
+    newAcc
+  }
+
+  override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
+    case o: SQLDiffMetric =>
+      if (_baseValue == o.baseValue) {
+        if (baseValue < o.baseValue) {
+          _value = o.baseValue
+        }
+      } else {
+        throw new UnsupportedOperationException(
+          s"Cannot merge ${this.getClass.getName} with different baseValue: "
+            + s"${_baseValue} != ${o.baseValue}")
+      }
+    case _ =>
+      throw new UnsupportedOperationException(
+        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  override def value: Long = super.value - baseValue
+
+  def baseValue: Long = _baseValue
+}
 
 object SQLMetrics {
   private val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
+  private val BLOCKING_TIME_METRIC = "blocking-time"
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
@@ -97,14 +129,51 @@ object SQLMetrics {
   }
 
   /**
+   * Create a blocking time metric that reports duration in millis relative to startTime.
+   *
+   * The expected usage pattern is:
+   *
+   * On the driver:
+   *   metric = createBlockingTimeMetric(..., System.currentTimeMillis)
+   *
+   * On each executor:
+   *   < Do some work >
+   *   metric += System.currentTimeMillis
+   *
+   * The metric will then output the latest value across all the executors. This is a proxy for
+   * wall clock latency as it measures when the last executor finished this stage.
+   */
+  def createBlockingTimeMetric(sc: SparkContext, name: String, startTime: Long): SQLMetric = {
+    val acc = new SQLDiffMetric(BLOCKING_TIME_METRIC, startTime)
+    acc.register(sc, name = Some(name), countFailedValues = false)
+    acc
+  }
+
+  /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
    */
+<<<<<<< b482c09fa22c5762a355f95820e4ba3e2517fb77
   def stringValue(metricsType: String, values: Seq[Long]): String = {
     if (metricsType == SUM_METRIC) {
       val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
       numberFormat.format(values.sum)
     } else {
+=======
+  def stringValue(metricsType: String, values: Seq[Long]): String = metricsType match {
+    case SUM_METRIC =>
+      NumberFormat.getInstance().format(values.sum)
+
+    case BLOCKING_TIME_METRIC =>
+      val validValues = values.filter(_ >= 0)
+      if (validValues.nonEmpty) {
+        Utils.msDurationToString(validValues.max)
+      } else {
+        "0"
+      }
+
+    case _ =>
+>>>>>>> Rework based on #10116
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
@@ -124,6 +193,5 @@ object SQLMetrics {
         metric.map(strFormat)
       }
       s"\n$sum ($min, $med, $max)"
-    }
   }
 }
