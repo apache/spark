@@ -443,22 +443,21 @@ test_that("jsonRDD() on a RDD with json string", {
   expect_equal(count(df), 6)
 })
 
-test_that("test cache, uncache and clearCache", {
-  df <- read.json(jsonPath)
-  createOrReplaceTempView(df, "table1")
-  cacheTable("table1")
-  uncacheTable("table1")
-  clearCache()
-  dropTempTable("table1")
-})
-
 test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
-  df <- tables()
-  expect_equal(count(df), 1)
+  tables <- tables()
+  expect_equal(count(tables), 1)
+
+  suppressWarnings(registerTempTable(df, "table2"))
+  tables <- tables()
+  expect_equal(count(tables), 2)
   dropTempTable("table1")
+  dropTempTable("table2")
+
+  tables <- tables()
+  expect_equal(count(tables), 0)
 })
 
 test_that(
@@ -468,6 +467,15 @@ test_that(
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
+  dropTempTable("table1")
+})
+
+test_that("test cache, uncache and clearCache", {
+  df <- read.json(jsonPath)
+  createOrReplaceTempView(df, "table1")
+  cacheTable("table1")
+  uncacheTable("table1")
+  clearCache()
   dropTempTable("table1")
 })
 
