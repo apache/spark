@@ -460,7 +460,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
   }
-  
+
   public UTF8String trim() {
     int s = 0;
     int e = this.numBytes - 1;
