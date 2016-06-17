@@ -465,6 +465,15 @@ setMethod("createOrReplaceTempView",
 #' @rdname registerTempTable-deprecated
 #' @name registerTempTable
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' registerTempTable(df, "json_df")
+#' new_df <- sql("SELECT * FROM json_df")
+#'}
 setMethod("registerTempTable",
           signature(x = "SparkDataFrame", tableName = "character"),
           function(x, tableName) {
