@@ -184,10 +184,10 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
   /** Compute the mean of this RDD's elements. */
   def mean(): JDouble = srdd.mean()
 
-  /** Compute the variance of this RDD's elements. */
+  /** Compute the population variance of this RDD's elements. */
   def variance(): JDouble = srdd.variance()
 
-  /** Compute the standard deviation of this RDD's elements. */
+  /** Compute the population standard deviation of this RDD's elements. */
   def stdev(): JDouble = srdd.stdev()
 
   /**

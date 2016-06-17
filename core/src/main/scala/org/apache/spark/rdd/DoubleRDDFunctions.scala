@@ -47,12 +47,12 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     stats().mean
   }
 
-  /** Compute the variance of this RDD's elements. */
+  /** Compute the population variance of this RDD's elements. */
   def variance(): Double = self.withScope {
     stats().variance
   }
 
-  /** Compute the standard deviation of this RDD's elements. */
+  /** Compute the population standard deviation of this RDD's elements. */
   def stdev(): Double = self.withScope {
     stats().stdev
   }
