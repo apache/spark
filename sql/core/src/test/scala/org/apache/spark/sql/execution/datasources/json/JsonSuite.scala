@@ -1662,4 +1662,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(df.schema.size === 2)
     df.collect()
   }
+
+  test("save API - empty path or illegal path") {
+    var e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.format("json").save()
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
+
+    e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.json("")
+    }.getMessage
+    assert(e.contains("Can not create a Path from an empty string"))
+  }
 }

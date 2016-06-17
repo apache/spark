@@ -35,7 +35,7 @@ private[orc] class OrcOptions(
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +
-        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+        s"is not available. Known codecs are ${availableCodecs.mkString(", ")}.")
     }
     shortOrcCompressionCodecNames(codecName)
   }

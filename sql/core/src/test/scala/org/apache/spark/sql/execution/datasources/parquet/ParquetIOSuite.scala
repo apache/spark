@@ -413,6 +413,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("save API - empty path or illegal path") {
+    var e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.format("parquet").save()
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
+
+    e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.parquet("")
+    }.getMessage
+    assert(e.contains("Can not create a Path from an empty string"))
+  }
+
+  test("illegal compression") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(0, 10)
+      val e = intercept[IllegalArgumentException] {
+        df.write.option("compression", "illegal").mode("overwrite").format("parquet").save(path)
+      }.getMessage
+      assert(e.contains("Codec [illegal] is not available. Known codecs are"))
+    }
+  }
+
   test("SPARK-6315 regression test") {
     // Spark 1.1 and prior versions write Spark schema as case class string into Parquet metadata.
     // This has been deprecated by JSON format since 1.2.  Notice that, 1.3 further refactored data

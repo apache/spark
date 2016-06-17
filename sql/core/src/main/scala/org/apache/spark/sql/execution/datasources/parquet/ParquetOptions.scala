@@ -40,7 +40,7 @@ private[sql] class ParquetOptions(
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +
-        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+        s"is not available. Known codecs are ${availableCodecs.mkString(", ")}.")
     }
     shortParquetCompressionCodecNames(codecName).name()
   }

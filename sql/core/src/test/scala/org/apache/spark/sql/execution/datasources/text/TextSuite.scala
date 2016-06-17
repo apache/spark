@@ -154,6 +154,29 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("save API - empty path or illegal path") {
+    var e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.format("text").save()
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
+
+    e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.text("")
+    }.getMessage
+    assert(e.contains("Can not create a Path from an empty string"))
+  }
+
+  test("illegal compression") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(0, 10).selectExpr("CAST(id AS STRING) AS s")
+      val e = intercept[IllegalArgumentException] {
+        df.write.option("compression", "illegal").mode("overwrite").format("text").save(path)
+      }.getMessage
+      assert(e.contains("Codec [illegal] is not available. Known codecs are"))
+    }
+  }
+
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
   }

@@ -342,6 +342,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save API - empty path or illegal path") {
+    var e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.format("csv").save()
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
+
+    e = intercept[IllegalArgumentException] {
+      spark.range(1).coalesce(1).write.csv("")
+    }.getMessage
+    assert(e.contains("Can not create a Path from an empty string"))
+  }
+
   test("save csv with quote") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
