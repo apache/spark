@@ -83,9 +83,11 @@ class DefaultSource
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
+
   private val input = Utils.createTempDir(namePrefix = "input").getCanonicalPath
   private var output: String = _
-  private var schema: StructType = new StructType().add("s", "string")
+  private val userSchema = new StructType().add("s", StringType)
+  private val textSchema = new StructType().add("value", StringType)
 
   before {
     val f = Utils.createTempDir(namePrefix = "output")
@@ -227,55 +229,92 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     Option(input).map(spark.read.format("org.apache.spark.sql.test").load)
   }
 
-  test("text API") {
-    spark.read.text()
-    spark.read.text(input)
-    spark.read.text(input, input, input)
-    spark.read.text(Seq(input, input): _*).write.text(output)
-    Option(input).map(spark.read.text)
+  test("text - API and common behavior") {
+    // Reader, without user specified schema
+    assert(spark.read.text().schema === textSchema)
+    assert(spark.read.text(input).schema === textSchema)
+    assert(spark.read.text(input, input, input).schema === textSchema)
+    assert(spark.read.text(Seq(input, input): _*).schema === textSchema)
+    assert(Option(input).map(spark.read.text).get.schema === textSchema) // SPARK-16009
+
+    // Reader, with user specified schema
+    assert(spark.read.schema(userSchema).text().schema === userSchema)
+    assert(spark.read.schema(userSchema).text(input).schema === userSchema)
+    assert(spark.read.schema(userSchema).text(input, input, input).schema === userSchema)
+    assert(spark.read.schema(userSchema).text(Seq(input, input): _*).schema === userSchema)
+
+    // Writer
+    spark.read.text().write.text(output)
   }
 
-  test("textFile API") {
-    spark.read.textFile()
-    spark.read.textFile(input)
-    spark.read.textFile(input, input, input)
-    spark.read.textFile(Seq(input, input): _*).write.text(output)
-    Option(input).map(spark.read.textFile)
+  test("textFile - API and common behavior") {
+    // Reader, without user specified schema
+    assert(spark.read.textFile().schema === textSchema)
+    assert(spark.read.textFile(input).schema === textSchema)
+    assert(spark.read.textFile(input, input, input).schema === textSchema)
+    assert(spark.read.textFile(Seq(input, input): _*).schema === textSchema)
+    assert(Option(input).map(spark.read.textFile).get.schema === textSchema) // SPARK-16009
   }
 
-  test("csv API") {
-    spark.read.schema(schema).csv()
-    spark.read.schema(schema).csv(input)
-    spark.read.schema(schema).csv(input, input, input)
-    spark.read.schema(schema).csv(Seq(input, input): _*).write.csv(output)
-    Option(input).map(spark.read.schema(schema).csv)
+  test("csv - API and common behavior") {
+    // Reader, with user specified schema
+    // Refer to csv-specific test suites for behavior without user specified schema
+    assert(spark.read.schema(userSchema).csv().schema === userSchema)
+    assert(spark.read.schema(userSchema).csv(input).schema === userSchema)
+    assert(spark.read.schema(userSchema).csv(input, input, input).schema === userSchema)
+    assert(spark.read.schema(userSchema).csv(Seq(input, input): _*).schema === userSchema)
+
+    // Test explicit calls to single arg method - SPARK-16009
+    assert(Option(input).map(spark.read.schema(userSchema).csv).get.schema === userSchema)
+
+    // Writer
+    spark.range(10).write.csv(output)
   }
 
-  test("json API") {
-    spark.read.schema(schema).json()
-    spark.read.schema(schema).json(input)
-    spark.read.schema(schema).json(input, input, input)
-    spark.read.schema(schema).json(Seq(input, input): _*).write.json(output)
-    Option(input).map(spark.read.schema(schema).json)
+  test("json - API and common behavior") {
+    // Reader, with user specified schema
+    // Refer to csv-specific test suites for behavior without user specified schema
+    assert(spark.read.schema(userSchema).json().schema === userSchema)
+    assert(spark.read.schema(userSchema).json(input).schema === userSchema)
+    assert(spark.read.schema(userSchema).json(input, input, input).schema === userSchema)
+    assert(spark.read.schema(userSchema).json(Seq(input, input): _*).schema === userSchema)
+
+    // Test explicit calls to single arg method - SPARK-16009
+    assert(Option(input).map(spark.read.schema(userSchema).json).get.schema === userSchema)
+
+    // Writer
+    spark.range(10).write.json(output)
   }
 
-  test("parquet API") {
-    spark.read.schema(schema).parquet()
-    spark.read.schema(schema).parquet(input)
-    spark.read.schema(schema).parquet(input, input, input)
-    spark.read.schema(schema).parquet(Seq(input, input): _*).write.parquet(output)
-    Option(input).map(spark.read.schema(schema).parquet)
+  test("parquet - API and common behavior") {
+    // Reader, with user specified schema
+    // Refer to csv-specific test suites for behavior without user specified schema
+    assert(spark.read.schema(userSchema).parquet().schema === userSchema)
+    assert(spark.read.schema(userSchema).parquet(input).schema === userSchema)
+    assert(spark.read.schema(userSchema).parquet(input, input, input).schema === userSchema)
+    assert(spark.read.schema(userSchema).parquet(Seq(input, input): _*).schema === userSchema)
+
+    // Test explicit calls to single arg method - SPARK-16009
+    assert(Option(input).map(spark.read.schema(userSchema).parquet).get.schema === userSchema)
+
+    // Writer
+    spark.range(10).write.parquet(output)
   }
 
   /**
    * This only tests whether API compiles, but does not run it as orc()
    * cannot be run with Hive classes.
    */
-  ignore("orc API") {
-    spark.read.schema(schema).orc()
-    spark.read.schema(schema).orc(input)
-    spark.read.schema(schema).orc(input, input, input)
-    spark.read.schema(schema).orc(Seq(input, input): _*).write.orc(output)
-    Option(input).map(spark.read.schema(schema).orc)
+  ignore("orc - API") {
+    // Reader, with user specified schema
+    // Refer to csv-specific test suites for behavior without user specified schema
+    spark.read.schema(userSchema).orc()
+    spark.read.schema(userSchema).orc(input)
+    spark.read.schema(userSchema).orc(input, input, input)
+    spark.read.schema(userSchema).orc(Seq(input, input): _*)
+    Option(input).map(spark.read.schema(userSchema).orc)
+
+    // Writer
+    spark.range(10).write.orc(output)
   }
 }
