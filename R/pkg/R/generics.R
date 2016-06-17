@@ -679,6 +679,10 @@ setGeneric("withColumnRenamed",
 #' @export
 setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 
+#' @rdname randomSplit
+#' @export
+setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSplit") })
+
 ###################### Column Methods ##########################
 
 #' @rdname column
