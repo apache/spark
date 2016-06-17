@@ -40,7 +40,7 @@ trait PythonTransformerWrapper {
 
   def getTransformer: Array[Byte]
 
-  def getClass: String
+  def getClassName: String
 
   def save(path: String): Unit
 
@@ -150,8 +150,8 @@ class PythonTransformer(
     callGetTransformerFromPython
   }
 
-  def getPythonClass: String = {
-    pfunc.getClass
+  def getPythonClassName: String = {
+    pfunc.getClassName
   }
 
   override def copy(extra: ParamMap): PythonTransformer = {
@@ -201,7 +201,7 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
   class PythonTransformerWriter(instance: PythonTransformer) extends MLWriter {
     override def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
-      val extraMetadata = "pyClass" -> instance.getPythonClass
+      val extraMetadata = "pyClass" -> instance.getPythonClassName
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val pyDir = new Path(path, "pyTransformer").toString
       instance.pfunc.save(pyDir)
@@ -211,6 +211,7 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
   class PythonTransformerReader extends MLReader[PythonTransformer] {
     private val className = classOf[PythonTransformer].getName
     override def load(path: String): PythonTransformer = {
+      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val pyClass = (metadata.metadata \ "pyClass").extract[String]
       val pyDir = new Path(path, "pyTransformer").toString

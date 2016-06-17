@@ -289,8 +289,9 @@ class TransformerWrapper(object):
         except:
             self.failure = traceback.format_exc()
 
-    def getClass(self):
-        return self.transformer.__class__.__name__
+    def getClassName(self):
+        cls = self.transformer.__class__
+        return cls.__module__ + "." + cls.__name__
 
     def transform(self, jdf):
         # Clear the failure
