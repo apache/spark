@@ -962,9 +962,10 @@ private class LogisticAggregator(
    * @param featuresStd The standard deviation values of the features.
    * @return This LogisticAggregator object.
    */
-  def add(instance: Instance,
-          coefficients: Vector,
-          featuresStd: Array[Double]): this.type = {
+  def add(
+      instance: Instance,
+      coefficients: Vector,
+      featuresStd: Array[Double]): this.type = {
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $dim but got ${features.size}.")
