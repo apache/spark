@@ -1674,4 +1674,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }.getMessage
     assert(e.contains("Can not create a Path from an empty string"))
   }
+
+  test("illegal compression") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(0, 10)
+      val e = intercept[IllegalArgumentException] {
+        df.write.option("compression", "illegal").mode("overwrite").format("json").save(path)
+      }.getMessage
+      assert(e.contains("Codec [illegal] is not available. Known codecs are"))
+    }
+  }
 }

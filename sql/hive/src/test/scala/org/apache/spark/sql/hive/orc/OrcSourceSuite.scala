@@ -146,6 +146,10 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
     sql("DROP TABLE IF EXISTS orcNullValues")
   }
+
+
+
+
 }
 
 class OrcSourceSuite extends OrcSuite {
