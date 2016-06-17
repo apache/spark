@@ -25,6 +25,8 @@ import scala.collection.Iterator;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
+import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
@@ -32,6 +34,9 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
  */
 public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
+  protected ColumnarBatch columnarBatch;
+  protected java.util.Iterator<ColumnarBatch.Row> rowIterator;
+  protected boolean isColumnarBatchAccessed = false;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
   private long startTimeNs = System.nanoTime();
@@ -42,11 +47,15 @@ public abstract class BufferedRowIterator {
     if (currentRows.isEmpty()) {
       processNext();
     }
-    return !currentRows.isEmpty();
+    if (!isColumnarBatchAccessed) { return !currentRows.isEmpty(); }
+    if (rowIterator == null) { rowIterator = columnarBatch.rowIterator(); }
+    return rowIterator.hasNext();
   }
 
   public InternalRow next() {
-    return currentRows.remove();
+    if (!isColumnarBatchAccessed) { return currentRows.remove(); }
+    if (rowIterator == null) { rowIterator = columnarBatch.rowIterator(); }
+    return rowIterator.next().copyUnsafeRow();
   }
 
   /**
@@ -75,8 +84,15 @@ public abstract class BufferedRowIterator {
    * If it returns true, the caller should exit the loop (return from processNext()).
    */
   protected boolean shouldStop() {
-    return !currentRows.isEmpty();
+    if (!isColumnarBatchAccessed) { return !currentRows.isEmpty(); }
+    return false;  // TODO: currentIdx < allocated # of rows of CS
   }
+
+  protected boolean isColumnarBatch() { return this.columnarBatch != null; }
+  protected int numColumns() { return this.columnarBatch.numCols(); }
+  protected int numRows() { return this.columnarBatch.numRows(); }
+  protected ColumnVector column(int i) { return this.columnarBatch.column(i); }
+  protected void registerColumnarBatch(ColumnarBatch columnarBatch) { this.columnarBatch = columnarBatch; }
 
   /**
    * Increase the peak execution memory for current task.

@@ -63,6 +63,22 @@ private[columnar] trait NullableColumnBuilder extends ColumnBuilder {
     pos += 1
   }
 
+  override def appendColumn(
+      column: org.apache.spark.sql.execution.vectorized.ColumnVector, numRows: Integer): Unit = {
+    if (!column.anyNullsSet()) {
+      var i = 0;
+      while (i < numRows) {
+        if (column.isNullAt(i)) {
+          nulls = ColumnBuilder.ensureFreeSpace(nulls, 4)
+          nulls.putInt(i)
+          nullCount += 1
+        }
+        i += 1
+      }
+    }
+    super.appendColumn(column, numRows)
+  }
+
   abstract override def build(): ByteBuffer = {
     val nonNulls = super.build()
     val nullDataLen = nulls.position()

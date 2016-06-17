@@ -164,6 +164,28 @@ public final class ColumnarBatch {
       return row;
     }
 
+    public UnsafeRow copyUnsafeRow() {
+      UnsafeRow row = new UnsafeRow(columns.length);
+      int fixedSize = UnsafeRow.calculateBitSetWidthInBytes(row.numFields()) + 8 * row.numFields();
+      byte[] buffer = new byte[fixedSize + 64]; // 64 is margin
+      row.pointTo(buffer, buffer.length);
+      for (int i = 0; i < numFields(); i++) {
+        if (isNullAt(i)) {
+          row.setNullAt(i);
+        } else {
+          DataType dt = columns[i].dataType();
+          if (dt instanceof FloatType) {
+            row.setFloat(i, getFloat(i));
+          } else if (dt instanceof DoubleType) {
+            row.setDouble(i, getDouble(i));
+          } else {
+            throw new RuntimeException("Not implemented. " + dt);
+          }
+        }
+      }
+      return row;
+    }
+
     @Override
     public boolean anyNull() {
       throw new NotImplementedException();
