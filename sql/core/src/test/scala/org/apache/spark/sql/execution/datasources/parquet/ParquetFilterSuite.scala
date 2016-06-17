@@ -550,6 +550,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     import testImplicits._
 
     Seq("true", "false").foreach { pushDown =>
+      // When SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key is set to true and all the data types
+      // of the table schema are AtomicType, the parquet reader uses vectorizedReader.
+      // In this mode, filters will not be pushed down, no matter whether
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushDown,
           SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withTempPath { dir =>
