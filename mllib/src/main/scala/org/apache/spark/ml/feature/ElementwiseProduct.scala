@@ -44,6 +44,7 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
    * the vector to multiply with input vectors
    * @group param
    */
+  @Since("1.4.0")
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */

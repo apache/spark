@@ -281,6 +281,7 @@ class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
    * Default: Not specified, in which case [[inputCol]] metadata is used for labels.
    * @group param
    */
+  @Since("1.5.0")
   final val labels: StringArrayParam = new StringArrayParam(this, "labels",
     "Optional array of labels specifying index-string mapping." +
       " If not provided or if empty, then metadata from inputCol is used instead.")

@@ -43,6 +43,7 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * (default: p = 2)
    * @group param
    */
+  @Since("1.4.0")
   val p = new DoubleParam(this, "p", "the p norm value", ParamValidators.gtEq(1))
 
   setDefault(p -> 2.0)

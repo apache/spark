@@ -58,6 +58,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * (default = 2^18^)
    * @group param
    */
+  @Since("1.2.0")
   val numFeatures = new IntParam(this, "numFeatures", "number of features (> 0)",
     ParamValidators.gt(0))
 
@@ -68,6 +69,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * (default = false)
    * @group param
    */
+  @Since("2.0.0")
   val binary = new BooleanParam(this, "binary", "If true, all non zero counts are set to 1. " +
     "This is useful for discrete probabilistic models that model binary events rather " +
     "than integer counts")

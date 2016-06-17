@@ -54,6 +54,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
    * Default: Empty array
    * @group param
    */
+  @Since("1.5.0")
   val indices = new IntArrayParam(this, "indices",
     "An array of indices to select features from a vector column." +
       " There can be no overlap with names.", VectorSlicer.validIndices)
@@ -75,6 +76,7 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
    * Default: Empty Array
    * @group param
    */
+  @Since("1.5.0")
   val names = new StringArrayParam(this, "names",
     "An array of feature names to select features from a vector column." +
       " There can be no overlap with indices.", VectorSlicer.validNames)

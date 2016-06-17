@@ -47,6 +47,7 @@ class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: Str
    * Default: 2
    * @group param
    */
+  @Since("1.4.0")
   val degree = new IntParam(this, "degree", "the polynomial degree to expand (>= 1)",
     ParamValidators.gtEq(1))
 

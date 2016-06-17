@@ -50,6 +50,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * otherwise, values outside the splits specified will be treated as errors.
    * @group param
    */
+  @Since("1.4.0")
   val splits: DoubleArrayParam = new DoubleArrayParam(this, "splits",
     "Split points for mapping continuous features into buckets. With n+1 splits, there are n " +
       "buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last " +

@@ -48,6 +48,7 @@ class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * Default: false
    * @group param
    */
+  @Since("1.5.0")
   def inverse: BooleanParam = new BooleanParam(
     this, "inverse", "Set transformer to perform inverse DCT")
 

@@ -77,6 +77,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * Default: 1, to avoid returning empty strings
    * @group param
    */
+  @Since("1.4.0")
   val minTokenLength: IntParam = new IntParam(this, "minTokenLength", "minimum token length (>= 0)",
     ParamValidators.gtEq(0))
 
@@ -93,6 +94,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * Default: true
    * @group param
    */
+  @Since("1.4.0")
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
 
   /** @group setParam */
@@ -108,6 +110,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * Default: `"\\s+"`
    * @group param
    */
+  @Since("1.4.0")
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")
 
   /** @group setParam */
@@ -123,6 +126,7 @@ class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * Default: true
    * @group param
    */
+  @Since("1.6.0")
   final val toLowercase: BooleanParam = new BooleanParam(this, "toLowercase",
     "whether to convert all characters to lowercase before tokenizing.")
 

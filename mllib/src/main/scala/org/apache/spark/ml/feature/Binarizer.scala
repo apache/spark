@@ -49,6 +49,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * Default: 0.0
    * @group param
    */
+  @Since("1.4.0")
   val threshold: DoubleParam =
     new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
 

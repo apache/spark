@@ -47,6 +47,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * Default: 2, bigram features
    * @group param
    */
+  @Since("1.5.0")
   val n: IntParam = new IntParam(this, "n", "number elements per n-gram (>=1)",
     ParamValidators.gtEq(1))
 

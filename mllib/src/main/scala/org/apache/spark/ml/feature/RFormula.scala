@@ -81,6 +81,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
    * R formula parameter. The formula is provided in string form.
    * @group param
    */
+  @Since("1.5.0")
   val formula: Param[String] = new Param(this, "formula", "R model formula")
 
   /**

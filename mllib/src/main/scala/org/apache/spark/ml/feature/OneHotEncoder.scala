@@ -54,6 +54,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
    * Whether to drop the last category in the encoded vector (default: true)
    * @group param
    */
+  @Since("1.4.0")
   final val dropLast: BooleanParam =
     new BooleanParam(this, "dropLast", "whether to drop the last category")
   setDefault(dropLast -> true)

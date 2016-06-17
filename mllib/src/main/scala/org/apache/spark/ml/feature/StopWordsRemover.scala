@@ -54,6 +54,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * @see [[StopWordsRemover.loadDefaultStopWords()]]
    * @group param
    */
+  @Since("1.5.0")
   val stopWords: StringArrayParam =
     new StringArrayParam(this, "stopWords", "the words to be filtered out")
 
@@ -70,6 +71,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
    * Default: false
    * @group param
    */
+  @Since("1.5.0")
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
     "whether to do a case-sensitive comparison over the stop words")
 
