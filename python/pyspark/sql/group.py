@@ -35,9 +35,9 @@ def dfapi(f):
 
 
 def df_varargs_api(f):
-    def _api(self, *args):
+    def _api(self, *cols):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -58,7 +58,7 @@ class GroupedData(object):
         self._jgd = jgd
         self.sql_ctx = sql_ctx
 
-    @ignore_unicode_prefixs
+    @ignore_unicode_prefix
     @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
