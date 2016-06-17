@@ -22,8 +22,10 @@ NULL
 
 setOldClass("jobj")
 
-#' @title S4 class that represents a GroupedData
-#' @description GroupedDatas can be created using groupBy() on a SparkDataFrame
+#' S4 class that represents a GroupedData
+#'
+#' GroupedDatas can be created using groupBy() on a SparkDataFrame
+#'
 #' @rdname GroupedData
 #' @seealso groupBy
 #'
