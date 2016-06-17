@@ -2927,6 +2927,7 @@ setMethod("write.jdbc",
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- createDataFrame(data.frame(id = 1:1000))
 #' df_list <- randomSplit(df, c(2, 3, 5), 0)
+#' # df_list contains 3 SparkDataFrames with each having about 200, 300 and 500 rows respectively
 #' sapply(df_list, count)
 #' }
 #' @note since 2.0.0
