@@ -2274,6 +2274,8 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
 
 test_that("randomSplit", {
   df <- createDataFrame(data.frame(id = 1:1000))
+  df_list <- randomSplit(df, c(2, 3, 5))
+  expect_equal(1000, sum(sapply(df_list, count)))
   df_list <- randomSplit(df, c(2, 3, 5), 0)
   expect_equal(1000, sum(sapply(df_list, count)))
 })
