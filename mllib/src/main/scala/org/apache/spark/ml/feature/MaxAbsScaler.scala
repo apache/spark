@@ -94,7 +94,7 @@ class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
 @Since("2.0.0")
 object MaxAbsScaler extends DefaultParamsReadable[MaxAbsScaler] {
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): MaxAbsScaler = super.load(path)
 }
 
@@ -177,9 +177,9 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     }
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def read: MLReader[MaxAbsScalerModel] = new MaxAbsScalerModelReader
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): MaxAbsScalerModel = super.load(path)
 }
