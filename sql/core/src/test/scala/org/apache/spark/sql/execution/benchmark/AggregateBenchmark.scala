@@ -131,18 +131,26 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
-  ignore("aggregate with randomized keys") {
+
+  test("aggregate with randomized keys") {
     val N = 20 << 22
 
+    val numIters = 10
     val benchmark = new Benchmark("Aggregate w keys", N)
     sparkSession.range(N).selectExpr("id", "floor(rand() * 10000) as k")
       .createOrReplaceTempView("test")
 
-    def f(): Unit = sparkSession.sql("select k, k, sum(id) from test group by k, k").collect()
-
-    benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
-      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
-      f()
+    def run(cache: Boolean = false): Unit = {
+      if (cache) {
+        sparkSession.catalog.cacheTable("test")
+      }
+      try {
+        val ds = sparkSession.sql("select k, sum(id) from test group by k")
+        ds.collect()
+        ds.collect()
+      } finally {
+        sparkSession.catalog.clearCache()
+      }
     }
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
