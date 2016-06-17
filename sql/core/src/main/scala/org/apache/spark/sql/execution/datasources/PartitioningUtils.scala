@@ -339,9 +339,6 @@ private[sql] object PartitioningUtils {
   private val upCastingOrder: Seq[DataType] =
     Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
 
-  /**
-   * Validate partition columns for writing executions.
-   */
   def validatePartitionColumn(
       schema: StructType,
       partitionColumns: Seq[String],
@@ -354,10 +351,8 @@ private[sql] object PartitioningUtils {
       }
     }
 
-    if (schema.fields.isEmpty) {
-      throw new AnalysisException("Cannot write dataset with no fields")
-    } else if (partitionColumns.size == schema.fields.length) {
-      throw new AnalysisException("Cannot use all columns for partition columns")
+    if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
+      throw new AnalysisException(s"Cannot use all columns for partition columns")
     }
   }
 
