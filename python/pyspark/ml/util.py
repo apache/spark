@@ -262,6 +262,9 @@ class TransformerWrapper(object):
         self.transformer = transformer
         self.df_wrap_func = lambda jdf, ctx: DataFrame(jdf, ctx)
         self.failure = None
+        reader = TransformerWrapperReader(self.ctx)
+        self.ctx._gateway.jvm.\
+            org.apache.spark.ml.api.python.PythonTransformerWrapper.registerReader(reader)
 
     def df_wrapper(self, func):
         self.df_wrap_func = func
@@ -286,6 +289,9 @@ class TransformerWrapper(object):
         except:
             self.failure = traceback.format_exc()
 
+    def getClass(self):
+        return self.transformer.__class__.__name__
+
     def transform(self, jdf):
         # Clear the failure
         self.failure = None
@@ -306,11 +312,51 @@ class TransformerWrapper(object):
     def getLastFailure(self):
         return self.failure
 
+    def save(self, path):
+        self.failure = None
+        try:
+            self.transformer.save(path)
+        except:
+            self.failure = traceback.format_exc()
+
     def __repr__(self):
         return "TransformerWrapper(%s)" % self.transformer
 
     class Java:
         implements = ['org.apache.spark.ml.api.python.PythonTransformerWrapper']
+
+
+class TransformerWrapperReader(object):
+
+    def __init__(self, ctx):
+        self.failure = None
+        self.ctx = ctx
+
+    def __get_class(self, clazz):
+        """
+        Loads Python class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
+
+    def getLastFailure(self):
+        return self.failure
+
+    def load(self, path, clazz):
+        self.failure = None
+        try:
+            cls = self.__get_class(clazz)
+            transformer = cls.load(path)
+            return TransformerWrapper(self.ctx, transformer)
+        except:
+            self.failure = traceback.format_exc()
+
+    class Java:
+        implements = ['org.apache.spark.ml.api.python.PythonTransformerWrapperReader']
 
 
 class TransformWrapperSerializer(object):
@@ -328,7 +374,7 @@ class TransformWrapperSerializer(object):
         self.ctx = ctx
         self.serializer = serializer
         self.gateway = gateway or self.ctx._gateway
-        self.gateway.jvm.PythonDStream.registerSerializer(self)
+        # self.gateway.jvm.PythonDStream.registerSerializer(self)
         self.failure = None
 
     def dumps(self, id):

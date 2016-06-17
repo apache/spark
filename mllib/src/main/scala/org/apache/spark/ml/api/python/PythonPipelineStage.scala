@@ -20,9 +20,13 @@ package org.apache.spark.ml.api.python
 import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 
+import org.apache.hadoop.fs.Path
+import org.json4s._
+
 import org.apache.spark.SparkException
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -36,9 +40,40 @@ trait PythonTransformerWrapper {
 
   def getTransformer: Array[Byte]
 
+  def getClass: String
+
+  def save(path: String): Unit
+
   def copy(extra: ParamMap): PythonTransformerWrapper
 
   def getLastFailure: String
+}
+
+object PythonTransformerWrapper {
+  private var reader: PythonTransformerWrapperReader = _
+
+  def registerReader(r: PythonTransformerWrapperReader): Unit = {
+    reader = r
+  }
+
+  def load(path: String, clazz: String): PythonTransformerWrapper = {
+    require(reader != null, "Python reader has not been registered.")
+    callLoadFromPython(path, clazz)
+  }
+
+  def callLoadFromPython(path: String, clazz: String): PythonTransformerWrapper = {
+    val result = reader.load(path, clazz)
+    val failure = reader.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    result
+  }
+}
+
+trait PythonTransformerWrapperReader {
+  def getLastFailure: String
+  def load(path: String, clazz: String): PythonTransformerWrapper
 }
 
 trait PythonTransformerWrapperSerializer {
@@ -101,7 +136,7 @@ private[python] object PythonTransformerWrapperSerializer {
 
 class PythonTransformer(
     @transient var pfunc: PythonTransformerWrapper,
-    override val uid: String) extends Transformer {
+    override val uid: String) extends Transformer with MLWritable {
 
   override def transformSchema(schema: StructType): StructType = {
     pfunc.transformSchema(schema)
@@ -115,11 +150,16 @@ class PythonTransformer(
     callGetTransformerFromPython
   }
 
+  def getPythonClass: String = {
+    pfunc.getClass
+  }
 
   override def copy(extra: ParamMap): PythonTransformer = {
     this.pfunc = this.pfunc.copy(extra)
     this
   }
+
+  override def write: MLWriter = new PythonTransformer.PythonTransformerWriter(this)
 
   def callGetTransformerFromPython: Array[Byte] = {
     val result = pfunc.getTransformer
@@ -150,6 +190,33 @@ class PythonTransformer(
     val bytes = new Array[Byte](length)
     in.readFully(bytes)
     pfunc = PythonTransformerWrapperSerializer.deserialize(bytes)
+  }
+}
+
+object PythonTransformer extends MLReadable[PythonTransformer] {
+  override def read: MLReader[PythonTransformer] = new PythonTransformerReader
+
+  override def load(path: String): PythonTransformer = super.load(path)
+
+  class PythonTransformerWriter(instance: PythonTransformer) extends MLWriter {
+    override def saveImpl(path: String): Unit = {
+      import org.json4s.JsonDSL._
+      val extraMetadata = "pyClass" -> instance.getPythonClass
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      val pyDir = new Path(path, "pyTransformer").toString
+      instance.pfunc.save(pyDir)
+    }
+  }
+
+  class PythonTransformerReader extends MLReader[PythonTransformer] {
+    private val className = classOf[PythonTransformer].getName
+    override def load(path: String): PythonTransformer = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val pyClass = (metadata.metadata \ "pyClass").extract[String]
+      val pyDir = new Path(path, "pyTransformer").toString
+      val pfunc = PythonTransformerWrapper.load(pyDir, pyClass)
+      new PythonTransformer(pfunc, pfunc.getUid)
+    }
   }
 }
 
