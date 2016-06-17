@@ -33,18 +33,26 @@ class HiveDataFrameSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("inputFiles") {
     Seq("SEQUENCEFILE", "ORC", "PARQUET").foreach { format =>
-      withTable("tab1") {
-        withView("view1") {
-          sql(s"create table tab1 stored as $format as select 1 as a, 2 as b")
-          sql("create view view1 as select * from tab1")
-          val tabDF = sql("select * from tab1")
-          val viewDF = sql("select * from view1")
-          assert(tabDF.inputFiles === viewDF.inputFiles)
-          assert(tabDF.inputFiles.length == 1)
-          if (format == "SEQUENCEFILE") {
-            assert(tabDF.inputFiles(0).toLowerCase.endsWith("tab1"))
-          } else {
-            assert(tabDF.inputFiles(0).toLowerCase.endsWith(format.toLowerCase))
+      withTempDir { tmpDir =>
+        withTable("tab1") {
+          withView("view1") {
+            sql(
+              s"""
+                 |create table tab1
+                 |stored as $format
+                 |location '$tmpDir'
+                 |as select 1 as a, 2 as b
+               """.stripMargin)
+            sql("create view view1 as select * from tab1")
+            val tabDF = sql("select * from tab1")
+            val viewDF = sql("select * from view1")
+            assert(tabDF.inputFiles === viewDF.inputFiles)
+            assert(tabDF.inputFiles.length == 1)
+            if (format == "SEQUENCEFILE") {
+              assert(tabDF.inputFiles(0).endsWith(tmpDir.toString))
+            } else {
+              assert(tabDF.inputFiles(0).toLowerCase.endsWith(format.toLowerCase))
+            }
           }
         }
       }
