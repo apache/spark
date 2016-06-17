@@ -66,6 +66,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance, 
  *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
  *                           the checkpoint directory is not set in
  *                           [[org.apache.spark.SparkContext]], this setting is ignored.
+ * @param classWeights Weights of classes used in classification problems. It will be ignored in
+ *                     regression problems.
  */
 @Since("1.0.0")
 class Strategy @Since("1.3.0") (
