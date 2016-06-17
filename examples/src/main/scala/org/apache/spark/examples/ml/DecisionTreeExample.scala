@@ -321,7 +321,7 @@ object DecisionTreeExample {
       case None => throw new RuntimeException(
         "Unknown failure when indexing labels for classification.")
     }
-    val accuracy = new MulticlassMetrics(predictions.zip(labels)).precision
+    val accuracy = new MulticlassMetrics(predictions.zip(labels)).accuracy
     println(s"  Accuracy ($numClasses classes): $accuracy")
   }
 

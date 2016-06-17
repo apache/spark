@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
@@ -675,6 +675,8 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -689,6 +691,8 @@ class DistributedLDAModel private[ml] (
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
@@ -696,8 +700,8 @@ class DistributedLDAModel private[ml] (
   @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
-    val fs = FileSystem.get(sparkSession.sparkContext.hadoopConfiguration)
-    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, hadoopConf))
     _checkpointFiles = Array.empty[String]
   }
 

@@ -396,6 +396,8 @@ object FunctionRegistry {
     fr
   }
 
+  val functionSet: Set[String] = builtin.listFunction().toSet
+
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
@@ -410,7 +412,7 @@ object FunctionRegistry {
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }
       } else {
-        // Otherwise, find an ctor method that matches the number of arguments, and use that.
+        // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>

@@ -218,7 +218,7 @@ private[hive] trait HiveClient {
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit
 
-  /** Drop an existing function an the database. */
+  /** Drop an existing function in the database. */
   def dropFunction(db: String, name: String): Unit
 
   /** Rename an existing function in the database. */

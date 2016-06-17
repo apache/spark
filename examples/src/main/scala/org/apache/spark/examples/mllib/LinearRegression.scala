@@ -34,6 +34,7 @@ import org.apache.spark.mllib.util.MLUtils
  * A synthetic dataset can be found at `data/mllib/sample_linear_regression_data.txt`.
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 object LinearRegression {
 
   object RegType extends Enumeration {

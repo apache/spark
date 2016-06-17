@@ -454,6 +454,10 @@ setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 #' @export
 setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect") })
 
+#' @rdname gapply
+#' @export
+setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
@@ -462,12 +466,9 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 #' @export
 setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
-#' @rdname dropduplicates
+#' @rdname dropDuplicates
 #' @export
-setGeneric("dropDuplicates",
-           function(x, colNames = columns(x)) {
-             standardGeneric("dropDuplicates")
-           })
+setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
 
 #' @rdname nafunctions
 #' @export
@@ -547,9 +548,12 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
-#' @rdname registerTempTable
+#' @rdname createOrReplaceTempView
 #' @export
-setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
 
 #' @rdname sample
 #' @export
@@ -695,7 +699,7 @@ setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname column
 #' @export
-setGeneric("endsWith", function(x, ...) { standardGeneric("endsWith") })
+setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
 
 #' @rdname column
 #' @export
@@ -727,7 +731,7 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname column
 #' @export
-setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
+setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
 #' @rdname column
 #' @export

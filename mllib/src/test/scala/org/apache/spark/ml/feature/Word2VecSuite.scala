@@ -196,6 +196,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .setStepSize(0.01)
       .setVectorSize(100)
+      .setMaxSentenceLength(500)
     testDefaultReadWrite(t)
   }
 

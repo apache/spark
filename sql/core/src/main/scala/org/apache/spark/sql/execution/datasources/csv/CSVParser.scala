@@ -75,6 +75,7 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   writerSettings.setSkipEmptyLines(true)
   writerSettings.setQuoteAllFields(false)
   writerSettings.setHeaders(headers: _*)
+  writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
 
   private var buffer = new ByteArrayOutputStream()
   private var writer = new CsvWriter(

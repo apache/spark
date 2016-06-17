@@ -826,13 +826,15 @@ class HiveWindowFunctionQueryFileSuite
     "windowing_ntile",
     "windowing_udaf",
     "windowing_windowspec",
-    "windowing_rank"
+    "windowing_rank",
+
+    // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
+    "windowing_columnPruning",
+    "windowing_adjust_rowcontainer_sz"
   )
 
   override def whiteList: Seq[String] = Seq(
-    "windowing_udaf2",
-    "windowing_columnPruning",
-    "windowing_adjust_rowcontainer_sz"
+    "windowing_udaf2"
   )
 
   // Only run those query tests in the realWhileList (do not try other ignored query files).

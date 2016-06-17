@@ -110,9 +110,11 @@ isRDD <- function(name, env) {
 #' @return the hash code as an integer
 #' @export
 #' @examples
+#'\dontrun{
 #' hashCode(1L) # 1
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
+#'}
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
@@ -489,7 +491,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be
 #               considered as a "name"-to-"list of functions" mapping.
 # return value
-#   a new version of func that has an correct environment (closure).
+#   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
@@ -663,4 +665,13 @@ varargsToJProperties <- function(...) {
     })
   }
   props
+}
+
+launchScript <- function(script, combinedArgs, capture = FALSE) {
+  if (.Platform$OS.type == "windows") {
+    scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    shell(scriptWithArgs, translate = TRUE, wait = capture, intern = capture) # nolint
+  } else {
+    system2(script, combinedArgs, wait = capture, stdout = capture)
+  }
 }

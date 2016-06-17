@@ -58,7 +58,7 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
 }
 
 /**
- * Generates bytecode for an [[ColumnarIterator]] for columnar cache.
+ * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
 object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
@@ -224,7 +224,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         }
       }"""
 
-    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated ColumnarIterator:\n${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]

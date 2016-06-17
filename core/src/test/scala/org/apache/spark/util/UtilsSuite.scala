@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, FileOutputStream, PrintStream}
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -39,6 +39,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
+
+  test("truncatedString") {
+    assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
+    assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
+  }
 
   test("timeConversion") {
     // Test -1
@@ -681,14 +689,37 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(!Utils.isInDirectory(nullFile, childFile3))
   }
 
-  test("circular buffer") {
-    val buffer = new CircularBuffer(25)
-    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+  test("circular buffer: if nothing was written to the buffer, display nothing") {
+    val buffer = new CircularBuffer(4)
+    assert(buffer.toString === "")
+  }
 
-    // scalastyle:off println
-    stream.println("test circular test circular test circular test circular test circular")
-    // scalastyle:on println
-    assert(buffer.toString === "t circular test circular\n")
+  test("circular buffer: if the buffer isn't full, print only the contents written") {
+    val buffer = new CircularBuffer(10)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+    stream.print("test")
+    assert(buffer.toString === "test")
+  }
+
+  test("circular buffer: data written == size of the buffer") {
+    val buffer = new CircularBuffer(4)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+
+    // fill the buffer to its exact size so that it just hits overflow
+    stream.print("test")
+    assert(buffer.toString === "test")
+
+    // add more data to the buffer
+    stream.print("12")
+    assert(buffer.toString === "st12")
+  }
+
+  test("circular buffer: multiple overflow") {
+    val buffer = new CircularBuffer(25)
+    val stream = new PrintStream(buffer, true, "UTF-8")
+
+    stream.print("test circular test circular test circular test circular test circular")
+    assert(buffer.toString === "st circular test circular")
   }
 
   test("nanSafeCompareDoubles") {

@@ -19,7 +19,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 
 __all__ = ['ALS', 'ALSModel']
@@ -120,12 +120,10 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                         "whether to use nonnegative constraint for least squares",
                         typeConverter=TypeConverters.toBoolean)
     intermediateStorageLevel = Param(Params._dummy(), "intermediateStorageLevel",
-                                     "StorageLevel for intermediate datasets. Cannot be 'NONE'. " +
-                                     "Default: 'MEMORY_AND_DISK'.",
+                                     "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
                                      typeConverter=TypeConverters.toString)
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
-                              "StorageLevel for ALS model factors. " +
-                              "Default: 'MEMORY_AND_DISK'.",
+                              "StorageLevel for ALS model factors.",
                               typeConverter=TypeConverters.toString)
 
     @keyword_only

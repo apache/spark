@@ -246,8 +246,8 @@ public class JavaDataFrameSuite {
     Dataset<Row> crosstab = df.stat().crosstab("a", "b");
     String[] columnNames = crosstab.schema().fieldNames();
     Assert.assertEquals("a_b", columnNames[0]);
-    Assert.assertEquals("2", columnNames[1]);
-    Assert.assertEquals("1", columnNames[2]);
+    Assert.assertEquals("1", columnNames[1]);
+    Assert.assertEquals("2", columnNames[2]);
     List<Row> rows = crosstab.collectAsList();
     Collections.sort(rows, crosstabRowComparator);
     Integer count = 1;
@@ -338,10 +338,10 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testTextLoad() {
-    Dataset<String> ds1 = spark.read().text(getResource("text-suite.txt"));
+    Dataset<String> ds1 = spark.read().textFile(getResource("text-suite.txt"));
     Assert.assertEquals(4L, ds1.count());
 
-    Dataset<String> ds2 = spark.read().text(
+    Dataset<String> ds2 = spark.read().textFile(
       getResource("text-suite.txt"),
       getResource("text-suite2.txt"));
     Assert.assertEquals(5L, ds2.count());

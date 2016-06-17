@@ -57,7 +57,7 @@ case class ParquetDataWithKeyAndComplexTypes(
  */
 class ParquetMetastoreSuite extends ParquetPartitioningTest {
   import hiveContext._
-  import hiveContext.implicits._
+  import spark.implicits._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -571,7 +571,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
  */
 class ParquetSourceSuite extends ParquetPartitioningTest {
   import testImplicits._
-  import hiveContext._
+  import spark._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -671,6 +671,46 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
           checkAnswer(
             spark.read.parquet(path),
             Row("1st", "2nd", Seq(Row("val_a", "val_b"))))
+        }
+      }
+    }
+  }
+
+  test("Verify the PARQUET conversion parameter: CONVERT_METASTORE_PARQUET") {
+    withTempTable("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      Seq("true", "false").foreach { parquetConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
+          val tableName = "test_parquet_ctas"
+          withTable(tableName) {
+            sql(
+              s"""
+                 |CREATE TABLE $tableName STORED AS PARQUET
+                 |AS SELECT tmp.key, tmp.value FROM single tmp
+               """.stripMargin)
+
+            val df = spark.sql(s"SELECT * FROM $tableName WHERE key=0")
+            checkAnswer(df, singleRowDF)
+
+            val queryExecution = df.queryExecution
+            if (parquetConversion == "true") {
+              queryExecution.analyzed.collectFirst {
+                case _: LogicalRelation =>
+              }.getOrElse {
+                fail(s"Expecting the query plan to convert parquet to data sources, " +
+                  s"but got:\n$queryExecution")
+              }
+            } else {
+              queryExecution.analyzed.collectFirst {
+                case _: MetastoreRelation =>
+              }.getOrElse {
+                fail(s"Expecting no conversion from parquet to data sources, " +
+                  s"but got:\n$queryExecution")
+              }
+            }
+          }
         }
       }
     }

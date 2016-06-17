@@ -235,6 +235,17 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(items.length === 1)
   }
 
+  test("SPARK-15709: Prevent `UnsupportedOperationException: empty.min` in `freqItems`") {
+    val ds = spark.createDataset(Seq(1, 2, 2, 3, 3, 3))
+
+    intercept[IllegalArgumentException] {
+      ds.stat.freqItems(Seq("value"), 0)
+    }
+    intercept[IllegalArgumentException] {
+      ds.stat.freqItems(Seq("value"), 2)
+    }
+  }
+
   test("sampleBy") {
     val df = spark.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)

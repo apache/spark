@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.datasources
 
@@ -30,8 +30,14 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
 
@@ -73,15 +79,34 @@ case class DataSource(
   lazy val sourceInfo = sourceSchema()
 
   /** A map to maintain backward compatibility in case we move data sources around. */
-  private val backwardCompatibilityMap = Map(
-    "org.apache.spark.sql.jdbc" -> classOf[jdbc.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[jdbc.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.json" -> classOf[json.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.json.DefaultSource" -> classOf[json.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getCanonicalName,
-    "com.databricks.spark.csv" -> classOf[csv.DefaultSource].getCanonicalName
-  )
+  private val backwardCompatibilityMap: Map[String, String] = {
+    val jdbc = classOf[JdbcRelationProvider].getCanonicalName
+    val json = classOf[JsonFileFormat].getCanonicalName
+    val parquet = classOf[ParquetFileFormat].getCanonicalName
+    val csv = classOf[CSVFileFormat].getCanonicalName
+    val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
+    val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
+
+    Map(
+      "org.apache.spark.sql.jdbc" -> jdbc,
+      "org.apache.spark.sql.jdbc.DefaultSource" -> jdbc,
+      "org.apache.spark.sql.execution.datasources.jdbc.DefaultSource" -> jdbc,
+      "org.apache.spark.sql.execution.datasources.jdbc" -> jdbc,
+      "org.apache.spark.sql.json" -> json,
+      "org.apache.spark.sql.json.DefaultSource" -> json,
+      "org.apache.spark.sql.execution.datasources.json" -> json,
+      "org.apache.spark.sql.execution.datasources.json.DefaultSource" -> json,
+      "org.apache.spark.sql.parquet" -> parquet,
+      "org.apache.spark.sql.parquet.DefaultSource" -> parquet,
+      "org.apache.spark.sql.execution.datasources.parquet" -> parquet,
+      "org.apache.spark.sql.execution.datasources.parquet.DefaultSource" -> parquet,
+      "org.apache.spark.sql.hive.orc.DefaultSource" -> orc,
+      "org.apache.spark.sql.hive.orc" -> orc,
+      "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
+      "org.apache.spark.ml.source.libsvm" -> libsvm,
+      "com.databricks.spark.csv" -> csv
+    )
+  }
 
   /**
    * Class that were removed in Spark 2.0. Used to detect incompatibility libraries for Spark 2.0.
@@ -107,28 +132,20 @@ case class DataSource(
               // Found the data source using fully qualified path
               dataSource
             case Failure(error) =>
-              if (error.isInstanceOf[ClassNotFoundException]) {
-                val className = error.getMessage
-                if (spark2RemovedClasses.contains(className)) {
-                  throw new ClassNotFoundException(s"$className is removed in Spark 2.0. " +
-                    "Please check if your library is compatible with Spark 2.0")
-                }
-              }
-              if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-                throw new ClassNotFoundException(
-                  "The ORC data source must be used with Hive support enabled.", error)
+              if (provider.toLowerCase == "orc" ||
+                  provider.startsWith("org.apache.spark.sql.hive.orc")) {
+                throw new AnalysisException(
+                  "The ORC data source must be used with Hive support enabled")
+              } else if (provider.toLowerCase == "avro" ||
+                  provider == "com.databricks.spark.avro") {
+                throw new AnalysisException(
+                  s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
+                    "package http://spark-packages.org/package/databricks/spark-avro")
               } else {
-                if (provider == "avro" || provider == "com.databricks.spark.avro") {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please use Spark package " +
-                      "http://spark-packages.org/package/databricks/spark-avro",
-                    error)
-                } else {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
-                    error)
-                }
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please find packages at " +
+                    "http://spark-packages.org",
+                  error)
               }
           }
         } catch {
@@ -186,6 +203,16 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
+        val isTextSource = providingClass == classOf[text.TextFileFormat]
+        // If the schema inference is disabled, only text sources require schema to be specified
+        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
+          throw new IllegalArgumentException(
+            "Schema must be specified when creating a streaming source DataFrame. " +
+              "If some files already exist in the directory, then depending on the file format " +
+              "you may be able to create a static DataFrame on that directory with " +
+              "'spark.read.load(directory)' and infer schema from it.")
+        }
         SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
 
       case _ =>
@@ -214,15 +241,20 @@ case class DataSource(
   }
 
   /** Returns a sink that can be used to continually write data. */
-  def createSink(): Sink = {
+  def createSink(outputMode: OutputMode): Sink = {
     providingClass.newInstance() match {
-      case s: StreamSinkProvider => s.createSink(sparkSession.sqlContext, options, partitionColumns)
+      case s: StreamSinkProvider =>
+        s.createSink(sparkSession.sqlContext, options, partitionColumns, outputMode)
 
-      case parquet: parquet.DefaultSource =>
+      case parquet: parquet.ParquetFileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        if (outputMode != OutputMode.Append) {
+          throw new IllegalArgumentException(
+            s"Data source $className does not support $outputMode output mode")
+        }
         new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
 
       case _ =>
@@ -354,9 +386,6 @@ case class DataSource(
               "It must be specified manually")
         }
 
-        val enrichedOptions =
-          format.prepareRead(sparkSession, caseInsensitiveOptions, fileCatalog.allFiles())
-
         HadoopFsRelation(
           sparkSession,
           fileCatalog,
@@ -364,7 +393,7 @@ case class DataSource(
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          enrichedOptions)
+          caseInsensitiveOptions)
 
       case _ =>
         throw new AnalysisException(
@@ -400,7 +429,7 @@ case class DataSource(
         }
 
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-        PartitioningUtils.validatePartitionColumnDataTypes(
+        PartitioningUtils.validatePartitionColumn(
           data.schema, partitionColumns, caseSensitive)
 
         // If we are appending to a table that already exists, make sure the partitioning matches
@@ -442,7 +471,7 @@ case class DataSource(
             options,
             data.logicalPlan,
             mode)
-        sparkSession.executePlan(plan).toRdd
+        sparkSession.sessionState.executePlan(plan).toRdd
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")

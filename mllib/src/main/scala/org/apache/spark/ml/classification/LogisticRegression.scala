@@ -333,6 +333,13 @@ class LogisticRegression @Since("1.2.0") (
         val featuresMean = summarizer.mean.toArray
         val featuresStd = summarizer.variance.toArray.map(math.sqrt)
 
+        if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
+          featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
+          logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
+            "constant nonzero column, Spark MLlib outputs zero coefficients for constant " +
+            "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
+        }
+
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
@@ -400,7 +407,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+          initialCoefficientsWithIntercept.asBreeze.toDenseVector)
 
         /*
            Note that in Logistic Regression, the objective history (loss + regularization)
@@ -686,7 +693,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 /**
  * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
  * and validates the data to see if the labels used for k class multi-label classification
- * are in the range of {0, 1, ..., k - 1} in a online fashion.
+ * are in the range of {0, 1, ..., k - 1} in an online fashion.
  *
  * Two MultilabelSummarizer can be merged together to have a statistical summary of the
  * corresponding joint dataset.
@@ -854,7 +861,7 @@ class BinaryLogisticRegressionSummary private[classification] (
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,
-   * which is an Dataframe having two fields (FPR, TPR)
+   * which is a Dataframe having two fields (FPR, TPR)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    *
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
@@ -874,7 +881,7 @@ class BinaryLogisticRegressionSummary private[classification] (
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
-   * Returns the precision-recall curve, which is an Dataframe containing
+   * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    *
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
@@ -923,7 +930,7 @@ class BinaryLogisticRegressionSummary private[classification] (
 
 /**
  * LogisticAggregator computes the gradient and loss for binary logistic loss function, as used
- * in binary classification for instances in sparse or dense vector in a online fashion.
+ * in binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Note that multinomial logistic loss is not supported yet!
  *

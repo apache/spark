@@ -18,7 +18,7 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.feature import VectorAssembler
 # $example off$
 from pyspark.sql import SparkSession

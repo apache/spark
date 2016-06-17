@@ -267,6 +267,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
 
+    if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
+      featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
+      logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
+        "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
+        "columns. This behavior is the same as R glmnet but different from LIBSVM.")
+    }
+
     // Since we implicitly do the feature scaling when we compute the cost function
     // to improve the convergence, the effective regParam will be changed.
     val effectiveRegParam = $(regParam) / yStd
@@ -297,7 +304,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val initialCoefficients = Vectors.zeros(numFeatures)
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialCoefficients.toBreeze.toDenseVector)
+      initialCoefficients.asBreeze.toDenseVector)
 
     val (coefficients, objectiveHistory) = {
       /*
@@ -558,16 +565,18 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val featuresCol: String,
-    @deprecated("The model field is deprecated and will be removed in 2.1.0.", "2.0.0")
-    val model: LinearRegressionModel,
+    private val privateModel: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
+
+  @deprecated("The model field is deprecated and will be removed in 2.1.0.", "2.0.0")
+  val model: LinearRegressionModel = privateModel
 
   @transient private val metrics = new RegressionMetrics(
     predictions
       .select(col(predictionCol), col(labelCol).cast(DoubleType))
       .rdd
       .map { case Row(pred: Double, label: Double) => (pred, label) },
-    !model.getFitIntercept)
+    !privateModel.getFitIntercept)
 
   /**
    * Returns the explained variance regression score.
@@ -631,10 +640,10 @@ class LinearRegressionSummary private[regression] (
   lazy val numInstances: Long = predictions.count()
 
   /** Degrees of freedom */
-  private val degreesOfFreedom: Long = if (model.getFitIntercept) {
-    numInstances - model.coefficients.size - 1
+  private val degreesOfFreedom: Long = if (privateModel.getFitIntercept) {
+    numInstances - privateModel.coefficients.size - 1
   } else {
-    numInstances - model.coefficients.size
+    numInstances - privateModel.coefficients.size
   }
 
   /**
@@ -642,13 +651,15 @@ class LinearRegressionSummary private[regression] (
    * the square root of the instance weights.
    */
   lazy val devianceResiduals: Array[Double] = {
-    val weighted = if (!model.isDefined(model.weightCol) || model.getWeightCol.isEmpty) {
-      lit(1.0)
-    } else {
-      sqrt(col(model.getWeightCol))
-    }
-    val dr = predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
-      .multiply(weighted).as("weightedResiduals"))
+    val weighted =
+      if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
+        lit(1.0)
+      } else {
+        sqrt(col(privateModel.getWeightCol))
+      }
+    val dr = predictions
+      .select(col(privateModel.getLabelCol).minus(col(privateModel.getPredictionCol))
+        .multiply(weighted).as("weightedResiduals"))
       .select(min(col("weightedResiduals")).as("min"), max(col("weightedResiduals")).as("max"))
       .first()
     Array(dr.getDouble(0), dr.getDouble(1))
@@ -668,14 +679,15 @@ class LinearRegressionSummary private[regression] (
       throw new UnsupportedOperationException(
         "No Std. Error of coefficients available for this LinearRegressionModel")
     } else {
-      val rss = if (!model.isDefined(model.weightCol) || model.getWeightCol.isEmpty) {
-        meanSquaredError * numInstances
-      } else {
-        val t = udf { (pred: Double, label: Double, weight: Double) =>
-          math.pow(label - pred, 2.0) * weight }
-        predictions.select(t(col(model.getPredictionCol), col(model.getLabelCol),
-          col(model.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
-      }
+      val rss =
+        if (!privateModel.isDefined(privateModel.weightCol) || privateModel.getWeightCol.isEmpty) {
+          meanSquaredError * numInstances
+        } else {
+          val t = udf { (pred: Double, label: Double, weight: Double) =>
+            math.pow(label - pred, 2.0) * weight }
+          predictions.select(t(col(privateModel.getPredictionCol), col(privateModel.getLabelCol),
+            col(privateModel.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
+        }
       val sigma2 = rss / degreesOfFreedom
       diagInvAtWA.map(_ * sigma2).map(math.sqrt)
     }
@@ -695,10 +707,10 @@ class LinearRegressionSummary private[regression] (
       throw new UnsupportedOperationException(
         "No t-statistic available for this LinearRegressionModel")
     } else {
-      val estimate = if (model.getFitIntercept) {
-        Array.concat(model.coefficients.toArray, Array(model.intercept))
+      val estimate = if (privateModel.getFitIntercept) {
+        Array.concat(privateModel.coefficients.toArray, Array(privateModel.intercept))
       } else {
-        model.coefficients.toArray
+        privateModel.coefficients.toArray
       }
       estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
     }
@@ -726,7 +738,7 @@ class LinearRegressionSummary private[regression] (
 
 /**
  * LeastSquaresAggregator computes the gradient and loss for a Least-squared loss function,
- * as used in linear regression for samples in sparse or dense vector in a online fashion.
+ * as used in linear regression for samples in sparse or dense vector in an online fashion.
  *
  * Two LeastSquaresAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.

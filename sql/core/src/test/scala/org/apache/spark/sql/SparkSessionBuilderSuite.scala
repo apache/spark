@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -89,5 +89,37 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != activeSession)
     newSession.stop()
+  }
+
+  test("create SparkContext first then SparkSession") {
+    sparkContext.stop()
+    val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
+    val sparkContext2 = new SparkContext(conf)
+    val session = SparkSession.builder().config("key2", "value2").getOrCreate()
+    assert(session.conf.get("key1") == "value1")
+    assert(session.conf.get("key2") == "value2")
+    assert(session.sparkContext.conf.get("key1") == "value1")
+    assert(session.sparkContext.conf.get("key2") == "value2")
+    session.stop()
+  }
+
+  test("SPARK-15887: hive-site.xml should be loaded") {
+    val session = SparkSession.builder().master("local").getOrCreate()
+    assert(session.sessionState.newHadoopConf().get("hive.in.test") == "true")
+    assert(session.sparkContext.hadoopConfiguration.get("hive.in.test") == "true")
+    session.stop()
+  }
+
+  test("SPARK-15991: Set global Hadoop conf") {
+    val session = SparkSession.builder().master("local").getOrCreate()
+    val mySpecialKey = "my.special.key.15991"
+    val mySpecialValue = "msv"
+    try {
+      session.sparkContext.hadoopConfiguration.set(mySpecialKey, mySpecialValue)
+      assert(session.sessionState.newHadoopConf().get(mySpecialKey) == mySpecialValue)
+    } finally {
+      session.sparkContext.hadoopConfiguration.unset(mySpecialKey)
+      session.stop()
+    }
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -28,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 
 /**
- * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
+ * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
 private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -38,6 +40,16 @@ private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[Lo
           sparkSession,
           paths = u.tableIdentifier.table :: Nil,
           className = u.tableIdentifier.database.get)
+
+        val notSupportDirectQuery = try {
+          !classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+        } catch {
+          case NonFatal(e) => false
+        }
+        if (notSupportDirectQuery) {
+          throw new AnalysisException("Unsupported data source type for direct query on files: " +
+            s"${u.tableIdentifier.database.get}")
+        }
         val plan = LogicalRelation(dataSource.resolveRelation())
         u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
       } catch {
@@ -66,8 +78,9 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
         // schema of the relation.
         if (l.output.size != child.output.size) {
           sys.error(
-            s"$l requires that the query in the SELECT clause of the INSERT INTO/OVERWRITE " +
-              s"statement generates the same number of columns as its schema.")
+            s"$l requires that the data to be inserted have the same number of columns as the " +
+              s"target table: target table has ${l.output.size} column(s) but " +
+              s"the inserted data has ${child.output.size} column(s).")
         }
         castAndRenameChildOutput(i, l.output, child)
   }
@@ -142,7 +155,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           // OK
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(
+        PartitioningUtils.validatePartitionColumn(
           r.schema, part.keySet.toSeq, conf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
@@ -193,7 +206,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           // OK
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(
+        PartitioningUtils.validatePartitionColumn(
           c.child.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
 
         for {

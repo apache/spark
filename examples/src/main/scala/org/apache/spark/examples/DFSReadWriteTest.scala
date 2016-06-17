@@ -107,16 +107,13 @@ object DFSReadWriteTest {
       .appName("DFS Read Write Test")
       .getOrCreate()
 
-    println("Creating SparkContext")
-    val sc = spark.sparkContext
-
     println("Writing local file to DFS")
     val dfsFilename = dfsDirPath + "/dfs_read_write_test"
-    val fileRDD = sc.parallelize(fileContents)
+    val fileRDD = spark.sparkContext.parallelize(fileContents)
     fileRDD.saveAsTextFile(dfsFilename)
 
     println("Reading file from DFS and running Word Count")
-    val readFileRDD = sc.textFile(dfsFilename)
+    val readFileRDD = spark.sparkContext.textFile(dfsFilename)
 
     val dfsWordCount = readFileRDD
       .flatMap(_.split(" "))

@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -51,7 +52,7 @@ private[libsvm] class LibSVMOutputWriter(
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
@@ -90,7 +91,7 @@ private[libsvm] class LibSVMOutputWriter(
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = spark.read().format("libsvm")
+ *   Dataset<Row> df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}
@@ -105,9 +106,13 @@ private[libsvm] class LibSVMOutputWriter(
  *  - "vectorType": feature vector type, "sparse" (default) or "dense".
  *
  *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
+ *
+ * Note that this class is public for documentation purpose. Please don't use this class directly.
+ * Rather, use the data source API as illustrated above.
  */
+// If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
 @Since("1.6.0")
-class DefaultSource extends FileFormat with DataSourceRegister {
+class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   @Since("1.6.0")
   override def shortName(): String = "libsvm"
@@ -115,9 +120,12 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   override def toString: String = "LibSVM"
 
   private def verifySchema(dataSchema: StructType): Unit = {
-    if (dataSchema.size != 2 ||
-      (!dataSchema(0).dataType.sameType(DataTypes.DoubleType)
-        || !dataSchema(1).dataType.sameType(new VectorUDT()))) {
+    if (
+      dataSchema.size != 2 ||
+        !dataSchema(0).dataType.sameType(DataTypes.DoubleType) ||
+        !dataSchema(1).dataType.sameType(new VectorUDT()) ||
+        !(dataSchema(1).metadata.getLong("numFeatures").toInt > 0)
+    ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
     }
   }
@@ -126,17 +134,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    Some(
-      StructType(
-        StructField("label", DoubleType, nullable = false) ::
-        StructField("features", new VectorUDT(), nullable = false) :: Nil))
-  }
-
-  override def prepareRead(
-      sparkSession: SparkSession,
-      options: Map[String, String],
-      files: Seq[FileStatus]): Map[String, String] = {
-    def computeNumFeatures(): Int = {
+    val numFeatures: Int = options.get("numFeatures").map(_.toInt).filter(_ > 0).getOrElse {
+      // Infers number of features if the user doesn't specify (a valid) one.
       val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
       val path = if (dataFiles.length == 1) {
         dataFiles.head.getPath.toUri.toString
@@ -151,11 +150,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       MLUtils.computeNumFeatures(parsed)
     }
 
-    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
-      computeNumFeatures()
-    }
+    val featuresMetadata = new MetadataBuilder()
+      .putLong("numFeatures", numFeatures)
+      .build()
 
-    new CaseInsensitiveMap(options + ("numFeatures" -> numFeatures.toString))
+    Some(
+      StructType(
+        StructField("label", DoubleType, nullable = false) ::
+        StructField("features", new VectorUDT(), nullable = false, featuresMetadata) :: Nil))
   }
 
   override def prepareWrite(
@@ -184,7 +186,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
-    val numFeatures = options("numFeatures").toInt
+    val numFeatures = dataSchema("features").metadata.getLong("numFeatures").toInt
     assert(numFeatures > 0)
 
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"

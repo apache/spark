@@ -378,59 +378,63 @@ class DAGScheduler(
    * the provided firstJobId.
    */
   private def getParentStages(rdd: RDD[_], firstJobId: Int): List[Stage] = {
-    val parents = new HashSet[Stage]
-    val visited = new HashSet[RDD[_]]
-    // We are manually maintaining a stack here to prevent StackOverflowError
-    // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(r: RDD[_]) {
-      if (!visited(r)) {
-        visited += r
-        // Kind of ugly: need to register RDDs with the cache here since
-        // we can't do it in its constructor because # of partitions is unknown
-        for (dep <- r.dependencies) {
-          dep match {
-            case shufDep: ShuffleDependency[_, _, _] =>
-              parents += getShuffleMapStage(shufDep, firstJobId)
-            case _ =>
-              waitingForVisit.push(dep.rdd)
-          }
-        }
-      }
-    }
-    waitingForVisit.push(rdd)
-    while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
-    }
-    parents.toList
+    getShuffleDependencies(rdd).map { shuffleDep =>
+      getShuffleMapStage(shuffleDep, firstJobId)
+    }.toList
   }
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
   private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
-    val parents = new Stack[ShuffleDependency[_, _, _]]
+    val ancestors = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
-    def visit(r: RDD[_]) {
-      if (!visited(r)) {
-        visited += r
-        for (dep <- r.dependencies) {
-          dep match {
-            case shufDep: ShuffleDependency[_, _, _] =>
-              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
-                parents.push(shufDep)
-              }
-            case _ =>
-          }
-          waitingForVisit.push(dep.rdd)
+    waitingForVisit.push(rdd)
+    while (waitingForVisit.nonEmpty) {
+      val toVisit = waitingForVisit.pop()
+      if (!visited(toVisit)) {
+        visited += toVisit
+        getShuffleDependencies(toVisit).foreach { shuffleDep =>
+          if (!shuffleToMapStage.contains(shuffleDep.shuffleId)) {
+            ancestors.push(shuffleDep)
+            waitingForVisit.push(shuffleDep.rdd)
+          } // Otherwise, the dependency and its ancestors have already been registered.
         }
       }
     }
+    ancestors
+  }
 
+  /**
+   * Returns shuffle dependencies that are immediate parents of the given RDD.
+   *
+   * This function will not return more distant ancestors.  For example, if C has a shuffle
+   * dependency on B which has a shuffle dependency on A:
+   *
+   * A <-- B <-- C
+   *
+   * calling this function with rdd C will only return the B <-- C dependency.
+   *
+   * This function is scheduler-visible for the purpose of unit testing.
+   */
+  private[scheduler] def getShuffleDependencies(
+      rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
+    val parents = new HashSet[ShuffleDependency[_, _, _]]
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new Stack[RDD[_]]
     waitingForVisit.push(rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      val toVisit = waitingForVisit.pop()
+      if (!visited(toVisit)) {
+        visited += toVisit
+        toVisit.dependencies.foreach {
+          case shuffleDep: ShuffleDependency[_, _, _] =>
+            parents += shuffleDep
+          case dependency =>
+            waitingForVisit.push(dependency.rdd)
+        }
+      }
     }
     parents
   }
@@ -726,7 +730,6 @@ class DAGScheduler(
       reason = "as part of cancellation of all jobs"))
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
-    submitWaitingStages()
   }
 
   /**
@@ -752,23 +755,21 @@ class DAGScheduler(
         submitStage(stage)
       }
     }
-    submitWaitingStages()
   }
 
   /**
    * Check for waiting stages which are now eligible for resubmission.
-   * Ordinarily run on every iteration of the event loop.
+   * Submits stages that depend on the given parent stage. Called when the parent stage completes
+   * successfully.
    */
-  private def submitWaitingStages() {
-    // TODO: We might want to run this less often, when we are sure that something has become
-    // runnable that wasn't before.
-    logTrace("Checking for newly runnable parent stages")
+  private def submitWaitingChildStages(parent: Stage) {
+    logTrace(s"Checking if any dependencies of $parent are now runnable")
     logTrace("running: " + runningStages)
     logTrace("waiting: " + waitingStages)
     logTrace("failed: " + failedStages)
-    val waitingStagesCopy = waitingStages.toArray
-    waitingStages.clear()
-    for (stage <- waitingStagesCopy.sortBy(_.firstJobId)) {
+    val childStages = waitingStages.filter(_.parents.contains(parent)).toArray
+    waitingStages --= childStages
+    for (stage <- childStages.sortBy(_.firstJobId)) {
       submitStage(stage)
     }
   }
@@ -793,7 +794,6 @@ class DAGScheduler(
     }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
-    submitWaitingStages()
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
@@ -801,7 +801,6 @@ class DAGScheduler(
     // In that case, we wouldn't have the stage anymore in stageIdToStage.
     val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
-    submitWaitingStages()
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -809,7 +808,6 @@ class DAGScheduler(
       reason: String,
       exception: Option[Throwable]): Unit = {
     stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
-    submitWaitingStages()
   }
 
   private[scheduler] def cleanUpAfterSchedulerStop() {
@@ -832,7 +830,6 @@ class DAGScheduler(
 
   private[scheduler] def handleGetTaskResult(taskInfo: TaskInfo) {
     listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
-    submitWaitingStages()
   }
 
   private[scheduler] def handleJobSubmitted(jobId: Int,
@@ -871,8 +868,6 @@ class DAGScheduler(
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
     submitStage(finalStage)
-
-    submitWaitingStages()
   }
 
   private[scheduler] def handleMapStageSubmitted(jobId: Int,
@@ -916,8 +911,6 @@ class DAGScheduler(
     if (finalStage.isAvailable) {
       markMapStageJobAsFinished(job, mapOutputTracker.getStatistics(dependency))
     }
-
-    submitWaitingStages()
   }
 
   /** Submits stage, but first recursively submits any missing parents. */
@@ -1073,6 +1066,8 @@ class DAGScheduler(
           s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})"
       }
       logDebug(debugString)
+
+      submitWaitingChildStages(stage)
     }
   }
 
@@ -1238,9 +1233,8 @@ class DAGScheduler(
                     markMapStageJobAsFinished(job, stats)
                   }
                 }
+                submitWaitingChildStages(shuffleStage)
               }
-
-              // Note: newly runnable stages will be submitted below when we submit waiting stages
             }
         }
 
@@ -1315,7 +1309,6 @@ class DAGScheduler(
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }
-    submitWaitingStages()
   }
 
   /**
@@ -1357,7 +1350,6 @@ class DAGScheduler(
       logDebug("Additional executor lost message for " + execId +
                "(epoch " + currentEpoch + ")")
     }
-    submitWaitingStages()
   }
 
   private[scheduler] def handleExecutorAdded(execId: String, host: String) {
@@ -1366,7 +1358,6 @@ class DAGScheduler(
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
-    submitWaitingStages()
   }
 
   private[scheduler] def handleStageCancellation(stageId: Int) {
@@ -1379,7 +1370,6 @@ class DAGScheduler(
       case None =>
         logInfo("No active jobs to kill for Stage " + stageId)
     }
-    submitWaitingStages()
   }
 
   private[scheduler] def handleJobCancellation(jobId: Int, reason: String = "") {
@@ -1389,7 +1379,6 @@ class DAGScheduler(
       failJobAndIndependentStages(
         jobIdToActiveJob(jobId), "Job %d cancelled %s".format(jobId, reason))
     }
-    submitWaitingStages()
   }
 
   /**
@@ -1411,7 +1400,7 @@ class DAGScheduler(
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
-      logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
+      logInfo(s"$stage (${stage.name}) failed in $serviceTime s due to ${errorMessage.get}")
     }
 
     outputCommitCoordinator.stageEnd(stage.id)

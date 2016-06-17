@@ -1,25 +1,25 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.joins
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
+import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.SparkPlan
@@ -40,15 +40,14 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   protected var spark: SparkSession = null
 
   /**
-   * Create a new [[SQLContext]] running in local-cluster mode with unsafe and codegen enabled.
+   * Create a new [[SparkSession]] running in local-cluster mode with unsafe and codegen enabled.
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val conf = new SparkConf()
-      .setMaster("local-cluster[2,1,1024]")
-      .setAppName("testing")
-    val sc = new SparkContext(conf)
-    spark = SparkSession.builder.getOrCreate()
+    spark = SparkSession.builder()
+      .master("local-cluster[2,1,1024]")
+      .appName("testing")
+      .getOrCreate()
   }
 
   override def afterAll(): Unit = {
