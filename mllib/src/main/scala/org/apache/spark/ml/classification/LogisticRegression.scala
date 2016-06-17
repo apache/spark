@@ -942,14 +942,13 @@ class BinaryLogisticRegressionSummary private[classification] (
  * @param fitIntercept Whether to fit an intercept term.
  */
 private class LogisticAggregator(
-    numFeatures: Int,
+    private val numFeatures: Int,
     numClasses: Int,
     fitIntercept: Boolean) extends Serializable {
 
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val dim = numFeatures
   private val gradientSumArray =
     Array.ofDim[Double](if (fitIntercept) numFeatures + 1 else numFeatures)
 
@@ -967,8 +966,8 @@ private class LogisticAggregator(
       coefficients: Vector,
       featuresStd: Array[Double]): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(dim == features.size, s"Dimensions mismatch when adding new instance." +
-        s" Expecting $dim but got ${features.size}.")
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
@@ -992,7 +991,7 @@ private class LogisticAggregator(
               }
             }
             sum + {
-              if (fitIntercept) coefficientsArray(dim) else 0.0
+              if (fitIntercept) coefficientsArray(numFeatures) else 0.0
             }
           }
 
@@ -1005,7 +1004,7 @@ private class LogisticAggregator(
           }
 
           if (fitIntercept) {
-            localGradientSumArray(dim) += multiplier
+            localGradientSumArray(numFeatures) += multiplier
           }
 
           if (label > 0) {
@@ -1032,8 +1031,8 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def merge(other: LogisticAggregator): this.type = {
-    require(dim == other.dim, s"Dimensions mismatch when merging with another " +
-      s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
+    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
+      s"LeastSquaresAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
