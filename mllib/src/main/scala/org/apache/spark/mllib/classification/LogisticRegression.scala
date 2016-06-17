@@ -421,7 +421,7 @@ class LogisticRegressionWithLBFGS
   private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSuppliedWeights: Boolean):
       LogisticRegressionModel = {
     // ml's Logistic regression only supports binary classification currently.
-    if (numOfLinearPredictor == 1 && false) {
+    if (numOfLinearPredictor == 1) {
       def runWithMlLogisticRegression(elasticNetParam: Double) = {
         // Prepare the ml LogisticRegression based on our settings
         val lr = new org.apache.spark.ml.classification.LogisticRegression()

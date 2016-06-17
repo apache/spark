@@ -950,7 +950,8 @@ private class LogisticAggregator(
   private var lossSum = 0.0
 
   private val dim = numFeatures
-  private val gradientSumArray = Array.ofDim[Double](dim)
+  private val gradientSumArray =
+    Array.ofDim[Double](if (fitIntercept) numFeatures + 1 else numFeatures)
 
   /**
    * Add a new training instance to this LogisticAggregator, and update the loss and gradient
@@ -1092,7 +1093,7 @@ private class LogisticCostFun(
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(n, numClasses, fitIntercept)
+        new LogisticAggregator(numFeatures, numClasses, fitIntercept)
       )(seqOp, combOp)
     }
 
