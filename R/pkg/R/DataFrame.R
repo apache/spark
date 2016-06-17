@@ -43,6 +43,7 @@ setOldClass("structType")
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- createDataFrame(faithful)
 #'}
+#' @note SparkDataFrame since 2.0.0
 setClass("SparkDataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
@@ -59,6 +60,7 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 #' @export
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the SparkDataFrame is cached
+#' @note dataFrame since 2.0.0
 dataFrame <- function(sdf, isCached = FALSE) {
   new("SparkDataFrame", sdf, isCached)
 }
@@ -83,6 +85,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' df <- read.json(path)
 #' printSchema(df)
 #'}
+#' @note printSchema since 1.4.0
 setMethod("printSchema",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -108,6 +111,7 @@ setMethod("printSchema",
 #' df <- read.json(path)
 #' dfSchema <- schema(df)
 #'}
+#' @note schema since 1.4.0
 setMethod("schema",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -132,6 +136,7 @@ setMethod("schema",
 #' df <- read.json(path)
 #' explain(df, TRUE)
 #'}
+#' @note explain since 1.4.0
 setMethod("explain",
           signature(x = "SparkDataFrame"),
           function(x, extended = FALSE) {
@@ -163,6 +168,7 @@ setMethod("explain",
 #' df <- read.json(path)
 #' isLocal(df)
 #'}
+#' @note isLocal since 1.4.0
 setMethod("isLocal",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -188,6 +194,7 @@ setMethod("isLocal",
 #' df <- read.json(path)
 #' showDF(df)
 #'}
+#' @note showDF since 1.4.0
 setMethod("showDF",
           signature(x = "SparkDataFrame"),
           function(x, numRows = 20, truncate = TRUE) {
@@ -213,6 +220,7 @@ setMethod("showDF",
 #' df <- read.json(path)
 #' df
 #'}
+#' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
           function(object) {
             cols <- lapply(dtypes(object), function(l) {
@@ -240,6 +248,7 @@ setMethod("show", "SparkDataFrame",
 #' df <- read.json(path)
 #' dtypes(df)
 #'}
+#' @note dtypes since 1.4.0
 setMethod("dtypes",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -268,6 +277,7 @@ setMethod("dtypes",
 #' columns(df)
 #' colnames(df)
 #'}
+#' @note columns since 1.4.0
 setMethod("columns",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -278,6 +288,7 @@ setMethod("columns",
 
 #' @rdname columns
 #' @name names
+#' @note names since 1.5.0
 setMethod("names",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -286,6 +297,7 @@ setMethod("names",
 
 #' @rdname columns
 #' @name names<-
+#' @note names<- since 1.5.0
 setMethod("names<-",
           signature(x = "SparkDataFrame"),
           function(x, value) {
@@ -297,6 +309,7 @@ setMethod("names<-",
 
 #' @rdname columns
 #' @name colnames
+#' @note colnames since 1.6.0
 setMethod("colnames",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -305,6 +318,7 @@ setMethod("colnames",
 
 #' @rdname columns
 #' @name colnames<-
+#' @note colnames<- since 1.6.0
 setMethod("colnames<-",
           signature(x = "SparkDataFrame"),
           function(x, value) {
@@ -347,6 +361,7 @@ setMethod("colnames<-",
 #' irisDF <- createDataFrame(iris)
 #' coltypes(irisDF)
 #'}
+#' @note coltypes since 1.6.0
 setMethod("coltypes",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -403,6 +418,7 @@ setMethod("coltypes",
 #' coltypes(df) <- c("character", "integer")
 #' coltypes(df) <- c(NA, "numeric")
 #'}
+#' @note coltypes<- since 1.6.0
 setMethod("coltypes<-",
           signature(x = "SparkDataFrame", value = "character"),
           function(x, value) {
@@ -451,6 +467,7 @@ setMethod("coltypes<-",
 #' createOrReplaceTempView(df, "json_df")
 #' new_df <- sql("SELECT * FROM json_df")
 #'}
+#' @note createOrReplaceTempView since 2.0.0
 setMethod("createOrReplaceTempView",
           signature(x = "SparkDataFrame", viewName = "character"),
           function(x, viewName) {
@@ -476,6 +493,7 @@ setMethod("createOrReplaceTempView",
 #' registerTempTable(df, "json_df")
 #' new_df <- sql("SELECT * FROM json_df")
 #'}
+#' @note registerTempTable since 1.4.0
 setMethod("registerTempTable",
           signature(x = "SparkDataFrame", tableName = "character"),
           function(x, tableName) {
@@ -505,6 +523,7 @@ setMethod("registerTempTable",
 #' createOrReplaceTempView(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
+#' @note insertInto since 1.4.0
 setMethod("insertInto",
           signature(x = "SparkDataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
@@ -532,6 +551,7 @@ setMethod("insertInto",
 #' df <- read.json(path)
 #' cache(df)
 #'}
+#' @note cache since 1.4.0
 setMethod("cache",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -560,6 +580,7 @@ setMethod("cache",
 #' df <- read.json(path)
 #' persist(df, "MEMORY_AND_DISK")
 #'}
+#' @note persist since 1.4.0
 setMethod("persist",
           signature(x = "SparkDataFrame", newLevel = "character"),
           function(x, newLevel) {
@@ -589,6 +610,7 @@ setMethod("persist",
 #' persist(df, "MEMORY_AND_DISK")
 #' unpersist(df)
 #'}
+#' @note unpersist since 1.4.0
 setMethod("unpersist",
           signature(x = "SparkDataFrame"),
           function(x, blocking = TRUE) {
@@ -626,6 +648,7 @@ setMethod("unpersist",
 #' newDF <- repartition(df, col = df$"col1", df$"col2")
 #' newDF <- repartition(df, 3L, col = df$"col1", df$"col2")
 #'}
+#' @note repartition since 1.4.0
 setMethod("repartition",
           signature(x = "SparkDataFrame"),
           function(x, numPartitions = NULL, col = NULL, ...) {
@@ -694,6 +717,7 @@ setMethod("toJSON",
 #' df <- read.json(path)
 #' write.json(df, "/tmp/sparkr-tmp/")
 #'}
+#' @note write.json since 1.6.0
 setMethod("write.json",
           signature(x = "SparkDataFrame", path = "character"),
           function(x, path) {
@@ -749,6 +773,7 @@ setMethod("write.orc",
 #' write.parquet(df, "/tmp/sparkr-tmp1/")
 #' saveAsParquetFile(df, "/tmp/sparkr-tmp2/")
 #'}
+#' @note write.parquet since 1.6.0
 setMethod("write.parquet",
           signature(x = "SparkDataFrame", path = "character"),
           function(x, path) {
@@ -759,6 +784,7 @@ setMethod("write.parquet",
 #' @rdname write.parquet
 #' @name saveAsParquetFile
 #' @export
+#' @note saveAsParquetFile since 1.4.0
 setMethod("saveAsParquetFile",
           signature(x = "SparkDataFrame", path = "character"),
           function(x, path) {
@@ -787,6 +813,7 @@ setMethod("saveAsParquetFile",
 #' df <- read.text(path)
 #' write.text(df, "/tmp/sparkr-tmp/")
 #'}
+#' @note write.text since 2.0.0
 setMethod("write.text",
           signature(x = "SparkDataFrame", path = "character"),
           function(x, path) {
@@ -812,6 +839,7 @@ setMethod("write.text",
 #' df <- read.json(path)
 #' distinctDF <- distinct(df)
 #'}
+#' @note distinct since 1.4.0
 setMethod("distinct",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -821,6 +849,7 @@ setMethod("distinct",
 
 #' @rdname distinct
 #' @name unique
+#' @note unique since 1.5.0
 setMethod("unique",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -849,6 +878,7 @@ setMethod("unique",
 #' collect(sample(df, FALSE, 0.5))
 #' collect(sample(df, TRUE, 0.5))
 #'}
+#' @note sample since 1.4.0
 setMethod("sample",
           signature(x = "SparkDataFrame", withReplacement = "logical",
                     fraction = "numeric"),
@@ -866,6 +896,7 @@ setMethod("sample",
 
 #' @rdname sample
 #' @name sample_frac
+#' @note sample_frac since 1.4.0
 setMethod("sample_frac",
           signature(x = "SparkDataFrame", withReplacement = "logical",
                     fraction = "numeric"),
@@ -889,6 +920,7 @@ setMethod("sample_frac",
 #' df <- read.json(path)
 #' count(df)
 #' }
+#' @note count since 1.4.0
 setMethod("count",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -897,6 +929,7 @@ setMethod("count",
 
 #' @name nrow
 #' @rdname nrow
+#' @note nrow since 1.5.0
 setMethod("nrow",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -919,6 +952,7 @@ setMethod("nrow",
 #' df <- read.json(path)
 #' ncol(df)
 #' }
+#' @note ncol since 1.5.0
 setMethod("ncol",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -942,6 +976,7 @@ setMethod("ncol",
 #' df <- read.json(path)
 #' dim(df)
 #' }
+#' @note dim since 1.5.0
 setMethod("dim",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -967,6 +1002,7 @@ setMethod("dim",
 #' collected <- collect(df)
 #' firstName <- collected[[1]]$name
 #' }
+#' @note collect since 1.4.0
 setMethod("collect",
           signature(x = "SparkDataFrame"),
           function(x, stringsAsFactors = FALSE) {
@@ -1038,6 +1074,7 @@ setMethod("collect",
 #' df <- read.json(path)
 #' limitedDF <- limit(df, 10)
 #' }
+#' @note limit since 1.4.0
 setMethod("limit",
           signature(x = "SparkDataFrame", num = "numeric"),
           function(x, num) {
@@ -1059,6 +1096,7 @@ setMethod("limit",
 #' df <- read.json(path)
 #' take(df, 2)
 #' }
+#' @note take since 1.4.0
 setMethod("take",
           signature(x = "SparkDataFrame", num = "numeric"),
           function(x, num) {
@@ -1088,6 +1126,7 @@ setMethod("take",
 #' df <- read.json(path)
 #' head(df)
 #' }
+#' @note head since 1.4.0
 setMethod("head",
           signature(x = "SparkDataFrame"),
           function(x, num = 6L) {
@@ -1111,6 +1150,7 @@ setMethod("head",
 #' df <- read.json(path)
 #' first(df)
 #' }
+#' @note first(SparkDataFrame) since 1.4.0
 setMethod("first",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -1163,6 +1203,7 @@ setMethod("toRDD",
 #'   # Compute the max age and average salary, grouped by department and gender.
 #'   agg(groupBy(df, "department", "gender"), salary="avg", "age" -> "max")
 #' }
+#' @note groupBy since 1.4.0
 setMethod("groupBy",
            signature(x = "SparkDataFrame"),
            function(x, ...) {
@@ -1178,6 +1219,7 @@ setMethod("groupBy",
 
 #' @rdname groupBy
 #' @name group_by
+#' @note group_by since 1.4.0
 setMethod("group_by",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
@@ -1193,6 +1235,7 @@ setMethod("group_by",
 #' @rdname agg
 #' @name agg
 #' @export
+#' @note agg since 1.4.0
 setMethod("agg",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
@@ -1201,6 +1244,7 @@ setMethod("agg",
 
 #' @rdname agg
 #' @name summarize
+#' @note summarize since 1.4.0
 setMethod("summarize",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
@@ -1265,6 +1309,7 @@ dapplyInternal <- function(x, func, schema) {
 #'   #     1 2 2 2 3
 #'   #     2 3 3 3 4
 #' }
+#' @note dapply since 2.0.0
 setMethod("dapply",
           signature(x = "SparkDataFrame", func = "function", schema = "structType"),
           function(x, func, schema) {
@@ -1305,6 +1350,7 @@ setMethod("dapply",
 #'   #       2 2 2 3
 #'   #       3 3 3 4
 #' }
+#' @note dapplyCollect since 2.0.0
 setMethod("dapplyCollect",
           signature(x = "SparkDataFrame", func = "function"),
           function(x, func) {
@@ -1393,6 +1439,7 @@ setMethod("dapplyCollect",
 #' 3        2.351890    0.6548350    0.2375602     0.2521257
 #'
 #'}
+#' @note gapply(SparkDataFrame) since 2.0.0
 setMethod("gapply",
           signature(x = "SparkDataFrame"),
           function(x, cols, func, schema) {
@@ -1476,6 +1523,7 @@ getColumn <- function(x, c) {
 
 #' @rdname select
 #' @name $
+#' @note $ since 1.4.0
 setMethod("$", signature(x = "SparkDataFrame"),
           function(x, name) {
             getColumn(x, name)
@@ -1483,6 +1531,7 @@ setMethod("$", signature(x = "SparkDataFrame"),
 
 #' @rdname select
 #' @name $<-
+#' @note $<- since 1.4.0
 setMethod("$<-", signature(x = "SparkDataFrame"),
           function(x, name, value) {
             stopifnot(class(value) == "Column" || is.null(value))
@@ -1500,6 +1549,7 @@ setClassUnion("numericOrcharacter", c("numeric", "character"))
 
 #' @rdname subset
 #' @name [[
+#' @note [[ since 1.4.0
 setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
           function(x, i) {
             if (is.numeric(i)) {
@@ -1511,6 +1561,7 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 
 #' @rdname subset
 #' @name [
+#' @note [ since 1.4.0
 setMethod("[", signature(x = "SparkDataFrame"),
           function(x, i, j, ..., drop = F) {
             # Perform filtering first if needed
@@ -1575,6 +1626,7 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #'   subset(df, df$age %in% c(19), select = c(1,2))
 #'   subset(df, select = c(1,2))
 #' }
+#' @note subset since 1.5.0
 setMethod("subset", signature(x = "SparkDataFrame"),
           function(x, subset, select, drop = F, ...) {
             if (missing(subset)) {
@@ -1605,6 +1657,7 @@ setMethod("subset", signature(x = "SparkDataFrame"),
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df[,df$age]
 #' }
+#' @note select(SparkDataFrame, character) since 1.4.0
 setMethod("select", signature(x = "SparkDataFrame", col = "character"),
           function(x, col, ...) {
             if (length(col) > 1) {
@@ -1622,6 +1675,7 @@ setMethod("select", signature(x = "SparkDataFrame", col = "character"),
 #' @family SparkDataFrame functions
 #' @rdname select
 #' @export
+#' @note select(SparkDataFrame, Column) since 1.4.0
 setMethod("select", signature(x = "SparkDataFrame", col = "Column"),
           function(x, col, ...) {
             jcols <- lapply(list(col, ...), function(c) {
@@ -1634,6 +1688,7 @@ setMethod("select", signature(x = "SparkDataFrame", col = "Column"),
 #' @family SparkDataFrame functions
 #' @rdname select
 #' @export
+#' @note select(SparkDataFrame, list) since 1.4.0
 setMethod("select",
           signature(x = "SparkDataFrame", col = "list"),
           function(x, col) {
@@ -1668,6 +1723,7 @@ setMethod("select",
 #' df <- read.json(path)
 #' selectExpr(df, "col1", "(col2 * 5) as newCol")
 #' }
+#' @note selectExpr since 1.4.0
 setMethod("selectExpr",
           signature(x = "SparkDataFrame", expr = "character"),
           function(x, expr, ...) {
@@ -1700,6 +1756,7 @@ setMethod("selectExpr",
 #' # Replace an existing column
 #' newDF2 <- withColumn(newDF, "newCol", newDF$col1)
 #' }
+#' @note withColumn since 1.4.0
 setMethod("withColumn",
           signature(x = "SparkDataFrame", colName = "character", col = "Column"),
           function(x, colName, col) {
@@ -1733,6 +1790,7 @@ setMethod("withColumn",
 #' # Replace the "age" column
 #' df1 <- mutate(df, age = df$age + 1L)
 #' }
+#' @note mutate since 1.4.0
 setMethod("mutate",
           signature(.data = "SparkDataFrame"),
           function(.data, ...) {
@@ -1791,6 +1849,7 @@ setMethod("mutate",
 #' @export
 #' @rdname mutate
 #' @name transform
+#' @note transform since 1.5.0
 setMethod("transform",
           signature(`_data` = "SparkDataFrame"),
           function(`_data`, ...) {
@@ -1818,6 +1877,7 @@ setMethod("transform",
 #' df <- read.json(path)
 #' newDF <- withColumnRenamed(df, "col1", "newCol1")
 #' }
+#' @note withColumnRenamed since 1.4.0
 setMethod("withColumnRenamed",
           signature(x = "SparkDataFrame", existingCol = "character", newCol = "character"),
           function(x, existingCol, newCol) {
@@ -1843,6 +1903,7 @@ setMethod("withColumnRenamed",
 #' df <- read.json(path)
 #' newDF <- rename(df, col1 = df$newCol1)
 #' }
+#' @note rename since 1.4.0
 setMethod("rename",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
@@ -1890,6 +1951,7 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' arrange(df, "col1", decreasing = TRUE)
 #' arrange(df, "col1", "col2", decreasing = c(TRUE, FALSE))
 #' }
+#' @note arrange(SparkDataFrame, Column) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "Column"),
           function(x, col, ...) {
@@ -1904,6 +1966,7 @@ setMethod("arrange",
 #' @rdname arrange
 #' @name arrange
 #' @export
+#' @note arrange(SparkDataFrame, character) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "character"),
           function(x, col, ..., decreasing = FALSE) {
@@ -1936,6 +1999,7 @@ setMethod("arrange",
 #' @rdname arrange
 #' @name orderBy
 #' @export
+#' @note orderBy(SparkDataFrame, characterOrColumn) since 1.4.0
 setMethod("orderBy",
           signature(x = "SparkDataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
@@ -1964,6 +2028,7 @@ setMethod("orderBy",
 #' filter(df, "col1 > 0")
 #' filter(df, df$col2 != "abcdefg")
 #' }
+#' @note filter since 1.4.0
 setMethod("filter",
           signature(x = "SparkDataFrame", condition = "characterOrColumn"),
           function(x, condition) {
@@ -1977,6 +2042,7 @@ setMethod("filter",
 #' @family SparkDataFrame functions
 #' @rdname filter
 #' @name where
+#' @note where since 1.4.0
 setMethod("where",
           signature(x = "SparkDataFrame", condition = "characterOrColumn"),
           function(x, condition) {
@@ -2006,6 +2072,7 @@ setMethod("where",
 #' dropDuplicates(df, "col1", "col2")
 #' dropDuplicates(df, c("col1", "col2"))
 #' }
+#' @note dropDuplicates since 2.0.0
 setMethod("dropDuplicates",
           signature(x = "SparkDataFrame"),
           function(x, ...) {
@@ -2053,6 +2120,7 @@ setMethod("dropDuplicates",
 #' join(df1, df2, df1$col1 == df2$col2) # Performs an inner join based on expression
 #' join(df1, df2, df1$col1 == df2$col2, "right_outer")
 #' }
+#' @note join since 1.4.0
 setMethod("join",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL) {
@@ -2115,6 +2183,7 @@ setMethod("join",
 #' merge(df1, df2, by.x = "col1", by.y = "col2", all = TRUE, sort = FALSE)
 #' merge(df1, df2, by = "col1", all = TRUE, suffixes = c("-X", "-Y"))
 #' }
+#' @note merge since 1.5.0
 setMethod("merge",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
@@ -2202,6 +2271,7 @@ setMethod("merge",
 #' @param suffix a suffix for the column name
 #' @return list of columns
 #'
+#' @note generateAliasesForIntersectedCols since 1.6.0
 generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
   allColNames <- names(x)
   # sets alias for making colnames unique in dataframe 'x'
@@ -2241,6 +2311,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' df2 <- read.json(path2)
 #' unioned <- unionAll(df, df2)
 #' }
+#' @note unionAll since 1.4.0
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
@@ -2255,6 +2326,7 @@ setMethod("unionAll",
 #' @rdname rbind
 #' @name rbind
 #' @export
+#' @note rbind since 1.5.0
 setMethod("rbind",
           signature(... = "SparkDataFrame"),
           function(x, ..., deparse.level = 1) {
@@ -2285,6 +2357,7 @@ setMethod("rbind",
 #' df2 <- read.json(path2)
 #' intersectDF <- intersect(df, df2)
 #' }
+#' @note intersect since 1.4.0
 setMethod("intersect",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
@@ -2314,6 +2387,7 @@ setMethod("intersect",
 #' }
 #' @rdname except
 #' @export
+#' @note except since 1.4.0
 setMethod("except",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
@@ -2356,6 +2430,7 @@ setMethod("except",
 #' write.df(df, "myfile", "parquet", "overwrite")
 #' saveDF(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
 #' }
+#' @note write.df since 1.4.0
 setMethod("write.df",
           signature(df = "SparkDataFrame", path = "character"),
           function(df, path, source = NULL, mode = "error", ...){
@@ -2376,6 +2451,7 @@ setMethod("write.df",
 #' @rdname write.df
 #' @name saveDF
 #' @export
+#' @note saveDF since 1.4.0
 setMethod("saveDF",
           signature(df = "SparkDataFrame", path = "character"),
           function(df, path, source = NULL, mode = "error", ...){
@@ -2414,6 +2490,7 @@ setMethod("saveDF",
 #' df <- read.json(path)
 #' saveAsTable(df, "myfile")
 #' }
+#' @note saveAsTable since 1.4.0
 setMethod("saveAsTable",
           signature(df = "SparkDataFrame", tableName = "character"),
           function(df, tableName, source = NULL, mode="error", ...){
@@ -2453,6 +2530,7 @@ setMethod("saveAsTable",
 #' describe(df, "col1")
 #' describe(df, "col1", "col2")
 #' }
+#' @note describe(SparkDataFrame, character) since 1.4.0
 setMethod("describe",
           signature(x = "SparkDataFrame", col = "character"),
           function(x, col, ...) {
@@ -2463,6 +2541,7 @@ setMethod("describe",
 
 #' @rdname summary
 #' @name describe
+#' @note describe(SparkDataFrame) since 1.4.0
 setMethod("describe",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -2473,6 +2552,7 @@ setMethod("describe",
 
 #' @rdname summary
 #' @name summary
+#' @note summary(SparkDataFrame) since 1.5.0
 setMethod("summary",
           signature(object = "SparkDataFrame"),
           function(object, ...) {
@@ -2507,6 +2587,7 @@ setMethod("summary",
 #' df <- read.json(sqlCtx, path)
 #' dropna(df)
 #' }
+#' @note dropna since 1.4.0
 setMethod("dropna",
           signature(x = "SparkDataFrame"),
           function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
@@ -2527,6 +2608,7 @@ setMethod("dropna",
 #' @rdname nafunctions
 #' @name na.omit
 #' @export
+#' @note na.omit since 1.5.0
 setMethod("na.omit",
           signature(object = "SparkDataFrame"),
           function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
@@ -2562,6 +2644,7 @@ setMethod("na.omit",
 #' fillna(df, 1)
 #' fillna(df, list("age" = 20, "name" = "unknown"))
 #' }
+#' @note fillna since 1.4.0
 setMethod("fillna",
           signature(x = "SparkDataFrame"),
           function(x, value, cols = NULL) {
@@ -2621,6 +2704,7 @@ setMethod("fillna",
 #' irisDF <- createDataFrame(iris)
 #' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
 #' }
+#' @note as.data.frame since 1.6.0
 setMethod("as.data.frame",
           signature(x = "SparkDataFrame"),
           function(x, row.names = NULL, optional = FALSE, ...) {
@@ -2647,6 +2731,7 @@ setMethod("as.data.frame",
 #' summary(Sepal_Width)
 #' }
 #' @seealso \link{detach}
+#' @note attach since 1.6.0
 setMethod("attach",
           signature(what = "SparkDataFrame"),
           function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
@@ -2672,6 +2757,7 @@ setMethod("attach",
 #' with(irisDf, nrow(Sepal_Width))
 #' }
 #' @seealso \link{attach}
+#' @note with since 1.6.0
 setMethod("with",
           signature(data = "SparkDataFrame"),
           function(data, expr, ...) {
@@ -2695,6 +2781,7 @@ setMethod("with",
 #' # Show the structure of the SparkDataFrame
 #' str(irisDF)
 #' }
+#' @note str since 1.6.1
 setMethod("str",
           signature(object = "SparkDataFrame"),
           function(object) {
@@ -2777,6 +2864,7 @@ setMethod("str",
 #' drop(df, c("col1", "col2"))
 #' drop(df, df$col1)
 #' }
+#' @note drop since 2.0.0
 setMethod("drop",
           signature(x = "SparkDataFrame"),
           function(x, col) {
@@ -2826,6 +2914,7 @@ setMethod("drop",
 #'         geom_bar(stat = "identity") +
 #'         xlab("Sepal_Length") + ylab("Frequency")
 #' }
+#' @note histogram since 2.0.0
 setMethod("histogram",
           signature(df = "SparkDataFrame", col = "characterOrColumn"),
           function(df, col, nbins = 10) {
@@ -2948,6 +3037,7 @@ setMethod("histogram",
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
 #' write.jdbc(df, jdbcUrl, "table", user = "username", password = "password")
 #' }
+#' @note write.jdbc since 2.0.0
 setMethod("write.jdbc",
           signature(x = "SparkDataFrame", url = "character", tableName = "character"),
           function(x, url, tableName, mode = "error", ...){
@@ -2979,7 +3069,7 @@ setMethod("write.jdbc",
 #' # df_list contains 3 SparkDataFrames with each having about 200, 300 and 500 rows respectively
 #' sapply(df_list, count)
 #' }
-#' @note since 2.0.0
+#' @note randomSplit since 2.0.0
 setMethod("randomSplit",
           signature(x = "SparkDataFrame", weights = "numeric"),
           function(x, weights, seed) {
