@@ -166,22 +166,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
   }
 
-  test("paths") {
-    val df = spark.read
-      .format("org.apache.spark.sql.test")
-      .load("/test")
-
-    assert(LastOptions.parameters("path") == "/test")
-
-    LastOptions.clear()
-
-    df.write
-      .format("org.apache.spark.sql.test")
-      .save("/test")
-
-    assert(LastOptions.parameters("path") == "/test")
-  }
-
   test("test different data types for options") {
     val df = spark.read
       .format("org.apache.spark.sql.test")
