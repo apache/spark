@@ -99,7 +99,7 @@ import org.apache.spark.sql.types.IntegerType
  * we could improve this in the current rule by applying more advanced expression canonicalization
  * techniques.
  */
-object DistinctAggregationRewriter extends Rule[LogicalPlan] {
+object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case a: Aggregate => rewrite(a)

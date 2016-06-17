@@ -52,7 +52,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
-      DistinctAggregationRewriter) ::
+      RewriteDistinctAggregates) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -74,10 +74,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
-      SetOperationPushDown,
-      SamplePushDown,
+      PushThroughSetOperations,
+      PushProjectThroughSample,
       ReorderJoin,
-      OuterJoinElimination,
+      EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
@@ -98,7 +98,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
-      BinaryComparisonSimplification,
+      SimplifyBinaryComparison,
       PruneFilters,
       EliminateSorts,
       SimplifyCasts,
@@ -147,10 +147,9 @@ class SimpleTestOptimizer extends Optimizer(
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
- * Pushes operations down into a Sample.
+ * Pushes projects down beneath Sample to enable column pruning with sampling.
  */
-object SamplePushDown extends Rule[LogicalPlan] {
-
+object PushProjectThroughSample extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down projection into sample
     case Project(projectList, Sample(lb, up, replace, seed, child)) =>
@@ -170,7 +169,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
       projectList: Seq[NamedExpression],
       childOutput: Seq[Attribute]): Boolean = {
     if (!projectList.forall(_.isInstanceOf[Alias]) || projectList.length != childOutput.length) {
-      return false
+      false
     } else {
       projectList.map(_.asInstanceOf[Alias]).zip(childOutput).forall { case (a, o) =>
         a.child match {
@@ -182,11 +181,9 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val aliasOnlyProject = plan.find { p =>
-      p match {
-        case Project(pList, child) if isAliasOnly(pList, child.output) => true
-        case _ => false
-      }
+    val aliasOnlyProject = plan.find {
+      case Project(pList, child) if isAliasOnly(pList, child.output) => true
+      case _ => false
     }
 
     aliasOnlyProject.map { case p: Project =>
@@ -291,7 +288,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
  */
-object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -879,7 +876,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  */
-object BinaryComparisonSimplification extends Rule[LogicalPlan] with PredicateHelper {
+object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       // True with equality
@@ -1217,7 +1214,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
