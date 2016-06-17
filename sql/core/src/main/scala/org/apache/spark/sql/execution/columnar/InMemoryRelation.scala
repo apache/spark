@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.lang.StringUtils
 
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
 
@@ -183,6 +185,49 @@ private[sql] case class InMemoryRelation(
         .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
     _cachedColumnBuffers = cached
   }
+
+//  private def buildBuffers(): Unit = {
+//    val output = child.output
+//    val cached = child.execute().mapPartitionsInternal { rowIterator =>
+//      new Iterator[ColumnarCachedBatch] {
+//        def next(): ColumnarCachedBatch = {
+//          val columnVectors = output.map { attribute =>
+//            ColumnVector.allocate(batchSize, attribute.dataType, MemoryMode.ON_HEAP)
+//          }.toArray
+//
+//          var rowCount = 0
+//          var totalSize = 0L
+//          while (rowIterator.hasNext && rowCount < batchSize
+//            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
+//            val row = rowIterator.next()
+//            assert(
+//              row.numFields == columnVectors.length,
+//              s"Row column number mismatch, expected ${output.size} columns, " +
+//                s"but got ${row.numFields}." +
+//                s"\nRow content: $row")
+//
+//            var i = 0
+//            totalSize = 0
+//            while (i < row.numFields) {
+//              columnVectors(i).putLong(rowCount, row.getLong(i))
+//              totalSize += 8
+//              i += 1
+//            }
+//            rowCount += 1
+//          }
+//
+//          ColumnarCachedBatch(rowCount, columnVectors)
+//        }
+//
+//        def hasNext: Boolean = rowIterator.hasNext
+//      }
+//    }.persist(storageLevel)
+//
+//    cached.setName(
+//      tableName.map(n => s"In-memory table $n")
+//        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
+//    _cachedColumnBuffers = cached
+//  }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
