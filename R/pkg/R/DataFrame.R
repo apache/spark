@@ -2934,3 +2934,40 @@ setMethod("write.jdbc",
             write <- callJMethod(write, "mode", jmode)
             invisible(callJMethod(write, "jdbc", url, tableName, jprops))
           })
+
+#' randomSplit
+#'
+#' Return a list of randomly split dataframes with the provided weights.
+#'
+#' @param x A SparkDataFrame
+#' @param weights A vector of weights for splits, will be normalized if they don't sum to 1
+#' @param seed A seed to use for random split
+#'
+#' @family SparkDataFrame functions
+#' @rdname randomSplit
+#' @name randomSplit
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df <- createDataFrame(data.frame(id = 1:1000))
+#' df_list <- randomSplit(df, c(2, 3, 5), 0)
+#' # df_list contains 3 SparkDataFrames with each having about 200, 300 and 500 rows respectively
+#' sapply(df_list, count)
+#' }
+#' @note since 2.0.0
+setMethod("randomSplit",
+          signature(x = "SparkDataFrame", weights = "numeric"),
+          function(x, weights, seed) {
+            if (!all(sapply(weights, function(c) { c >= 0 }))) {
+              stop("all weight values should not be negative")
+            }
+            normalized_list <- as.list(weights / sum(weights))
+            if (!missing(seed)) {
+              sdfs <- callJMethod(x@sdf, "randomSplit", normalized_list, as.integer(seed))
+            } else {
+              sdfs <- callJMethod(x@sdf, "randomSplit", normalized_list)
+            }
+            sapply(sdfs, dataFrame)
+          })
