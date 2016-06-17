@@ -132,7 +132,7 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
         val validUdfs = udfs.filter { case udf =>
           // Check to make sure that the UDF can be evaluated with only the input of this child.
           udf.references.subsetOf(child.outputSet)
-        }
+        }.toArray  // Turn it into an array since iterators cannot be serialized in Scala 2.10
         if (validUdfs.nonEmpty) {
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
