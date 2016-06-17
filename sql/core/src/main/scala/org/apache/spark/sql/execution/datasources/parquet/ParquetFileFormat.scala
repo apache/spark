@@ -363,9 +363,11 @@ private[sql] class ParquetFileFormat
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
-        vectorizedReader
+
+        val iter = new RecordReaderIterator(vectorizedReader)
+        iter.asInstanceOf[Iterator[InternalRow]]
       } else {
-        logDebug(s"Falling back to parquet-mr")
+        logDebug(s"Use parquet-mr")
         val reader = pushed match {
           case Some(filter) =>
             new ParquetRecordReader[InternalRow](
@@ -375,26 +377,20 @@ private[sql] class ParquetFileFormat
             new ParquetRecordReader[InternalRow](new ParquetReadSupport)
         }
         reader.initialize(split, hadoopAttemptContext)
-        reader
-      }
 
-      val iter = new RecordReaderIterator(parquetReader)
-
-      // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-      if (parquetReader.isInstanceOf[VectorizedParquetRecordReader] &&
-          enableVectorizedReader) {
-        iter.asInstanceOf[Iterator[InternalRow]]
-      } else {
+        // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
         val joinedRow = new JoinedRow()
         val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
+        val iter = new RecordReaderIterator(reader)
         // This is a horrible erasure hack...  if we type the iterator above, then it actually check
         // the type in next() and we get a class cast exception.  If we make that function return
         // Object, then we can defer the cast until later!
         iter.asInstanceOf[Iterator[InternalRow]]
-            .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+          .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
       }
+      parquetReader
     }
   }
 

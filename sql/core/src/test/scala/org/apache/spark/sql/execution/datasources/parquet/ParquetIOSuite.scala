@@ -451,7 +451,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
     val extraOptions = Map(
       SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-      "spark.sql.parquet.output.committer.class" ->
+      SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
         classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
     )
     withTempPath { dir =>
@@ -462,23 +462,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-6330 regression test") {
+  test("SPARK-6330 non-existent file or host") {
     // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
     // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
-    intercept[Throwable] {
+    var e = intercept[AnalysisException] {
       spark.read.parquet("file:///nonexistent")
-    }
-    val errorMessage = intercept[Throwable] {
+    }.getMessage
+    assert(e.contains("Path does not exist: file:/nonexistent"))
+
+    e = intercept[IllegalArgumentException] {
       spark.read.parquet("hdfs://nonexistent")
-    }.toString
-    assert(errorMessage.contains("UnknownHostException"))
+    }.getMessage
+    assert(e.contains("java.net.UnknownHostException: nonexistent"))
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
     // Using a output committer that always fail when committing a task, so that both
     // `commitTask()` and `abortTask()` are invoked.
     val extraOptions = Map[String, String](
-      "spark.sql.parquet.output.committer.class" ->
+      SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
         classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
     )
 

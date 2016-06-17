@@ -545,4 +545,24 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }
     }
   }
+
+  test("Verify SQLConf PARQUET_FILTER_PUSHDOWN_ENABLED") {
+    import testImplicits._
+
+    Seq("true", "false").foreach { pushDown =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushDown,
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/table1"
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+          // When a filter is pushed to Parquet, Parquet can apply it to every row.
+          // So, we can check the number of rows returned from the Parquet
+          // to make sure our filter pushdown work.
+          val df = spark.read.parquet(path).where("a > 2")
+          val numExpectedRows = if (pushDown == "true") 1 else 3
+          assert(stripSparkFilter(df).count == numExpectedRows)
+        }
+      }
+    }
+  }
 }
