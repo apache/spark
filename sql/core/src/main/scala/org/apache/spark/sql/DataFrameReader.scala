@@ -269,7 +269,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @since 1.4.0
    */
-  def json(path: String): DataFrame = json(Seq(path): _*)
+  def json(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    json(Seq(path): _*)
+  }
 
   /**
    * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
@@ -404,7 +407,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @since 2.0.0
    */
-  def csv(path: String): DataFrame = csv(Seq(path): _*)
+  def csv(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    csv(Seq(path): _*)
+  }
 
   /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
@@ -472,7 +478,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @since 2.0.0
    */
-  def parquet(path: String): DataFrame = parquet(Seq(path): _*)
+  def parquet(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    parquet(Seq(path): _*)
+  }
 
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
@@ -497,7 +506,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support.
    */
-  def orc(path: String): DataFrame = orc(Seq(path): _*)
+  def orc(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    orc(Seq(path): _*)
+  }
 
   /**
    * Loads an ORC file and returns the result as a [[DataFrame]].
@@ -536,7 +548,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param path input path
    * @since 2.0.0
    */
-  def text(path: String): DataFrame = text(Seq(path): _*)
+  def text(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    text(Seq(path): _*)
+  }
 
   /**
    * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
@@ -576,7 +591,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param path input path
    * @since 2.0.0
    */
-  def textFile(path: String): Dataset[String] = textFile(Seq(path): _*)
+  def textFile(path: String): Dataset[String] = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    textFile(Seq(path): _*)
+  }
 
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
