@@ -2911,7 +2911,7 @@ setMethod("write.jdbc",
 
 #' randomSplit
 #'
-#' Return randomly split RDDs with the provided weights.
+#' Return a list of randomly split dataframes with the provided weights.
 #'
 #' @param x A SparkDataFrame
 #' @param weights a vector of weights for splits, will be normalized if they don't sum to 1
@@ -2928,7 +2928,8 @@ setMethod("write.jdbc",
 #' df <- createDataFrame(data.frame(id = 1:1000))
 #' df_list <- randomSplit(df, c(2, 3, 5), 0)
 #' sapply(df_list, count)
-#'}
+#' }
+#' @note since 2.0.0
 setMethod("randomSplit",
           signature(x = "SparkDataFrame", weights = "numeric"),
           function(x, weights, seed) {
