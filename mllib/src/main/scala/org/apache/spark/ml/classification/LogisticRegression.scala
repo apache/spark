@@ -949,15 +949,7 @@ private class LogisticAggregator(
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-//  private val coefficientsArray = coefficients match {
-//    case dv: DenseVector => dv.values
-//    case _ =>
-//      throw new IllegalArgumentException(
-//        s"coefficients only supports dense vector b ut got type ${coefficients.getClass}.")
-//  }
-
-//  private val dim = if (fitIntercept) coefficientsArray.length - 1 else coefficientsArray.length
-  private val dim = numFeatures//if (fitIntercept) featuresStd.length else featuresStd.length
+  private val dim = numFeatures
   private val gradientSumArray = Array.ofDim[Double](dim)
 
   /**
