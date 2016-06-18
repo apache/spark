@@ -131,7 +131,7 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
            l @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
         if query.resolved &&
           t.schema.asNullable == query.schema.asNullable &&
-          parts.forall(_._2.isEmpty) =>
+          (parts.isEmpty || parts.forall(_._2.isEmpty)) =>
 
       // Sanity checks
       if (t.location.paths.size != 1) {

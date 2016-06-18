@@ -320,6 +320,19 @@ trait CheckAnalysis extends PredicateHelper {
                  |${s.catalogTable.identifier}
                """.stripMargin)
 
+          case i @ InsertIntoTable(table, partitions, query, _, _) =>
+            // TODO: We need to consolidate this kind of pre-write checks with the rule of
+            // PreWriteCheck defined in extendedCheckRules.
+            val numStaticPartitions = partitions.values.count(_.isDefined)
+            if (table.output.size != (query.output.size + numStaticPartitions)) {
+              failAnalysis(
+                s"$table requires that the data to be inserted have the same number of " +
+                s"columns as the target table: target table has ${table.output.size} " +
+                s"column(s) but the inserted data has " + "" +
+                s"${query.output.size + numStaticPartitions} column(s), including " +
+                s"$numStaticPartitions partition column(s) having constant value(s).")
+            }
+
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")
