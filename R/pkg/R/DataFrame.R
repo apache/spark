@@ -25,7 +25,7 @@ setOldClass("structType")
 
 #' S4 class that represents a SparkDataFrame
 #'
-#' DataFrames can be created using functions like \link{createDataFrame},
+#' SparkDataFrames can be created using functions like \link{createDataFrame},
 #' \link{read.json}, \link{table} etc.
 #'
 #' @family SparkDataFrame functions
@@ -60,7 +60,6 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 #' @export
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the SparkDataFrame is cached
-#' @note dataFrame since 2.0.0
 dataFrame <- function(sdf, isCached = FALSE) {
   new("SparkDataFrame", sdf, isCached)
 }
