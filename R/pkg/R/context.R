@@ -258,8 +258,7 @@ setCheckpointDir <- function(sc, dirName) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' doubled <- spark.lapply(sc, 1:10, function(x){2 * x})
+#' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
 spark.lapply <- function(list, func) {
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
