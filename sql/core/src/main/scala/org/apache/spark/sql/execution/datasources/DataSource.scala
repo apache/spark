@@ -435,26 +435,25 @@ case class DataSource(
         // If we are appending to a table that already exists, make sure the partitioning matches
         // up.  If we fail to load the table for whatever reason, ignore the check.
         if (mode == SaveMode.Append) {
-          val existingPartitionColumnSet = try {
-            Some(
-              resolveRelation()
-                .asInstanceOf[HadoopFsRelation]
-                .location
-                .partitionSpec()
-                .partitionColumns
-                .fieldNames
-                .toSet)
-          } catch {
-            case e: Exception =>
-              None
-          }
-
-          existingPartitionColumnSet.foreach { ex =>
-            if (ex.map(_.toLowerCase) != partitionColumns.map(_.toLowerCase()).toSet) {
-              throw new AnalysisException(
-                s"Requested partitioning does not equal existing partitioning: " +
-                s"$ex != ${partitionColumns.toSet}.")
-            }
+          val existingColumns = Try {
+            resolveRelation()
+              .asInstanceOf[HadoopFsRelation]
+              .location
+              .partitionSpec()
+              .partitionColumns
+              .fieldNames
+              .toSeq
+          }.getOrElse(Seq.empty[String])
+          val sameColumns =
+            existingColumns.map(_.toLowerCase) == partitionColumns.map(_.toLowerCase)
+          if (existingColumns.size > 0 && !sameColumns) {
+            throw new AnalysisException(
+              s"""Requested partitioning does not match existing partitioning.
+                 |Existing partitioning columns:
+                 |  ${existingColumns.mkString(", ")}
+                 |Requested partitioning columns:
+                 |  ${partitionColumns.mkString(", ")}
+                 |""".stripMargin)
           }
         }
 
