@@ -1363,7 +1363,7 @@ setMethod("gapply",
 #'               output column with preferred output column name and corresponding data type.
 #' @family SparkDataFrame functions
 #' @rdname gapply
-#' @name gapply
+#' @name gapplyCollect
 #' @export
 #' @examples
 #'
