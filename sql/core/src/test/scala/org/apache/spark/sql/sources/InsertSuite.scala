@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -88,7 +89,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
-    val message = intercept[RuntimeException] {
+    val message = intercept[AnalysisException] {
       sql(
         s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
@@ -281,6 +282,80 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       checkAnswer(
         sql("SELECT a, b FROM target2"),
         sql("SELECT a, b FROM jt")
+      )
+    }
+  }
+
+  test("SPARK-16030: allow specifying static partitions when inserting to data source tables") {
+    withTable("srcSparkPart") {
+      spark
+        .createDataFrame(Seq((1, 2, 3, 4)))
+        .toDF("a", "b", "c", "d")
+        .write
+        .partitionBy("b", "c")
+        .saveAsTable("srcSparkPart")
+
+      sql("INSERT INTO TABLE srcSparkPart PARTITION (b=6, c=7) SELECT 5, 8")
+
+      sql("INSERT INTO TABLE srcSparkPart PARTITION (c=11, b=10) SELECT 9, 12")
+
+      // c is defined twice. Parser will complain.
+      intercept[ParseException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b=14, c=15, c=16) SELECT 13")
+      }
+
+      // d is not a partitioning column.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b=14, c=15, d=16) SELECT 13, 14")
+      }
+
+      // d is not a partitioning column. The total number of columns is correct.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b=14, c=15, d=16) SELECT 13")
+      }
+
+      // The data is missing a column.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (c=15, b=16) SELECT 13")
+      }
+
+      // d is not a partitioning column.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b=15, d=15) SELECT 13, 14")
+      }
+
+      // The statement is missing a column.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b=15) SELECT 13, 14")
+      }
+
+      // The statement is missing a column.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b=15) SELECT 13, 14, 16")
+      }
+
+      sql("INSERT INTO TABLE srcSparkPart PARTITION (b=14, c) SELECT 13, 16, 15")
+
+      // Dynamic partitioning columns need to be after static partitioning columns.
+      intercept[AnalysisException] {
+        sql("INSERT INTO TABLE srcSparkPart PARTITION (b, c=19) SELECT 17, 20, 18")
+      }
+
+      sql("INSERT INTO TABLE srcSparkPart PARTITION (b, c) SELECT 17, 20, 18, 19")
+
+      sql("INSERT INTO TABLE srcSparkPart PARTITION (c, b) SELECT 21, 24, 22, 23")
+
+      sql("INSERT INTO TABLE srcSparkPart SELECT 25, 28, 26, 27")
+
+      checkAnswer(
+        sql("SELECT a, b, c, d FROM srcSparkPart"),
+        Row(1, 2, 3, 4) ::
+        Row(5, 6, 7, 8) ::
+        Row(9, 10, 11, 12) ::
+        Row(13, 14, 15, 16) ::
+        Row(17, 18, 19, 20) ::
+        Row(21, 22, 23, 24) ::
+        Row(25, 26, 27, 28) :: Nil
       )
     }
   }

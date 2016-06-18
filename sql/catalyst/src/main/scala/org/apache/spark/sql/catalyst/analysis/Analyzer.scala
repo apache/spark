@@ -452,7 +452,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        val table = lookupTableFromCatalog(u)
+        val table = EliminateSubqueryAliases(lookupTableFromCatalog(u))
         // adding the table's partitions or validate the query's partition info
         table match {
           case relation: CatalogRelation if relation.catalogTable.partitionColumns.nonEmpty =>
@@ -468,7 +468,7 @@ class Analyzer(
                      |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
               }
               // Assume partition columns are correctly placed at the end of the child's output
-              i.copy(table = EliminateSubqueryAliases(table))
+              i.copy(table = table)
             } else {
               // Set up the table's partition scheme with all dynamic partitions by moving partition
               // columns to the end of the column list, in partition order.
@@ -481,12 +481,12 @@ class Analyzer(
                   throw new AnalysisException(s"Cannot find partition column $name"))
               }
               i.copy(
-                table = EliminateSubqueryAliases(table),
+                table = table,
                 partition = tablePartitionNames.map(_ -> None).toMap,
                 child = Project(columns ++ partColumns, child))
             }
           case _ =>
-            i.copy(table = EliminateSubqueryAliases(table))
+            i.copy(table = table)
         }
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier

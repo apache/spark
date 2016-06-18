@@ -22,15 +22,16 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystConf, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
@@ -43,11 +44,116 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  */
-private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
+private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
+
+  def resolver: Resolver = {
+    if (conf.caseSensitiveAnalysis) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
+    // the user has specified static partitions, we add a Project operator on top of the query
+    // to include those constant column values in the query result.
+    //
+    // Example:
+    // Let's say that we have a table "t", which is created by
+    // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
+    // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
+    // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+    //
+    // Basically, we will put those partition columns having a assigned value back
+    // to the SELECT clause. The output of the SELECT clause is organized as
+    // normal_columns static_partitioning_columns dynamic_partitioning_columns.
+    // static_partitioning_columns are partitioning columns having assigned
+    // values in the PARTITION clause (e.g. b in the above example).
+    // dynamic_partitioning_columns are partitioning columns that do not assigned
+    // values in the PARTITION clause (e.g. c in the above example).
     case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
-        if query.resolved && t.schema.asNullable == query.schema.asNullable =>
+    l @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
+      if query.resolved && parts.exists(_._2.isDefined) =>
+
+      val staticPartitions = parts.flatMap {
+        case (partKey, Some(partValue)) => (partKey, partValue) :: Nil
+        case (_, None) => Nil
+      }
+
+      // The sum of the number of static partition columns and columns provided in the SELECT
+      // clause needs to match the number of columns of the target table.
+      if (staticPartitions.size + query.output.size != l.output.size) {
+        throw new AnalysisException(
+          s"$l requires that the data to be inserted have the same number of " +
+            s"columns as the target table: target table has ${l.output.size} " +
+            s"column(s) but the inserted data has ${query.output.size + staticPartitions.size} " +
+            s"column(s), which contain ${staticPartitions.size} partition column(s) having " +
+            s"assigned constant values.")
+      }
+
+      if (parts.size != t.partitionSchema.fields.size) {
+        throw new AnalysisException(
+          s"$l requires that the data to be inserted have the same number of " +
+            s"partition columns as the target table: target table " +
+            s"has ${t.partitionSchema.fields.size} partition column(s) but the inserted " +
+            s"data has ${parts.size} partition columns specified.")
+      }
+
+      staticPartitions.foreach {
+        case (partKey, partValue) =>
+          if (!t.partitionSchema.fields.exists(field => resolver(field.name, partKey))) {
+            throw new AnalysisException(
+              s"$partKey is not a partition column. Partition columns are " +
+                s"${t.partitionSchema.fields.map(_.name).mkString("[", ",", "]")}")
+          }
+      }
+
+      val partitionList = t.partitionSchema.fields.map { field =>
+        val potentialSpecs = staticPartitions.filter {
+          case (partKey, partValue) => resolver(field.name, partKey)
+        }
+        if (potentialSpecs.size == 0) {
+          //
+          None
+        } else if (potentialSpecs.size == 1) {
+          val partValue = potentialSpecs.head._2
+          Some(Alias(Cast(Literal(partValue), field.dataType), "_staticPart")())
+        } else {
+          throw new AnalysisException(
+            s"Partition column ${field.name} have multiple values specified, " +
+              s"${potentialSpecs.mkString("[", ", ", "]")}. Please only specify a single value.")
+        }
+      }
+
+      partitionList.sliding(2).foreach { v =>
+        // If there is a dynamic partition appearing before a static partition,
+        // we need to throw an exception.
+        if (v(0).isEmpty && v(1).isDefined) {
+          throw new AnalysisException(
+            s"The ordering of partition columns is " +
+              s"${t.partitionSchema.fields.map(_.name).mkString("[", ",", "]")}. " +
+              "All partition columns having constant values need to appear before other " +
+              "partition columns that do not have an assigned constant value.")
+        }
+      }
+
+      assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
+      val projectList =
+        query.output.take(l.output.size - t.partitionSchema.fields.size) ++
+        partitionList.take(staticPartitions.size).map(_.get) ++
+        query.output.takeRight(t.partitionSchema.fields.size - staticPartitions.size)
+
+      // We will remove all assigned values to static partitions because they have been
+      // moved to the projectList.
+      i.copy(partition = parts.map(p => (p._1, None)), child = Project(projectList, query))
+
+    case i @ logical.InsertIntoTable(
+           l @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
+        if query.resolved &&
+          t.schema.asNullable == query.schema.asNullable &&
+          (parts.isEmpty || parts.forall(_._2.isEmpty)) =>
 
       // Sanity checks
       if (t.location.paths.size != 1) {
