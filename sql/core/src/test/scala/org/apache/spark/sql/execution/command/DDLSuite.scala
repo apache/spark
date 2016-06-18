@@ -1317,4 +1317,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
   }
 
+  test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
+    import testImplicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    withTable("partitionedTable") {
+      df.write.mode("overwrite").partitionBy("a", "b").saveAsTable("partitionedTable")
+      // Misses some partition columns
+      intercept[AnalysisException] {
+        df.write.mode("append").partitionBy("a").saveAsTable("partitionedTable")
+      }
+      // Wrong order
+      intercept[AnalysisException] {
+        df.write.mode("append").partitionBy("b", "a").saveAsTable("partitionedTable")
+      }
+      // Partition columns not specified
+      intercept[AnalysisException] {
+        df.write.mode("append").saveAsTable("partitionedTable")
+      }
+      assert(sql("select * from partitionedTable").collect().size == 1)
+      // Inserts new data successfully when partition columns are correctly specified in
+      // partitionBy(...).
+      df.write.mode("append").partitionBy("a", "b").saveAsTable("partitionedTable")
+      assert(sql("select * from partitionedTable").collect().size == 2)
+    }
+  }
 }
