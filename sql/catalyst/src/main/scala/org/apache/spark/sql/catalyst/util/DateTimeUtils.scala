@@ -856,18 +856,30 @@ object DateTimeUtils {
   private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
     var guess = tz.getRawOffset
     // the actual offset should be calculated based on milliseconds in UTC
-    var actual = tz.getOffset(millisLocal - guess)
-    if (actual != guess) {
-      // try with the result as guess
-      guess = actual
-      actual = tz.getOffset(millisLocal - guess)
-      // At the start of DST, the local time is forwarded by an hour, so it's OK to get the
-      // local time bigger than current one after an round trip (local -> UTC -> local).
-      // At the end of DST, the local time is backwarded by an hour, actual offset will be
-      // less than guess, we should decrease the guess and try again.
-      while (actual < guess) {
-        guess = actual
-        actual = tz.getOffset(millisLocal - guess)
+    val offset = tz.getOffset(millisLocal - guess)
+    if (offset != guess) {
+      guess = tz.getOffset(millisLocal - offset)
+      if (guess != offset) {
+        // fallback to do the reverse lookup using java.sql.Timestamp
+        // this should only happen near the start or end of DST
+        val days = Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
+        val year = getYear(days)
+        val month = getMonth(days)
+        val day = getDayOfMonth(days)
+
+        var millisOfDay = (millisLocal % MILLIS_PER_DAY).toInt
+        if (millisOfDay < 0) {
+          millisOfDay += MILLIS_PER_DAY.toInt
+        }
+        val seconds = (millisOfDay / 1000L).toInt
+        val hh = seconds / 3600
+        val mm = seconds / 60 % 60
+        val ss = seconds % 60
+        val nano = millisOfDay % 1000 * 1000000
+
+        // create a Timestamp to get the unix timestamp (in UTC)
+        val timestamp = new Timestamp(year - 1900, month - 1, day, hh, mm, ss, nano)
+        guess = (millisLocal - timestamp.getTime).toInt
       }
     }
     guess
