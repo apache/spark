@@ -1097,6 +1097,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.cluster, s.cluster)
 
 
+
 class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
