@@ -36,6 +36,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
+import org.apache.spark.serializer.avro.{GenericAvroSerializer, EmptySchemaRepo, SchemaRepo}
 import org.apache.spark.storage._
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.CompactBuffer
@@ -108,8 +109,9 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
-    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
+    val schemaRepo = SchemaRepo(conf).getOrElse(EmptySchemaRepo)
+    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas, schemaRepo))
+    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas, schemaRepo))
 
     try {
       // scalastyle:off classforname
@@ -184,8 +186,8 @@ class KryoSerializer(conf: SparkConf)
 
 private[spark]
 class KryoSerializationStream(
-    serInstance: KryoSerializerInstance,
-    outStream: OutputStream) extends SerializationStream {
+                               serInstance: KryoSerializerInstance,
+                               outStream: OutputStream) extends SerializationStream {
 
   private[this] var output: KryoOutput = new KryoOutput(outStream)
   private[this] var kryo: Kryo = serInstance.borrowKryo()
@@ -217,8 +219,8 @@ class KryoSerializationStream(
 
 private[spark]
 class KryoDeserializationStream(
-    serInstance: KryoSerializerInstance,
-    inStream: InputStream) extends DeserializationStream {
+                                 serInstance: KryoSerializerInstance,
+                                 inStream: InputStream) extends DeserializationStream {
 
   private[this] var input: KryoInput = new KryoInput(inStream)
   private[this] var kryo: Kryo = serInstance.borrowKryo()
@@ -450,7 +452,7 @@ private class JavaIterableWrapperSerializer
   }
 
   override def read(kryo: Kryo, in: KryoInput, clz: Class[java.lang.Iterable[_]])
-    : java.lang.Iterable[_] = {
+  : java.lang.Iterable[_] = {
     kryo.readClassAndObject(in) match {
       case scalaIterable: Iterable[_] => scalaIterable.asJava
       case javaIterable: java.lang.Iterable[_] => javaIterable
