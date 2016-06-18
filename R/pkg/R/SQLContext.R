@@ -642,8 +642,7 @@ dropTempTable <- function(x, ...) {
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df <- read.df(path, "parquet")
 #' createOrReplaceTempView(df, "table")
 #' dropTempView("table")
