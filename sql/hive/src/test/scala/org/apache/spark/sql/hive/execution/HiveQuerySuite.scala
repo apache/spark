@@ -1057,7 +1057,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
       sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, 'a', 'b' FROM src")
         .queryExecution.analyzed
     }
 
