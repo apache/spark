@@ -129,7 +129,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 
   /** Return the population standard deviation of the values. */
-  def stdev: Double = math.sqrt(variance)
+  def stdev: Double = popStdev
 
   /** Return the population standard deviation of the values. */
   def popStdev: Double = math.sqrt(popVariance)
