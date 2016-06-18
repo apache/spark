@@ -63,12 +63,10 @@ public class VectorizedSparkOrcNewRecordReader
   private final org.apache.hadoop.mapred.RecordReader<NullWritable, VectorizedRowBatch> reader;
   private final int numColumns;
   private VectorizedRowBatch internalValue;
-  OrcStruct value;
   private float progress = 0.0f;
   private ObjectInspector objectInspector;
   private List<Integer> columnIDs;
 
-  private final VectorExpressionWriter [] valueWriters;
   private long numRowsOfBatch = 0;
   private int indexOfRow = 0;
 
@@ -81,19 +79,12 @@ public class VectorizedSparkOrcNewRecordReader
       List<Integer> columnIDs) throws IOException {
     List<OrcProto.Type> types = file.getTypes();
     numColumns = (types.size() == 0) ? 0 : types.get(0).getSubtypesCount();
-    value = new OrcStruct(numColumns);
     this.reader = new SparkVectorizedOrcRecordReader(file, conf,
       new org.apache.hadoop.mapred.FileSplit(fileSplit));
+
     this.objectInspector = file.getObjectInspector();
     this.columnIDs = columnIDs;
     this.internalValue = this.reader.createValue();
-
-    try {
-      valueWriters = VectorExpressionWriterFactory
-          .getExpressionWriters((StructObjectInspector) this.objectInspector);
-    } catch (HiveException e) {
-      throw new RuntimeException(e);
-    }
     this.progress = reader.getProgress();
     this.row = new Row(this.internalValue.cols, columnIDs);
   }
@@ -115,26 +106,10 @@ public class VectorizedSparkOrcNewRecordReader
     if (indexOfRow >= numRowsOfBatch) {
       return null;
     }
-    // try {
     row.rowId = indexOfRow;
-      /*
-      for (int p = 0; p < internalValue.numCols; p++) {
-        // Only when this column is a required column, we populate the data.
-        if (columnIDs.contains(p)) {
-          if (internalValue.cols[p].isRepeating) {
-            valueWriters[p].setValue(value, internalValue.cols[p], 0);
-          } else {
-            valueWriters[p].setValue(value, internalValue.cols[p], indexOfRow);
-          }
-        }
-      }
-      */
-    // } catch (HiveException e) {
-    //  throw new RuntimeException(e);
-    // }
     indexOfRow++;
 
-    return row; // value;
+    return row;
   }
 
   @Override
@@ -199,71 +174,129 @@ public class VectorizedSparkOrcNewRecordReader
     @Override
     public boolean anyNull() {
       for (int i = 0; i < columns.length; i++) {
-        if (columnIDs.contains(i) && columns[i].isNull[rowId]) {
-          return true;
+        if (columnIDs.contains(i)) {
+          if (columns[i].isRepeating && columns[i].isNull[0]) {
+            return true;
+          } else if (!columns[i].isRepeating && columns[i].isNull[rowId]) {
+            return true;
+          }
         }
       }
       return false;
     }
 
     @Override
-    public boolean isNullAt(int ordinal) { return columns[columnIDs.get(ordinal)].isNull[rowId]; }
+    public boolean isNullAt(int ordinal) {
+      ColumnVector col = columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return col.isNull[0];
+      } else {
+        return col.isNull[rowId];
+      }
+    }
 
     @Override
     public boolean getBoolean(int ordinal) {
-      return ((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId] > 0;
+      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return col.vector[0] > 0;
+      } else {
+        return col.vector[rowId] > 0;
+      }
     }
 
     @Override
     public byte getByte(int ordinal) {
-      return (byte)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (byte)col.vector[0];
+      } else {
+        return (byte)col.vector[rowId];
+      }
     }
 
     @Override
     public short getShort(int ordinal) {
-      return (short)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (short)col.vector[0];
+      } else {
+        return (short)col.vector[rowId];
+      }
     }
 
     @Override
     public int getInt(int ordinal) {
-      return (int)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (int)col.vector[0];
+      } else {
+        return (int)col.vector[rowId];
+      }
     }
 
     @Override
     public long getLong(int ordinal) {
-      return (long)((LongColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      LongColumnVector col = (LongColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (long)col.vector[0];
+      } else {
+        return (long)col.vector[rowId];
+      }
     }
 
     @Override
     public float getFloat(int ordinal) {
-      return (float)((DoubleColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      DoubleColumnVector col = (DoubleColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (float)col.vector[0];
+      } else {
+        return (float)col.vector[rowId];
+      }
     }
 
     @Override
     public double getDouble(int ordinal) {
-      return (double)((DoubleColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      DoubleColumnVector col = (DoubleColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (double)col.vector[0];
+      } else {
+        return (double)col.vector[rowId];
+      }
     }
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      return Decimal.apply(
-        ((DecimalColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId].getHiveDecimal()
-          .bigDecimalValue(),
-        precision, scale);
+      DecimalColumnVector col = (DecimalColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return Decimal.apply(col.vector[0].getHiveDecimal().bigDecimalValue(), precision, scale);
+      } else {
+        return Decimal.apply(col.vector[rowId].getHiveDecimal().bigDecimalValue(),
+          precision, scale);
+      }
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
       BytesColumnVector bv = ((BytesColumnVector)columns[columnIDs.get(ordinal)]);
-      String str = new String(bv.vector[rowId], bv.start[rowId], bv.length[rowId],
-        StandardCharsets.UTF_8);
+      String str = null;
+      if (bv.isRepeating) {
+        str = new String(bv.vector[0], bv.start[0], bv.length[0], StandardCharsets.UTF_8);
+      } else {
+        str = new String(bv.vector[rowId], bv.start[rowId], bv.length[rowId],
+          StandardCharsets.UTF_8);
+      }
       return UTF8String.fromString(str);
-      // new String(((BytesColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId]));
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
-      return (byte[])((BytesColumnVector)columns[columnIDs.get(ordinal)]).vector[rowId];
+      BytesColumnVector col = (BytesColumnVector)columns[columnIDs.get(ordinal)];
+      if (col.isRepeating) {
+        return (byte[])col.vector[0];
+      } else {
+        return (byte[])col.vector[rowId];
+      }
     }
 
     @Override
