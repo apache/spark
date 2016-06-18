@@ -6,9 +6,14 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 #useDynLib(SparkR, stringHashCode)
 
 # S3 methods exported
+export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
+export("sparkR.session.stop")
 export("print.jobj")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
 
 # MLlib integration
 exportMethods("glm",
@@ -81,7 +86,9 @@ exportMethods("arrange",
               "orderBy",
               "persist",
               "printSchema",
+              "randomSplit",
               "rbind",
+              "registerTempTable",
               "rename",
               "repartition",
               "sample",
@@ -284,9 +291,6 @@ exportMethods("%in%",
 
 exportClasses("GroupedData")
 exportMethods("agg")
-
-export("sparkRSQL.init",
-       "sparkRHive.init")
 
 export("as.DataFrame",
        "cacheTable",

@@ -25,6 +25,7 @@ library(SparkR)
 sc <- sparkR.init(appName="SparkR-ML-example")
 sqlContext <- sparkRSQL.init(sc)
 
+# $example on$
 ############################ spark.glm and glm ##############################################
 
 irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
@@ -57,7 +58,6 @@ binomialPredictions <- predict(binomialGLM, binomialTestDF)
 showDF(binomialPredictions)
 
 ############################ spark.survreg ##############################################
-
 # Use the ovarian dataset available in R survival package
 library(survival)
 
@@ -121,7 +121,7 @@ gaussianGLM <- spark.glm(gaussianDF, Sepal_Length ~ Sepal_Width + Species, famil
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
 write.ml(gaussianGLM, modelPath)
 gaussianGLM2 <- read.ml(modelPath)
-
+# $example off$
 # Check model summary
 summary(gaussianGLM2)
 
