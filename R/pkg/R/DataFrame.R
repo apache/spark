@@ -1362,7 +1362,7 @@ setMethod("gapply",
 #'               The schema must match to output of `func`. It has to be defined for each
 #'               output column with preferred output column name and corresponding data type.
 #' @family SparkDataFrame functions
-#' @rdname gapply
+#' @rdname gapplyCollect
 #' @name gapplyCollect
 #' @export
 #' @examples
