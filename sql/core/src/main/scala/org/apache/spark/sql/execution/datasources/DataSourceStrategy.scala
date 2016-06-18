@@ -55,6 +55,24 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
+    // the user has specified static partitions, we add a Project operator on top of the query
+    // to include those constant column values in the query result.
+    //
+    // Example:
+    // Let's say that we have a table "t", which is created by
+    // CREATE TABLE t (a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)
+    // The statement of "INSERT INTO TABLE t PARTITION (b=2, c) SELECT 1, 3"
+    // will be converted to "INSERT INTO TABLE t PARTITION (b, c) SELECT 1, 2, 3".
+    //
+    // Basically, we will put those partition columns having a assigned value back
+    // to the SELECT clause. The output of the SELECT clause is organized as
+    // normal_columns static_partitioning_columns dynamic_partitioning_columns.
+    // static_partitioning_columns are partitioning columns having assigned
+    // values in the PARTITION clause (e.g. b in the above example).
+    // dynamic_partitioning_columns are partitioning columns that do not assigned
+    // values in the PARTITION clause (e.g. c in the above example).
     case i @ logical.InsertIntoTable(
     l @ LogicalRelation(t: HadoopFsRelation, _, _), parts, query, overwrite, false)
       if query.resolved && parts.exists(_._2.isDefined) =>
@@ -64,15 +82,15 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
         case (_, None) => Nil
       }
 
-      // The total number of static partition columns and columns provided in the SELECT
-      // clause need to match the number of columns of the target table.
+      // The sum of the number of static partition columns and columns provided in the SELECT
+      // clause needs to match the number of columns of the target table.
       if (staticPartitions.size + query.output.size != l.output.size) {
         throw new AnalysisException(
           s"$l requires that the data to be inserted have the same number of " +
             s"columns as the target table: target table has ${l.output.size} " +
             s"column(s) but the inserted data has ${query.output.size + staticPartitions.size} " +
             s"column(s), which contain ${staticPartitions.size} partition column(s) having " +
-            s"constant values.")
+            s"assigned constant values.")
       }
 
       if (parts.size != t.partitionSchema.fields.size) {
@@ -97,6 +115,7 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
           case (partKey, partValue) => resolver(field.name, partKey)
         }
         if (potentialSpecs.size == 0) {
+          //
           None
         } else if (potentialSpecs.size == 1) {
           val partValue = potentialSpecs.head._2
@@ -109,8 +128,8 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
       }
 
       partitionList.sliding(2).foreach { v =>
-        // If there are dynamic partitions before any static partitions,
-        // we will throw an exception
+        // If there is a dynamic partition appearing before a static partition,
+        // we need to throw an exception.
         if (v(0).isEmpty && v(1).isDefined) {
           throw new AnalysisException(
             s"The ordering of partition columns is " +
@@ -120,11 +139,14 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
         }
       }
 
+      assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
       val projectList =
         query.output.take(l.output.size - t.partitionSchema.fields.size) ++
         partitionList.take(staticPartitions.size).map(_.get) ++
         query.output.takeRight(t.partitionSchema.fields.size - staticPartitions.size)
 
+      // We will remove all assigned values to static partitions because they have been
+      // moved to the projectList.
       i.copy(partition = parts.map(p => (p._1, None)), child = Project(projectList, query))
 
     case i @ logical.InsertIntoTable(
