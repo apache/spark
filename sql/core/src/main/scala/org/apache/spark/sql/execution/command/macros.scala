@@ -46,7 +46,7 @@ case class CreateMacroCommand(
         case b: BoundReference => children(b.ordinal)
       }
     }
-    catalog.createTempMacro(macroName, info, builder, ignoreIfExists = false)
+    catalog.createTempMacro(macroName, info, builder)
     Seq.empty[Row]
   }
 }

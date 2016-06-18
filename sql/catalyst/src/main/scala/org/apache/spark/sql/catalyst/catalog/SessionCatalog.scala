@@ -762,9 +762,8 @@ class SessionCatalog(
   def createTempMacro(
       name: String,
       info: ExpressionInfo,
-      funcDefinition: FunctionBuilder,
-      ignoreIfExists: Boolean): Unit = {
-    if (functionRegistry.functionExists(name) && !ignoreIfExists) {
+      funcDefinition: FunctionBuilder): Unit = {
+    if (functionRegistry.functionExists(name)) {
       throw new TempFunctionAlreadyExistsException(name)
     }
     functionRegistry.registerMacro(name, info, funcDefinition)
