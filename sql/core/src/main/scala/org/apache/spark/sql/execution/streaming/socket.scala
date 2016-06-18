@@ -44,9 +44,6 @@ class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
   private var socket: Socket = null
 
   @GuardedBy("this")
-  private var reader: BufferedReader = null
-
-  @GuardedBy("this")
   private var readThread: Thread = null
 
   @GuardedBy("this")
@@ -56,7 +53,7 @@ class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
 
   private def initialize(): Unit = synchronized {
     socket = new Socket(host, port)
-    reader = new BufferedReader(new InputStreamReader(socket.getInputStream))
+    val reader = new BufferedReader(new InputStreamReader(socket.getInputStream))
     readThread = new Thread(s"TextSocketSource($host, $port)") {
       setDaemon(true)
 
