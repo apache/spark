@@ -39,8 +39,7 @@ setOldClass("structType")
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df <- createDataFrame(faithful)
 #'}
 setClass("SparkDataFrame",
@@ -77,8 +76,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' printSchema(df)
@@ -102,8 +100,7 @@ setMethod("printSchema",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' dfSchema <- schema(df)
@@ -126,8 +123,7 @@ setMethod("schema",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' explain(df, TRUE)
@@ -157,8 +153,7 @@ setMethod("explain",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' isLocal(df)
@@ -182,8 +177,7 @@ setMethod("isLocal",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' showDF(df)
@@ -207,8 +201,7 @@ setMethod("showDF",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' df
@@ -234,8 +227,7 @@ setMethod("show", "SparkDataFrame",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' dtypes(df)
@@ -261,8 +253,7 @@ setMethod("dtypes",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' columns(df)
@@ -396,8 +387,7 @@ setMethod("coltypes",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' coltypes(df) <- c("character", "integer")
@@ -432,7 +422,7 @@ setMethod("coltypes<-",
 
 #' Creates a temporary view using the given name.
 #'
-#' Creates a new temporary view using a SparkDataFrame in the SQLContext. If a
+#' Creates a new temporary view using a SparkDataFrame in the Spark Session. If a
 #' temporary view with the same name already exists, replaces it.
 #'
 #' @param x A SparkDataFrame
@@ -444,8 +434,7 @@ setMethod("coltypes<-",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' createOrReplaceTempView(df, "json_df")
@@ -469,8 +458,7 @@ setMethod("createOrReplaceTempView",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' registerTempTable(df, "json_df")
@@ -498,8 +486,7 @@ setMethod("registerTempTable",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df <- read.df(path, "parquet")
 #' df2 <- read.df(path2, "parquet")
 #' createOrReplaceTempView(df, "table1")
@@ -526,8 +513,7 @@ setMethod("insertInto",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' cache(df)
@@ -554,8 +540,7 @@ setMethod("cache",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' persist(df, "MEMORY_AND_DISK")
@@ -582,8 +567,7 @@ setMethod("persist",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' persist(df, "MEMORY_AND_DISK")
@@ -617,8 +601,7 @@ setMethod("unpersist",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' newDF <- repartition(df, 2L)
@@ -660,8 +643,7 @@ setMethod("repartition",
 #' @noRd
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' newRDD <- toJSON(df)
@@ -688,8 +670,7 @@ setMethod("toJSON",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.json(df, "/tmp/sparkr-tmp/")
@@ -715,8 +696,7 @@ setMethod("write.json",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.parquet(df, "/tmp/sparkr-tmp1/")
@@ -754,8 +734,7 @@ setMethod("saveAsParquetFile",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.txt"
 #' df <- read.text(path)
 #' write.text(df, "/tmp/sparkr-tmp/")
@@ -779,8 +758,7 @@ setMethod("write.text",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' distinctDF <- distinct(df)
@@ -815,8 +793,7 @@ setMethod("unique",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' collect(sample(df, FALSE, 0.5))
@@ -856,8 +833,7 @@ setMethod("sample_frac",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' count(df)
@@ -886,8 +862,7 @@ setMethod("nrow",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' ncol(df)
@@ -909,8 +884,7 @@ setMethod("ncol",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' dim(df)
@@ -933,8 +907,7 @@ setMethod("dim",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' collected <- collect(df)
@@ -1005,8 +978,7 @@ setMethod("collect",
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' limitedDF <- limit(df, 10)
@@ -1026,8 +998,7 @@ setMethod("limit",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' take(df, 2)
@@ -1055,8 +1026,7 @@ setMethod("take",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' head(df)
@@ -1078,8 +1048,7 @@ setMethod("head",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' first(df)
@@ -1099,8 +1068,7 @@ setMethod("first",
 #' @noRd
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' rdd <- toRDD(df)
@@ -1635,8 +1603,7 @@ setMethod("select",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' selectExpr(df, "col1", "(col2 * 5) as newCol")
@@ -1665,8 +1632,7 @@ setMethod("selectExpr",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' newDF <- withColumn(df, "newCol", df$col1 * 5)
@@ -1694,8 +1660,7 @@ setMethod("withColumn",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
@@ -1785,8 +1750,7 @@ setMethod("transform",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' newDF <- withColumnRenamed(df, "col1", "newCol1")
@@ -1810,8 +1774,7 @@ setMethod("withColumnRenamed",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' newDF <- rename(df, col1 = df$newCol1)
@@ -1854,8 +1817,7 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' arrange(df, df$col1)
@@ -1930,8 +1892,7 @@ setMethod("orderBy",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' filter(df, "col1 > 0")
@@ -1971,8 +1932,7 @@ setMethod("where",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' dropDuplicates(df)
@@ -2018,8 +1978,7 @@ setMethod("dropDuplicates",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
 #' join(df1, df2) # Performs a Cartesian
@@ -2076,8 +2035,7 @@ setMethod("join",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
 #' merge(df1, df2) # Performs a Cartesian
@@ -2208,8 +2166,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
 #' unioned <- unionAll(df, df2)
@@ -2252,8 +2209,7 @@ setMethod("rbind",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
 #' intersectDF <- intersect(df, df2)
@@ -2279,8 +2235,7 @@ setMethod("intersect",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
 #' exceptDF <- except(df, df2)
@@ -2322,8 +2277,7 @@ setMethod("except",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' write.df(df, "myfile", "parquet", "overwrite")
@@ -2381,8 +2335,7 @@ setMethod("saveDF",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' saveAsTable(df, "myfile")
@@ -2418,8 +2371,7 @@ setMethod("saveAsTable",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' describe(df)
@@ -2474,10 +2426,9 @@ setMethod("summary",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlCtx, path)
+#' df <- read.json(path)
 #' dropna(df)
 #' }
 setMethod("dropna",
@@ -2528,10 +2479,9 @@ setMethod("na.omit",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlCtx, path)
+#' df <- read.json(path)
 #' fillna(df, 1)
 #' fillna(df, list("age" = 20, "name" = "unknown"))
 #' }
@@ -2742,10 +2692,9 @@ setMethod("str",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlCtx, path)
+#' df <- read.json(path)
 #' drop(df, "col1")
 #' drop(df, c("col1", "col2"))
 #' drop(df, df$col1)
@@ -2916,8 +2865,7 @@ setMethod("histogram",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
 #' write.jdbc(df, jdbcUrl, "table", user = "username", password = "password")
 #' }
@@ -2945,8 +2893,7 @@ setMethod("write.jdbc",
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df <- createDataFrame(data.frame(id = 1:1000))
 #' df_list <- randomSplit(df, c(2, 3, 5), 0)
 #' # df_list contains 3 SparkDataFrames with each having about 200, 300 and 500 rows respectively

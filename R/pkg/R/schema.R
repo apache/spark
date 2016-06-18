@@ -29,11 +29,8 @@
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
 #' schema <- structType(structField("a", "integer"), structField("b", "string"))
-#' df <- createDataFrame(sqlCtx, rdd, schema)
+#' df <- createDataFrame(rdd, schema)
 #' }
 structType <- function(x, ...) {
   UseMethod("structType", x)
@@ -90,13 +87,10 @@ print.structType <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlCtx <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
 #' field1 <- structField("a", "integer", TRUE)
 #' field2 <- structField("b", "string", TRUE)
 #' schema <- structType(field1, field2)
-#' df <- createDataFrame(sqlCtx, rdd, schema)
+#' df <- createDataFrame(rdd, schema)
 #' }
 
 structField <- function(x, ...) {
