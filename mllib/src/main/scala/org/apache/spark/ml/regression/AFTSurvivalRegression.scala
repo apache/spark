@@ -496,7 +496,7 @@ private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
    * @return This AFTAggregator object.
    */
   def merge(other: AFTAggregator): this.type = {
-    if (totalCnt != 0) {
+    if (other.count != 0) {
       totalCnt += other.totalCnt
       lossSum += other.lossSum
 
