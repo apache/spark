@@ -168,14 +168,14 @@ createMethods()
 #' df <- createDataFrame (
 #' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
 #'   c("a", "b", "c", "d"))
+#' gdf <- group_by(df, "a", "c")
 #'
 #' Here our output contains three columns, the key which is a combination of two
 #' columns with data types integer and string and the mean which is a double.
 #' schema <-  structType(structField("a", "integer"), structField("c", "string"),
 #'   structField("avg", "double"))
 #' df1 <- gapply(
-#'   df,
-#'   list("a", "c"),
+#'   gdf,
 #'   function(key, x) {
 #'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 #'   },
@@ -194,6 +194,45 @@ setMethod("gapply",
             gapplyInternal(x, func, schema)
           })
 
+#' gapplyCollect
+#'
+#' Applies a R function to each group in the input GroupedData and collects the result
+#' back to R as a data.frame.
+#'
+#' @param x a GroupedData
+#' @param func A function to be applied to each group partition specified by GroupedData.
+#'             The function `func` takes as argument a key - grouping columns and
+#'             a data frame - a local R data.frame.
+#'             The output of `func` is a local R data.frame.
+#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
+#'               The schema must match to output of `func`. It has to be defined for each
+#'               output column with preferred output column name and corresponding data type.
+#' @return a SparkDataFrame
+#' @rdname gapply
+#' @name gapplyCollect
+#' @examples
+#' \dontrun{
+#' Computes the arithmetic mean of the second column by grouping
+#' on the first and third columns. Output the grouping values and the average.
+#'
+#' df <- createDataFrame (
+#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
+#'   c("a", "b", "c", "d"))
+#' gdf <- group_by(df, "a", "c")
+#' result <- gapplyCollect(
+#'   gdf,
+#'   function(key, x) {
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#'     colnames(y) <- c("key_a", "key_c", "mean_b")
+#'     y
+#'   })
+#'
+#' Result
+#' ------
+#' key_a key_c mean_b
+#' 3 3 3.0
+#' 1 1 1.5
+#' }
 setMethod("gapplyCollect",
           signature(x = "GroupedData"),
           function(x, func) {

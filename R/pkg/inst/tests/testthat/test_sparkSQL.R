@@ -2154,7 +2154,7 @@ test_that("repartition by columns on DataFrame", {
   expect_equal(nrow(df1), 2)
 })
 
-test_that("gapply() on a DataFrame", {
+test_that("gapply() and gapplyCollect() on a DataFrame", {
   df <- createDataFrame (
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
@@ -2162,6 +2162,9 @@ test_that("gapply() on a DataFrame", {
   df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
   actual <- collect(df1)
   expect_identical(actual, expected)
+
+  df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
+  expect_identical(df1Collect, expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
@@ -2176,6 +2179,17 @@ test_that("gapply() on a DataFrame", {
   actual <- collect(df2)$e
   expected <- c(TRUE, TRUE)
   expect_identical(actual, expected)
+
+  df2Collect <- gapplyCollect(
+    df,
+    list(df$"a", df$"c"),
+    function(key, x) {
+      y <- data.frame(key[1], sum(x$b) > 2)
+      colnames(y) <- c("a", "e")
+      y
+    })
+    actual <- df2Collect$e
+    expect_identical(actual, expected)
 
   # Computes the arithmetic mean of the second column by grouping
   # on the first and third columns. Output the groupping value and the average.
@@ -2195,6 +2209,19 @@ test_that("gapply() on a DataFrame", {
   expected <- data.frame(aggregate(expected$b, by = list(expected$a, expected$c), FUN = mean))
   colnames(expected) <- c("a", "c", "avg")
   expected <-  expected[order(expected$a), ]
+  rownames(expected) <- NULL
+  expect_identical(actual, expected)
+
+  df3Collect <- gapplyCollect(
+    df,
+    list("a", "c"),
+    function(key, x) {
+      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+      colnames(y) <- c("a", "c", "avg")
+      y
+    })
+  actual <- df3Collect[order(df3Collect$a), ]
+  rownames(actual) <- NULL
   rownames(expected) <- NULL
   expect_identical(actual, expected)
 
