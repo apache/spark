@@ -196,8 +196,13 @@ final class OneVsRestModel private[ml] (
     }
 
     // output label and label metadata as prediction
+    val predictionMetadata = new MetadataBuilder()
+      .withMetadata(labelMetadata)
+      .putString("name", predictionCol.name)
+      .build()
+
     aggregatedDataset
-      .withColumn($(predictionCol), labelUDF(col(accColName)), labelMetadata)
+      .withColumn($(predictionCol), labelUDF(col(accColName)), predictionMetadata)
       .drop(accColName)
   }
 
