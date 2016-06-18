@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable.HashSet
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
@@ -59,6 +60,10 @@ trait FunctionRegistry {
   /** Checks if a function with a given name exists. */
   def functionExists(name: String): Boolean = lookupFunction(name).isDefined
 
+  def registerMacro(name: String, info: ExpressionInfo, builder: FunctionBuilder): Unit
+
+  def dropMacro(name: String): Boolean
+
   /** Clear all registered functions. */
   def clear(): Unit
 
@@ -68,6 +73,8 @@ class SimpleFunctionRegistry extends FunctionRegistry {
 
   protected val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
+
+  val macros = new HashSet[String]
 
   override def registerFunction(
       name: String,
@@ -101,8 +108,26 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
+  override def registerMacro(
+      name: String,
+      info: ExpressionInfo,
+      builder: FunctionBuilder): Unit = synchronized {
+    functionBuilders.put(name, (info, builder))
+    macros += name.toLowerCase()
+  }
+
+  override  def dropMacro(name: String): Boolean = synchronized {
+    if (macros.contains(name.toLowerCase)) {
+      macros -= name.toLowerCase
+      functionBuilders.remove(name).isDefined
+    } else {
+      false
+    }
+  }
+
   override def clear(): Unit = synchronized {
     functionBuilders.clear()
+    macros.clear()
   }
 
   def copy(): SimpleFunctionRegistry = synchronized {
@@ -141,6 +166,14 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   }
 
   override def dropFunction(name: String): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
+  override def registerMacro(name: String, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def dropMacro(name: String): Boolean = {
     throw new UnsupportedOperationException
   }
 

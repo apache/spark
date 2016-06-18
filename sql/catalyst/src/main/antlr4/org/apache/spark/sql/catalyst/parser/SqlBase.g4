@@ -98,7 +98,7 @@ statement
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | CREATE TEMPORARY MACRO macroName=identifier
-        '('(columns=colTypeList)?')' expression                        #createMacro
+        '(' colTypeList? ')' expression                        #createMacro
     | DROP TEMPORARY MACRO (IF EXISTS)? macroName=identifier           #dropMacro
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?

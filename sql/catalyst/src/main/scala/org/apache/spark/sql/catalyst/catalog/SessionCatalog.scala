@@ -758,6 +758,25 @@ class SessionCatalog(
     }
   }
 
+  /** Create a temporary macro. */
+  def createTempMacro(
+      name: String,
+      info: ExpressionInfo,
+      funcDefinition: FunctionBuilder,
+      ignoreIfExists: Boolean): Unit = {
+    if (functionRegistry.functionExists(name) && !ignoreIfExists) {
+      throw new TempFunctionAlreadyExistsException(name)
+    }
+    functionRegistry.registerMacro(name, info, funcDefinition)
+  }
+
+  /** Drop a temporary macro. */
+  def dropTempMacro(name: String, ignoreIfNotExists: Boolean): Unit = {
+    if (!functionRegistry.dropMacro(name) && !ignoreIfNotExists) {
+      throw new NoSuchTempMacroException(name)
+    }
+  }
+
   protected def failFunctionLookup(name: String): Nothing = {
     throw new NoSuchFunctionException(db = currentDb, func = name)
   }

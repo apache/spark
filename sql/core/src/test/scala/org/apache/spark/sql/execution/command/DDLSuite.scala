@@ -1313,6 +1313,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql(s"CREATE TEMPORARY MACRO simple_add_error(x int) x + y")
     }
+    intercept[AnalysisException] {
+      sql(s"CREATE TEMPORARY MACRO simple_add_error(x int, x int) x + y")
+    }
+    intercept[AnalysisException] {
+      sql(s"CREATE TEMPORARY MACRO simple_add_error(x int) x NOT IN (select c2 from t2) ")
+    }
     sql("CREATE TEMPORARY MACRO fixed_number() 42")
     checkAnswer(sql("SELECT fixed_number()"), Row(42))
     sql("CREATE TEMPORARY MACRO string_len_plus_two(x string) length(x) + 2")

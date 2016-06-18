@@ -25,15 +25,16 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructField}
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -599,13 +600,28 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitCreateMacro(ctx: CreateMacroContext): LogicalPlan = withOrigin(ctx) {
-    val arguments = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns).map { col =>
-      AttributeReference(col.name, CatalystSqlParser.parseDataType(col.dataType))()
+    val arguments = Option(ctx.colTypeList).map(visitColTypeList(_))
+      .getOrElse(Seq.empty[StructField]).map { col =>
+      AttributeReference(col.name, col.dataType, col.nullable, col.metadata)() }
+    val colToIndex: Map[String, Int] = arguments.map(_.name).zipWithIndex.toMap
+    if (colToIndex.size != arguments.size) {
+      throw operationNotAllowed(
+        s"Cannot support duplicate colNames for CREATE TEMPORARY MACRO ", ctx)
     }
-    val e = expression(ctx.expression)
+    val macroFunction = expression(ctx.expression).transformUp {
+      case u: UnresolvedAttribute =>
+        val index = colToIndex.get(u.name).getOrElse(
+          throw new ParseException(
+            s"Cannot find colName: [${u}] for CREATE TEMPORARY MACRO", ctx))
+        BoundReference(index, arguments(index).dataType, arguments(index).nullable)
+      case _: SubqueryExpression =>
+        throw operationNotAllowed(s"Cannot support Subquery for CREATE TEMPORARY MACRO", ctx)
+    }
+
     CreateMacroCommand(
       ctx.macroName.getText,
-      MacroFunctionWrapper(arguments, e))
+      arguments,
+      macroFunction)
   }
 
   /**
