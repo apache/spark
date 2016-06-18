@@ -271,16 +271,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         ifNotExists = false)).toRdd
   }
 
-  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
-    cols.map(normalize(_, "Partition"))
+  /** Duplicates are not allowed in partitionBy/bucketBy/sortBy columns. */
+  private def checkDuplicates(columnNames: Seq[String], columnType: String): Unit = {
+    if (columnNames.length != columnNames.distinct.length) {
+      val duplicateColumns = columnNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "`" + x + "`"
+      }.mkString(", ")
+      throw new AnalysisException(
+        s"Duplicate column(s): $duplicateColumns found in $columnType columns")
+    }
   }
 
-  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
-    cols.map(normalize(_, "Bucketing"))
+  private def normalizedParCols: Option[Seq[String]] = {
+    val partitionByCols = partitioningColumns.map { cols => cols.map(normalize(_, "Partition")) }
+    partitionByCols.foreach(checkDuplicates(_, "Partition"))
+    partitionByCols
   }
 
-  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
-    cols.map(normalize(_, "Sorting"))
+  private def normalizedBucketColNames: Option[Seq[String]] = {
+    val bucketByCols = bucketColumnNames.map { cols => cols.map(normalize(_, "Bucketing")) }
+    bucketByCols.foreach(checkDuplicates(_, "Bucketing"))
+    bucketByCols
+  }
+
+  private def normalizedSortColNames: Option[Seq[String]] = {
+    val sortByCols = sortColumnNames.map { cols => cols.map(normalize(_, "Sorting")) }
+    sortByCols.foreach(checkDuplicates(_, "Sorting"))
+    sortByCols
   }
 
   private def getBucketSpec: Option[BucketSpec] = {
@@ -369,6 +386,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
+    val partitions = normalizedParCols.map(_.toArray).getOrElse(Array.empty[String])
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -382,7 +400,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           CreateTableUsingAsSelect(
             tableIdent,
             source,
-            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            partitions,
             getBucketSpec,
             mode,
             extraOptions.toMap,

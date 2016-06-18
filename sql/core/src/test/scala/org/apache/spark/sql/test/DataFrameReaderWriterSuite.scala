@@ -80,6 +80,7 @@ class DefaultSource
 
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -97,6 +98,29 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("duplicate columns in bucketBy") {
+    val df = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+    val e = intercept[AnalysisException] {
+      df.write.format("json").bucketBy(8, "j", "j").saveAsTable("tab")
+    }.getMessage
+    assert(e.contains("Duplicate column(s): `j` found in Bucketing columns"))
+  }
+
+  test("duplicate columns in sortBy") {
+    val df = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+    val e = intercept[AnalysisException] {
+      df.write.format("json").bucketBy(8, "j", "k").sortBy("k", "k").saveAsTable("tab")
+    }.getMessage
+    assert(e.contains("Duplicate column(s): `k` found in Sorting columns"))
+  }
+
+  test("duplicate columns in partitionBy") {
+    val df = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+    val e = intercept[AnalysisException] {
+      df.write.format("json").partitionBy("i", "i").saveAsTable("tab")
+    }.getMessage
+    assert(e.contains("Duplicate column(s): `i` found in Partition columns"))
+  }
 
   test("resolve default source") {
     spark.read
