@@ -317,6 +317,15 @@ convertEnvsToList <- function(keys, vals) {
          })
 }
 
+# Utility function to merge 2 environments with the second overriding values in the first
+# env1 is changed in place
+overrideEnvs <- function(env1, env2) {
+  lapply(ls(env2),
+         function(name) {
+           env1[[name]] <- env2[[name]]
+         })
+}
+
 # Utility function to capture the varargs into environment object
 varargsToEnv <- function(...) {
   # Based on http://stackoverflow.com/a/3057419/4577954
