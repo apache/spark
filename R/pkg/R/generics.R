@@ -610,6 +610,10 @@ setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
 #' @export
 setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
 
+#' @rdname write.orc
+#' @export
+setGeneric("write.orc", function(x, path) { standardGeneric("write.orc") })
+
 #' @rdname write.parquet
 #' @export
 setGeneric("write.parquet", function(x, path) { standardGeneric("write.parquet") })
