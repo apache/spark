@@ -348,6 +348,7 @@ abstract class HiveComparisonTest
                 queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
+                case _: InsertIntoTable => ()
                 case _: LogicalInsertIntoHiveTable => ()
               }.nonEmpty
 

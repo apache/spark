@@ -65,8 +65,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
         catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
-        PreInsertCastAndRename ::
+        PreprocessTableInsertion ::
         DataSourceAnalysis ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 

@@ -325,27 +325,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     }
   }
 
-  test("Detect table partitioning with correct partition order") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE source (id bigint, part2 string, part1 string, data string)")
-      val data = (1 to 10).map(i => (i, if ((i % 2) == 0) "even" else "odd", "p", s"data-$i"))
-          .toDF("id", "part2", "part1", "data")
-
-      data.write.insertInto("source")
-      checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
-
-      // the original data with part1 and part2 at the end
-      val expected = data.select("id", "data", "part1", "part2")
-
-      sql(
-        """CREATE TABLE partitioned (id bigint, data string)
-          |PARTITIONED BY (part1 string, part2 string)""".stripMargin)
-      spark.table("source").write.insertInto("partitioned")
-
-      checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)
-    }
-  }
-
   private def testPartitionedHiveSerDeTable(testName: String)(f: String => Unit): Unit = {
     test(s"Hive SerDe table - $testName") {
       val hiveTable = "hive_table"
