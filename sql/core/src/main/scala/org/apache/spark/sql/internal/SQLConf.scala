@@ -114,7 +114,7 @@ object SQLConf {
     .createWithDefault(10L * 1024 * 1024)
 
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
-    SQLConfigBuilder("spark.sql.enableFallBackToHdfsForStats")
+    SQLConfigBuilder("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
       " This is useful in determining if a table is small enough to use auto broadcast joins.")
     .booleanConf
@@ -484,14 +484,14 @@ object SQLConf {
       .createWithDefault(2)
 
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
-    .doc("The default location for storing checkpoint data for continuously executing queries.")
+    .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
     .createOptional
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
-      .doc("When true, the logical plan for continuous query will be checked for unsupported" +
+      .doc("When true, the logical plan for streaming query will be checked for unsupported" +
         " operations.")
       .booleanConf
       .createWithDefault(true)

@@ -27,13 +27,22 @@ import org.apache.spark.sql.SparkSession
  * @since 2.0.0
  */
 @Experimental
-trait ContinuousQuery {
+trait StreamingQuery {
 
   /**
-   * Returns the name of the query.
+   * Returns the name of the query. This name is unique across all active queries. This can be
+   * set in the[[org.apache.spark.sql.DataFrameWriter DataFrameWriter]] as
+   * `dataframe.write().queryName("query").startStream()`.
    * @since 2.0.0
    */
   def name: String
+
+  /**
+   * Returns the unique id of this query. This id is automatically generated and is unique across
+   * all queries that have been started in the current process.
+   * @since 2.0.0
+   */
+  def id: Long
 
   /**
    * Returns the [[SparkSession]] associated with `this`.
@@ -48,10 +57,10 @@ trait ContinuousQuery {
   def isActive: Boolean
 
   /**
-   * Returns the [[ContinuousQueryException]] if the query was terminated by an exception.
+   * Returns the [[StreamingQueryException]] if the query was terminated by an exception.
    * @since 2.0.0
    */
-  def exception: Option[ContinuousQueryException]
+  def exception: Option[StreamingQueryException]
 
   /**
    * Returns current status of all the sources.
@@ -70,7 +79,7 @@ trait ContinuousQuery {
    * immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws ContinuousQueryException, if `this` query has terminated with an exception.
+   * @throws StreamingQueryException, if `this` query has terminated with an exception.
    *
    * @since 2.0.0
    */
@@ -86,7 +95,7 @@ trait ContinuousQuery {
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws ContinuousQueryException, if `this` query has terminated with an exception
+   * @throws StreamingQueryException, if `this` query has terminated with an exception
    *
    * @since 2.0.0
    */

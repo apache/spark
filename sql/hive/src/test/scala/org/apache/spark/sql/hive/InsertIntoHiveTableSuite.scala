@@ -166,6 +166,74 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     sql("DROP TABLE tmp_table")
   }
 
+  test("INSERT OVERWRITE - partition IF NOT EXISTS") {
+    withTempDir { tmpDir =>
+      val table = "table_with_partition"
+      withTable(table) {
+        val selQuery = s"select c1, p1, p2 from $table"
+        sql(
+          s"""
+             |CREATE TABLE $table(c1 string)
+             |PARTITIONED by (p1 string,p2 string)
+             |location '${tmpDir.toURI.toString}'
+           """.stripMargin)
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $table
+             |partition (p1='a',p2='b')
+             |SELECT 'blarr'
+           """.stripMargin)
+        checkAnswer(
+          sql(selQuery),
+          Row("blarr", "a", "b"))
+
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $table
+             |partition (p1='a',p2='b')
+             |SELECT 'blarr2'
+           """.stripMargin)
+        checkAnswer(
+          sql(selQuery),
+          Row("blarr2", "a", "b"))
+
+        var e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $table
+               |partition (p1='a',p2) IF NOT EXISTS
+               |SELECT 'blarr3', 'newPartition'
+             """.stripMargin)
+        }
+        assert(e.getMessage.contains(
+          "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
+
+        e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $table
+               |partition (p1='a',p2) IF NOT EXISTS
+               |SELECT 'blarr3', 'b'
+             """.stripMargin)
+        }
+        assert(e.getMessage.contains(
+          "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
+
+        // If the partition already exists, the insert will overwrite the data
+        // unless users specify IF NOT EXISTS
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE $table
+             |partition (p1='a',p2='b') IF NOT EXISTS
+             |SELECT 'blarr3'
+           """.stripMargin)
+        checkAnswer(
+          sql(selQuery),
+          Row("blarr2", "a", "b"))
+      }
+    }
+  }
+
   test("Insert ArrayType.containsNull == false") {
     val schema = StructType(Seq(
       StructField("a", ArrayType(StringType, containsNull = false))))
@@ -257,25 +325,41 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     }
   }
 
-  test("Detect table partitioning with correct partition order") {
-    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE source (id bigint, part2 string, part1 string, data string)")
-      val data = (1 to 10).map(i => (i, if ((i % 2) == 0) "even" else "odd", "p", s"data-$i"))
-          .toDF("id", "part2", "part1", "data")
+  private def testPartitionedHiveSerDeTable(testName: String)(f: String => Unit): Unit = {
+    test(s"Hive SerDe table - $testName") {
+      val hiveTable = "hive_table"
 
-      data.write.insertInto("source")
-      checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
-
-      // the original data with part1 and part2 at the end
-      val expected = data.select("id", "data", "part1", "part2")
-
-      sql(
-        """CREATE TABLE partitioned (id bigint, data string)
-          |PARTITIONED BY (part1 string, part2 string)""".stripMargin)
-      spark.table("source").write.insertInto("partitioned")
-
-      checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)
+      withTable(hiveTable) {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          sql(s"CREATE TABLE $hiveTable (a INT) PARTITIONED BY (b INT, c INT) STORED AS TEXTFILE")
+          f(hiveTable)
+        }
+      }
     }
+  }
+
+  private def testPartitionedDataSourceTable(testName: String)(f: String => Unit): Unit = {
+    test(s"Data source table - $testName") {
+      val dsTable = "ds_table"
+
+      withTable(dsTable) {
+        sql(s"CREATE TABLE $dsTable (a INT, b INT, c INT) USING PARQUET PARTITIONED BY (b, c)")
+        f(dsTable)
+      }
+    }
+  }
+
+  private def testPartitionedTable(testName: String)(f: String => Unit): Unit = {
+    testPartitionedHiveSerDeTable(testName)(f)
+    testPartitionedDataSourceTable(testName)(f)
+  }
+
+  testPartitionedTable("partitionBy() can't be used together with insertInto()") { tableName =>
+    val cause = intercept[AnalysisException] {
+      Seq((1, 2, 3)).toDF("a", "b", "c").write.partitionBy("b", "c").insertInto(tableName)
+    }
+
+    assert(cause.getMessage.contains("insertInto() can't be used together with partitionBy()."))
   }
 
   test("InsertIntoTable#resolved should include dynamic partitions") {

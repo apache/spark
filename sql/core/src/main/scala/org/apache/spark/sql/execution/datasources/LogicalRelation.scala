@@ -60,9 +60,11 @@ case class LogicalRelation(
     com.google.common.base.Objects.hashCode(relation, output)
   }
 
-  override def sameResult(otherPlan: LogicalPlan): Boolean = otherPlan match {
-    case LogicalRelation(otherRelation, _, _) => relation == otherRelation
-    case _ => false
+  override def sameResult(otherPlan: LogicalPlan): Boolean = {
+    otherPlan.canonicalized match {
+      case LogicalRelation(otherRelation, _, _) => relation == otherRelation
+      case _ => false
+    }
   }
 
   // When comparing two LogicalRelations from within LogicalPlan.sameResult, we only need

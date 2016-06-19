@@ -55,8 +55,8 @@ object TestData {
   val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
 }
 
-class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.http
+class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
+  override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
     // Transport creation logic below mimics HiveConnection.createBinaryTransport
@@ -70,8 +70,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     try f(client) finally transport.close()
   }
 
-  // TODO: update this test to work in HTTP mode
-  ignore("GetInfo Thrift API") {
+  test("GetInfo Thrift API") {
     withCLIServiceClient { client =>
       val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
@@ -567,7 +566,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
-  override def mode: ServerMode.Value = ServerMode.http
+  override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
     "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
@@ -614,6 +613,38 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
         }
       }
     )
+  }
+}
+
+class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
+  override def mode: ServerMode.Value = ServerMode.http
+
+  test("JDBC query execution") {
+    withJdbcStatement { statement =>
+      val queries = Seq(
+        "SET spark.sql.shuffle.partitions=3",
+        "DROP TABLE IF EXISTS test",
+        "CREATE TABLE test(key INT, val STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
+        "CACHE TABLE test")
+
+      queries.foreach(statement.execute)
+
+      assertResult(5, "Row count mismatch") {
+        val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
+        resultSet.next()
+        resultSet.getInt(1)
+      }
+    }
+  }
+
+  test("Checks Hive version") {
+    withJdbcStatement { statement =>
+      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
+      resultSet.next()
+      assert(resultSet.getString(1) === "spark.sql.hive.version")
+      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+    }
   }
 }
 

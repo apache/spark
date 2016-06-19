@@ -33,26 +33,35 @@ markUtf8 <- function(s) {
 }
 
 setHiveContext <- function(sc) {
-  ssc <- callJMethod(sc, "sc")
-  hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  },
-  error = function(err) {
-    skip("Hive is not build with SparkSQL, skipped")
-  })
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
-  hiveCtx
+  if (exists(".testHiveSession", envir = .sparkREnv)) {
+    hiveSession <- get(".testHiveSession", envir = .sparkREnv)
+  } else {
+    # initialize once and reuse
+    ssc <- callJMethod(sc, "sc")
+    hiveCtx <- tryCatch({
+      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+    },
+    error = function(err) {
+      skip("Hive is not build with SparkSQL, skipped")
+    })
+    hiveSession <- callJMethod(hiveCtx, "sparkSession")
+  }
+  previousSession <- get(".sparkRsession", envir = .sparkREnv)
+  assign(".sparkRsession", hiveSession, envir = .sparkREnv)
+  assign(".prevSparkRsession", previousSession, envir = .sparkREnv)
+  hiveSession
 }
 
 unsetHiveContext <- function() {
-  remove(".sparkRHivesc", envir = .sparkREnv)
+  previousSession <- get(".prevSparkRsession", envir = .sparkREnv)
+  assign(".sparkRsession", previousSession, envir = .sparkREnv)
+  remove(".prevSparkRsession", envir = .sparkREnv)
 }
 
 # Tests for SparkSQL functions in SparkR
 
-sc <- sparkR.init()
-
-sqlContext <- sparkRSQL.init(sc)
+sparkSession <- sparkR.session()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
@@ -79,7 +88,16 @@ complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
 test_that("calling sparkRSQL.init returns existing SQL context", {
-  expect_equal(sparkRSQL.init(sc), sqlContext)
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
+})
+
+test_that("calling sparkRSQL.init returns existing SparkSession", {
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
+})
+
+test_that("calling sparkR.session returns existing SparkSession", {
+  expect_equal(sparkR.session(), sparkSession)
 })
 
 test_that("infer types and check types", {
@@ -431,6 +449,7 @@ test_that("read/write json files", {
 })
 
 test_that("jsonRDD() on a RDD with json string", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
   df <- suppressWarnings(jsonRDD(sqlContext, rdd))
@@ -443,30 +462,39 @@ test_that("jsonRDD() on a RDD with json string", {
   expect_equal(count(df), 6)
 })
 
-test_that("test cache, uncache and clearCache", {
-  df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
-  cacheTable("table1")
-  uncacheTable("table1")
-  clearCache()
-  dropTempTable("table1")
-})
-
 test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
-  df <- tables()
-  expect_equal(count(df), 1)
+  tables <- tables()
+  expect_equal(count(tables), 1)
+
+  suppressWarnings(registerTempTable(df, "table2"))
+  tables <- tables()
+  expect_equal(count(tables), 2)
   dropTempTable("table1")
+  dropTempTable("table2")
+
+  tables <- tables()
+  expect_equal(count(tables), 0)
 })
 
-test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
+test_that(
+  "createOrReplaceTempView() results in a queryable table and sql() results in a new DataFrame", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
+  dropTempTable("table1")
+})
+
+test_that("test cache, uncache and clearCache", {
+  df <- read.json(jsonPath)
+  createOrReplaceTempView(df, "table1")
+  cacheTable("table1")
+  uncacheTable("table1")
+  clearCache()
   dropTempTable("table1")
 })
 
@@ -484,13 +512,13 @@ test_that("insertInto() on a registered table", {
   write.df(df2, parquetPath2, "parquet", "overwrite")
   dfParquet2 <- read.df(parquetPath2, "parquet")
 
-  registerTempTable(dfParquet, "table1")
+  createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1")
   expect_equal(count(sql("select * from table1")), 5)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
   dropTempTable("table1")
 
-  registerTempTable(dfParquet, "table1")
+  createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1", overwrite = TRUE)
   expect_equal(count(sql("select * from table1")), 2)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
@@ -502,7 +530,7 @@ test_that("insertInto() on a registered table", {
 
 test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   tabledf <- tableToDF("table1")
   expect_is(tabledf, "SparkDataFrame")
   expect_equal(count(tabledf), 3)
@@ -788,6 +816,14 @@ test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
     expected)
 
   result <- collect(dropDuplicates(df, c("key", "value1")))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2), ],
+    expected)
+
+  result <- collect(dropDuplicates(df, "key", "value1"))
   expected <- rbind.data.frame(
     c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
   names(expected) <- c("key", "value1", "value2")
@@ -2145,8 +2181,72 @@ test_that("repartition by columns on DataFrame", {
   expect_equal(nrow(df1), 2)
 })
 
+test_that("gapply() on a DataFrame", {
+  df <- createDataFrame (
+    list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
+    c("a", "b", "c", "d"))
+  expected <- collect(df)
+  df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
+  actual <- collect(df1)
+  expect_identical(actual, expected)
+
+  # Computes the sum of second column by grouping on the first and third columns
+  # and checks if the sum is larger than 2
+  schema <- structType(structField("a", "integer"), structField("e", "boolean"))
+  df2 <- gapply(
+    df,
+    list(df$"a", df$"c"),
+    function(key, x) {
+      y <- data.frame(key[1], sum(x$b) > 2)
+    },
+    schema)
+  actual <- collect(df2)$e
+  expected <- c(TRUE, TRUE)
+  expect_identical(actual, expected)
+
+  # Computes the arithmetic mean of the second column by grouping
+  # on the first and third columns. Output the groupping value and the average.
+  schema <-  structType(structField("a", "integer"), structField("c", "string"),
+               structField("avg", "double"))
+  df3 <- gapply(
+    df,
+    list("a", "c"),
+    function(key, x) {
+      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+    },
+    schema)
+  actual <- collect(df3)
+  actual <-  actual[order(actual$a), ]
+  rownames(actual) <- NULL
+  expected <- collect(select(df, "a", "b", "c"))
+  expected <- data.frame(aggregate(expected$b, by = list(expected$a, expected$c), FUN = mean))
+  colnames(expected) <- c("a", "c", "avg")
+  expected <-  expected[order(expected$a), ]
+  rownames(expected) <- NULL
+  expect_identical(actual, expected)
+
+  irisDF <- suppressWarnings(createDataFrame (iris))
+  schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
+  # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
+  df4 <- gapply(
+    cols = list("Sepal_Length"),
+    irisDF,
+    function(key, x) {
+      y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
+    },
+    schema)
+  actual <- collect(df4)
+  actual <- actual[order(actual$Sepal_Length), ]
+  rownames(actual) <- NULL
+  agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Sepal.Length), FUN = mean),
+                    stringsAsFactors = FALSE)
+  colnames(agg_local_df) <- c("Sepal_Length", "Avg")
+  expected <-  agg_local_df[order(agg_local_df$Sepal_Length), ]
+  rownames(expected) <- NULL
+  expect_identical(actual, expected)
+})
+
 test_that("Window functions on a DataFrame", {
-  setHiveContext(sc)
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
   ws <- orderBy(window.partitionBy("key"), "value")
@@ -2171,10 +2271,10 @@ test_that("Window functions on a DataFrame", {
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
-  unsetHiveContext()
 })
 
 test_that("createDataFrame sqlContext parameter backward compatibility", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   a <- 1:3
   b <- c("a", "b", "c")
   ldf <- data.frame(a, b)
@@ -2196,6 +2296,58 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   before <- suppressWarnings(createDataFrame(sqlContext, iris))
   after <- suppressWarnings(createDataFrame(iris))
   expect_equal(collect(before), collect(after))
+})
+
+test_that("randomSplit", {
+  num <- 4000
+  df <- createDataFrame(data.frame(id = 1:num))
+  weights <- c(2, 3, 5)
+  df_list <- randomSplit(df, weights)
+  expect_equal(length(weights), length(df_list))
+  counts <- sapply(df_list, count)
+  expect_equal(num, sum(counts))
+  expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
+
+  df_list <- randomSplit(df, weights, 0)
+  expect_equal(length(weights), length(df_list))
+  counts <- sapply(df_list, count)
+  expect_equal(num, sum(counts))
+  expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
+})
+
+test_that("Change config on SparkSession", {
+  # first, set it to a random but known value
+  conf <- callJMethod(sparkSession, "conf")
+  property <- paste0("spark.testing.", as.character(runif(1)))
+  value1 <- as.character(runif(1))
+  callJMethod(conf, "set", property, value1)
+
+  # next, change the same property to the new value
+  value2 <- as.character(runif(1))
+  l <- list(value2)
+  names(l) <- property
+  sparkR.session(sparkConfig = l)
+
+  conf <- callJMethod(sparkSession, "conf")
+  newValue <- callJMethod(conf, "get", property, "")
+  expect_equal(value2, newValue)
+
+  value <- as.character(runif(1))
+  sparkR.session(spark.app.name = "sparkSession test", spark.testing.r.session.r = value)
+  conf <- callJMethod(sparkSession, "conf")
+  appNameValue <- callJMethod(conf, "get", "spark.app.name", "")
+  testValue <- callJMethod(conf, "get", "spark.testing.r.session.r", "")
+  expect_equal(appNameValue, "sparkSession test")
+  expect_equal(testValue, value)
+})
+
+test_that("enableHiveSupport on SparkSession", {
+  setHiveContext(sc)
+  unsetHiveContext()
+  # if we are still here, it must be built with hive
+  conf <- callJMethod(sparkSession, "conf")
+  value <- callJMethod(conf, "get", "spark.sql.catalogImplementation", "")
+  expect_equal(value, "hive")
 })
 
 unlink(parquetPath)

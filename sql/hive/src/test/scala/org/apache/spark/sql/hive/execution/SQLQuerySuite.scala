@@ -187,28 +187,42 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
-    // The TestContext is shared by all the test cases, some functions may be registered before
-    // this, so we check that all the builtin functions are returned.
-    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
-    allBuiltinFunctions.foreach { f =>
-      assert(allFunctions.contains(f))
-    }
     withTempDatabase { db =>
-      checkAnswer(sql("SHOW functions abs"), Row("abs"))
-      checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions $db.abs"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql("SHOW functions `~`"), Row("~"))
+      def createFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(
+            s"""
+              |CREATE TEMPORARY FUNCTION $name
+              |AS '${classOf[PairUDF].getName}'
+            """.stripMargin)
+        }
+      }
+      def dropFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(s"DROP TEMPORARY FUNCTION $name")
+        }
+      }
+      createFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
+
+      checkAnswer(sql("SHOW functions temp_abs"), Row("temp_abs"))
+      checkAnswer(sql("SHOW functions 'temp_abs'"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-      checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
+      checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
+
       // this probably will failed if we add more function with `sha` prefixing.
-      checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+      checkAnswer(
+        sql("SHOW functions `temp_sha*`"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2")))
+
       // Test '|' for alternation.
       checkAnswer(
-        sql("SHOW functions 'sha*|weekofyea*'"),
-        Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+        sql("SHOW functions 'temp_sha*|temp_weekofyea*'"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2"), Row("temp_weekofyear")))
+
+      dropFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
     }
   }
 
@@ -1596,6 +1610,38 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
   }
 
+  test("select partitioned table") {
+    val table = "table_with_partition"
+    withTable(table) {
+      sql(
+        s"""
+           |CREATE TABLE $table(c1 string)
+           |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $table
+           |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+           |SELECT 'blarr'
+         """.stripMargin)
+
+      // project list is the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
+        Row("a", "b", "c", "d", "e", "blarr") :: Nil)
+
+      // project list does not have the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
+        Row("b", "c", "d", "a", "e", "blarr") :: Nil)
+
+      // project list contains partial partition columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p1, p5, c1 FROM $table"),
+        Row("b", "a", "e", "blarr") :: Nil)
+    }
+  }
+
   test("SPARK-14981: DESC not supported for sorting columns") {
     withTable("t") {
       val cause = intercept[ParseException] {
@@ -1636,6 +1682,38 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("select (cast(99 as decimal(19,6)) + c1) * c2 from tbl"),
         Row(234.6)
       )
+    }
+  }
+
+  test("SPARK-16036: better error message when insert into a table with mismatch schema") {
+    withTable("hive_table", "datasource_table") {
+      sql("CREATE TABLE hive_table(a INT) PARTITIONED BY (b INT, c INT)")
+      sql("CREATE TABLE datasource_table(a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)")
+      val e1 = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE hive_table PARTITION(b=1, c=2) SELECT 1, 2, 3")
+      }
+      assert(e1.message.contains("the number of columns are different"))
+      val e2 = intercept[AnalysisException] {
+        sql("INSERT INTO TABLE datasource_table PARTITION(b=1, c=2) SELECT 1, 2, 3")
+      }
+      assert(e2.message.contains("the number of columns are different"))
+    }
+  }
+
+  test("SPARK-16037: INSERT statement should match columns by position") {
+    withTable("hive_table", "datasource_table") {
+      sql("CREATE TABLE hive_table(a INT) PARTITIONED BY (b INT, c INT)")
+      sql("CREATE TABLE datasource_table(a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)")
+
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql("INSERT INTO TABLE hive_table SELECT 1, 2 AS c, 3 AS b")
+        checkAnswer(sql("SELECT a, b, c FROM hive_table"), Row(1, 2, 3))
+        sql("INSERT OVERWRITE TABLE hive_table SELECT 1, 2, 3")
+        checkAnswer(sql("SELECT a, b, c FROM hive_table"), Row(1, 2, 3))
+      }
+
+      sql("INSERT INTO TABLE datasource_table SELECT 1, 2 AS c, 3 AS b")
+      checkAnswer(sql("SELECT a, b, c FROM datasource_table"), Row(1, 2, 3))
     }
   }
 }
