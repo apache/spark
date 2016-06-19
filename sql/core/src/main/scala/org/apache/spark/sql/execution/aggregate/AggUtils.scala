@@ -181,8 +181,8 @@ object AggUtils {
     val distinctAttributes = namedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    // 1. Create an Aggregate Operator for partial aggregations.
-    val partialMergeAggregate: SparkPlan = {
+    // 1. Create an Aggregate Operator for non-distinct aggregations.
+    val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregateExec(
@@ -217,8 +217,8 @@ object AggUtils {
         rewrittenDistinctFunctions.zipWithIndex.map { case (func, i) =>
           // We rewrite the aggregate function to a non-distinct aggregation because
           // its input will have distinct arguments.
-          // We just keep the isDistinct setting to true, so when users look at the query plan,
-          // they still can see distinct aggregations.
+          // We keep the isDistinct setting to true because this flag is used to generate partial
+          // aggregations and it is easy to see aggregation types in the query plan.
           val expr = AggregateExpression(func, Complete, isDistinct = true)
           // Use original AggregationFunction to lookup attributes, which is used to build
           // aggregateFunctionToAttribute
@@ -233,7 +233,7 @@ object AggUtils {
         aggregateAttributes = finalAggregateAttributes ++ distinctAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = resultExpressions,
-        child = partialMergeAggregate)
+        child = partialAggregate)
     }
 
     finalAndCompleteAggregate :: Nil
@@ -258,7 +258,7 @@ object AggUtils {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    val partialMerged1: SparkPlan = {
+    val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregateExec(
@@ -273,9 +273,9 @@ object AggUtils {
         child = child)
     }
 
-    val restored = StateStoreRestoreExec(groupingAttributes, None, partialMerged1)
+    val restored = StateStoreRestoreExec(groupingAttributes, None, partialAggregate)
 
-    val partialMerged2: SparkPlan = {
+    val partialMerged: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       createAggregateExec(
@@ -292,7 +292,7 @@ object AggUtils {
     // Note: stateId and returnAllStates are filled in later with preparation rules
     // in IncrementalExecution.
     val saved = StateStoreSaveExec(
-      groupingAttributes, stateId = None, returnAllStates = None, partialMerged2)
+      groupingAttributes, stateId = None, returnAllStates = None, partialMerged)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))
