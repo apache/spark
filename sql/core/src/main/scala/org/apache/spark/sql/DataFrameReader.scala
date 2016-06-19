@@ -45,7 +45,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def format(source: String): DataFrameReader = {
-    this.source = source
+    if (this.userSpecifiedSource.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: the input data source format has already been set. " +
+        s"Existing: `${this.userSpecifiedSource.get}`, new: `$source`.")
+    }
+    this.userSpecifiedSource = Option(source)
     this
   }
 
@@ -57,6 +62,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def schema(schema: StructType): DataFrameReader = {
+    if (this.userSpecifiedSchema.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: the input schema has already been set. " +
+          s"Existing: `${this.userSpecifiedSchema.get}`, new: `$schema`.")
+    }
     this.userSpecifiedSchema = Option(schema)
     this
   }
@@ -412,6 +422,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
+    if (userSpecifiedSource.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input data source format when reading table from " +
+        s"catalog. table: `$tableName`, format: `${userSpecifiedSource.get}`.")
+    }
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input schema when reading table from " +
+        s"catalog. table: `$tableName`, schema: `${userSpecifiedSchema.get}`.")
+    }
+    if (extraOptions.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input option when reading table from " +
+          s"catalog. table: `$tableName`, option: `${extraOptions.mkString(", ")}`.")
+    }
+
     Dataset.ofRows(sparkSession,
       sparkSession.sessionState.catalog.lookupRelation(
         sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
@@ -464,7 +490,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
+  private def source: String =
+    userSpecifiedSource.getOrElse(sparkSession.sessionState.conf.defaultDataSourceName)
+
+  private var userSpecifiedSource: Option[String] = None
 
   private var userSpecifiedSchema: Option[StructType] = None
 

@@ -19,7 +19,7 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -199,6 +199,68 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
     assert(LastOptions.parameters("intOpt") == "56")
     assert(LastOptions.parameters("boolOpt") == "false")
     assert(LastOptions.parameters("doubleOpt") == "6.7")
+  }
+
+  test("reading catalog table") {
+    val schema = StructType(StructField("c1", IntegerType) :: Nil)
+    val format = "parquet"
+    val df = spark.createDataFrame(sparkContext.parallelize(Row(3) :: Nil), schema)
+
+    val tableName = "tab"
+    withTable(tableName) {
+      df.write.format(format).mode("overwrite").saveAsTable(tableName)
+      // correct way:
+      spark.read.table(tableName)
+
+      // not allowed to specify format.
+      var e = intercept[IllegalArgumentException] {
+        spark.read.format(format).table(tableName)
+      }.getMessage
+      assert(e.contains("Operation not allowed: specifying the input data source format " +
+        "when reading table from catalog. table: `tab`, format: `parquet`"))
+
+      // not allowed to specify schema.
+      e = intercept[IllegalArgumentException] {
+        spark.read.schema(schema).table(tableName)
+      }.getMessage
+      assert(e.contains("Operation not allowed: specifying the input schema when reading table " +
+        "from catalog. table: `tab`, schema: `StructType(StructField(c1,IntegerType,true))`"))
+
+      // not allowed to specify options.
+      e = intercept[IllegalArgumentException] {
+        spark.read.options(Map("header" -> "true", "mode" -> "dropmalformed")).table(tableName)
+      }.getMessage
+      assert(e.contains("Operation not allowed: specifying the input option when reading table " +
+        "from catalog. table: `tab`, option: `header -> true, mode -> dropmalformed`"))
+    }
+  }
+
+  test("format or schema are specified twice") {
+    val schema1 = StructType(StructField("c1", IntegerType) :: Nil)
+    val schema2 = StructType(StructField("c2", IntegerType) :: Nil)
+    val format = "parquet"
+    val df = spark.createDataFrame(sparkContext.parallelize(Row(3) :: Nil), schema1)
+
+    withTempPath { path =>
+      df.write.format("json").mode("overwrite").save(path.getCanonicalPath)
+      // correct way:
+      spark.read.json(path.getCanonicalPath)
+
+      // not allowed to specify the format more than once
+      var e = intercept[IllegalArgumentException] {
+        spark.read.format(format).json(path.getCanonicalPath)
+      }.getMessage
+      assert(e.contains("Operation not allowed: the input data source format has already been " +
+        "set. Existing: `parquet`, new: `json`"))
+
+      // not allowed to specify the schema more than once.
+      e = intercept[IllegalArgumentException] {
+        spark.read.schema(schema1).schema(schema2).json(path.getCanonicalPath)
+      }.getMessage
+      assert(e.contains("Operation not allowed: the input schema has already been set. " +
+        "Existing: `StructType(StructField(c1,IntegerType,true))`, " +
+        "new: `StructType(StructField(c2,IntegerType,true))`"))
+    }
   }
 
   test("check jdbc() does not support partitioning or bucketing") {
