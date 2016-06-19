@@ -132,6 +132,7 @@ class GaussianMixtureSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
+
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
                       HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
