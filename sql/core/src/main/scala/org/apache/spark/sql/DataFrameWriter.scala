@@ -245,7 +245,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (partitioningColumns.isDefined) {
       throw new AnalysisException(
         "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns are defined by the table into which is being inserted."
+          "Partition columns have already be defined for the table. " +
+          "It is not necessary to use partitionBy()."
       )
     }
 
