@@ -365,15 +365,6 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
-  private[spark] lazy val expectedColumns = {
-    if (table.output.isEmpty) {
-      None
-    } else {
-      val staticPartCols = partition.filter(_._2.isDefined).keySet
-      Some(table.output.filterNot(a => staticPartCols.contains(a.name)))
-    }
-  }
-
   assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
   override lazy val resolved: Boolean =

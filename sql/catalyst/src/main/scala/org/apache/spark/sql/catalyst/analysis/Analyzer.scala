@@ -451,8 +451,31 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _, _) if child.resolved =>
+        val staticPartCols = parts.filter(_._2.isDefined).keySet
+        val table = EliminateSubqueryAliases(lookupTableFromCatalog(u))
+
+        val resolvedPartCols = staticPartCols.map { p =>
+          table.resolve(Seq(p), resolver).getOrElse {
+            throw new AnalysisException(
+              s"Can't resolve static partition column $p on table $table")
+          }
+        }
+
+        val expectedColumns = if (table.output.isEmpty) {
+          None
+        } else {
+          Some(table.output.filterNot(a => resolvedPartCols.exists(a)))
+        }
+
+        expectedColumns.forall { expected =>
+          child.output.size == expected.size && child.output.zip(expected).forall {
+            case (childAttr, tableAttr) =>
+              DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+          }
+        }
+
+        i.copy(table = table)
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&
