@@ -370,6 +370,9 @@ package object dsl {
         case plan => SubqueryAlias(alias, plan)
       }
 
+      def repartition(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = true, logicalPlan)
+
       def distribute(exprs: Expression*): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan)
 

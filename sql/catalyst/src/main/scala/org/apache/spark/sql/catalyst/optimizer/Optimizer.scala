@@ -86,6 +86,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
+      CollapseRepartitionBy,
       CollapseProject,
       CombineFilters,
       CombineLimits,
@@ -562,6 +563,16 @@ object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
       Repartition(numPartitions, shuffle, child)
+  }
+}
+
+/**
+ * Combines adjacent [[RepartitionByExpression]] operators.
+ */
+object CollapseRepartitionBy extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
   }
 }
 
