@@ -141,8 +141,6 @@ private[sql] class OrcFileFormat
         val physicalSchema = maybePhysicalSchema.get
         OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
 
-        // val orcRecordReader:
-        // MReduceRecordReader[_, org.apache.hadoop.hive.ql.io.orc.OrcStruct] = {
         val job = Job.getInstance(conf)
         FileInputFormat.setInputPaths(job, file.filePath)
 
@@ -170,11 +168,9 @@ private[sql] class OrcFileFormat
           OrcRelation.unwrapOrcStructs(
             conf,
             requiredSchema,
-            Some(orcRecordReader.asInstanceOf[SparkOrcNewRecordReaderBase]
-              .getObjectInspector.asInstanceOf[StructObjectInspector]),
+            Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
             new RecordReaderIterator[OrcStruct](orcRecordReader))
         }
-        // }
       }
     }
   }

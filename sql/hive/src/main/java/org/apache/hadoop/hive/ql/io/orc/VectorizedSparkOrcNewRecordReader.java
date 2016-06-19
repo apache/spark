@@ -24,21 +24,14 @@ import java.util.List;
 import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.common.type.Decimal128;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterFactory;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
@@ -52,19 +45,16 @@ import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * This is based on hive-exec-1.2.1
- * {@link org.apache.hadoop.hive.ql.io.orc.OrcNewInputFormat.OrcRecordReader}.
- * This class exposes getObjectInspector which can be used for reducing
- * NameNode calls in OrcRelation.
+ * A RecordReader that returns InternalRow for Spark SQL execution.
+ * This reader uses an internal reader that returns Hive's VectorizedRowBatch. An adapter
+ * class is used to return internal row by directly accessing data in column vectors.
  */
 public class VectorizedSparkOrcNewRecordReader
-    extends org.apache.hadoop.mapreduce.RecordReader<NullWritable, InternalRow>
-    implements SparkOrcNewRecordReaderBase {
+    extends org.apache.hadoop.mapreduce.RecordReader<NullWritable, InternalRow> {
   private final org.apache.hadoop.mapred.RecordReader<NullWritable, VectorizedRowBatch> reader;
   private final int numColumns;
   private VectorizedRowBatch internalValue;
   private float progress = 0.0f;
-  private ObjectInspector objectInspector;
   private List<Integer> columnIDs;
 
   private long numRowsOfBatch = 0;
@@ -82,7 +72,6 @@ public class VectorizedSparkOrcNewRecordReader
     this.reader = new SparkVectorizedOrcRecordReader(file, conf,
       new org.apache.hadoop.mapred.FileSplit(fileSplit));
 
-    this.objectInspector = file.getObjectInspector();
     this.columnIDs = columnIDs;
     this.internalValue = this.reader.createValue();
     this.progress = reader.getProgress();
@@ -150,11 +139,6 @@ public class VectorizedSparkOrcNewRecordReader
     }
   }
 
-  @Override
-  public ObjectInspector getObjectInspector() {
-    return objectInspector;
-  }
-
   /**
    * Adapter class to return an internal row.
    */
@@ -169,7 +153,7 @@ public class VectorizedSparkOrcNewRecordReader
     }
 
     @Override
-    public int numFields() { return columns.length; }
+    public int numFields() { return columnIDs.size(); }
 
     @Override
     public boolean anyNull() {
@@ -293,9 +277,13 @@ public class VectorizedSparkOrcNewRecordReader
     public byte[] getBinary(int ordinal) {
       BytesColumnVector col = (BytesColumnVector)columns[columnIDs.get(ordinal)];
       if (col.isRepeating) {
-        return (byte[])col.vector[0];
+        byte[] binary = new byte[col.length[0]];
+        System.arraycopy(col.vector[0], col.start[0], binary, 0, binary.length);
+        return binary;
       } else {
-        return (byte[])col.vector[rowId];
+        byte[] binary = new byte[col.length[rowId]];
+        System.arraycopy(col.vector[rowId], col.start[rowId], binary, 0, binary.length);
+        return binary;
       }
     }
 
