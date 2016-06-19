@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -376,5 +377,32 @@ class AnalysisSuite extends AnalysisTest {
     assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
+  }
+
+  test("InsertIntoTable's expectedColumns support case-insensitive resolution properly") {
+    val data = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", StringType)(),
+      AttributeReference("c", DoubleType)(),
+      AttributeReference("d", DecimalType(10, 2))())
+
+    val insertIntoTable = InsertIntoTable(testRelation2,
+      Map("E" -> Some("1")), data, overwrite = false, ifNotExists = false)
+
+    val caseSensitiveAnalyzer = getAnalyzer(true)
+    val caseInSensitiveAnalyzer = getAnalyzer(false)
+    intercept[AnalysisException] {
+      caseSensitiveAnalyzer.execute(insertIntoTable)
+    }
+    val caseInSensitiveAnalysisAttempt = caseInSensitiveAnalyzer.execute(insertIntoTable)
+    caseInSensitiveAnalyzer.checkAnalysis(caseInSensitiveAnalysisAttempt)
+
+    val expectedColumns =
+      caseInSensitiveAnalysisAttempt.asInstanceOf[InsertIntoTable].expectedColumns
+
+    assert(expectedColumns.isDefined && expectedColumns.get.length == data.output.length)
+    expectedColumns.get.zip(data.output).map { case (expected, output) =>
+      DataType.equalsIgnoreCompatibleNullability(expected.dataType, output.dataType)
+    }
   }
 }

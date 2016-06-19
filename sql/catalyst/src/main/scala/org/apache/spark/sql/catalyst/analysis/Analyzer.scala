@@ -466,7 +466,7 @@ class Analyzer(
         val expectedColumns = if (table.output.isEmpty) {
           None
         } else {
-          Some(table.output.filterNot(a => resolvedPartCols.exists(a.equals(_))))
+          Some(table.output.filterNot(a => resolvedPartCols.exists(a.semanticEquals(_))))
         }
         i.copy(expectedColumns = expectedColumns)
       case u: UnresolvedRelation =>
