@@ -40,10 +40,9 @@ class PlannerSuite extends SharedSQLContext {
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = spark.sessionState.planner
     import planner._
-    val plannedOption = Aggregation(query).headOption
-    val planned =
-      plannedOption.getOrElse(
-        fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
+    val ensureRequirements = EnsureRequirements(spark.sessionState.conf)
+    val planned = Aggregation(query).headOption.map(ensureRequirements(_))
+      .getOrElse(fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
     // For the new aggregation code path, there will be four aggregate operator for
