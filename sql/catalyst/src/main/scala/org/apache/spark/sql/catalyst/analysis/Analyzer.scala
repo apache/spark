@@ -451,7 +451,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _, _) if child.resolved =>
         val staticPartCols = parts.filter(_._2.isDefined).keySet
         val table = EliminateSubqueryAliases(lookupTableFromCatalog(u))
 
