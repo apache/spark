@@ -2221,7 +2221,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
       y
     })
   actual <- df3Collect[order(df3Collect$a), ]
-  expect_identical(actual, expected)
+  expect_identical(actual$avg, expected$avg)
 
   irisDF <- suppressWarnings(createDataFrame (iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
