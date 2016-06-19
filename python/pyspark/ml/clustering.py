@@ -64,7 +64,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         `trainingSummary is None`.
         """
         java_gmt_summary = self._call_java("summary")
-        return GaussianMixtureTrainingSummary(java_gmt_summary)
+        return GaussianMixtureSummary(java_gmt_summary)
 
     @property
     @since("2.0.0")
@@ -74,20 +74,6 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         instance.
         """
         return self._call_java("hasSummary")
-
-    @since("2.0.0")
-    def evaluate(self, dataset):
-        """
-        Evaluates the model on a test dataset.
-
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
-        """
-        if not isinstance(dataset, DataFrame):
-            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
-        java_gmt_summary = self._call_java("evaluate", dataset)
-        return GaussianMixtureSummary(java_gmt_summary)
 
 
 class GaussianMixtureSummary(JavaWrapper):
@@ -146,36 +132,6 @@ class GaussianMixtureSummary(JavaWrapper):
         """
         return self._call_java("clusterSizes")
 
-
-@inherit_doc
-class GaussianMixtureTrainingSummary(GaussianMixtureSummary):
-    """
-    Abstraction for Gaussian Mixture Training results.
-    Currently, the training summary ignores the training weights except
-    for the objective trace.
-
-    .. versionadded:: 2.0.0
-    """
-
-    @property
-    @since("2.0.0")
-    def objectiveHistory(self):
-        """
-        Objective function (scaled loss + regularization) at each
-        iteration.
-        """
-        return self._call_java("objectiveHistory")
-
-    @property
-    @since("2.0.0")
-    def totalIterations(self):
-        """
-        Number of training iterations until termination.
-        """
-        return self._call_java("totalIterations")
-
-
-@inherit_doc
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
                       HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
