@@ -452,8 +452,9 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _, _) if child.resolved =>
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case i @ InsertIntoTable(table, parts, child, _, _, None) if child.resolved =>
         val staticPartCols = parts.filter(_._2.isDefined).keySet
-        val table = EliminateSubqueryAliases(lookupTableFromCatalog(u))
 
         val resolvedPartCols = staticPartCols.map { p =>
           table.resolve(Seq(p), resolver).getOrElse {
@@ -467,7 +468,7 @@ class Analyzer(
         } else {
           Some(table.output.filterNot(a => resolvedPartCols.exists(a.equals(_))))
         }
-        i.copy(table = table, expectedColumns = expectedColumns)
+        i.copy(expectedColumns = expectedColumns)
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&
