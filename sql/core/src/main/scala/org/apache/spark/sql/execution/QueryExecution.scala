@@ -81,10 +81,12 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
-
-  // Set the start time for the entire plan.
-  executedPlan.setStartTimeMs(System.currentTimeMillis())
+  lazy val executedPlan: SparkPlan = {
+    // Set the start time for the entire plan.
+    val plan = prepareForExecution(sparkPlan)
+    plan.setStartTimeMs(System.currentTimeMillis())
+    plan
+  }
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()

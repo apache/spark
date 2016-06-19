@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.metric
 
@@ -153,16 +153,10 @@ object SQLMetrics {
    * A function that defines how we aggregate the final accumulator results among all tasks,
    * and represent it in string for a SQL physical operator.
    */
-<<<<<<< b482c09fa22c5762a355f95820e4ba3e2517fb77
-  def stringValue(metricsType: String, values: Seq[Long]): String = {
-    if (metricsType == SUM_METRIC) {
-      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
-      numberFormat.format(values.sum)
-    } else {
-=======
   def stringValue(metricsType: String, values: Seq[Long]): String = metricsType match {
     case SUM_METRIC =>
-      NumberFormat.getInstance().format(values.sum)
+      val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+      numberFormat.format(values.sum)
 
     case BLOCKING_TIME_METRIC =>
       val validValues = values.filter(_ >= 0)
@@ -173,7 +167,6 @@ object SQLMetrics {
       }
 
     case _ =>
->>>>>>> Rework based on #10116
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
       } else if (metricsType == TIMING_METRIC) {
