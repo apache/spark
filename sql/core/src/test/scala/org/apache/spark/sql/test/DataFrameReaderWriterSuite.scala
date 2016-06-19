@@ -249,8 +249,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
           sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
           Row("cl1", "test") :: Nil)
         // Verify the schema
-        val expectedFields = schema.fields.map(f => f.copy(nullable = true))
-        assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+        assert(spark.table(tableName).schema == schema.asNullable)
       }
     }
   }
