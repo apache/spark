@@ -446,7 +446,7 @@ case class DataSource(
           }.getOrElse(Seq.empty[String])
           // TODO: Case sensitivity.
           val sameColumns =
-            existingPartitionColumns.map(_.toLowerCase) == partitionColumns.map(_.toLowerCase)
+            existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
           if (existingPartitionColumns.size > 0 && !sameColumns) {
             throw new AnalysisException(
               s"""Requested partitioning does not match existing partitioning.
