@@ -298,6 +298,36 @@ private[ann] class LinearFunction extends ActivationFunction {
 }
 
 /**
+ * Implements relu activation function
+ */
+private[ann] class ReluFunction extends ActivationFunction {
+
+  override def eval: (Double) => Double = x => {
+    if (x > 0) x
+    else 0
+  }
+
+  override def derivative: (Double) => Double = z => {
+    if (z > 0) 1
+    else 0
+  }
+}
+
+/**
+ * Implements tanh activation function
+ */
+private[ann] class TanhFunction extends ActivationFunction {
+
+  override def eval: (Double) => Double = x => {
+    ( 2 / (1 + math.exp(-2 * x))) - 1
+  }
+
+  override def derivative: (Double) => Double = z => {
+    1 - math.pow((( 2 / (1 + math.exp(-2 * z))) - 1), 2)
+  }
+}
+
+/**
  * Functional layer properties, y = f(x)
  *
  * @param activationFunction activation function
@@ -443,7 +473,7 @@ private[ml] object FeedForwardTopology {
             new SigmoidLayerWithSquaredError()
           }
         } else {
-          new FunctionalLayer(new SigmoidFunction())
+          new FunctionalLayer(new TanhFunction())
         }
     }
     FeedForwardTopology(layers)
@@ -464,7 +494,7 @@ private[ml] object FeedForwardTopology {
         if (i == layerSizes.length - 2) {
           new LinearLayerWithSquaredError()
         } else {
-          new FunctionalLayer(new SigmoidFunction())
+          new FunctionalLayer(new TanhFunction())
         }
     }
     FeedForwardTopology(layers)
