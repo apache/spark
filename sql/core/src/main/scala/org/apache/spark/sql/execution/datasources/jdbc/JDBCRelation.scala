@@ -59,10 +59,10 @@ private[sql] object JDBCRelation {
 
     val lowerBound = partitioning.lowerBound
     val upperBound = partitioning.upperBound
-    if (lowerBound > upperBound) {
-      throw new IllegalArgumentException("Operation not allowed: the lower bound of partitioning " +
-        s"column is larger than the upper bound. lowerBound: $lowerBound; higherBound: $upperBound")
-    }
+    require (lowerBound <= upperBound,
+      "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
+      s"bound. lowerBound: $lowerBound; higherBound: $upperBound")
+
     val numPartitions =
       if ((upperBound - lowerBound) >= partitioning.numPartitions) {
         partitioning.numPartitions
