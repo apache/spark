@@ -52,29 +52,42 @@ private[sql] object JDBCRelation {
    * @return an array of partitions with where clause for each partition
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
-    if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
+    if (partitioning == null || partitioning.numPartitions <= 1 ||
+      partitioning.lowerBound == partitioning.upperBound) {
+      return Array[Partition](JDBCPartition(null, 0))
+    }
 
-    val numPartitions = partitioning.numPartitions
+    val lowerBound = partitioning.lowerBound
+    val upperBound = partitioning.upperBound
+    if (lowerBound > upperBound) {
+      throw new IllegalArgumentException("Operation not allowed: the lower bound of partitioning " +
+        s"column is larger than the upper bound. lowerBound: $lowerBound; higherBound: $upperBound")
+    }
+    val numPartitions =
+      if ((upperBound - lowerBound) >= partitioning.numPartitions) {
+        partitioning.numPartitions
+      } else {
+        upperBound - lowerBound
+      }
     val column = partitioning.column
-    if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = (partitioning.upperBound / numPartitions
-                      - partitioning.lowerBound / numPartitions)
+    val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
+    assert(stride >= 1)
     var i: Int = 0
-    var currentValue: Long = partitioning.lowerBound
+    var currentValue: Long = lowerBound
     var ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
-      val lowerBound = if (i != 0) s"$column >= $currentValue" else null
+      val lBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
-      val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+      val uBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
       val whereClause =
-        if (upperBound == null) {
-          lowerBound
-        } else if (lowerBound == null) {
-          s"$upperBound or $column is null"
+        if (uBound == null) {
+          lBound
+        } else if (lBound == null) {
+          s"$uBound or $column is null"
         } else {
-          s"$lowerBound AND $upperBound"
+          s"$lBound AND $uBound"
         }
       ans += JDBCPartition(whereClause, i)
       i = i + 1
