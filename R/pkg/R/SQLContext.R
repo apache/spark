@@ -330,9 +330,9 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
   }
 }
 
-#' Create a SparkDataFrame from a ORC file.
+#' Create a SparkDataFrame from an ORC file.
 #'
-#' Loads a ORC file, returning the result as a SparkDataFrame.
+#' Loads an ORC file, returning the result as a SparkDataFrame.
 #'
 #' @param path Path of file to read.
 #' @return SparkDataFrame

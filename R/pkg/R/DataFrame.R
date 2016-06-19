@@ -701,9 +701,9 @@ setMethod("write.json",
             invisible(callJMethod(write, "json", path))
           })
 
-#' Save the contents of SparkDataFrame as a ORC file, preserving the schema.
+#' Save the contents of SparkDataFrame as an ORC file, preserving the schema.
 #'
-#' Save the contents of a SparkDataFrame as a ORC file, preserving the schema. Files written out
+#' Save the contents of a SparkDataFrame as an ORC file, preserving the schema. Files written out
 #' with this method can be read back in as a SparkDataFrame using read.orc().
 #'
 #' @param x A SparkDataFrame
