@@ -249,7 +249,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
-    val partitions = normalizedParCols.map(_.map(col => col -> Option.empty[String]).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
     // A partitioned relation's schema can be different from the input logicalPlan, since
@@ -265,7 +264,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
-        partitions.getOrElse(Map.empty[String, Option[String]]),
+        Map.empty[String, Option[String]],
         input,
         overwrite,
         ifNotExists = false)).toRdd
