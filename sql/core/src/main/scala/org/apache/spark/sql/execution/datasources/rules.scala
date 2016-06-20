@@ -67,7 +67,7 @@ private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[Lo
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-private[sql] object PreprocessTableInsertion extends Rule[LogicalPlan] {
+private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -84,7 +84,13 @@ private[sql] object PreprocessTableInsertion extends Rule[LogicalPlan] {
     if (insert.partition.nonEmpty) {
       // the query's partitioning must match the table's partitioning
       // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
-      if (insert.partition.keySet != partColNames.toSet) {
+      val samePartitionColumns =
+        if (conf.caseSensitiveAnalysis) {
+          insert.partition.keySet == partColNames.toSet
+        } else {
+          insert.partition.keySet.map(_.toLowerCase) == partColNames.map(_.toLowerCase).toSet
+        }
+      if (!samePartitionColumns) {
         throw new AnalysisException(
           s"""
              |Requested partitioning does not match the table $tblName:
@@ -94,7 +100,8 @@ private[sql] object PreprocessTableInsertion extends Rule[LogicalPlan] {
       }
       expectedColumns.map(castAndRenameChildOutput(insert, _)).getOrElse(insert)
     } else {
-      // All partition columns are dynamic because this InsertIntoTable had no partitioning
+      // All partition columns are dynamic because because the InsertIntoTable command does
+      // not explicitly specify partitioning columns.
       expectedColumns.map(castAndRenameChildOutput(insert, _)).getOrElse(insert)
         .copy(partition = partColNames.map(_ -> None).toMap)
     }

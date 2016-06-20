@@ -369,6 +369,8 @@ case class InsertIntoTable(
     if (table.output.isEmpty) {
       None
     } else {
+      // Note: The parser (visitPartitionSpec in AstBuilder) already turns
+      // keys in partition to their lowercase forms.
       val staticPartCols = partition.filter(_._2.isDefined).keySet
       Some(table.output.filterNot(a => staticPartCols.contains(a.name)))
     }
