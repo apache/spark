@@ -1406,6 +1406,7 @@ test_that("pivot GroupedData column", {
   sum1 <- collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
   sum2 <- collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
   sum3 <- collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
+  sum4 <- collect(sum(pivot(groupBy(df, "year"), "course", "R"), "earnings"))
 
   correct_answer <- data.frame(
     year = c(2013, 2014, 2015, 2016),
@@ -1415,6 +1416,10 @@ test_that("pivot GroupedData column", {
   expect_equal(sum1, correct_answer)
   expect_equal(sum2, correct_answer)
   expect_equal(sum3, correct_answer)
+  expect_equal(sum4, correct_answer[, c("year", "R")])
+
+  expect_error(collect(sum(pivot(groupBy(df, "year"), "course", c("R", "R")), "earnings")))
+  expect_error(collect(sum(pivot(groupBy(df, "year"), "course", list("R", "R")), "earnings")))
 })
 
 test_that("arrange() and orderBy() on a DataFrame", {

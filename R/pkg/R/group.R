@@ -138,7 +138,7 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #'
 #' @param x a GroupedData object
 #' @param colname A column name
-#' @param values A list or vector of distinct values for the output columns.
+#' @param values A value or a list/vector of distinct values for the output columns.
 #' @return GroupedData object
 #' @rdname pivot
 #' @family agg
@@ -152,6 +152,7 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #'     year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
 #' ))
 #' collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
+#' collect(sum(pivot(groupBy(df, "year"), "course", "R"), "earnings"))
 #' collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
 #' collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
 #' }
@@ -163,7 +164,7 @@ setMethod("pivot",
               result <- callJMethod(x@sgd, "pivot", colname)
             } else {
               if (length(values) > length(unique(values))) {
-                stop("Values in list are not unique")
+                stop("Values are not unique")
               }
               result <- callJMethod(x@sgd, "pivot", colname, as.list(values))
             }
