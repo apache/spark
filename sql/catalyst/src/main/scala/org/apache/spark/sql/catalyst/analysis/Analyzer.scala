@@ -733,6 +733,24 @@ class Analyzer(
     }
   }
 
+  protected[sql] def resolveFunction(func: UnresolvedFunction) = {
+    catalog.lookupFunction(func.name, func.children) match {
+      // DISTINCT is not meaningful for a Max or a Min.
+      case max: Max if func.isDistinct =>
+        AggregateExpression(max, Complete, isDistinct = false)
+      case min: Min if func.isDistinct =>
+        AggregateExpression(min, Complete, isDistinct = false)
+      // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+      // the context of a Window clause. They do not need to be wrapped in an
+      // AggregateExpression.
+      case wf: AggregateWindowFunction => wf
+      // We get an aggregate function, we need to wrap it in an AggregateExpression.
+      case agg: AggregateFunction => AggregateExpression(agg, Complete, func.isDistinct)
+      // This function is not an aggregate function, just return the resolved one.
+      case other => other
+    }
+  }
+
  /**
   * In many dialects of SQL it is valid to use ordinal positions in order/sort by and group by
   * clauses. This rule is to convert ordinal positions to the corresponding expressions in the
@@ -916,21 +934,7 @@ class Analyzer(
             }
           case u @ UnresolvedFunction(funcId, children, isDistinct) =>
             withPosition(u) {
-              catalog.lookupFunction(funcId, children) match {
-                // DISTINCT is not meaningful for a Max or a Min.
-                case max: Max if isDistinct =>
-                  AggregateExpression(max, Complete, isDistinct = false)
-                case min: Min if isDistinct =>
-                  AggregateExpression(min, Complete, isDistinct = false)
-                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-                // the context of a Window clause. They do not need to be wrapped in an
-                // AggregateExpression.
-                case wf: AggregateWindowFunction => wf
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
-                // This function is not an aggregate function, just return the resolved one.
-                case other => other
-              }
+              resolveFunction(u)
             }
         }
     }

@@ -25,7 +25,6 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
@@ -601,27 +600,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitCreateMacro(ctx: CreateMacroContext): LogicalPlan = withOrigin(ctx) {
     val arguments = Option(ctx.colTypeList).map(visitColTypeList(_))
-      .getOrElse(Seq.empty[StructField]).map { col =>
-      AttributeReference(col.name, col.dataType, col.nullable, col.metadata)() }
-    val colToIndex: Map[String, Int] = arguments.map(_.name).zipWithIndex.toMap
-    if (colToIndex.size != arguments.size) {
-      throw operationNotAllowed(
-        s"Cannot support duplicate colNames for CREATE TEMPORARY MACRO ", ctx)
-    }
-    val macroFunction = expression(ctx.expression).transformUp {
-      case u: UnresolvedAttribute =>
-        val index = colToIndex.get(u.name).getOrElse(
-          throw new ParseException(
-            s"Cannot find colName: [${u}] for CREATE TEMPORARY MACRO", ctx))
-        BoundReference(index, arguments(index).dataType, arguments(index).nullable)
-      case _: SubqueryExpression =>
-        throw operationNotAllowed(s"Cannot support Subquery for CREATE TEMPORARY MACRO", ctx)
-    }
-
+      .getOrElse(Seq.empty[StructField])
+    val e = expression(ctx.expression)
     CreateMacroCommand(
       ctx.macroName.getText,
-      arguments,
-      macroFunction)
+        MacroFunctionWrapper(arguments, e))
   }
 
   /**
