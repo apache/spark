@@ -1135,6 +1135,10 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
+#' @rdname spark_partition_id
+#' @export
+setGeneric("spark_partition_id", function(x) { standardGeneric("spark_partition_id") })
+
 #' @rdname sd
 #' @export
 setGeneric("stddev", function(x) { standardGeneric("stddev") })

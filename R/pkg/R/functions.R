@@ -1206,6 +1206,27 @@ setMethod("soundex",
             column(jc)
           })
 
+#' Return the partition ID as a column
+#'
+#' Return the partition ID of the Spark task as a SparkDataFrame column.
+#' Note that this is nondeterministic because it depends on data partitioning and
+#' task scheduling.
+#'
+#' This is equivalent to the SPARK_PARTITION_ID function in SQL.
+#'
+#' @rdname spark_partition_id
+#' @name spark_partition_id
+#' @export
+#' @examples
+#' \dontrun{select(df, spark_partition_id())}
+#' @note spark_partition_id since 2.0.0
+setMethod("spark_partition_id",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "spark_partition_id")
+            column(jc)
+          })
+
 #' @rdname sd
 #' @name stddev
 setMethod("stddev",
