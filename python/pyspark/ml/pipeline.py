@@ -19,7 +19,7 @@ from pyspark import SparkContext
 from pyspark import keyword_only, since
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import MLReadable, MLWritable, TransformerWrapper
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, TransformerWrapper
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py
 from pyspark.sql import SQLContext
@@ -87,7 +87,7 @@ class PipelineWrapper(object):
 
 
 @inherit_doc
-class Pipeline(PipelineWrapper, JavaEstimator, MLReadable, MLWritable):
+class Pipeline(PipelineWrapper, JavaEstimator, JavaMLReadable, JavaMLWritable):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
     of a sequence of stages, each of which is either an
@@ -250,7 +250,7 @@ class Pipeline(PipelineWrapper, JavaEstimator, MLReadable, MLWritable):
 
 
 @inherit_doc
-class PipelineModel(PipelineWrapper, JavaModel, MLReadable, MLWritable):
+class PipelineModel(PipelineWrapper, JavaModel, JavaMLReadable, JavaMLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
 
