@@ -141,7 +141,6 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' @param values A value or a list/vector of distinct values for the output columns.
 #' @return GroupedData object
 #' @rdname pivot
-#' @family agg
 #' @name pivot
 #' @export
 #' @examples
@@ -158,8 +157,9 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' }
 #' @note pivot since 2.0.0
 setMethod("pivot",
-          signature(x = "GroupedData"),
+          signature(x = "GroupedData", colname = "character"),
           function(x, colname, values = list()){
+            stopifnot(length(colname) == 1)
             if (length(values) == 0) {
               result <- callJMethod(x@sgd, "pivot", colname)
             } else {
