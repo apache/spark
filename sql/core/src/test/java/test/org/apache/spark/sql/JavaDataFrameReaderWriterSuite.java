@@ -111,7 +111,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testTextFileAPI() {
-    spark.read().textFile();     // Disabled because of SPARK-XXXXX
+    spark.read().textFile();
     spark.read().textFile(input);
     spark.read().textFile(input, input, input);
     spark.read().textFile(new String[]{input, input});
