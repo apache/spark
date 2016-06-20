@@ -150,16 +150,9 @@ createMethods()
 #' Applies a R function to each group in the input GroupedData
 #'
 #' @param x a GroupedData
-#' @param func A function to be applied to each group partition specified by GroupedData.
-#'             The function `func` takes as argument a key - grouping columns and
-#'             a data frame - a local R data.frame.
-#'             The output of `func` is a local R data.frame.
-#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
-#'               The schema must match to output of `func`. It has to be defined for each
-#'               output column with preferred output column name and corresponding data type.
-#' @return a SparkDataFrame
 #' @rdname gapply
 #' @name gapply
+#' @seealso gapplyCollect \link{gapplyCollect}
 #' @examples
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping
@@ -205,8 +198,9 @@ setMethod("gapply",
 #'             a data frame - a local R data.frame.
 #'             The output of `func` is a local R data.frame.
 #' @return a SparkDataFrame
-#' @rdname gapply
+#' @rdname gapplyCollect
 #' @name gapplyCollect
+#' @seealso gapply \link{gapply}
 #' @examples
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping

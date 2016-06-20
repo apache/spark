@@ -1269,7 +1269,7 @@ setMethod("dapplyCollect",
 
 #' gapply
 #'
-#' Group the SparkDataFrame using the specified columns and apply the R function to each
+#' Groups the SparkDataFrame using the specified columns and applies the R function to each
 #' group.
 #'
 #' @param x A SparkDataFrame
@@ -1349,16 +1349,10 @@ setMethod("gapply",
 
 #' gapplyCollect
 #'
-#' Group the SparkDataFrame using the specified columns and apply the R function to each
+#' Groups the SparkDataFrame using the specified columns, applies the R function to each
 #' group and collects the result back to R as data.frame.
 #'
 #' @param x A SparkDataFrame
-#' @param cols Grouping columns
-#' @param func A function to be applied to each group partition specified by grouping
-#'             column of the SparkDataFrame. The function `func` takes as argument
-#'             a key - grouping columns and a data frame - a local R data.frame.
-#'             The output of `func` is a local R data.frame.
-#' @family SparkDataFrame functions
 #' @rdname gapplyCollect
 #' @name gapplyCollect
 #' @export
@@ -1367,10 +1361,6 @@ setMethod("gapply",
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping
 #' on the first and third columns. Output the grouping values and the average.
-#'
-#' df <- createDataFrame (
-#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
-#'   c("a", "b", "c", "d"))
 #'
 #' result <- gapplyCollect(
 #'   df,
@@ -1401,7 +1391,7 @@ setMethod("gapply",
 #'     data.frame(t(coef(m)))
 #'   })
 #'
-#'Result
+#' Result
 #'---------
 #' Model  X.Intercept.  Sepal_Width  Petal_Length  Petal_Width
 #' 1        0.699883    0.3303370    0.9455356    -0.1697527
