@@ -155,18 +155,18 @@ class AggregateBenchmark extends BenchmarkBase {
     println("Sleeping for 5 seconds before starting...")
     Thread.sleep(5000L)
 
-    benchmark.addCase(s"codegen = F hashmap = F cache = F", numIters) { iter =>
-      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 0)
-      run()
-    }
-
-//    benchmark.addCase(s"codegen = F hashmap = F cache = T compress = F", numIters) { iter =>
+//    benchmark.addCase(s"codegen = F hashmap = F cache = F", numIters) { iter =>
 //      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
 //      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 0)
-//      sparkSession.conf.set("spark.sql.inMemoryColumnarStorage.compressed", value = false)
-//      run(cache = true)
+//      run()
 //    }
+
+    benchmark.addCase(s"codegen = F hashmap = F cache = T compress = F", numIters) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 0)
+      sparkSession.conf.set("spark.sql.inMemoryColumnarStorage.compressed", value = false)
+      run(cache = true)
+    }
 
 //    benchmark.addCase(s"codegen = F hashmap = F cache = T compress = T", numIters) { iter =>
 //      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
