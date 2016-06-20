@@ -933,7 +933,7 @@ setMethod("minute",
 #' @examples \dontrun{select(df, monotonically_increasing_id())}
 setMethod("monotonically_increasing_id",
           signature(x = "missing"),
-          function(x) {
+          function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "monotonically_increasing_id")
             column(jc)
           })
