@@ -297,6 +297,18 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     }
   }
 
+  test("Resolve dynamic partition columns") {
+    withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+      sql("CREATE TABLE partitioned (id bigint) PARTITIONED BY (data string, part string)")
+      val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
+          .toDF("id", "data2", "part")
+
+      // Dynamic partition columns are resolved by ordering, not name.
+      data.write.insertInto("partitioned")
+      checkAnswer(sql("SELECT * FROM partitioned"), data.collect().toSeq)
+    }
+  }
+
   test("Test partition mode = strict") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "strict")) {
       sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
