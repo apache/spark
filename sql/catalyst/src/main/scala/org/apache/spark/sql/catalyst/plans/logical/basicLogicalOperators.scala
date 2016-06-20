@@ -369,7 +369,7 @@ case class InsertIntoTable(
   assert(overwrite || !ifNotExists)
   assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
   override lazy val resolved: Boolean =
-    childrenResolved && table.resolved && expectedColumns.isDefined &&
+    childrenResolved && table.resolved && (expectedColumns.isDefined || table.output.isEmpty) &&
     expectedColumns.forall { expected =>
       child.output.size == expected.size && child.output.zip(expected).forall {
         case (childAttr, tableAttr) =>
