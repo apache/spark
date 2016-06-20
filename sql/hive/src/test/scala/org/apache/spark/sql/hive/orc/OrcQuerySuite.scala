@@ -52,6 +52,7 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
+
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
