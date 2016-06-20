@@ -435,7 +435,7 @@ class JDBCSuite extends SparkFunSuite
       )
     }.getMessage
     assert(e.contains("Operation not allowed: the lower bound of partitioning column " +
-      "is larger than the upper bound. lowerBound: 5; higherBound: 1"))
+      "is larger than the upper bound. Lower bound: 5; Upper bound: 1"))
   }
 
   test("SELECT * on partitioned table with a nullable partition column") {

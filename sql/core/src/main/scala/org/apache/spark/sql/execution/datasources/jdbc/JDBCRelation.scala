@@ -61,7 +61,7 @@ private[sql] object JDBCRelation {
     val upperBound = partitioning.upperBound
     require (lowerBound <= upperBound,
       "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
-      s"bound. lowerBound: $lowerBound; higherBound: $upperBound")
+      s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
 
     val numPartitions =
       if ((upperBound - lowerBound) >= partitioning.numPartitions) {
@@ -69,11 +69,13 @@ private[sql] object JDBCRelation {
       } else {
         upperBound - lowerBound
       }
-    val column = partitioning.column
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
-    assert(stride >= 1)
+    // The automatic adjustment of numPartitions can ensure the following checking condition.
+    assert(stride >= 1, "The specified number of partitions should be greater than " +
+      "the difference between upper bound and lower bound")
+    val column = partitioning.column
     var i: Int = 0
     var currentValue: Long = lowerBound
     var ans = new ArrayBuffer[Partition]()
