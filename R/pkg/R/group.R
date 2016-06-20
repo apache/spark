@@ -58,7 +58,7 @@ setMethod("show", "GroupedData",
 #'
 #' @param x a GroupedData
 #' @return a SparkDataFrame
-#' @rdname agg
+#' @rdname count
 #' @export
 #' @examples
 #' \dontrun{
@@ -83,6 +83,7 @@ setMethod("count",
 #' @rdname summarize
 #' @name agg
 #' @family agg_funcs
+#' @export
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
@@ -160,6 +161,7 @@ createMethods()
 #' @return a SparkDataFrame
 #' @rdname gapply
 #' @name gapply
+#' @export
 #' @examples
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping
