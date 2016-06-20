@@ -241,7 +241,10 @@ class PowerIterationClustering @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PowerIterationClusteringModel = {
     val rdd: RDD[(Long, Long, Double)] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) => point.asInstanceOf[(Long, Long, Double)]
+      case Row(point: Vector) =>
+        val array = point.toArray
+        require(array.size == 3, "The number of elements in each row must be 3.")
+        (array(0).toLong, array(1).toLong, array(2))
     }
 
     val algo = new MLlibPowerIterationClustering()
