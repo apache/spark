@@ -129,6 +129,47 @@ methods <- c("avg", "max", "mean", "min", "sum")
 # These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
 # "variance", "var_samp", "var_pop"
 
+#' Pivot a column of the GroupedData and perform the specified aggregation.
+#'
+#' Pivot a column of the GroupedData and perform the specified aggregation.
+#' There are two versions of pivot function: one that requires the caller to specify the list
+#' of distinct values to pivot on, and one that does not. The latter is more concise but less
+#' efficient, because Spark needs to first compute the list of distinct values internally.
+#'
+#' @param x a GroupedData object
+#' @param colname A column name
+#' @param values A list or vector of distinct values for the output columns.
+#' @return GroupedData object
+#' @rdname pivot
+#' @family agg
+#' @name pivot
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(data.frame(
+#'     earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+#'     course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+#'     year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+#' ))
+#' collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
+#' collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
+#' collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
+#' }
+#' @note pivot since 2.0.0
+setMethod("pivot",
+          signature(x = "GroupedData"),
+          function(x, colname, values = list()){
+            if (length(values) == 0) {
+              result <- callJMethod(x@sgd, "pivot", colname)
+            } else {
+              if (length(values) > length(unique(values))) {
+                stop("Values in list are not unique")
+              }
+              result <- callJMethod(x@sgd, "pivot", colname, as.list(values))
+            }
+            groupedData(result)
+          })
+
 createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
