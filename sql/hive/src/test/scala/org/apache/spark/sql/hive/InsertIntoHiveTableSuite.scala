@@ -372,4 +372,24 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       assert(!logical.resolved, "Should not resolve: missing partition data")
     }
   }
+
+  testPartitionedTable(
+    "SPARK-16036: better error message when insert into a table with mismatch schema") {
+    tableName =>
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
+      }
+      assert(e.message.contains("the number of columns are different"))
+  }
+
+  testPartitionedTable(
+    "SPARK-16037: INSERT statement should match columns by position") {
+    tableName =>
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(s"INSERT INTO TABLE $tableName SELECT 1, 2 AS c, 3 AS b")
+        checkAnswer(sql(s"SELECT a, b, c FROM $tableName"), Row(1, 2, 3))
+        sql(s"INSERT OVERWRITE TABLE $tableName SELECT 1, 2, 3")
+        checkAnswer(sql(s"SELECT a, b, c FROM $tableName"), Row(1, 2, 3))
+      }
+  }
 }
