@@ -1337,8 +1337,24 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(sql("select * from partitionedTable").collect().size == 1)
       // Inserts new data successfully when partition columns are correctly specified in
       // partitionBy(...).
-      df.write.mode("append").partitionBy("a", "b").saveAsTable("partitionedTable")
-      assert(sql("select * from partitionedTable").collect().size == 2)
+      // TODO: Right now, partition columns are always treated in a case-insensitive way.
+      // See the write method in DataSource.scala.
+      Seq((4, 5, 6)).toDF("a", "B", "c")
+        .write
+        .mode("append")
+        .partitionBy("a", "B")
+        .saveAsTable("partitionedTable")
+
+      Seq((7, 8, 9)).toDF("a", "b", "c")
+        .write
+        .mode("append")
+        .partitionBy("a", "b")
+        .saveAsTable("partitionedTable")
+
+      checkAnswer(
+        sql("select a, b, c from partitionedTable"),
+        Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
+      )
     }
   }
 }
