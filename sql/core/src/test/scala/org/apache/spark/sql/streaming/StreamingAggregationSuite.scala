@@ -104,6 +104,31 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     }
   }
 
+  test("sort after aggregate in complete mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .toDF("value", "count")
+        .orderBy($"count".desc)
+        .as[(Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 3),
+      CheckLastBatch(isSorted = true, (3, 1)),
+      AddData(inputData, 2, 3),
+      CheckLastBatch(isSorted = true, (3, 2), (2, 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch(isSorted = true, (3, 3), (2, 2), (1, 1)),
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch(isSorted = true, (4, 4), (3, 3), (2, 2), (1, 1))
+    )
+  }
+
   test("multiple keys") {
     val inputData = MemoryStream[Int]
 

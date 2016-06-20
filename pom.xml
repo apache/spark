@@ -2605,12 +2605,29 @@
             <plugin>
               <groupId>net.alchim31.maven</groupId>
               <artifactId>scala-maven-plugin</artifactId>
-              <configuration>
-                <args combine.children="append">
-                  <arg>-javabootclasspath</arg>
-                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
-                </args>
-              </configuration>
+              <!-- Note: -javabootclasspath is set on a per-execution basis rather than as a
+                   plugin-wide configuration because doc-jar generation will break if it's
+                   set; see SPARK-15839 for more details -->
+              <executions>
+                <execution>
+                  <id>scala-compile-first</id>
+                  <configuration>
+                    <args combine.children="append">
+                      <arg>-javabootclasspath</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                    </args>
+                  </configuration>
+                </execution>
+                <execution>
+                  <id>scala-test-compile-first</id>
+                  <configuration>
+                    <args combine.children="append">
+                      <arg>-javabootclasspath</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                    </args>
+                  </configuration>
+                </execution>
+              </executions>
             </plugin>
           </plugins>
         </pluginManagement>

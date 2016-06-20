@@ -68,28 +68,62 @@ abstract class QueryTest extends PlanTest {
   /**
    * Evaluates a dataset to make sure that the result of calling collect matches the given
    * expected answer.
-   *  - Special handling is done based on whether the query plan should be expected to return
-   *    the results in sorted order.
-   *  - This function also checks to make sure that the schema for serializing the expected answer
-   *    matches that produced by the dataset (i.e. does manual construction of object match
-   *    the constructed encoder for cases like joins, etc).  Note that this means that it will fail
-   *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
-   *    which performs a subset of the checks done by this function.
    */
   protected def checkDataset[T](
-      ds: Dataset[T],
-      expectedAnswer: T*): Unit = {
-    checkAnswer(
-      ds.toDF(),
-      spark.createDataset(expectedAnswer)(ds.exprEnc).toDF().collect().toSeq)
-
-    checkDecoding(ds, expectedAnswer: _*)
-  }
-
-  protected def checkDecoding[T](
       ds: => Dataset[T],
       expectedAnswer: T*): Unit = {
-    val decoded = try ds.collect().toSet catch {
+    val result = getResult(ds)
+
+    if (!compare(result.toSeq, expectedAnswer)) {
+      fail(
+        s"""
+           |Decoded objects do not match expected objects:
+           |expected: $expectedAnswer
+           |actual:   ${result.toSeq}
+           |${ds.exprEnc.deserializer.treeString}
+         """.stripMargin)
+    }
+  }
+
+  /**
+   * Evaluates a dataset to make sure that the result of calling collect matches the given
+   * expected answer, after sort.
+   */
+  protected def checkDatasetUnorderly[T : Ordering](
+      ds: => Dataset[T],
+      expectedAnswer: T*): Unit = {
+    val result = getResult(ds)
+
+    if (!compare(result.toSeq.sorted, expectedAnswer.sorted)) {
+      fail(
+        s"""
+           |Decoded objects do not match expected objects:
+           |expected: $expectedAnswer
+           |actual:   ${result.toSeq}
+           |${ds.exprEnc.deserializer.treeString}
+         """.stripMargin)
+    }
+  }
+
+  private def getResult[T](ds: => Dataset[T]): Array[T] = {
+    val analyzedDS = try ds catch {
+      case ae: AnalysisException =>
+        if (ae.plan.isDefined) {
+          fail(
+            s"""
+               |Failed to analyze query: $ae
+               |${ae.plan.get}
+               |
+               |${stackTraceToString(ae)}
+             """.stripMargin)
+        } else {
+          throw ae
+        }
+    }
+    checkJsonFormat(analyzedDS)
+    assertEmptyMissingInput(analyzedDS)
+
+    try ds.collect() catch {
       case e: Exception =>
         fail(
           s"""
@@ -99,24 +133,17 @@ abstract class QueryTest extends PlanTest {
              |${ds.queryExecution}
            """.stripMargin, e)
     }
+  }
 
-    // Handle the case where the return type is an array
-    val isArray = decoded.headOption.map(_.getClass.isArray).getOrElse(false)
-    def normalEquality = decoded == expectedAnswer.toSet
-    def expectedAsSeq = expectedAnswer.map(_.asInstanceOf[Array[_]].toSeq).toSet
-    def decodedAsSeq = decoded.map(_.asInstanceOf[Array[_]].toSeq)
-
-    if (!((isArray && expectedAsSeq == decodedAsSeq) || normalEquality)) {
-      val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
-      val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
-
-      val comparison = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
-      fail(
-        s"""Decoded objects do not match expected objects:
-            |$comparison
-            |${ds.exprEnc.deserializer.treeString}
-         """.stripMargin)
-    }
+  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+    case (null, null) => true
+    case (null, _) => false
+    case (_, null) => false
+    case (a: Array[_], b: Array[_]) =>
+      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a: Iterable[_], b: Iterable[_]) =>
+      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
+    case (a, b) => a == b
   }
 
   /**
@@ -143,7 +170,7 @@ abstract class QueryTest extends PlanTest {
 
     checkJsonFormat(analyzedDF)
 
-    assertEmptyMissingInput(df)
+    assertEmptyMissingInput(analyzedDF)
 
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
@@ -201,10 +228,10 @@ abstract class QueryTest extends PlanTest {
         planWithCaching)
   }
 
-  private def checkJsonFormat(df: DataFrame): Unit = {
+  private def checkJsonFormat(ds: Dataset[_]): Unit = {
     // Get the analyzed plan and rewrite the PredicateSubqueries in order to make sure that
     // RDD and Data resolution does not break.
-    val logicalPlan = df.queryExecution.analyzed
+    val logicalPlan = ds.queryExecution.analyzed
 
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
@@ -341,10 +368,16 @@ object QueryTest {
    *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
+  def checkAnswer(
+      df: DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-
+    if (checkToRDD) {
+      df.rdd.count()  // Also attempt to deserialize as an RDD [SPARK-15791]
+    }
 
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>

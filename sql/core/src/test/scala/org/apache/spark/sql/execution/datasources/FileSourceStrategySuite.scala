@@ -340,6 +340,41 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("SPARK-15654 do not split non-splittable files") {
+    // Check if a non-splittable file is not assigned into partitions
+    Seq("gz", "snappy", "lz4").map { suffix =>
+       val table = createTable(
+        files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
+      )
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 2)
+          assert(partitions(0).files.size == 1)
+          assert(partitions(1).files.size == 2)
+        }
+      }
+    }
+
+    // Check if a splittable compressed file is assigned into multiple partitions
+    Seq("bz2").map { suffix =>
+       val table = createTable(
+         files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
+      )
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 3)
+          assert(partitions(0).files.size == 1)
+          assert(partitions(1).files.size == 2)
+          assert(partitions(2).files.size == 1)
+        }
+      }
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -434,7 +469,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends FileFormat {
+class TestFileFormat extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 

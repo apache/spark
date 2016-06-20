@@ -127,7 +127,12 @@ case class TypedAggregateExpression(
 
     dataType match {
       case s: StructType =>
-        ReferenceToExpressions(CreateStruct(outputSerializer), resultObj :: Nil)
+        val objRef = outputSerializer.head.find(_.isInstanceOf[BoundReference]).get
+        val struct = If(
+          IsNull(objRef),
+          Literal.create(null, dataType),
+          CreateStruct(outputSerializer))
+        ReferenceToExpressions(struct, resultObj :: Nil)
       case _ =>
         assert(outputSerializer.length == 1)
         outputSerializer.head transform {
