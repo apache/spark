@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 
@@ -27,18 +29,48 @@ class FakeSchedulerBackend extends SchedulerBackend {
   def defaultParallelism(): Int = 1
 }
 
-class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with Logging {
+class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
+    with Logging {
 
-  test("Scheduler does not always schedule tasks on the same workers") {
+
+  var failedTaskSetExc: Option[Throwable] = None
+  var failedTaskSetReason: String = null
+  var failedTaskSet = false
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    failedTaskSet = false
+    failedTaskSetExc = None
+    failedTaskSetReason = null
+  }
+
+  def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    confs.foreach { case (k, v) =>
+      sc.conf.set(k, v)
+    }
     val taskScheduler = new TaskSchedulerImpl(sc)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
+      override def executorAdded(execId: String, host: String): Unit = {}
+      override def taskSetFailed(
+          taskSet: TaskSet,
+          reason: String,
+          exception: Option[Throwable]): Unit = {
+        // Normally the DAGScheduler puts this in the event loop, which will eventually fail
+        // dependent jobs
+        failedTaskSet = true
+        failedTaskSetReason = reason
+        failedTaskSetExc = exception
+      }
     }
+    taskScheduler
+  }
 
+  test("Scheduler does not always schedule tasks on the same workers") {
+    val taskScheduler = setupScheduler()
     val numFreeCores = 1
     val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
       new WorkerOffer("executor1", "host1", numFreeCores))
@@ -58,14 +90,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     val count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
     assert(count > 0)
     assert(count < numTrials)
+    assert(!failedTaskSet)
   }
 
   test("Scheduler correctly accounts for multiple CPUs per task") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskCpus = 2
-
-    sc.conf.set("spark.task.cpus", taskCpus.toString)
-    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
@@ -96,22 +126,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(1 === taskDescriptions.length)
     assert("executor0" === taskDescriptions(0).executorId)
+    assert(!failedTaskSet)
   }
 
   test("Scheduler does not crash when tasks are not serializable") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val taskCpus = 2
-
-    sc.conf.set("spark.task.cpus", taskCpus.toString)
-    val taskScheduler = new TaskSchedulerImpl(sc)
-    taskScheduler.initialize(new FakeSchedulerBackend)
-    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    val dagScheduler = new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
-    }
+    val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
     val numFreeCores = 1
-    taskScheduler.setDAGScheduler(dagScheduler)
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
     val multiCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", taskCpus),
@@ -121,24 +142,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     assert(0 === taskDescriptions.length)
 
     // Now check that we can still submit tasks
-    // Even if one of the tasks has not-serializable tasks, the other task set should
+    // Even if one of the task sets has not-serializable tasks, the other task set should
     // still be processed without error
-    taskScheduler.submitTasks(taskSet)
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
+    taskScheduler.submitTasks(taskSet)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
   test("refuse to schedule concurrent attempts for the same stage (SPARK-8103)") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
-    val taskScheduler = new TaskSchedulerImpl(sc)
-    taskScheduler.initialize(new FakeSchedulerBackend)
-    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    val dagScheduler = new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
-    }
-    taskScheduler.setDAGScheduler(dagScheduler)
+    val taskScheduler = setupScheduler()
     val attempt1 = FakeTask.createTaskSet(1, 0)
     val attempt2 = FakeTask.createTaskSet(1, 1)
     taskScheduler.submitTasks(attempt1)
@@ -153,17 +166,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     taskScheduler.taskSetManagerForAttempt(attempt2.stageId, attempt2.stageAttemptId)
       .get.isZombie = true
     taskScheduler.submitTasks(attempt3)
+    assert(!failedTaskSet)
   }
 
   test("don't schedule more tasks after a taskset is zombie") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
-    val taskScheduler = new TaskSchedulerImpl(sc)
-    taskScheduler.initialize(new FakeSchedulerBackend)
-    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
-    }
+    val taskScheduler = setupScheduler()
 
     val numFreeCores = 1
     val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores))
@@ -191,17 +198,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     assert(1 === taskDescriptions3.length)
     val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions3(0).taskId).get
     assert(mgr.taskSet.stageAttemptId === 1)
+    assert(!failedTaskSet)
   }
 
   test("if a zombie attempt finishes, continue scheduling tasks for non-zombie attempts") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
-    val taskScheduler = new TaskSchedulerImpl(sc)
-    taskScheduler.initialize(new FakeSchedulerBackend)
-    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
-    }
+    val taskScheduler = setupScheduler()
 
     val numFreeCores = 10
     val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores))
@@ -236,17 +237,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
       val mgr = taskScheduler.taskIdToTaskSetManager.get(task.taskId).get
       assert(mgr.taskSet.stageAttemptId === 1)
     }
+    assert(!failedTaskSet)
   }
 
   test("tasks are not re-scheduled while executor loss reason is pending") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
-    val taskScheduler = new TaskSchedulerImpl(sc)
-    taskScheduler.initialize(new FakeSchedulerBackend)
-    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
-    }
+    val taskScheduler = setupScheduler()
 
     val e0Offers = Seq(new WorkerOffer("executor0", "host0", 1))
     val e1Offers = Seq(new WorkerOffer("executor1", "host0", 1))
@@ -272,6 +267,55 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     val taskDescriptions3 = taskScheduler.resourceOffers(e1Offers).flatten
     assert(1 === taskDescriptions3.length)
     assert("executor1" === taskDescriptions3(0).executorId)
+    assert(!failedTaskSet)
+  }
+
+  test("abort stage if executor loss results in unschedulability from previously failed tasks") {
+    // Make sure we can detect when a taskset becomes unschedulability from a blacklisting.  This
+    // test explores a particular corner case -- you may have one task fail, but still be
+    // schedulable on another executor.  However, that executor may fail later on, leaving the
+    // first task with no place to run.
+    val taskScheduler = setupScheduler(
+      // set this to something much longer than the test duration
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+    )
+
+    val taskSet = FakeTask.createTaskSet(2)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
+
+    val firstTasks = taskScheduler.resourceOffers(Seq(
+      new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1)
+    )).flatten
+    assert(Set("executor0", "executor1") === firstTasks.map{_.executorId}.toSet)
+
+    // fail one of the tasks, but leave the other running
+    val failedTask = firstTasks.find(_.executorId == "executor0").get
+    taskScheduler.handleFailedTask(tsm, failedTask.taskId, TaskState.FAILED, TaskResultLost)
+    // at this point, our failed task could run on the other executor, so don't give up the task
+    // set yet.
+
+    // but now we fail our second executor.  The other task still has a failed executor it can
+    // run on, but our first failed task does not.  So we should fail the task set.
+    taskScheduler.executorLost("executor1", SlaveLost("oops"))
+      val nextTasks =
+        taskScheduler.resourceOffers(Seq(new WorkerOffer("executor0", "host0", 1))).flatten
+    // Note: Its OK if some future change makes this already realize the taskset has become
+    // unschedulable at this point (though in the current implementation, we're sure it will not)
+    assert(nextTasks.size === 1)
+    assert(nextTasks.head.executorId === "executor0")
+    assert(nextTasks.head.attemptNumber === 1)
+    assert(nextTasks.head.index != failedTask.index)
+
+    // now we should definitely realize that our task set is unschedulable, because the only
+    // task left can't be scheduled on any executors due to the blacklist
+    taskScheduler.resourceOffers(Seq(new WorkerOffer("executor0", "host0", 1)))
+    sc.listenerBus.waitUntilEmpty(100000)
+    assert(tsm.isZombie)
+    assert(failedTaskSet)
+    assert(failedTaskSetReason.contains("Aborting TaskSet 0.0 because it has a task which cannot " +
+      "be scheduled on any executor due to blacklists"))
   }
 
 }
