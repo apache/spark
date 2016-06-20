@@ -34,7 +34,7 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        SamplePushDown,
+        PushProjectThroughSample,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,

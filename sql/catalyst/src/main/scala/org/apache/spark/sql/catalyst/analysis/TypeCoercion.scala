@@ -73,7 +73,7 @@ object TypeCoercion {
       DoubleType)
 
   /**
-   * Case 1 type widening (see the classdoc comment above for HiveTypeCoercion).
+   * Case 1 type widening (see the classdoc comment above for TypeCoercion).
    *
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
@@ -132,7 +132,7 @@ object TypeCoercion {
   }
 
   /**
-   * Case 2 type widening (see the classdoc comment above for HiveTypeCoercion).
+   * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
    * loss of precision when widening decimal and double.
@@ -178,8 +178,8 @@ object TypeCoercion {
         q transformExpressions {
           case a: AttributeReference =>
             inputMap.get(a.exprId) match {
-              // This can happen when a Attribute reference is born in a non-leaf node, for example
-              // due to a call to an external script like in the Transform operator.
+              // This can happen when an Attribute reference is born in a non-leaf node, for
+              // example due to a call to an external script like in the Transform operator.
               // TODO: Perhaps those should actually be aliases?
               case None => a
               // Leave the same if the dataTypes match.
@@ -289,11 +289,6 @@ object TypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case a @ BinaryArithmetic(left @ StringType(), right @ DecimalType.Expression(_, _)) =>
-        a.makeCopy(Array(Cast(left, DecimalType.SYSTEM_DEFAULT), right))
-      case a @ BinaryArithmetic(left @ DecimalType.Expression(_, _), right @ StringType()) =>
-        a.makeCopy(Array(left, Cast(right, DecimalType.SYSTEM_DEFAULT)))
 
       case a @ BinaryArithmetic(left @ StringType(), right) =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
@@ -530,14 +525,16 @@ object TypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
-      case e if !e.resolved => e
+      case e if !e.childrenResolved => e
 
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-
-      case Divide(left, right) => Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+      case Divide(left, right) if isNumeric(left) && isNumeric(right) =>
+        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
+
+    private def isNumeric(ex: Expression): Boolean = ex.dataType.isInstanceOf[NumericType]
   }
 
   /**

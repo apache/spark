@@ -6,9 +6,14 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 #useDynLib(SparkR, stringHashCode)
 
 # S3 methods exported
+export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
+export("sparkR.session.stop")
 export("print.jobj")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
 
 # MLlib integration
 exportMethods("glm",
@@ -45,6 +50,7 @@ exportMethods("arrange",
               "corr",
               "covar_samp",
               "covar_pop",
+              "createOrReplaceTempView",
               "crosstab",
               "dapply",
               "dapplyCollect",
@@ -61,6 +67,7 @@ exportMethods("arrange",
               "filter",
               "first",
               "freqItems",
+              "gapply",
               "group_by",
               "groupBy",
               "head",
@@ -79,6 +86,7 @@ exportMethods("arrange",
               "orderBy",
               "persist",
               "printSchema",
+              "randomSplit",
               "rbind",
               "registerTempTable",
               "rename",
@@ -109,6 +117,7 @@ exportMethods("arrange",
               "write.df",
               "write.jdbc",
               "write.json",
+              "write.orc",
               "write.parquet",
               "write.text",
               "write.ml")
@@ -185,6 +194,8 @@ exportMethods("%in%",
               "isNaN",
               "isNotNull",
               "isNull",
+              "is.nan",
+              "isnan",
               "kurtosis",
               "lag",
               "last",
@@ -208,6 +219,7 @@ exportMethods("%in%",
               "mean",
               "min",
               "minute",
+              "monotonically_increasing_id",
               "month",
               "months_between",
               "n",
@@ -282,21 +294,20 @@ exportMethods("%in%",
 exportClasses("GroupedData")
 exportMethods("agg")
 
-export("sparkRSQL.init",
-       "sparkRHive.init")
-
 export("as.DataFrame",
        "cacheTable",
        "clearCache",
        "createDataFrame",
        "createExternalTable",
        "dropTempTable",
+       "dropTempView",
        "jsonFile",
        "loadDF",
        "parquetFile",
        "read.df",
        "read.jdbc",
        "read.json",
+       "read.orc",
        "read.parquet",
        "read.text",
        "spark.lapply",

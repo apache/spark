@@ -48,7 +48,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
 
     <!-- Provided dependencies -->
@@ -94,6 +94,13 @@
               <shadedPattern>${spark.shade.packageName}.com.fasterxml.jackson</shadedPattern>
               <includes>
                 <include>com.fasterxml.jackson.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>io.netty</pattern>
+              <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
+              <includes>
+                <include>io.netty.**</include>
               </includes>
             </relocation>
           </relocations>

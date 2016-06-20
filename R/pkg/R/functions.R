@@ -911,6 +911,33 @@ setMethod("minute",
             column(jc)
           })
 
+#' monotonically_increasing_id
+#'
+#' Return a column that generates monotonically increasing 64-bit integers.
+#'
+#' The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+#' The current implementation puts the partition ID in the upper 31 bits, and the record number
+#' within each partition in the lower 33 bits. The assumption is that the SparkDataFrame has
+#' less than 1 billion partitions, and each partition has less than 8 billion records.
+#'
+#' As an example, consider a SparkDataFrame with two partitions, each with 3 records.
+#' This expression would return the following IDs:
+#' 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+#'
+#' This is equivalent to the MONOTONICALLY_INCREASING_ID function in SQL.
+#'
+#' @rdname monotonically_increasing_id
+#' @name monotonically_increasing_id
+#' @family misc_funcs
+#' @export
+#' @examples \dontrun{select(df, monotonically_increasing_id())}
+setMethod("monotonically_increasing_id",
+          signature(x = "missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "monotonically_increasing_id")
+            column(jc)
+          })
+
 #' month
 #'
 #' Extracts the month as an integer from a given date/timestamp/string.
@@ -2185,7 +2212,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'    # 09:01:15-09:02:15...
 #'   window(df$time, "1 minute", startTime = "15 seconds")
 #'
-#'   # Thirty second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
+#'   # Thirty-second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
 #'   window(df$time, "30 seconds", "10 seconds")
 #'}
 setMethod("window", signature(x = "Column"),
@@ -2226,7 +2253,7 @@ setMethod("window", signature(x = "Column"),
 #' @export
 #' @examples \dontrun{locate('b', df$c, 1)}
 setMethod("locate", signature(substr = "character", str = "Column"),
-          function(substr, str, pos = 0) {
+          function(substr, str, pos = 1) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "locate",
                               substr, str@jc, as.integer(pos))

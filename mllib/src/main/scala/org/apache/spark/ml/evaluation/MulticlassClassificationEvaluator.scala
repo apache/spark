@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
- * Evaluator for multiclass classification, which expects two input columns: score and label.
+ * Evaluator for multiclass classification, which expects two input columns: prediction and label.
  */
 @Since("1.5.0")
 @Experimental
@@ -39,16 +39,16 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def this() = this(Identifiable.randomUID("mcEval"))
 
   /**
-   * param for metric name in evaluation (supports `"f1"` (default), `"precision"`, `"recall"`,
-   * `"weightedPrecision"`, `"weightedRecall"`, `"accuracy"`)
+   * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
+   * `"weightedRecall"`, `"accuracy"`)
    * @group param
    */
   @Since("1.5.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("f1", "precision",
-      "recall", "weightedPrecision", "weightedRecall", "accuracy"))
+    val allowedParams = ParamValidators.inArray(Array("f1", "weightedPrecision",
+      "weightedRecall", "accuracy"))
     new Param(this, "metricName", "metric name in evaluation " +
-      "(f1|precision|recall|weightedPrecision|weightedRecall|accuracy)", allowedParams)
+      "(f1|weightedPrecision|weightedRecall|accuracy)", allowedParams)
   }
 
   /** @group getParam */
@@ -82,8 +82,6 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
-      case "precision" => metrics.precision
-      case "recall" => metrics.recall
       case "weightedPrecision" => metrics.weightedPrecision
       case "weightedRecall" => metrics.weightedRecall
       case "accuracy" => metrics.accuracy

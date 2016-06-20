@@ -441,7 +441,7 @@ class JDBCSuite extends SparkFunSuite
   test("test DATE types in cache") {
     val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
     spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
-      .cache().registerTempTable("mycached_date")
+      .cache().createOrReplaceTempView("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
@@ -639,7 +639,7 @@ class JDBCSuite extends SparkFunSuite
   test("test credentials in the properties are not in plan output") {
     val df = sql("SELECT * FROM parts")
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
-    spark.executePlan(explain).executedPlan.executeCollect().foreach {
+    spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
     // test the JdbcRelation toString output
@@ -651,7 +651,7 @@ class JDBCSuite extends SparkFunSuite
   test("test credentials in the connection url are not in the plan output") {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
-    spark.executePlan(explain).executedPlan.executeCollect().foreach {
+    spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
   }
@@ -660,5 +660,31 @@ class JDBCSuite extends SparkFunSuite
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
+
+  private def assertEmptyQuery(sqlString: String): Unit = {
+    assert(sql(sqlString).collect().isEmpty)
+  }
+
+  test("SPARK-15916: JDBC filter operator push down should respect operator precedence") {
+    val TRUE = "NAME != 'non_exists'"
+    val FALSE1 = "THEID > 1000000000"
+    val FALSE2 = "THEID < -1000000000"
+
+    assertEmptyQuery(s"SELECT * FROM foobar WHERE ($TRUE OR $FALSE1) AND $FALSE2")
+    assertEmptyQuery(s"SELECT * FROM foobar WHERE $FALSE1 AND ($FALSE2 OR $TRUE)")
+
+    // Tests JDBCPartition whereClause clause push down.
+    withTempTable("tempFrame") {
+      val jdbcPartitionWhereClause = s"$FALSE1 OR $TRUE"
+      val df = spark.read.jdbc(
+        urlWithUserAndPass,
+        "TEST.PEOPLE",
+        predicates = Array[String](jdbcPartitionWhereClause),
+        new Properties)
+
+      df.createOrReplaceTempView("tempFrame")
+      assertEmptyQuery(s"SELECT * FROM tempFrame where $FALSE2")
+    }
   }
 }

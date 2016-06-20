@@ -137,7 +137,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
     val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>
       // Add edges for terms with non-zero counts.
-      termCounts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
+      termCounts.asBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
         Edge(docID, term2index(term), cnt)
       }
     }
@@ -457,7 +457,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val vocabSize = this.vocabSize
     val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
     val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
-    val alpha = this.alpha.toBreeze
+    val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
 
     val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
@@ -507,7 +507,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private def updateAlpha(gammat: BDM[Double]): Unit = {
     val weight = rho()
     val N = gammat.rows.toDouble
-    val alpha = this.alpha.toBreeze.toDenseVector
+    val alpha = this.alpha.asBreeze.toDenseVector
     val logphat: BDM[Double] = sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)) / N
     val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat.toDenseVector)
 

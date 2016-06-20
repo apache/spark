@@ -446,6 +446,13 @@ setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
+#' @rdname createOrReplaceTempView
+#' @export
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -453,6 +460,10 @@ setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 #' @rdname dapply
 #' @export
 setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect") })
+
+#' @rdname gapply
+#' @export
+setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 
 #' @rdname summary
 #' @export
@@ -462,12 +473,9 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 #' @export
 setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
-#' @rdname dropduplicates
+#' @rdname dropDuplicates
 #' @export
-setGeneric("dropDuplicates",
-           function(x, colNames = columns(x)) {
-             standardGeneric("dropDuplicates")
-           })
+setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
 
 #' @rdname nafunctions
 #' @export
@@ -547,7 +555,7 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
-#' @rdname registerTempTable
+#' @rdname registerTempTable-deprecated
 #' @export
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
@@ -601,6 +609,10 @@ setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
 #' @rdname write.json
 #' @export
 setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
+
+#' @rdname write.orc
+#' @export
+setGeneric("write.orc", function(x, path) { standardGeneric("write.orc") })
 
 #' @rdname write.parquet
 #' @export
@@ -671,6 +683,10 @@ setGeneric("withColumnRenamed",
 #' @export
 setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 
+#' @rdname randomSplit
+#' @export
+setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSplit") })
+
 ###################### Column Methods ##########################
 
 #' @rdname column
@@ -695,7 +711,7 @@ setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname column
 #' @export
-setGeneric("endsWith", function(x, ...) { standardGeneric("endsWith") })
+setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
 
 #' @rdname column
 #' @export
@@ -727,7 +743,7 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname column
 #' @export
-setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
+setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
 #' @rdname column
 #' @export
@@ -980,6 +996,11 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @rdname minute
 #' @export
 setGeneric("minute", function(x) { standardGeneric("minute") })
+
+#' @rdname monotonically_increasing_id
+#' @export
+setGeneric("monotonically_increasing_id",
+           function(x) { standardGeneric("monotonically_increasing_id") })
 
 #' @rdname month
 #' @export

@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.objects.CreateExternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -46,6 +48,14 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     futures.foreach(ThreadUtils.awaitResult(_, 10.seconds))
+  }
+
+  test("metrics are recorded on compile") {
+    val startCount1 = CodegenMetrics.METRIC_COMPILATION_TIME.getCount()
+    val startCount2 = CodegenMetrics.METRIC_SOURCE_CODE_SIZE.getCount()
+    GenerateOrdering.generate(Add(Literal(123), Literal(1)).asc :: Nil)
+    assert(CodegenMetrics.METRIC_COMPILATION_TIME.getCount() == startCount1 + 1)
+    assert(CodegenMetrics.METRIC_SOURCE_CODE_SIZE.getCount() == startCount2 + 1)
   }
 
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
@@ -137,6 +147,19 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-14224: split wide external row creation into blocks due to JVM code size limit") {
+    val length = 5000
+    val schema = StructType(Seq.fill(length)(StructField("int", IntegerType)))
+    val expressions = Seq(CreateExternalRow(Seq.fill(length)(Literal(1)), schema))
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq(Row.fromSeq(Seq.fill(length)(1)))
+
+    if (!checkResult(actual, expected)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),
@@ -193,5 +216,49 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
       true,
       InternalRow(UTF8String.fromString("\\u")))
+  }
+
+  test("check compilation error doesn't occur caused by specific literal") {
+    // The end of comment (*/) should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("*/Compilation error occurs/*", StringType) :: Nil)
+
+    // `\u002A` is `*` and `\u002F` is `/`
+    // so if the end of comment consists of those characters in queries, we need to escape them.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\\\002FCompilation error occurs/*", StringType) :: Nil)
+
+    // \ u002X is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002X/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002X/Compilation error occurs", StringType) :: Nil)
+
+    // \ u001 is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u001/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u001/Compilation error occurs", StringType) :: Nil)
+
   }
 }

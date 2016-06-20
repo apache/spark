@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.File
 import java.nio.charset.StandardCharsets
 
 import org.scalatest.BeforeAndAfterAll
@@ -25,7 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -52,12 +51,6 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
-
-  def getTempFilePath(prefix: String, suffix: String = ""): File = {
-    val tempFile = File.createTempFile(prefix, suffix)
-    tempFile.delete()
-    tempFile
-  }
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
@@ -98,7 +91,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    sparkContext.parallelize(data).toDF().registerTempTable("t")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
     withTempTable("t") {
       checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
@@ -153,11 +146,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("save and load case class RDD with `None`s as orc") {
     val data = (
-      None: Option[Int],
-      None: Option[Long],
-      None: Option[Float],
-      None: Option[Double],
-      None: Option[Boolean]
+      Option.empty[Int],
+      Option.empty[Long],
+      Option.empty[Float],
+      Option.empty[Double],
+      Option.empty[Boolean]
     ) :: Nil
 
     withOrcFile(data) { file =>
@@ -223,7 +216,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
@@ -233,7 +226,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
@@ -324,7 +317,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.registerTempTable("empty")
+          emptyDF.createOrReplaceTempView("empty")
 
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
@@ -340,7 +333,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-          singleRowDF.registerTempTable("single")
+          singleRowDF.createOrReplaceTempView("single")
 
           spark.sql(
             s"""INSERT INTO TABLE empty_orc
@@ -407,36 +400,48 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-14070 Use ORC data source for SQL queries on ORC tables") {
-    withTempPath { dir =>
-      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
-        HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
-        val path = dir.getCanonicalPath
+  test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
+    withTempTable("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
 
-        withTable("dummy_orc") {
-          withTempTable("single") {
-            spark.sql(
-              s"""CREATE TABLE dummy_orc(key INT, value STRING)
-                  |STORED AS ORC
-                  |LOCATION '$path'
-               """.stripMargin)
+      Seq("true", "false").foreach { orcConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
+          withTable("dummy_orc") {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.sql(
+                s"""
+                   |CREATE TABLE dummy_orc(key INT, value STRING)
+                   |STORED AS ORC
+                   |LOCATION '$path'
+                 """.stripMargin)
 
-            val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-            singleRowDF.registerTempTable("single")
+              spark.sql(
+                s"""
+                   |INSERT INTO TABLE dummy_orc
+                   |SELECT key, value FROM single
+                 """.stripMargin)
 
-            spark.sql(
-              s"""INSERT INTO TABLE dummy_orc
-                  |SELECT key, value FROM single
-               """.stripMargin)
+              val df = spark.sql("SELECT * FROM dummy_orc WHERE key=0")
+              checkAnswer(df, singleRowDF)
 
-            val df = spark.sql("SELECT * FROM dummy_orc WHERE key=0")
-            checkAnswer(df, singleRowDF)
-
-            val queryExecution = df.queryExecution
-            queryExecution.analyzed.collectFirst {
-              case _: LogicalRelation => ()
-            }.getOrElse {
-              fail(s"Expecting the query plan to have LogicalRelation, but got:\n$queryExecution")
+              val queryExecution = df.queryExecution
+              if (orcConversion == "true") {
+                queryExecution.analyzed.collectFirst {
+                  case _: LogicalRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting the query plan to convert orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              } else {
+                queryExecution.analyzed.collectFirst {
+                  case _: MetastoreRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting no conversion from orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              }
             }
           }
         }

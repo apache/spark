@@ -25,10 +25,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
 
@@ -182,7 +182,7 @@ class RFormula(override val uid: String)
 
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
-  override def toString: String = s"RFormula(${get(formula)}) (uid=$uid)"
+  override def toString: String = s"RFormula(${get(formula).getOrElse("")}) (uid=$uid)"
 }
 
 @Since("2.0.0")
@@ -194,7 +194,9 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 
 /**
  * :: Experimental ::
- * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
+ * Model fitted by [[RFormula]]. Fitting is required to determine the factor levels of
+ * formula terms.
+ *
  * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */

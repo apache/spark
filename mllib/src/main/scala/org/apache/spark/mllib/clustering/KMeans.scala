@@ -279,7 +279,7 @@ class KMeans private (
       }
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
-      val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
+      val costAccums = activeRuns.map(_ => sc.doubleAccumulator)
 
       val bcActiveCenters = sc.broadcast(activeCenters)
 
@@ -296,7 +296,7 @@ class KMeans private (
         points.foreach { point =>
           (0 until runs).foreach { i =>
             val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
-            costAccums(i) += cost
+            costAccums(i).add(cost)
             val sum = sums(i)(bestCenter)
             axpy(1.0, point.vector, sum)
             counts(i)(bestCenter) += 1
@@ -441,7 +441,7 @@ class KMeans private (
           val rs = (0 until runs).filter { r =>
             rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
           }
-          if (rs.length > 0) Some((p, rs)) else None
+          if (rs.nonEmpty) Some((p, rs)) else None
         }
       }.collect()
       mergeNewCenters()

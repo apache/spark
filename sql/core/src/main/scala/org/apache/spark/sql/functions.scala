@@ -924,7 +924,7 @@ object functions {
    * @since 1.5.0
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
-    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.unresolvedTEncoder)
+    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
   }
 
   /**
@@ -1168,7 +1168,7 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse {
+    val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
       new SparkSqlParser(new SQLConf)
     }
     Column(parser.parseExpression(expr))
@@ -1996,7 +1996,7 @@ object functions {
 
   /**
    * Computes the numeric value of the first character of the string column, and returns the
-   * result as a int column.
+   * result as an int column.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2437,7 +2437,7 @@ object functions {
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
 
-  /*
+  /**
    * Returns number of months between dates `date1` and `date2`.
    * @group datetime_funcs
    * @since 1.5.0
@@ -2587,7 +2587,7 @@ object functions {
    *   09:00:25-09:01:25 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2641,7 +2641,7 @@ object functions {
    *   09:00:20-09:01:20 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2683,7 +2683,7 @@ object functions {
    *   09:02:00-09:03:00 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2952,8 +2952,8 @@ object functions {
    *  import org.apache.spark.sql._
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-   *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  val spark = df.sparkSession
+   *  spark.udf.register("simpleUDF", (v: Int) => v * v)
    *  df.select($"id", callUDF("simpleUDF", $"value"))
    * }}}
    *

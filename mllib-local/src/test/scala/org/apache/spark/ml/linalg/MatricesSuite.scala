@@ -61,7 +61,7 @@ class MatricesSuite extends SparkMLFunSuite {
         (1, 2, 2.0), (2, 2, 2.0), (1, 2, 2.0), (0, 0, 0.0))
 
     val mat2 = SparseMatrix.fromCOO(m, n, entries)
-    assert(mat.toBreeze === mat2.toBreeze)
+    assert(mat.asBreeze === mat2.asBreeze)
     assert(mat2.values.length == 4)
   }
 
@@ -174,8 +174,8 @@ class MatricesSuite extends SparkMLFunSuite {
     val spMat2 = deMat1.toSparse
     val deMat2 = spMat1.toDense
 
-    assert(spMat1.toBreeze === spMat2.toBreeze)
-    assert(deMat1.toBreeze === deMat2.toBreeze)
+    assert(spMat1.asBreeze === spMat2.asBreeze)
+    assert(deMat1.asBreeze === deMat2.asBreeze)
   }
 
   test("map, update") {
@@ -209,8 +209,8 @@ class MatricesSuite extends SparkMLFunSuite {
     val sATexpected =
       new SparseMatrix(3, 4, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0))
 
-    assert(dAT.toBreeze === dATexpected.toBreeze)
-    assert(sAT.toBreeze === sATexpected.toBreeze)
+    assert(dAT.asBreeze === dATexpected.asBreeze)
+    assert(sAT.asBreeze === sATexpected.asBreeze)
     assert(dA(1, 0) === dAT(0, 1))
     assert(dA(2, 1) === dAT(1, 2))
     assert(sA(1, 0) === sAT(0, 1))
@@ -219,8 +219,8 @@ class MatricesSuite extends SparkMLFunSuite {
     assert(!dA.toArray.eq(dAT.toArray), "has to have a new array")
     assert(dA.values.eq(dAT.transpose.asInstanceOf[DenseMatrix].values), "should not copy array")
 
-    assert(dAT.toSparse.toBreeze === sATexpected.toBreeze)
-    assert(sAT.toDense.toBreeze === dATexpected.toBreeze)
+    assert(dAT.toSparse.asBreeze === sATexpected.asBreeze)
+    assert(sAT.toDense.asBreeze === dATexpected.asBreeze)
   }
 
   test("foreachActive") {

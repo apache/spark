@@ -20,6 +20,7 @@ import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.ApplicationId
@@ -27,7 +28,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.shuffle.ShuffleTestAccessor

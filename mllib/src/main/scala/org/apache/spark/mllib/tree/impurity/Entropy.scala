@@ -21,8 +21,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 
 /**
  * :: Experimental ::
- * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
- * binary classification.
+ * Class for calculating entropy during multiclass classification.
  */
 @Since("1.0.0")
 @Experimental

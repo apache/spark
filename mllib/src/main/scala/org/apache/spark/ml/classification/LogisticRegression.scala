@@ -27,12 +27,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.BLAS._
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -332,6 +333,13 @@ class LogisticRegression @Since("1.2.0") (
         val featuresMean = summarizer.mean.toArray
         val featuresStd = summarizer.variance.toArray.map(math.sqrt)
 
+        if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
+          featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
+          logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
+            "constant nonzero column, Spark MLlib outputs zero coefficients for constant " +
+            "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
+        }
+
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
@@ -399,7 +407,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+          initialCoefficientsWithIntercept.asBreeze.toDenseVector)
 
         /*
            Note that in Logistic Regression, the objective history (loss + regularization)
@@ -613,7 +621,7 @@ class LogisticRegressionModel private[spark] (
   }
 
   /**
-   * Returns a [[MLWriter]] instance for this ML instance.
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    *
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
@@ -685,7 +693,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 /**
  * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
  * and validates the data to see if the labels used for k class multi-label classification
- * are in the range of {0, 1, ..., k - 1} in a online fashion.
+ * are in the range of {0, 1, ..., k - 1} in an online fashion.
  *
  * Two MultilabelSummarizer can be merged together to have a statistical summary of the
  * corresponding joint dataset.
@@ -853,7 +861,7 @@ class BinaryLogisticRegressionSummary private[classification] (
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,
-   * which is an Dataframe having two fields (FPR, TPR)
+   * which is a Dataframe having two fields (FPR, TPR)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    *
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
@@ -873,7 +881,7 @@ class BinaryLogisticRegressionSummary private[classification] (
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
-   * Returns the precision-recall curve, which is an Dataframe containing
+   * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    *
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
@@ -922,57 +930,54 @@ class BinaryLogisticRegressionSummary private[classification] (
 
 /**
  * LogisticAggregator computes the gradient and loss for binary logistic loss function, as used
- * in binary classification for instances in sparse or dense vector in a online fashion.
+ * in binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Note that multinomial logistic loss is not supported yet!
  *
  * Two LogisticAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * @param coefficients The coefficients corresponding to the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
- * @param featuresStd The standard deviation values of the features.
- * @param featuresMean The mean values of the features.
  */
 private class LogisticAggregator(
-    coefficients: Vector,
+    private val numFeatures: Int,
     numClasses: Int,
-    fitIntercept: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    fitIntercept: Boolean) extends Serializable {
 
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val coefficientsArray = coefficients match {
-    case dv: DenseVector => dv.values
-    case _ =>
-      throw new IllegalArgumentException(
-        s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
-  }
-
-  private val dim = if (fitIntercept) coefficientsArray.length - 1 else coefficientsArray.length
-
-  private val gradientSumArray = Array.ofDim[Double](coefficientsArray.length)
+  private val gradientSumArray =
+    Array.ofDim[Double](if (fitIntercept) numFeatures + 1 else numFeatures)
 
   /**
    * Add a new training instance to this LogisticAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
+   * @param coefficients The coefficients corresponding to the features.
+   * @param featuresStd The standard deviation values of the features.
    * @return This LogisticAggregator object.
    */
-  def add(instance: Instance): this.type = {
+  def add(
+      instance: Instance,
+      coefficients: Vector,
+      featuresStd: Array[Double]): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(dim == features.size, s"Dimensions mismatch when adding new instance." +
-        s" Expecting $dim but got ${features.size}.")
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
-      val localCoefficientsArray = coefficientsArray
+      val coefficientsArray = coefficients match {
+        case dv: DenseVector => dv.values
+        case _ =>
+          throw new IllegalArgumentException(
+            s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
+      }
       val localGradientSumArray = gradientSumArray
 
       numClasses match {
@@ -982,11 +987,11 @@ private class LogisticAggregator(
             var sum = 0.0
             features.foreachActive { (index, value) =>
               if (featuresStd(index) != 0.0 && value != 0.0) {
-                sum += localCoefficientsArray(index) * (value / featuresStd(index))
+                sum += coefficientsArray(index) * (value / featuresStd(index))
               }
             }
             sum + {
-              if (fitIntercept) localCoefficientsArray(dim) else 0.0
+              if (fitIntercept) coefficientsArray(numFeatures) else 0.0
             }
           }
 
@@ -999,7 +1004,7 @@ private class LogisticAggregator(
           }
 
           if (fitIntercept) {
-            localGradientSumArray(dim) += multiplier
+            localGradientSumArray(numFeatures) += multiplier
           }
 
           if (label > 0) {
@@ -1026,8 +1031,8 @@ private class LogisticAggregator(
    * @return This LogisticAggregator object.
    */
   def merge(other: LogisticAggregator): this.type = {
-    require(dim == other.dim, s"Dimensions mismatch when merging with another " +
-      s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
+    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
+      s"LeastSquaresAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0.0) {
       weightSum += other.weightSum
@@ -1078,13 +1083,17 @@ private class LogisticCostFun(
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
     val coeffs = Vectors.fromBreeze(coefficients)
+    val n = coeffs.size
+    val localFeaturesStd = featuresStd
+
 
     val logisticAggregator = {
-      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
+      val seqOp = (c: LogisticAggregator, instance: Instance) =>
+        c.add(instance, coeffs, localFeaturesStd)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
+        new LogisticAggregator(numFeatures, numClasses, fitIntercept)
       )(seqOp, combOp)
     }
 
