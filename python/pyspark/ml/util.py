@@ -295,13 +295,7 @@ class TransformerWrapper(object):
     def transform(self, jdf):
         self.failure = None
         try:
-            if self.ctx is None:
-                self.ctx = SQLContext.getOrCreate(SparkContext._active_spark_context)
-            if not self.ctx or not self.ctx._jsc:
-                # stopped
-                return
-
-            df = self.df_wrap_func(jdf, self.ctx) if jdf else None
+            df = self.df_wrap_func(jdf, self.sql_ctx) if jdf else None
             r = self.transformer.transform(df)
             if r:
                 return r._jdf
