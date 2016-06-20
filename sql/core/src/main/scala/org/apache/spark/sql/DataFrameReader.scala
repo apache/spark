@@ -119,13 +119,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap)
-    Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation()))
+    load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
   /**
@@ -135,7 +129,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load()
+    load(Seq(path): _*) // force invocation of `load(...varargs...)`
   }
 
   /**
@@ -146,18 +140,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      sparkSession.emptyDataFrame
-    } else {
-      sparkSession.baseRelationToDataFrame(
-        DataSource.apply(
-          sparkSession,
-          paths = paths,
-          userSpecifiedSchema = userSpecifiedSchema,
-          className = source,
-          options = extraOptions.toMap).resolveRelation())
-    }
+    sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap).resolveRelation())
   }
+
   /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
@@ -247,11 +238,23 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   * See the documentation on the overloaded `json()` method with varargs for more details.
+   *
+   * @since 1.4.0
+   */
+  def json(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    json(Seq(path): _*)
+  }
+
+  /**
+   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <ul>
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
    * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
    * type. If the values do not fit in decimal, then it infers them as doubles.</li>
@@ -266,17 +269,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.</li>
    * <ul>
-   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
-   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *  the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
    *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *  <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   *
-   * @since 1.6.0
+   * </ul>
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
@@ -327,6 +330,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
+   * Loads a CSV file and returns the result as a [[DataFrame]]. See the documentation on the
+   * other overloaded `csv()` method for more details.
+   *
+   * @since 2.0.0
+   */
+  def csv(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    csv(Seq(path): _*)
+  }
+
+  /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
    *
    * This function will go through the input once to determine the input schema if `inferSchema`
@@ -334,6 +348,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
+   * <ul>
    * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
@@ -370,26 +385,37 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.</li>
    * <ul>
-   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *   <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
    *     a schema is set by user, it sets `null` for extra fields.</li>
-   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *   <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
-   *
+   * </ul>
    * @since 2.0.0
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
 
   /**
-   * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
-   * [[DataFrame]] if no paths are passed in.
+   * Loads a Parquet file, returning the result as a [[DataFrame]]. See the documentation
+   * on the other overloaded `parquet()` method for more details.
+   *
+   * @since 2.0.0
+   */
+  def parquet(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    parquet(Seq(path): _*)
+  }
+
+  /**
+   * Loads a Parquet file, returning the result as a [[DataFrame]].
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <ul>
    * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
    * whether we should merge schemas collected from all Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
-   *
+   * </ul>
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -404,7 +430,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support.
    */
-  def orc(path: String): DataFrame = format("orc").load(path)
+  def orc(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    orc(Seq(path): _*)
+  }
+
+  /**
+   * Loads an ORC file and returns the result as a [[DataFrame]].
+   *
+   * @param paths input paths
+   * @since 2.0.0
+   * @note Currently, this method can only be used after enabling Hive support.
+   */
+  @scala.annotation.varargs
+  def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
 
   /**
    * Returns the specified table as a [[DataFrame]].
@@ -415,6 +454,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     Dataset.ofRows(sparkSession,
       sparkSession.sessionState.catalog.lookupRelation(
         sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
+  }
+
+  /**
+   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * "value", and followed by partitioned columns if there are any. See the documentation on
+   * the other overloaded `text()` method for more details.
+   *
+   * @since 2.0.0
+   */
+  def text(path: String): DataFrame = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    text(Seq(path): _*)
   }
 
   /**
@@ -430,11 +481,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   spark.read().text("/path/to/spark/README.md")
    * }}}
    *
-   * @param paths input path
+   * @param paths input paths
    * @since 1.6.0
    */
   @scala.annotation.varargs
   def text(paths: String*): DataFrame = format("text").load(paths : _*)
+
+  /**
+   * Loads text files and returns a [[Dataset]] of String. See the documentation on the
+   * other overloaded `textFile()` method for more details.
+   * @since 2.0.0
+   */
+  def textFile(path: String): Dataset[String] = {
+    // This method ensures that calls that explicit need single argument works, see SPARK-16009
+    textFile(Seq(path): _*)
+  }
 
   /**
    * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
@@ -457,6 +518,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new AnalysisException("User specified schema not supported with `textFile`")
+    }
     text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
