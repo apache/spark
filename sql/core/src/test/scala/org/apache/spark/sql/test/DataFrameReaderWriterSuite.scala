@@ -217,21 +217,21 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
         spark.read.format(format).table(tableName)
       }.getMessage
       assert(e.contains("Operation not allowed: specifying the input data source format " +
-        "when reading table from catalog. table: `tab`, format: `parquet`"))
+        "when reading tables from catalog. table: `tab`, format: `parquet`"))
 
       // not allowed to specify schema.
       e = intercept[IllegalArgumentException] {
         spark.read.schema(schema).table(tableName)
       }.getMessage
-      assert(e.contains("Operation not allowed: specifying the input schema when reading table " +
+      assert(e.contains("Operation not allowed: specifying the input schema when reading tables " +
         "from catalog. table: `tab`, schema: `StructType(StructField(c1,IntegerType,true))`"))
 
       // not allowed to specify options.
       e = intercept[IllegalArgumentException] {
         spark.read.options(Map("header" -> "true", "mode" -> "dropmalformed")).table(tableName)
       }.getMessage
-      assert(e.contains("Operation not allowed: specifying the input option when reading table " +
-        "from catalog. table: `tab`, option: `header -> true, mode -> dropmalformed`"))
+      assert(e.contains("Operation not allowed: specifying the input option when reading " +
+        "tables from catalog. table: `tab`, option: `header -> true, mode -> dropmalformed`"))
     }
   }
 

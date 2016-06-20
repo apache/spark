@@ -245,6 +245,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
+    if (userSpecifiedSource.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input data source format when reading tables from " +
+          s"JDBC connections. table: `$table`, format: `${userSpecifiedSource.get}`.")
+    }
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input schema when reading tables from " +
+          s"JDBC connections. table: `$table`, schema: `${userSpecifiedSchema.get}`.")
+    }
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
       props.put(key, value)
@@ -424,17 +434,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def table(tableName: String): DataFrame = {
     if (userSpecifiedSource.nonEmpty) {
       throw new IllegalArgumentException(
-        "Operation not allowed: specifying the input data source format when reading table from " +
+        "Operation not allowed: specifying the input data source format when reading tables from " +
         s"catalog. table: `$tableName`, format: `${userSpecifiedSource.get}`.")
     }
     if (userSpecifiedSchema.nonEmpty) {
       throw new IllegalArgumentException(
-        "Operation not allowed: specifying the input schema when reading table from " +
+        "Operation not allowed: specifying the input schema when reading tables from " +
         s"catalog. table: `$tableName`, schema: `${userSpecifiedSchema.get}`.")
     }
     if (extraOptions.nonEmpty) {
       throw new IllegalArgumentException(
-        "Operation not allowed: specifying the input option when reading table from " +
+        "Operation not allowed: specifying the input option when reading tables from " +
           s"catalog. table: `$tableName`, option: `${extraOptions.mkString(", ")}`.")
     }
 

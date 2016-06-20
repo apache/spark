@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCRelation, JDBCRDD}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -346,6 +346,36 @@ class JDBCSuite extends SparkFunSuite
     properties.setProperty("fetchSize", "2")
     assert(spark.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+  }
+
+  test("Option API with FetchSize") {
+    val dfUsingOption = spark.read.option("fetchSize", "2").jdbc(
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    assert(dfUsingOption.count() == 3)
+    val logicalRelation =
+      dfUsingOption.queryExecution.analyzed.find(_.isInstanceOf[LogicalRelation])
+    assert(logicalRelation.isDefined)
+    val baseRelation = logicalRelation.get.asInstanceOf[LogicalRelation].relation
+    assert(baseRelation.isInstanceOf[JDBCRelation])
+    assert(baseRelation.asInstanceOf[JDBCRelation].properties.get("fetchSize") === "2")
+  }
+
+  test("Using format or schema") {
+    // not allowed to specify format.
+    var e = intercept[IllegalArgumentException] {
+      spark.read.format("parquet").jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    }.getMessage
+    assert(e.contains("Operation not allowed: specifying the input data source format " +
+      "when reading tables from JDBC connections. table: `TEST.PEOPLE`, format: `parquet`"))
+
+    // not allowed to specify schema.
+    val schema = StructType(StructField("c1", IntegerType) :: Nil)
+    e = intercept[IllegalArgumentException] {
+      spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    }.getMessage
+    assert(e.contains("Operation not allowed: specifying the input schema when reading tables " +
+      "from JDBC connections. table: `TEST.PEOPLE`, schema: " +
+      "`StructType(StructField(c1,IntegerType,true))`"))
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
