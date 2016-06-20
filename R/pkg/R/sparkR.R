@@ -89,9 +89,7 @@ sparkR.session.stop <- function() {
 
 #' (Deprecated) Initialize a new Spark Context.
 #'
-#' This function initializes a new SparkContext. For details on how to initialize
-#' and use SparkR, refer to SparkR programming guide at
-#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
+#' This function initializes a new SparkContext.
 #'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
@@ -311,6 +309,9 @@ sparkRHive.init <- function(jsc = NULL) {
 #'
 #' Additional Spark properties can be set (...), and these named parameters take priority over
 #' over values in master, appName, named lists of sparkConfig.
+#'
+#' For details on how to initialize and use SparkR, refer to SparkR programming guide at
+#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
 #'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager

@@ -67,8 +67,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' data(iris)
 #' df <- createDataFrame(iris)
 #' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family="gaussian")
@@ -115,8 +114,7 @@ setMethod(
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' data(iris)
 #' df <- createDataFrame(iris)
 #' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
