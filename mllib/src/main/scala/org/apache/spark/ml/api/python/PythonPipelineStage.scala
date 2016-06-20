@@ -205,6 +205,10 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val pyDir = new Path(path, "pyTransformer").toString
       instance.pfunc.save(pyDir)
+      val failure = instance.pfunc.getLastFailure
+      if (failure != null) {
+        throw new SparkException("An exception was raised by Python:\n" + failure)
+      }
     }
   }
 
