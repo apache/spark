@@ -28,8 +28,8 @@ import org.apache.spark.sql.types.DataType
 object sqlDataTypes {
 
   /** Data type for [[Vector]]. */
-  lazy val VectorType: DataType = new VectorUDT
+  val VectorType: DataType = new VectorUDT
 
   /** Data type for [[Matrix]]. */
-  lazy val MatrixType: DataType = new MatrixUDT
+  val MatrixType: DataType = new MatrixUDT
 }
