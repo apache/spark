@@ -49,6 +49,9 @@ object SchemaUtils {
    * @return
    */
   private  def getDataType(dataType: Any): DataType = dataType match {
+    case mt: MapType => {
+      MapType(getDataType(mt.keyType), getDataType(mt.valueType), mt.valueContainsNull)
+    }
     case at: ArrayType => {
       ArrayType(getDataType(at.elementType), at.containsNull)
     }
