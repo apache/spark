@@ -24,8 +24,7 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 
 /**
- * This is based on 
- * {@link org.apache.hadoop.hive.ql.io.orc.VectorizedOrcInputFormat.VectorizedOrcRecordReader}.
+ * A mapred.RecordReader that returns VectorizedRowBatch.
  */
 public class SparkVectorizedOrcRecordReader
       implements RecordReader<NullWritable, VectorizedRowBatch> {

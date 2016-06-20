@@ -204,7 +204,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("simple select queries") {
-    val data = (0 until 10).map(i => (i, i.toString))
     withOrcTable((0 until 10).map(i => (i, i.toString)), "t") {
       checkAnswer(
         sql("SELECT `_1` FROM t where t.`_1` > 5"),
