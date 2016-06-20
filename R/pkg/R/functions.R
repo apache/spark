@@ -1181,8 +1181,8 @@ setMethod("soundex",
 
 #' Return the partition ID as a column
 #'
-#' Return the column for partition ID of the Spark task.
-#' Note that this is indeterministic because it depends on data partitioning and
+#' Return the partition ID of the Spark task as a SparkDataFrame column.
+#' Note that this is nondeterministic because it depends on data partitioning and
 #' task scheduling.
 #'
 #' This is equivalent to the SPARK_PARTITION_ID function in SQL.
