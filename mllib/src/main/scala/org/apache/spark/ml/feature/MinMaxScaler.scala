@@ -149,8 +149,8 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
 @Since("1.5.0")
 class MinMaxScalerModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("1.5.0") val originalMin: Vector,
-    @Since("1.5.0") val originalMax: Vector)
+    @Since("2.0.0") val originalMin: Vector,
+    @Since("2.0.0") val originalMax: Vector)
   extends Model[MinMaxScalerModel] with MinMaxScalerParams with MLWritable {
 
   import MinMaxScalerModel._

@@ -147,8 +147,8 @@ object StandardScaler extends DefaultParamsReadable[StandardScaler] {
 @Since("1.2.0")
 class StandardScalerModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    @Since("1.5.0") val std: Vector,
-    @Since("1.5.0") val mean: Vector)
+    @Since("2.0.0") val std: Vector,
+    @Since("2.0.0") val mean: Vector)
   extends Model[StandardScalerModel] with StandardScalerParams with MLWritable {
 
   import StandardScalerModel._

@@ -127,7 +127,7 @@ object PCA extends DefaultParamsReadable[PCA] {
 @Since("1.5.0")
 class PCAModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("1.6.0") val pc: DenseMatrix,
+    @Since("2.0.0") val pc: DenseMatrix,
     @Since("2.0.0") val explainedVariance: DenseVector)
   extends Model[PCAModel] with PCAParams with MLWritable {
 

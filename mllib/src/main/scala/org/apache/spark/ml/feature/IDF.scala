@@ -150,7 +150,7 @@ class IDFModel private[ml] (
   }
 
   /** Returns the IDF vector. */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def idf: Vector = idfModel.idf.asML
 
   @Since("1.6.0")
