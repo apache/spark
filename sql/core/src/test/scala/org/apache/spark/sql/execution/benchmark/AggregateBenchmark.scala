@@ -132,25 +132,31 @@ class AggregateBenchmark extends BenchmarkBase {
   }
 
 
-  test("aggregate with randomized keys") {
-    val N = 20 << 22
+  test("cache aggregate with randomized keys") {
+    val N = 20 << 21
 
     val numIters = 10
-    val benchmark = new Benchmark("Aggregate w keys", N)
-    sparkSession.range(N).selectExpr("id", "floor(rand() * 10000) as k")
+    val benchmark = new Benchmark("Cache aggregate", N)
+    sparkSession.range(N)
+      .selectExpr("id", "floor(rand() * 10000) as k")
       .createOrReplaceTempView("test")
 
-    def run(cache: Boolean = false): Unit = {
-      if (cache) {
-        sparkSession.catalog.cacheTable("test")
+    /**
+     * Actually run the benchmark, optionally specifying whether to cache the dataset.
+     */
+    def runBenchmark(name: String, cache: Boolean, params: Map[String, String]): Unit = {
+      val ds = sparkSession.sql("select k, sum(id) from test group by k")
+      val defaults = params.keys.map { k => (k, sparkSession.conf.get(k)) }
+      val prepare = () => {
+        params.foreach { case (k, v) => sparkSession.conf.set(k, v) }
+        if (cache) { sparkSession.catalog.cacheTable("test") }
+        ds.collect(): Unit
       }
-      try {
-        val ds = sparkSession.sql("select k, sum(id) from test group by k")
-        ds.collect()
-        ds.collect()
-      } finally {
+      val cleanup = () => {
+        defaults.foreach { case (k, v) => sparkSession.conf.set(k, v) }
         sparkSession.catalog.clearCache()
       }
+      benchmark.addCase(name, numIters, prepare, cleanup) { _ => ds.collect() }
     }
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
@@ -167,17 +173,6 @@ class AggregateBenchmark extends BenchmarkBase {
     }
 
     benchmark.run()
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    Aggregate w keys:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    codegen = F                                   7445 / 7517         11.3          88.7       1.0X
-    codegen = T hashmap = F                       4672 / 4703         18.0          55.7       1.6X
-    codegen = T hashmap = T                       1764 / 1958         47.6          21.0       4.2X
-    */
   }
 
   ignore("aggregate with string key") {
