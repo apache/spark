@@ -35,6 +35,7 @@
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
 #' }
+#' @note structType since 1.4.0
 structType <- function(x, ...) {
   UseMethod("structType", x)
 }
@@ -67,6 +68,7 @@ structType.structField <- function(x, ...) {
 #'
 #' @param x A StructType object
 #' @param ... further arguments passed to or from other methods
+#' @note print.structType since 1.4.0
 print.structType <- function(x, ...) {
   cat("StructType\n",
       sapply(x$fields(),
@@ -98,7 +100,7 @@ print.structType <- function(x, ...) {
 #'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
 #'               schema)
 #' }
-
+#' @note structField since 1.4.0
 structField <- function(x, ...) {
   UseMethod("structField", x)
 }
@@ -202,6 +204,7 @@ structField.character <- function(x, type, nullable = TRUE) {
 #'
 #' @param x A StructField object
 #' @param ... further arguments passed to or from other methods
+#' @note print.structField since 1.4.0
 print.structField <- function(x, ...) {
   cat("StructField(name = \"", x$name(),
       "\", type = \"", x$dataType.toString(),
