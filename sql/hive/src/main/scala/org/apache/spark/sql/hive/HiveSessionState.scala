@@ -66,7 +66,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         catalog.OrcConversions ::
         catalog.CreateTables ::
         PreprocessTableInsertion(conf) ::
-        DataSourceAnalysis ::
+        DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
