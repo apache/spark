@@ -2203,6 +2203,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the number of rows in the Dataset.
+   *
    * @group action
    * @since 1.6.0
    */
@@ -2294,19 +2295,6 @@ class Dataset[T] private[sql](
   def cache(): this.type = persist()
 
   /**
-   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
-   *
-   * @group basic
-   * @since 2.0.0
-   */
-  def getStorageLevel(): StorageLevel = {
-    sparkSession.sharedState.cacheManager.lookupCachedData(this).map {
-      case CachedData(_, relation) =>
-        relation.storageLevel
-    }.getOrElse(StorageLevel.NONE)
-  }
-
-  /**
    * Persist this Dataset with the given storage level.
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
@@ -2318,6 +2306,18 @@ class Dataset[T] private[sql](
   def persist(newLevel: StorageLevel): this.type = {
     sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
     this
+  }
+
+  /**
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def getStorageLevel(): StorageLevel = {
+    sparkSession.sharedState.cacheManager.lookupCachedData(this).map { cachedData =>
+      cachedData.cachedRepresentation.storageLevel
+    }.getOrElse(StorageLevel.NONE)
   }
 
   /**
@@ -2357,6 +2357,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
+   *
    * @group basic
    * @since 1.6.0
    */
@@ -2364,6 +2365,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
+   *
    * @group basic
    * @since 1.6.0
    */
@@ -2453,6 +2455,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
+   *
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
