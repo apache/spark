@@ -96,12 +96,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("Scheduler correctly accounts for multiple CPUs per task") {
     val taskCpus = 2
     val taskScheduler = setupScheduler("spark.task.cpus" -> taskCpus.toString)
-    taskScheduler.initialize(new FakeSchedulerBackend)
-    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    new DAGScheduler(sc, taskScheduler) {
-      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorAdded(execId: String, host: String) {}
-    }
     // Give zero core offers. Should not generate any tasks
     val zeroCoreWorkerOffers = Seq(new WorkerOffer("executor0", "host0", 0),
       new WorkerOffer("executor1", "host1", 0))

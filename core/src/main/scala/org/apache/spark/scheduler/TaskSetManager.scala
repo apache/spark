@@ -575,7 +575,6 @@ private[spark] class TaskSetManager(
     index
   }
 
-
   /**
    * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
    *
