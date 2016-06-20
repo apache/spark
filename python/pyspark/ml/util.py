@@ -264,7 +264,7 @@ class TransformerWrapper(object):
         self.failure = None
         reader = TransformerWrapperReader(self.ctx)
         self.ctx._sc._gateway.jvm.\
-            org.apache.spark.ml.api.python.PythonTransformerWrapper.registerReader(reader)
+            org.apache.spark.ml.api.python.PythonPipelineStage.registerReader(reader)
 
     def df_wrapper(self, func):
         self.df_wrap_func = func
@@ -375,7 +375,8 @@ class TransformWrapperSerializer(object):
         self.ctx = ctx
         self.serializer = serializer
         self.gateway = gateway or self.ctx._gateway
-        # self.gateway.jvm.PythonDStream.registerSerializer(self)
+        self.gateway.jvm\
+            .org.apache.spark.ml.api.python.PythonPipelineStage.registerSerializer(self)
         self.failure = None
 
     def dumps(self, id):
