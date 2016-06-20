@@ -34,17 +34,17 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     // default storage level
     ds1.persist()
     ds2.cache()
-    assert(ds1.getStorageLevel() == StorageLevel.MEMORY_AND_DISK)
-    assert(ds2.getStorageLevel() == StorageLevel.MEMORY_AND_DISK)
+    assert(ds1.storageLevel() == StorageLevel.MEMORY_AND_DISK)
+    assert(ds2.storageLevel() == StorageLevel.MEMORY_AND_DISK)
     // unpersist
     ds1.unpersist()
-    assert(ds1.getStorageLevel() == StorageLevel.NONE)
+    assert(ds1.storageLevel() == StorageLevel.NONE)
     // non-default storage level
     ds1.persist(StorageLevel.MEMORY_ONLY_2)
-    assert(ds1.getStorageLevel() == StorageLevel.MEMORY_ONLY_2)
+    assert(ds1.storageLevel() == StorageLevel.MEMORY_ONLY_2)
     // joined Dataset should not be persisted
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
-    assert(joined.getStorageLevel() == StorageLevel.NONE)
+    assert(joined.storageLevel() == StorageLevel.NONE)
   }
 
   test("persist and unpersist") {
@@ -60,7 +60,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
     // Drop the cache.
     cached.unpersist()
-    assert(cached.getStorageLevel() == StorageLevel.NONE, "The Dataset should not be cached.")
+    assert(cached.storageLevel() == StorageLevel.NONE, "The Dataset should not be cached.")
   }
 
   test("persist and then rebind right encoder when join 2 datasets") {
@@ -77,9 +77,9 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(joined, 2)
 
     ds1.unpersist()
-    assert(ds1.getStorageLevel() == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
+    assert(ds1.storageLevel() == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
     ds2.unpersist()
-    assert(ds2.getStorageLevel() == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
+    assert(ds2.storageLevel() == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
   }
 
   test("persist and then groupBy columns asKey, map") {
@@ -94,8 +94,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(agged.filter(_._1 == "b"))
 
     ds.unpersist()
-    assert(ds.getStorageLevel() == StorageLevel.NONE, "The Dataset ds should not be cached.")
+    assert(ds.storageLevel() == StorageLevel.NONE, "The Dataset ds should not be cached.")
     agged.unpersist()
-    assert(agged.getStorageLevel() == StorageLevel.NONE, "The Dataset agged should not be cached.")
+    assert(agged.storageLevel() == StorageLevel.NONE, "The Dataset agged should not be cached.")
   }
 }
