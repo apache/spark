@@ -111,16 +111,15 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
       }
     }
 
-    partitionList.sliding(2).foreach { v =>
-      // If there is a dynamic partition appearing before a static partition,
-      // we need to throw an exception.
-      if (v(0).isEmpty && v(1).isDefined) {
+    // We first drop all leading static partitions using dropWhile and check if there is
+    // any static partition appear after dynamic partitions.
+    partitionList.dropWhile(_.isDefined).collectFirst {
+      case Some(_) =>
         throw new AnalysisException(
           s"The ordering of partition columns is " +
             s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}. " +
             "All partition columns having constant values need to appear before other " +
             "partition columns that do not have an assigned constant value.")
-      }
     }
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))

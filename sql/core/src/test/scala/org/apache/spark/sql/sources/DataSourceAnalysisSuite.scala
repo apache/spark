@@ -170,17 +170,29 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
           targetPartitionSchema = targetPartitionSchema)
         checkProjectList(actual, expected)
       }
+
+      // Test the case having a single static partition column.
+      {
+        val nonPartitionedAttributes = Seq('e.int, 'f.int)
+        val expected = nonPartitionedAttributes ++ Seq(Cast(Literal("1"), IntegerType))
+        val actual = rule.convertStaticPartitions(
+          sourceAttributes = nonPartitionedAttributes,
+          providedPartitions = Map("b" -> Some("1")),
+          targetAttributes = Seq('a.int, 'd.int, 'b.int),
+          targetPartitionSchema = new StructType().add("b", IntegerType))
+        checkProjectList(actual, expected)
+      }
     }
 
     test(s"Static partition and dynamic partition (caseSensitive: $caseSensitive)") {
       val nonPartitionedAttributes = Seq('e.int, 'f.int)
-      val dynamicPartitionAttribtues = Seq('g.int)
+      val dynamicPartitionAttributes = Seq('g.int)
       val expected =
         nonPartitionedAttributes ++
           Seq(Cast(Literal("1"), IntegerType)) ++
-          dynamicPartitionAttribtues
+          dynamicPartitionAttributes
       val actual = rule.convertStaticPartitions(
-        sourceAttributes = nonPartitionedAttributes ++ dynamicPartitionAttribtues,
+        sourceAttributes = nonPartitionedAttributes ++ dynamicPartitionAttributes,
         providedPartitions = Map("b" -> Some("1"), "c" -> None),
         targetAttributes = targetAttributes,
         targetPartitionSchema = targetPartitionSchema)
