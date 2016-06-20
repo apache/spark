@@ -348,7 +348,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
   /**
    * This only tests whether API compiles, but does not run it as orc()
-   * cannot be run with Hive classes.
+   * cannot be run without Hive classes.
    */
   ignore("orc - API") {
     // Reader, with user specified schema

@@ -146,7 +146,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   /**
    * This only tests whether API compiles, but does not run it as orc()
-   * cannot be run with Hive classes.
+   * cannot be run without Hive classes.
    */
   public void testOrcAPI() {
     spark.read().schema(schema).orc();
