@@ -338,21 +338,20 @@ class JDBCSuite extends SparkFunSuite
 
   test("Basic API") {
     assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", new Properties)
-      .collect().length === 3)
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties).count == 3)
   }
 
   test("Basic API with FetchSize") {
     val properties = new Properties
     properties.setProperty("fetchSize", "2")
     assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+      urlWithUserAndPass, "TEST.PEOPLE", properties).count == 3)
   }
 
   test("Option API with FetchSize") {
     val dfUsingOption = spark.read.option("fetchSize", "2").jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", new Properties)
-    assert(dfUsingOption.count() == 3)
+    assert(dfUsingOption.count == 3)
     val logicalRelation =
       dfUsingOption.queryExecution.analyzed.find(_.isInstanceOf[LogicalRelation])
     assert(logicalRelation.isDefined)
@@ -370,7 +369,7 @@ class JDBCSuite extends SparkFunSuite
         .option("password", "testPass")
         .format("jdbc")
         .load()
-    assert(dfUsingOption.count() == 3)
+    assert(dfUsingOption.count == 3)
   }
 
   test("Using schema") {
