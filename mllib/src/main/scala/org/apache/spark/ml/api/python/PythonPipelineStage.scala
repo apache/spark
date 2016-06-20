@@ -222,5 +222,12 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
 }
 
 object PythonPipelineStage {
+  // Helper function due to Py4J error of reader/serializer does not exist in the JVM.
+  def registerReader(r: PythonTransformerWrapperReader): Unit = {
+    PythonTransformerWrapper.registerReader(r)
+  }
 
+  def registerSerializer(ser: PythonTransformerWrapperSerializer): Unit = {
+    PythonTransformerWrapperSerializer.register(ser)
+  }
 }
