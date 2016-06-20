@@ -473,7 +473,7 @@ private[ml] object FeedForwardTopology {
             new SigmoidLayerWithSquaredError()
           }
         } else {
-          new FunctionalLayer(new TanhFunction())
+          new FunctionalLayer(new SigmoidFunction())
         }
     }
     FeedForwardTopology(layers)
