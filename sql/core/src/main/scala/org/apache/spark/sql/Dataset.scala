@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
@@ -2203,7 +2203,6 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the number of rows in the Dataset.
-   *
    * @group action
    * @since 1.6.0
    */
@@ -2357,7 +2356,6 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
-   *
    * @group basic
    * @since 1.6.0
    */
@@ -2365,7 +2363,6 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
-   *
    * @group basic
    * @since 1.6.0
    */
@@ -2455,7 +2452,6 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
-   *
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {
