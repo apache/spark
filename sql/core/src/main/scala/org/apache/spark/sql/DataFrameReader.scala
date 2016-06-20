@@ -45,11 +45,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def format(source: String): DataFrameReader = {
-    if (this.userSpecifiedSource.nonEmpty) {
-      throw new IllegalArgumentException(
-        "Operation not allowed: the input data source format has already been set. " +
-        s"Existing: `${this.userSpecifiedSource.get}`, new: `$source`.")
-    }
     this.userSpecifiedSource = Option(source)
     this
   }
@@ -62,11 +57,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def schema(schema: StructType): DataFrameReader = {
-    if (this.userSpecifiedSchema.nonEmpty) {
-      throw new IllegalArgumentException(
-        "Operation not allowed: the input schema has already been set. " +
-          s"Existing: `${this.userSpecifiedSchema.get}`, new: `$schema`.")
-    }
     this.userSpecifiedSchema = Option(schema)
     this
   }

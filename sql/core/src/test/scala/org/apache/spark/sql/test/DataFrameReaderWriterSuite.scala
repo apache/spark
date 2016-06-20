@@ -228,34 +228,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("format or schema are specified twice") {
-    val schema1 = StructType(StructField("c1", IntegerType) :: Nil)
-    val schema2 = StructType(StructField("c2", IntegerType) :: Nil)
-    val format = "parquet"
-    val df = spark.createDataFrame(sparkContext.parallelize(Row(3) :: Nil), schema1)
-
-    withTempPath { path =>
-      df.write.format("json").mode("overwrite").save(path.getCanonicalPath)
-      // correct way:
-      spark.read.json(path.getCanonicalPath)
-
-      // not allowed to specify the format more than once
-      var e = intercept[IllegalArgumentException] {
-        spark.read.format(format).json(path.getCanonicalPath)
-      }.getMessage
-      assert(e.contains("Operation not allowed: the input data source format has already been " +
-        "set. Existing: `parquet`, new: `json`"))
-
-      // not allowed to specify the schema more than once.
-      e = intercept[IllegalArgumentException] {
-        spark.read.schema(schema1).schema(schema2).json(path.getCanonicalPath)
-      }.getMessage
-      assert(e.contains("Operation not allowed: the input schema has already been set. " +
-        "Existing: `StructType(StructField(c1,IntegerType,true))`, " +
-        "new: `StructType(StructField(c2,IntegerType,true))`"))
-    }
-  }
-
   test("check jdbc() does not support partitioning or bucketing") {
     val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
