@@ -188,14 +188,14 @@ class PythonTransformer(
   /**
    * @return Serialized Python transformer
    */
-  private def getPythonTransformer: Array[Byte] = {
+  private[python] def getPythonTransformer: Array[Byte] = {
     callGetTransformerFromPython
   }
 
   /**
    * @return Transformer's fully qualified class name in PySpark.
    */
-  private def getPythonClassName: String = {
+  private[python] def getPythonClassName: String = {
     proxy.getClassName
   }
 
