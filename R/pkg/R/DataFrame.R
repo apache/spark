@@ -701,6 +701,33 @@ setMethod("write.json",
             invisible(callJMethod(write, "json", path))
           })
 
+#' Save the contents of SparkDataFrame as an ORC file, preserving the schema.
+#'
+#' Save the contents of a SparkDataFrame as an ORC file, preserving the schema. Files written out
+#' with this method can be read back in as a SparkDataFrame using read.orc().
+#'
+#' @param x A SparkDataFrame
+#' @param path The directory where the file is saved
+#'
+#' @family SparkDataFrame functions
+#' @rdname write.orc
+#' @name write.orc
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' write.orc(df, "/tmp/sparkr-tmp1/")
+#' }
+#' @note write.orc since 2.0.0
+setMethod("write.orc",
+          signature(x = "SparkDataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "orc", path))
+          })
+
 #' Save the contents of SparkDataFrame as a Parquet file, preserving the schema.
 #'
 #' Save the contents of a SparkDataFrame as a Parquet file, preserving the schema. Files written out
