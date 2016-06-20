@@ -361,79 +361,71 @@ private[hive] trait HiveInspectors {
   def unwrapperFor(objectInspector: ObjectInspector): Any => Any =
     objectInspector match {
       case coi: ConstantObjectInspector if coi.getWritableConstantValue == null =>
-        data: Any => null
+        _ => null
       case poi: WritableConstantStringObjectInspector =>
-        data: Any =>
-          UTF8String.fromString(poi.getWritableConstantValue.toString)
+        val constant = UTF8String.fromString(poi.getWritableConstantValue.toString)
+        _ => constant
       case poi: WritableConstantHiveVarcharObjectInspector =>
-        data: Any =>
-          UTF8String.fromString(poi.getWritableConstantValue.getHiveVarchar.getValue)
+        val constant = UTF8String.fromString(poi.getWritableConstantValue.getHiveVarchar.getValue)
+        _ => constant
       case poi: WritableConstantHiveCharObjectInspector =>
-        data: Any =>
-          UTF8String.fromString(poi.getWritableConstantValue.getHiveChar.getValue)
+        val constant = UTF8String.fromString(poi.getWritableConstantValue.getHiveChar.getValue)
+        _ => constant
       case poi: WritableConstantHiveDecimalObjectInspector =>
-        data: Any =>
-          HiveShim.toCatalystDecimal(
-            PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
-            poi.getWritableConstantValue.getHiveDecimal)
+        val constant = HiveShim.toCatalystDecimal(
+          PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector,
+          poi.getWritableConstantValue.getHiveDecimal)
+        _ => constant
       case poi: WritableConstantTimestampObjectInspector =>
-        data: Any => {
-          val t = poi.getWritableConstantValue
-          t.getSeconds * 1000000L + t.getNanos / 1000L
-        }
+        val t = poi.getWritableConstantValue
+        val constant = t.getSeconds * 1000000L + t.getNanos / 1000L
+        _ => constant
       case poi: WritableConstantIntObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantDoubleObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantBooleanObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantLongObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantFloatObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantShortObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantByteObjectInspector =>
-        data: Any =>
-          poi.getWritableConstantValue.get()
+        val constant = poi.getWritableConstantValue.get()
+        _ => constant
       case poi: WritableConstantBinaryObjectInspector =>
-        data: Any => {
-          val writable = poi.getWritableConstantValue
-          val temp = new Array[Byte](writable.getLength)
-          System.arraycopy(writable.getBytes, 0, temp, 0, temp.length)
-          temp
-        }
+        val writable = poi.getWritableConstantValue
+        val constant = new Array[Byte](writable.getLength)
+        System.arraycopy(writable.getBytes, 0, constant, 0, constant.length)
+        _ => constant
       case poi: WritableConstantDateObjectInspector =>
-        data: Any =>
-          DateTimeUtils.fromJavaDate(poi.getWritableConstantValue.get())
+        val constant = DateTimeUtils.fromJavaDate(poi.getWritableConstantValue.get())
+        _ => constant
       case mi: StandardConstantMapObjectInspector =>
         val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector)
         val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector)
-        data: Any => {
-          // take the value from the map inspector object, rather than the input data
-          val keyValues = mi.getWritableConstantValue.asScala.toSeq
-          val keys = keyValues.map(kv => keyUnwrapper(kv._1)).toArray
-          val values = keyValues.map(kv => valueUnwrapper(kv._2)).toArray
-          ArrayBasedMapData(keys, values)
-        }
+        val keyValues = mi.getWritableConstantValue.asScala.toSeq
+        val keys = keyValues.map(kv => keyUnwrapper(kv._1)).toArray
+        val values = keyValues.map(kv => valueUnwrapper(kv._2)).toArray
+        val constant = ArrayBasedMapData(keys, values)
+        _ => constant
       case li: StandardConstantListObjectInspector =>
         val unwrapper = unwrapperFor(li.getListElementObjectInspector)
-        data: Any => {
-          // take the value from the list inspector object, rather than the input data
-          val values = li.getWritableConstantValue.asScala
-            .map(unwrapper)
-            .toArray
-          new GenericArrayData(values)
-        }
+        val values = li.getWritableConstantValue.asScala
+          .map(unwrapper)
+          .toArray
+        val constant = new GenericArrayData(values)
+        _ => constant
       case poi: VoidObjectInspector =>
-        data: Any =>
-          null // always be null for void object inspector
+        _ => null // always be null for void object inspector
       case pi: PrimitiveObjectInspector => pi match {
         // We think HiveVarchar/HiveChar is also a String
         case hvoi: HiveVarcharObjectInspector if hvoi.preferWritable() =>
@@ -618,8 +610,9 @@ private[hive] trait HiveInspectors {
           fields.map(_.getFieldObjectInspector).map(unwrapperFor))
         data: Any => {
           if (data != null) {
-            InternalRow.fromSeq(fieldsToUnwrap.map(
-              field => field._2(si.getStructFieldData(data, field._1))))
+            InternalRow.fromSeq(fieldsToUnwrap.map { case (field, unwrapper) =>
+              unwrapper(si.getStructFieldData(data, field))
+            })
           } else {
             null
           }
