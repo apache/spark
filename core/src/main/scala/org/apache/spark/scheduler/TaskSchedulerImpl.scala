@@ -280,52 +280,12 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    if (!launchedTask && isTaskSetCompletelyBlacklisted(taskSet)) {
-      taskSet.abort(s"Aborting ${taskSet.taskSet} because it has a task which cannot be scheduled" +
-        s" on any executor due to blacklists.")
+    if (!launchedTask) {
+      taskSet.abortIfTaskSetCompletelyBlacklisted(executorsByHost)
     }
     return launchedTask
   }
 
-  /**
-   * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
-   *
-   * It is possible that this taskset has become impossible to schedule *anywhere* due to the
-   * blacklist.  The most common scenario would be if there are fewer executors than
-   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
-   * will hang.
-   *
-   * The check here is a balance between being sure to catch the issue, but not wasting
-   * too much time inside the scheduling loop.  Just check if the last task is schedulable
-   * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
-   * really be fast unless you've got a bunch of things blacklisted.  Its possible it won't detect
-   * the unschedulable task immediately, but if it returns false, there is at least *some* task
-   * that is schedulable, and after scheduling all of those, we'll eventually find the unschedulable
-   * task.
-   */
-  private[scheduler] def isTaskSetCompletelyBlacklisted(
-      taskSet: TaskSetManager): Boolean = {
-    if (executorsByHost.nonEmpty) {
-      // take any task that needs to be scheduled, and see if we can find some executor it *could*
-      // run on
-      taskSet.pollPendingTask.map { task =>
-        logInfo(s"checking ${executorsByHost}")
-        executorsByHost.foreach { case (host, execs) =>
-          execs.foreach { exec =>
-            logInfo(s"checking task ${task} on exec $exec")
-            if (!taskSet.executorIsBlacklisted(exec, task)) {
-              return false
-            }
-          }
-        }
-        true
-      }.getOrElse(false)
-    } else {
-      // no executors have registered yet, so don't abort the stage, just wait.  We probably
-      // got here because a task set was added before the executors registered.
-      false
-    }
-  }
 
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task

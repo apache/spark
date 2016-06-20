@@ -404,25 +404,6 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Return some task which is pending, but do not remove it from the list of pending tasks.
-   * Used as a simple way to test if this task set is schedulable anywhere, or if it has been
-   * completely blacklisted.
-   */
-  private[scheduler] def pollPendingTask: Option[Int] = {
-    // usually this will just take the last pending task, but because of the lazy removal
-    // from each list, we may need to go deeper in the list
-    var indexOffset = allPendingTasks.size
-    while (indexOffset > 0) {
-      indexOffset -= 1
-      val index = allPendingTasks(indexOffset)
-      if (copiesRunning(index) == 0 && !successful(index)) {
-        return Some(index)
-      }
-    }
-    None
-  }
-
-  /**
    * Respond to an offer of a single executor from the scheduler by finding a task
    *
    * NOTE: this function is either called with a maxLocality which
@@ -592,6 +573,63 @@ private[spark] class TaskSetManager(
       index += 1
     }
     index
+  }
+
+
+  /**
+   * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
+   *
+   * It is possible that this taskset has become impossible to schedule *anywhere* due to the
+   * blacklist.  The most common scenario would be if there are fewer executors than
+   * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
+   * will hang.
+   *
+   * The check here is a balance between being sure to catch the issue, but not wasting
+   * too much time inside the scheduling loop.  Just check if the last task is schedulable
+   * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
+   * really be fast unless you've got a bunch of things blacklisted.  Its possible it won't detect
+   * the unschedulable task immediately, but if it returns false, there is at least *some* task
+   * that is schedulable, and after scheduling all of those, we'll eventually find the unschedulable
+   * task.
+   */
+  private[scheduler] def abortIfTaskSetCompletelyBlacklisted(
+      executorsByHost: HashMap[String, HashSet[String]]): Unit = {
+    // If no executors have registered yet, don't abort the stage, just wait.  We probably
+    // got here because a task set was added before the executors registered.
+    if (executorsByHost.nonEmpty) {
+      // take any task that needs to be scheduled, and see if we can find some executor it *could*
+      // run on
+      pollPendingTask.foreach { task =>
+        executorsByHost.foreach { case (host, execs) =>
+          execs.foreach { exec =>
+            if (!executorIsBlacklisted(exec, task)) {
+              return
+            }
+          }
+        }
+        abort(s"Aborting ${taskSet} because it has a task which cannot be scheduled on any" +
+          s" executor due to blacklists.")
+      }
+    }
+  }
+
+  /**
+   * Return some task which is pending, but do not remove it from the list of pending tasks.
+   * Used as a simple way to test if this task set is schedulable anywhere, or if it has been
+   * completely blacklisted.
+   */
+  private def pollPendingTask: Option[Int] = {
+    // usually this will just take the last pending task, but because of the lazy removal
+    // from each list, we may need to go deeper in the list
+    var indexOffset = allPendingTasks.size
+    while (indexOffset > 0) {
+      indexOffset -= 1
+      val index = allPendingTasks(indexOffset)
+      if (copiesRunning(index) == 0 && !successful(index)) {
+        return Some(index)
+      }
+    }
+    None
   }
 
   /**
