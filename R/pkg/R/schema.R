@@ -29,8 +29,11 @@
 #' @export
 #' @examples
 #'\dontrun{
-#' schema <- structType(structField("a", "integer"), structField("b", "string"))
-#' df <- createDataFrame(rdd, schema)
+#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#'                       structField("avg", "double"))
+#' df1 <- gapply(df, list("a", "c"),
+#'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
+#'               schema)
 #' }
 structType <- function(x, ...) {
   UseMethod("structType", x)
@@ -87,10 +90,13 @@ print.structType <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' field1 <- structField("a", "integer", TRUE)
-#' field2 <- structField("b", "string", TRUE)
-#' schema <- structType(field1, field2)
-#' df <- createDataFrame(rdd, schema)
+#' field1 <- structField("a", "integer")
+#' field2 <- structField("c", "string")
+#' field3 <- structField("avg", "double")
+#' schema <-  structType(field1, field2, field3)
+#' df1 <- gapply(df, list("a", "c"),
+#'               function(key, x) { y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE) },
+#'               schema)
 #' }
 
 structField <- function(x, ...) {
