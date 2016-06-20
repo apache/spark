@@ -48,7 +48,7 @@ case class CreateMacroCommand(
       throw new AnalysisException(s"Cannot support duplicate colNames " +
         s"for CREATE TEMPORARY MACRO $macroName, actual columns: ${columns.mkString(",")}")
     }
-    val macroFunction = funcWrapper.macroFunction.transformDown {
+    val macroFunction = funcWrapper.macroFunction.transform {
       case u: UnresolvedAttribute =>
         val index = colToIndex.get(u.name).getOrElse(
           throw new AnalysisException(s"Cannot find colName: ${u} " +
@@ -82,7 +82,7 @@ case class CreateMacroCommand(
         throw new AnalysisException(s"Actual number of columns: ${children.size} != " +
           s"expected number of columns: ${columns.size} for Macro $macroName")
       }
-      macroFunction.transformUp {
+      macroFunction.transform {
         // Skip to validate the input type because Analyzer will check it after ResolveFunctions.
         case b: BoundReference => children(b.ordinal)
       }
