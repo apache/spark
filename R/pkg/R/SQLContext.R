@@ -330,6 +330,25 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
   }
 }
 
+#' Create a SparkDataFrame from an ORC file.
+#'
+#' Loads an ORC file, returning the result as a SparkDataFrame.
+#'
+#' @param path Path of file to read.
+#' @return SparkDataFrame
+#' @rdname read.orc
+#' @export
+#' @name read.orc
+#' @note read.orc since 2.0.0
+read.orc <- function(path) {
+  sparkSession <- getSparkSession()
+  # Allow the user to have a more flexible definiton of the ORC file path
+  path <- suppressWarnings(normalizePath(path))
+  read <- callJMethod(sparkSession, "read")
+  sdf <- callJMethod(read, "orc", path)
+  dataFrame(sdf)
+}
+
 #' Create a SparkDataFrame from a Parquet file.
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
@@ -343,7 +362,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 
 read.parquet.default <- function(path) {
   sparkSession <- getSparkSession()
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definiton of the Parquet file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sparkSession, "read")
   sdf <- callJMethod(read, "parquet", paths)

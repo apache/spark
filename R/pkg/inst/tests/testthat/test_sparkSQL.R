@@ -68,6 +68,7 @@ mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Justin\", \"age\":19}")
 jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 parquetPath <- tempfile(pattern = "sparkr-test", fileext = ".parquet")
+orcPath <- tempfile(pattern = "sparkr-test", fileext = ".orc")
 writeLines(mockLines, jsonPath)
 
 # For test nafunctions, like dropna(), fillna(),...
@@ -1667,6 +1668,25 @@ test_that("mutate(), transform(), rename() and names()", {
   detach(airquality)
 })
 
+test_that("read/write ORC files", {
+  df <- read.df(jsonPath, "json")
+
+  # Test write.df and read.df
+  write.df(df, orcPath, "orc", mode = "overwrite")
+  df2 <- read.df(orcPath, "orc")
+  expect_is(df2, "SparkDataFrame")
+  expect_equal(count(df), count(df2))
+
+  # Test write.orc and read.orc
+  orcPath2 <- tempfile(pattern = "orcPath2", fileext = ".orc")
+  write.orc(df, orcPath2)
+  orcDF <- read.orc(orcPath2)
+  expect_is(orcDF, "SparkDataFrame")
+  expect_equal(count(orcDF), count(df))
+
+  unlink(orcPath2)
+})
+
 test_that("read/write Parquet files", {
   df <- read.df(jsonPath, "json")
   # Test write.df and read.df
@@ -2351,5 +2371,6 @@ test_that("enableHiveSupport on SparkSession", {
 })
 
 unlink(parquetPath)
+unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
