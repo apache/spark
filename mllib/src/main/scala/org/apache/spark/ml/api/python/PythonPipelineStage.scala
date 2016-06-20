@@ -31,7 +31,12 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
+/**
+ * Wrapper of transformers written in pure Python. Its implementation is in PySpark.
+ * See pyspark.ml.util.TransformerWrapper
+ */
 trait PythonTransformerWrapper {
+
   def getUid: String
 
   def transform(dataset: Dataset[_]): DataFrame
@@ -46,16 +51,30 @@ trait PythonTransformerWrapper {
 
   def copy(extra: ParamMap): PythonTransformerWrapper
 
+  /**
+   * Get the failure in PySpark, if any.
+ *
+   * @return the failure message if there was a failure, or `null` if there was no failure.
+   */
   def getLastFailure: String
 }
 
+/**
+ * Loader for Python transformers.
+ */
 object PythonTransformerWrapper {
   private var reader: PythonTransformerWrapperReader = _
 
+  /**
+   * Register Python transformer reader to load PySpark transformers.
+   */
   def registerReader(r: PythonTransformerWrapperReader): Unit = {
     reader = r
   }
 
+  /**
+   * Load a Python transformer given path and its class name.
+   */
   def load(path: String, clazz: String): PythonTransformerWrapper = {
     require(reader != null, "Python reader has not been registered.")
     callLoadFromPython(path, clazz)
@@ -71,33 +90,47 @@ object PythonTransformerWrapper {
   }
 }
 
+/**
+ * Reader to load a Python transformer. Its implementation is in PySpark.
+ * See pyspark.ml.util.TransformerWrapperReader
+ */
 trait PythonTransformerWrapperReader {
+
+  /**
+   * Get the failure in PySpark, if any.
+ *
+   * @return the failure message if there was a failure, or `null` if there was no failure.
+   */
   def getLastFailure: String
+
   def load(path: String, clazz: String): PythonTransformerWrapper
 }
 
+/**
+ * Serializer for a Python transformer. Its implementation is in Pyspark.
+ * See pyspark.ml.util.TransformerWrapperSerializer
+ */
 trait PythonTransformerWrapperSerializer {
+
   def dumps(id: String): Array[Byte]
+
   def loads(bytes: Array[Byte]): PythonTransformerWrapper
 
   /**
-   * Get the failure, if any, in the last call to `dumps` or `loads`.
-   *
+   * Get the failure in PySpark, if any.
+ *
    * @return the failure message if there was a failure, or `null` if there was no failure.
    */
   def getLastFailure: String
 }
 
 /**
- * Helpers for PythonTransformFunctionSerializer
- *
- * PythonTransformFunctionSerializer is logically a singleton that's happens to be
- * implemented as a Python object.
+ * Helpers for PythonTransformerWrapperSerializer.
  */
 private[python] object PythonTransformerWrapperSerializer {
 
   /**
-   * A serializer in Python, used to serialize PythonTransformFunction
+   * A serializer in Python, used to serialize PythonTransformerWrapper.
     */
   private var serializer: PythonTransformerWrapperSerializer = _
 
@@ -112,7 +145,7 @@ private[python] object PythonTransformerWrapperSerializer {
     require(serializer != null, "Serializer has not been registered!")
     // get the id of PythonTransformFunction in py4j
     val h = Proxy.getInvocationHandler(wrapper.asInstanceOf[Proxy])
-    val f = h.getClass().getDeclaredField("id")
+    val f = h.getClass.getDeclaredField("id")
     f.setAccessible(true)
     val id = f.get(h).asInstanceOf[String]
     val results = serializer.dumps(id)
@@ -134,36 +167,48 @@ private[python] object PythonTransformerWrapperSerializer {
   }
 }
 
+/**
+ * A proxy transformer for all PySpark transformers implemented in pure Python.
+ *
+ * @param proxy A PythonTransformerWrapper which is implemented in PySpark.
+ * @param uid The uid of the wrapped python transformer.
+ */
 class PythonTransformer(
-    @transient var pfunc: PythonTransformerWrapper,
+    @transient var proxy: PythonTransformerWrapper,
     override val uid: String) extends Transformer with MLWritable {
 
   override def transformSchema(schema: StructType): StructType = {
-    pfunc.transformSchema(schema)
+    proxy.transformSchema(schema)
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     callTransformFromPython(dataset)
   }
 
+  /**
+   * @return Serialized Python transformer
+   */
   def getPythonTransformer: Array[Byte] = {
     callGetTransformerFromPython
   }
 
+  /**
+   * @return Transformer's fully qualified class name in PySpark.
+   */
   def getPythonClassName: String = {
-    pfunc.getClassName
+    proxy.getClassName
   }
 
   override def copy(extra: ParamMap): PythonTransformer = {
-    this.pfunc = this.pfunc.copy(extra)
+    this.proxy = this.proxy.copy(extra)
     this
   }
 
   override def write: MLWriter = new PythonTransformer.PythonTransformerWriter(this)
 
   def callGetTransformerFromPython: Array[Byte] = {
-    val result = pfunc.getTransformer
-    val failure = pfunc.getLastFailure
+    val result = proxy.getTransformer
+    val failure = proxy.getLastFailure
     if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
     }
@@ -171,8 +216,8 @@ class PythonTransformer(
   }
 
   def callTransformFromPython(dataset: Dataset[_]): DataFrame = {
-    val result = pfunc.transform(dataset)
-    val failure = pfunc.getLastFailure
+    val result = proxy.transform(dataset)
+    val failure = proxy.getLastFailure
     if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
     }
@@ -180,7 +225,7 @@ class PythonTransformer(
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    val bytes = PythonTransformerWrapperSerializer.serialize(pfunc)
+    val bytes = PythonTransformerWrapperSerializer.serialize(proxy)
     out.writeInt(bytes.length)
     out.write(bytes)
   }
@@ -189,11 +234,15 @@ class PythonTransformer(
     val length = in.readInt()
     val bytes = new Array[Byte](length)
     in.readFully(bytes)
-    pfunc = PythonTransformerWrapperSerializer.deserialize(bytes)
+    proxy = PythonTransformerWrapperSerializer.deserialize(bytes)
   }
 }
 
+/**
+ * Implementations of save/load for PythonTransformer.
+ */
 object PythonTransformer extends MLReadable[PythonTransformer] {
+
   override def read: MLReader[PythonTransformer] = new PythonTransformerReader
 
   override def load(path: String): PythonTransformer = super.load(path)
@@ -204,8 +253,8 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
       val extraMetadata = "pyClass" -> instance.getPythonClassName
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val pyDir = new Path(path, "pyTransformer").toString
-      instance.pfunc.save(pyDir)
-      val failure = instance.pfunc.getLastFailure
+      instance.proxy.save(pyDir)
+      val failure = instance.proxy.getLastFailure
       if (failure != null) {
         throw new SparkException("An exception was raised by Python:\n" + failure)
       }
@@ -219,14 +268,16 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val pyClass = (metadata.metadata \ "pyClass").extract[String]
       val pyDir = new Path(path, "pyTransformer").toString
-      val pfunc = PythonTransformerWrapper.load(pyDir, pyClass)
-      new PythonTransformer(pfunc, pfunc.getUid)
+      val proxy = PythonTransformerWrapper.load(pyDir, pyClass)
+      new PythonTransformer(proxy, proxy.getUid)
     }
   }
 }
 
+/**
+ * Helper function due to Py4J error of reader/serializer does not exist in the JVM.
+ */
 object PythonPipelineStage {
-  // Helper function due to Py4J error of reader/serializer does not exist in the JVM.
   def registerReader(r: PythonTransformerWrapperReader): Unit = {
     PythonTransformerWrapper.registerReader(r)
   }
