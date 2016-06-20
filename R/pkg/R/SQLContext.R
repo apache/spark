@@ -599,13 +599,14 @@ clearCache <- function() {
   dispatchFunc("clearCache()")
 }
 
-#' Drop Temporary Table
+#' (Deprecated) Drop Temporary Table
 #'
 #' Drops the temporary table with the given table name in the catalog.
 #' If the table has been cached/persisted before, it's also unpersisted.
 #'
 #' @param tableName The name of the SparkSQL table to be dropped.
-#' @rdname dropTempTable
+#' @seealso \link{dropTempView}
+#' @rdname dropTempTable-deprecated
 #' @export
 #' @examples
 #' \dontrun{
@@ -619,16 +620,42 @@ clearCache <- function() {
 #' @method dropTempTable default
 
 dropTempTable.default <- function(tableName) {
-  sparkSession <- getSparkSession()
   if (class(tableName) != "character") {
     stop("tableName must be a string.")
   }
-  catalog <- callJMethod(sparkSession, "catalog")
-  callJMethod(catalog, "dropTempView", tableName)
+  dropTempView(tableName)
 }
 
 dropTempTable <- function(x, ...) {
-  dispatchFunc("dropTempTable(tableName)", x, ...)
+  .Deprecated("dropTempView")
+  dispatchFunc("dropTempView(viewName)", x, ...)
+}
+
+#' Drops the temporary view with the given view name in the catalog.
+#'
+#' Drops the temporary view with the given view name in the catalog.
+#' If the view has been cached before, then it will also be uncached.
+#'
+#' @param viewName the name of the view to be dropped.
+#' @rdname dropTempView
+#' @name dropTempView
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' df <- read.df(path, "parquet")
+#' createOrReplaceTempView(df, "table")
+#' dropTempView("table")
+#' }
+#' @note since 2.0.0
+
+dropTempView <- function(viewName) {
+  sparkSession <- getSparkSession()
+  if (class(viewName) != "character") {
+    stop("viewName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "dropTempView", viewName)
 }
 
 #' Load a SparkDataFrame

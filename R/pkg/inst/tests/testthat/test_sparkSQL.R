@@ -472,8 +472,8 @@ test_that("test tableNames and tables", {
   suppressWarnings(registerTempTable(df, "table2"))
   tables <- tables()
   expect_equal(count(tables), 2)
-  dropTempTable("table1")
-  dropTempTable("table2")
+  suppressWarnings(dropTempTable("table1"))
+  dropTempView("table2")
 
   tables <- tables()
   expect_equal(count(tables), 0)
@@ -486,7 +486,7 @@ test_that(
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
-  dropTempTable("table1")
+  dropTempView("table1")
 })
 
 test_that("test cache, uncache and clearCache", {
@@ -495,7 +495,7 @@ test_that("test cache, uncache and clearCache", {
   cacheTable("table1")
   uncacheTable("table1")
   clearCache()
-  dropTempTable("table1")
+  dropTempView("table1")
 })
 
 test_that("insertInto() on a registered table", {
@@ -516,13 +516,13 @@ test_that("insertInto() on a registered table", {
   insertInto(dfParquet2, "table1")
   expect_equal(count(sql("select * from table1")), 5)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
-  dropTempTable("table1")
+  dropTempView("table1")
 
   createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1", overwrite = TRUE)
   expect_equal(count(sql("select * from table1")), 2)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
-  dropTempTable("table1")
+  dropTempView("table1")
 
   unlink(jsonPath2)
   unlink(parquetPath2)
@@ -536,7 +536,7 @@ test_that("tableToDF() returns a new DataFrame", {
   expect_equal(count(tabledf), 3)
   tabledf2 <- tableToDF("table1")
   expect_equal(count(tabledf2), 3)
-  dropTempTable("table1")
+  dropTempView("table1")
 })
 
 test_that("toRDD() returns an RRDD", {
