@@ -258,6 +258,7 @@ setCheckpointDir <- function(sc, dirName) {
 #' @export
 #' @examples
 #'\dontrun{
+#' sparkR.session()
 #' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
 spark.lapply <- function(list, func) {
