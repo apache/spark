@@ -31,6 +31,7 @@ setOldClass("jobj")
 #'
 #' @param sgd A Java object reference to the backing Scala GroupedData
 #' @export
+#' @note GroupedData since 1.4.0
 setClass("GroupedData",
          slots = list(sgd = "jobj"))
 
@@ -46,6 +47,7 @@ groupedData <- function(sgd) {
 
 
 #' @rdname show
+#' @note show(GroupedData) since 1.4.0
 setMethod("show", "GroupedData",
           function(object) {
             cat("GroupedData\n")
@@ -64,6 +66,7 @@ setMethod("show", "GroupedData",
 #' \dontrun{
 #'   count(groupBy(df, "name"))
 #' }
+#' @note count since 1.4.0
 setMethod("count",
           signature(x = "GroupedData"),
           function(x) {
@@ -90,6 +93,7 @@ setMethod("count",
 #'  df3 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
 #'  df4 <- summarize(df, ageSum = max(df$age))
 #' }
+#' @note agg since 1.4.0
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
@@ -117,6 +121,7 @@ setMethod("agg",
 
 #' @rdname summarize
 #' @name summarize
+#' @note summarize since 1.4.0
 setMethod("summarize",
           signature(x = "GroupedData"),
           function(x, ...) {
@@ -190,6 +195,7 @@ createMethods()
 #' 3 3 3.0
 #' 1 1 1.5
 #' }
+#' @note gapply(GroupedData) since 2.0.0
 setMethod("gapply",
           signature(x = "GroupedData"),
           function(x, func, schema) {

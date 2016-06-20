@@ -29,24 +29,28 @@
 #'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
+#' @note GeneralizedLinearRegressionModel since 2.0.0
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a NaiveBayesModel
 #'
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
 #' @export
+#' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
 #' @export
+#' @note AFTSurvivalRegressionModel since 2.0.0
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 
 #' S4 class that represents a KMeansModel
 #'
 #' @param jobj a Java object reference to the backing Scala KMeansModel
 #' @export
+#' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' Fits a generalized linear model
@@ -73,6 +77,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family="gaussian")
 #' summary(model)
 #' }
+#' @note spark.glm since 2.0.0
 setMethod(
     "spark.glm",
     signature(data = "SparkDataFrame", formula = "formula"),
@@ -120,6 +125,7 @@ setMethod(
 #' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
 #' summary(model)
 #' }
+#' @note glm since 1.5.0
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
             spark.glm(data, formula, family, epsilon, maxit)
@@ -138,6 +144,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #' }
+#' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj
@@ -173,6 +180,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #' @rdname print
 #' @name print.summary.GeneralizedLinearRegressionModel
 #' @export
+#' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   if (x$is.loaded) {
     cat("\nSaved-loaded model does not support output 'Deviance Residuals'.\n")
@@ -215,6 +223,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
+#' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
 setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
@@ -236,6 +245,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #'}
+#' @note predict(NaiveBayesModel) since 2.0.0
 setMethod("predict", signature(object = "NaiveBayesModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
@@ -256,6 +266,7 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 #' model <- spark.naiveBayes(trainingData, y ~ x)
 #' summary(model)
 #'}
+#' @note summary(NaiveBayesModel) since 2.0.0
 setMethod("summary", signature(object = "NaiveBayesModel"),
           function(object, ...) {
             jobj <- object@jobj
@@ -289,6 +300,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' \dontrun{
 #' model <- spark.kmeans(data, ~ ., k=2, initMode="random")
 #' }
+#' @note spark.kmeans since 2.0.0
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k, maxIter = 10, initMode = c("random", "k-means||")) {
             formula <- paste(deparse(formula), collapse = "")
@@ -313,6 +325,7 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
 #'}
+#' @note fitted since 2.0.0
 setMethod("fitted", signature(object = "KMeansModel"),
           function(object, method = c("centers", "classes"), ...) {
             method <- match.arg(method)
@@ -339,6 +352,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' model <- spark.kmeans(trainingData, ~ ., 2)
 #' summary(model)
 #' }
+#' @note summary(KMeansModel) since 2.0.0
 setMethod("summary", signature(object = "KMeansModel"),
           function(object, ...) {
             jobj <- object@jobj
@@ -374,6 +388,7 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
+#' @note predict(KMeansModel) since 2.0.0
 setMethod("predict", signature(object = "KMeansModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
@@ -396,6 +411,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' df <- createDataFrame(infert)
 #' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
 #'}
+#' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
     function(data, formula, laplace = 0, ...) {
         formula <- paste(deparse(formula), collapse = "")
@@ -423,6 +439,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
+#' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
@@ -450,6 +467,7 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
+#' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
@@ -477,6 +495,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
+#' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
@@ -504,6 +523,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
+#' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
@@ -525,6 +545,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' path <- "path/to/model"
 #' model <- read.ml(path)
 #' }
+#' @note read.ml since 2.0.0
 read.ml <- function(path) {
   path <- suppressWarnings(normalizePath(path))
   jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
@@ -558,6 +579,7 @@ read.ml <- function(path) {
 #' df <- createDataFrame(ovarian)
 #' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
 #' }
+#' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, ...) {
             formula <- paste(deparse(formula), collapse = "")
@@ -581,6 +603,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
 #' summary(model)
 #' }
+#' @note summary(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj
@@ -608,6 +631,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
+#' @note predict(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))

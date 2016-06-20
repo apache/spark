@@ -67,6 +67,7 @@ dispatchFunc <- function(newFuncSig, x, ...) {
 }
 
 #' return the SparkSession
+#' @note getSparkSession since 2.0.0
 getSparkSession <- function() {
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     get(".sparkRsession", envir = .sparkREnv)
@@ -76,6 +77,7 @@ getSparkSession <- function() {
 }
 
 #' infer the SQL type
+#' @note infer_type since 1.4.0
 infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
@@ -133,7 +135,7 @@ getDefaultSqlSource <- function() {
 #' }
 #' @name createDataFrame
 #' @method createDataFrame default
-
+#' @note createDataFrame since 1.4.0
 # TODO(davies): support sampling and infer type from NA
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   sparkSession <- getSparkSession()
@@ -218,7 +220,7 @@ createDataFrame <- function(x, ...) {
 #' @aliases createDataFrame
 #' @export
 #' @method as.DataFrame default
-
+#' @note as.DataFrame since 1.6.0
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(data, schema, samplingRatio)
 }
@@ -266,7 +268,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' }
 #' @name read.json
 #' @method read.json default
-
+#' @note read.json since 1.6.0
 read.json.default <- function(path) {
   sparkSession <- getSparkSession()
   # Allow the user to have a more flexible definiton of the text file path
@@ -284,7 +286,7 @@ read.json <- function(x, ...) {
 #' @name jsonFile
 #' @export
 #' @method jsonFile default
-
+#' @note jsonFile since 1.4.0
 jsonFile.default <- function(path) {
   .Deprecated("read.json")
   read.json(path)
@@ -355,7 +357,7 @@ read.orc <- function(path) {
 #' @export
 #' @name read.parquet
 #' @method read.parquet default
-
+#' @note read.parquet since 1.6.0
 read.parquet.default <- function(path) {
   sparkSession <- getSparkSession()
   # Allow the user to have a more flexible definiton of the Parquet file path
@@ -373,7 +375,7 @@ read.parquet <- function(x, ...) {
 #' @name parquetFile
 #' @export
 #' @method parquetFile default
-
+#' @note parquetFile since 1.4.0
 parquetFile.default <- function(...) {
   .Deprecated("read.parquet")
   read.parquet(unlist(list(...)))
@@ -403,7 +405,7 @@ parquetFile <- function(x, ...) {
 #' }
 #' @name read.text
 #' @method read.text default
-
+#' @note read.text since 1.6.1
 read.text.default <- function(path) {
   sparkSession <- getSparkSession()
   # Allow the user to have a more flexible definiton of the text file path
@@ -435,7 +437,7 @@ read.text <- function(x, ...) {
 #' }
 #' @name sql
 #' @method sql default
-
+#' @note sql since 1.4.0
 sql.default <- function(sqlQuery) {
   sparkSession <- getSparkSession()
   sdf <- callJMethod(sparkSession, "sql", sqlQuery)
@@ -464,8 +466,7 @@ sql <- function(x, ...) {
 #' createOrReplaceTempView(df, "table")
 #' new_df <- tableToDF("table")
 #' }
-#' @note since 2.0.0
-
+#' @note tableToDF since 2.0.0
 tableToDF <- function(tableName) {
   sparkSession <- getSparkSession()
   sdf <- callJMethod(sparkSession, "table", tableName)
@@ -487,7 +488,7 @@ tableToDF <- function(tableName) {
 #' }
 #' @name tables
 #' @method tables default
-
+#' @note tables since 1.4.0
 tables.default <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
   jdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getTables", sparkSession, databaseName)
@@ -513,7 +514,7 @@ tables <- function(x, ...) {
 #' }
 #' @name tableNames
 #' @method tableNames default
-
+#' @note tableNames since 1.4.0
 tableNames.default <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
   callJStatic("org.apache.spark.sql.api.r.SQLUtils",
@@ -544,7 +545,7 @@ tableNames <- function(x, ...) {
 #' }
 #' @name cacheTable
 #' @method cacheTable default
-
+#' @note cacheTable since 1.4.0
 cacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
@@ -573,7 +574,7 @@ cacheTable <- function(x, ...) {
 #' }
 #' @name uncacheTable
 #' @method uncacheTable default
-
+#' @note uncacheTable since 1.4.0
 uncacheTable.default <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
@@ -596,7 +597,7 @@ uncacheTable <- function(x, ...) {
 #' }
 #' @name clearCache
 #' @method clearCache default
-
+#' @note clearCache since 1.4.0
 clearCache.default <- function() {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
@@ -625,7 +626,7 @@ clearCache <- function() {
 #' }
 #' @name dropTempTable
 #' @method dropTempTable default
-
+#' @note dropTempTable since 1.4.0
 dropTempTable.default <- function(tableName) {
   if (class(tableName) != "character") {
     stop("tableName must be a string.")
@@ -691,7 +692,7 @@ dropTempView <- function(viewName) {
 #' }
 #' @name read.df
 #' @method read.df default
-
+#' @note read.df since 1.4.0
 read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
@@ -719,7 +720,7 @@ read.df <- function(x, ...) {
 #' @rdname read.df
 #' @name loadDF
 #' @method loadDF default
-
+#' @note loadDF since 1.6.0
 loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   read.df(path, source, schema, ...)
 }
@@ -750,7 +751,7 @@ loadDF <- function(x, ...) {
 #' }
 #' @name createExternalTable
 #' @method createExternalTable default
-
+#' @note createExternalTable since 1.4.0
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, ...) {
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
@@ -798,8 +799,7 @@ createExternalTable <- function(x, ...) {
 #' df2 <- read.jdbc(jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
 #'                  upperBound = 10000, user = "username", password = "password")
 #' }
-#' @note since 2.0.0
-
+#' @note read.jdbc since 2.0.0
 read.jdbc <- function(url, tableName,
                       partitionColumn = NULL, lowerBound = NULL, upperBound = NULL,
                       numPartitions = 0L, predicates = list(), ...) {

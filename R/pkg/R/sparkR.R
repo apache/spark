@@ -31,6 +31,7 @@ connExists <- function(env) {
 #' @rdname sparkR.session.stop
 #' @name sparkR.stop
 #' @export
+#' @note sparkR.stop since 1.4.0
 sparkR.stop <- function() {
   sparkR.session.stop()
 }
@@ -41,7 +42,7 @@ sparkR.stop <- function() {
 #' @rdname sparkR.session.stop
 #' @name sparkR.session.stop
 #' @export
-#' @note since 2.0.0
+#' @note sparkR.session.stop since 2.0.0
 sparkR.session.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
@@ -112,7 +113,7 @@ sparkR.session.stop <- function() {
 #'                  c("one.jar", "two.jar", "three.jar"),
 #'                  c("com.databricks:spark-avro_2.10:2.0.1"))
 #'}
-
+#' @note sparkR.init since 1.4.0
 sparkR.init <- function(
   master = "",
   appName = "SparkR",
@@ -265,7 +266,7 @@ sparkR.sparkContext <- function(
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #'}
-
+#' @note sparkRSQL.init since 1.4.0
 sparkRSQL.init <- function(jsc = NULL) {
   .Deprecated("sparkR.session")
 
@@ -293,7 +294,7 @@ sparkRSQL.init <- function(jsc = NULL) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRHive.init(sc)
 #'}
-
+#' @note sparkRHive.init since 1.4.0
 sparkRHive.init <- function(jsc = NULL) {
   .Deprecated("sparkR.session")
 
@@ -334,8 +335,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #'                c("com.databricks:spark-avro_2.10:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
-#' @note since 2.0.0
-
+#' @note sparkR.session since 2.0.0
 sparkR.session <- function(
   master = "",
   appName = "SparkR",
@@ -399,7 +399,7 @@ sparkR.session <- function(
 #' sc <- sparkR.init()
 #' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
 #'}
-
+#' @note setJobGroup since 1.5.0
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
   callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
 }
@@ -412,7 +412,7 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
 #' sc <- sparkR.init()
 #' clearJobGroup(sc)
 #'}
-
+#' @note clearJobGroup since 1.5.0
 clearJobGroup <- function(sc) {
   callJMethod(sc, "clearJobGroup")
 }
@@ -426,7 +426,7 @@ clearJobGroup <- function(sc) {
 #' sc <- sparkR.init()
 #' cancelJobGroup(sc, "myJobGroup")
 #'}
-
+#' @note cancelJobGroup since 1.5.0
 cancelJobGroup <- function(sc, groupId) {
   callJMethod(sc, "cancelJobGroup", groupId)
 }

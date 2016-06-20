@@ -261,6 +261,7 @@ setCheckpointDir <- function(sc, dirName) {
 #' sparkR.session()
 #' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
+#' @note spark.lapply since 2.0.0
 spark.lapply <- function(list, func) {
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     stop("SparkR has not been initialized. Please call sparkR.session()")
@@ -283,7 +284,7 @@ spark.lapply <- function(list, func) {
 #'\dontrun{
 #' setLogLevel("ERROR")
 #'}
-
+#' @note setLogLevel since 2.0.0
 setLogLevel <- function(level) {
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     stop("SparkR has not been initialized. Please call sparkR.session()")
