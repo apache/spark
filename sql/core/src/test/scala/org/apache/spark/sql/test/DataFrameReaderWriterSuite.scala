@@ -201,7 +201,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
     assert(LastOptions.parameters("doubleOpt") == "6.7")
   }
 
-  test("reading catalog table") {
+  test("reading cataloged table") {
     val schema = StructType(StructField("c1", IntegerType) :: Nil)
     val format = "parquet"
     val df = spark.createDataFrame(sparkContext.parallelize(Row(3) :: Nil), schema)
@@ -225,13 +225,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
       }.getMessage
       assert(e.contains("Operation not allowed: specifying the input schema when reading tables " +
         "from catalog. table: `tab`, schema: `StructType(StructField(c1,IntegerType,true))`"))
-
-      // not allowed to specify options.
-      e = intercept[IllegalArgumentException] {
-        spark.read.options(Map("header" -> "true", "mode" -> "dropmalformed")).table(tableName)
-      }.getMessage
-      assert(e.contains("Operation not allowed: specifying the input option when reading " +
-        "tables from catalog. table: `tab`, option: `header -> true, mode -> dropmalformed`"))
     }
   }
 

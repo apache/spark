@@ -437,11 +437,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "Operation not allowed: specifying the input schema when reading tables from " +
         s"catalog. table: `$tableName`, schema: `${userSpecifiedSchema.get}`.")
     }
-    if (extraOptions.nonEmpty) {
-      throw new IllegalArgumentException(
-        "Operation not allowed: specifying the input option when reading tables from " +
-          s"catalog. table: `$tableName`, option: `${extraOptions.mkString(", ")}`.")
-    }
 
     Dataset.ofRows(sparkSession,
       sparkSession.sessionState.catalog.lookupRelation(
