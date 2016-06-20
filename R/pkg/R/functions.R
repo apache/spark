@@ -1179,7 +1179,7 @@ setMethod("soundex",
             column(jc)
           })
 
-#' spark_partition_id
+#' Return the partition ID as a column
 #'
 #' Return the column for partition ID of the Spark task.
 #' Note that this is indeterministic because it depends on data partitioning and
