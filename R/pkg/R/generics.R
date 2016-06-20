@@ -450,7 +450,7 @@ setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 
-#' @rdname dapply
+#' @rdname dapplyCollect
 #' @export
 setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect") })
 
