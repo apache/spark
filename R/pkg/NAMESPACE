@@ -293,7 +293,7 @@ exportMethods("%in%",
               "year")
 
 exportClasses("GroupedData")
-exportMethods("agg")
+exportMethods("agg", "pivot")
 
 export("as.DataFrame",
        "cacheTable",

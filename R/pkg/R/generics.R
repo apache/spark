@@ -160,6 +160,10 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 # @export
 setGeneric("pipeRDD", function(x, command, env = list()) { standardGeneric("pipeRDD")})
 
+# @rdname pivot
+# @export
+setGeneric("pivot", function(x, colname, values = list()) { standardGeneric("pivot") })
+
 # @rdname reduce
 # @export
 setGeneric("reduce", function(x, func) { standardGeneric("reduce") })

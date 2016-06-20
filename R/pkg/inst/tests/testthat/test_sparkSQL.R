@@ -17,6 +17,7 @@
 
 library(testthat)
 
+
 context("SparkSQL functions")
 
 # Utility function for easily checking the values of a StructField
@@ -1397,6 +1398,21 @@ test_that("group by, agg functions", {
   unlink(jsonPath2)
   unlink(jsonPath3)
 })
+
+test_that("pivot GroupedData column", {
+  df <- data.frame(
+        earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+        course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+        year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+  )
+  SparkRdf <- createDataFrame(df)
+  values <- list("R", "Python")
+  sums <- collect(summarize(pivot(groupBy(SparkRdf, "year"), "course", values),
+                earnings_sum = sum(SparkRdf$earnings)))
+  expect_equal(colnames(sums) %in% c("year", "R", "Python"), c(T, T, T))
+  expect_equal(sum(df$earnings), sum(sums$R) + sum(sums$Python))
+})
+
 
 test_that("arrange() and orderBy() on a DataFrame", {
   df <- read.json(jsonPath)

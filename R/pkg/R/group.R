@@ -134,6 +134,51 @@ methods <- c("avg", "max", "mean", "min", "sum")
 # These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
 # "variance", "var_samp", "var_pop"
 
+#' Pivot
+#' 
+#' Pivot GroupedData column to expand unique values of this column into set of column named accordingly and perform
+#' aggregation. Same purpose as dcast in reshape2 or pivot table in Excel
+#' 
+#' @param x a GroupedData object
+#' @param by name of column to pivot data by
+#' @param values a unique list of values that will be translated to columns in the output SparkDataFrame. 
+#' If not given it will be computed on the fly which will influence performance
+#' @return GroupedData object
+#' @rdname pivot
+#' @family agg
+#' @name pivot
+#' @export 
+#' @examples 
+#' \dontrun{
+#' library(magrittr)
+#' df <- data.frame(
+#'     earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+#'     course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+#'     year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+#' )
+#' SparkRdf <- createDataFrame(sqlContext, df)
+#' values <- list("R", "Python")
+#' sums <- groupBy(SparkRdf, "year") %>% 
+#'     pivot("course", values) %>% 
+#'     SparkR::summarize(sumOfEarnings = sum(SparkRdf$earnings) ) %>%
+#'     collect()
+#' }
+
+setMethod("pivot",
+          signature(x = "GroupedData"),
+          function(x, colname, values = list()){
+              if (length(values) == 0) {
+                  result <- callJMethod(x@sgd, "pivot", colname)
+              } else {
+                  if (length(values) == length(unique(values))) {
+                    stop("Values in list are not unique")
+                  }
+                  result <- callJMethod(x@sgd, "pivot", colname, values)
+              }
+              groupedData(result)
+          })
+
+
 createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
