@@ -2371,5 +2371,6 @@ test_that("enableHiveSupport on SparkSession", {
 })
 
 unlink(parquetPath)
+unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
