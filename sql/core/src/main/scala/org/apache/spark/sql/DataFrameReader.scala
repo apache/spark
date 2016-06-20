@@ -269,11 +269,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.</li>
    * <ul>
-   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
-   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
+   *  the malformed string into a new field configured by `columnNameOfCorruptRecord`. When
    *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *  <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
@@ -385,10 +385,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing.</li>
    * <ul>
-   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *   <li> - `PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
    *     a schema is set by user, it sets `null` for extra fields.</li>
-   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   *   <li> - `DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *   <li> - `FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
    * </ul>
    * @since 2.0.0
