@@ -327,7 +327,7 @@ train <- function(family) {
   summary(model)
 }
 # Return a list of model's summaries
-model.summaries <- spark.lapply(sc, families, train)
+model.summaries <- spark.lapply(families, train)
 
 # Print the summary of each model
 print(model.summaries)
