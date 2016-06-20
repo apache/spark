@@ -22,7 +22,6 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable, TransformerWrapper
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py
-from pyspark.sql import SQLContext
 
 
 class PipelineWrapper(object):
@@ -69,7 +68,6 @@ class PipelineWrapper(object):
         """
 
         def __transfer_stage_from_java(java_stage):
-            # TODO: Change pure Python PipelineStage back from JVM object.
             if java_stage.getClass().getName()\
                     == "org.apache.spark.ml.api.python.PythonTransformer":
                 return CloudPickleSerializer().loads(bytes(java_stage.getPythonTransformer()))
