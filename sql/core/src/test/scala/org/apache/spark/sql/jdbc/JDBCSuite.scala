@@ -338,7 +338,8 @@ class JDBCSuite extends SparkFunSuite
 
   test("Basic API") {
     assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+      .collect().length === 3)
   }
 
   test("Basic API with FetchSize") {
@@ -360,17 +361,22 @@ class JDBCSuite extends SparkFunSuite
     assert(baseRelation.asInstanceOf[JDBCRelation].properties.get("fetchSize") === "2")
   }
 
-  test("Using format or schema") {
-    // not allowed to specify format.
-    var e = intercept[IllegalArgumentException] {
-      spark.read.format("parquet").jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
-    }.getMessage
-    assert(e.contains("Operation not allowed: specifying the input data source format " +
-      "when reading tables from JDBC connections. table: `TEST.PEOPLE`, format: `parquet`"))
+  test("load API") {
+    val dfUsingOption =
+      spark.read
+        .option("url", url)
+        .option("dbtable", "(SELECT * FROM TEST.PEOPLE)")
+        .option("user", "testUser")
+        .option("password", "testPass")
+        .format("jdbc")
+        .load()
+    assert(dfUsingOption.count() == 3)
+  }
 
+  test("Using schema") {
     // not allowed to specify schema.
     val schema = StructType(StructField("c1", IntegerType) :: Nil)
-    e = intercept[IllegalArgumentException] {
+    val e = intercept[IllegalArgumentException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
     }.getMessage
     assert(e.contains("Operation not allowed: specifying the input schema when reading tables " +

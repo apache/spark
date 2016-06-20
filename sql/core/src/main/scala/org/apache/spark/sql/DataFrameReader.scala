@@ -245,11 +245,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
-    if (userSpecifiedSource.nonEmpty) {
-      throw new IllegalArgumentException(
-        "Operation not allowed: specifying the input data source format when reading tables from " +
-          s"JDBC connections. table: `$table`, format: `${userSpecifiedSource.get}`.")
-    }
     if (userSpecifiedSchema.nonEmpty) {
       throw new IllegalArgumentException(
         "Operation not allowed: specifying the input schema when reading tables from " +
