@@ -252,17 +252,20 @@ setCheckpointDir <- function(sc, dirName) {
 #' }
 #'
 #' @rdname spark.lapply
-#' @param sc Spark Context to use
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' doubled <- spark.lapply(sc, 1:10, function(x){2 * x})
+#' sparkR.session()
+#' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
-spark.lapply <- function(sc, list, func) {
+spark.lapply <- function(list, func) {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
   rdd <- parallelize(sc, list, length(list))
   results <- map(rdd, func)
   local <- collect(results)
@@ -274,14 +277,17 @@ spark.lapply <- function(sc, list, func) {
 #' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
 #'
 #' @rdname setLogLevel
-#' @param sc Spark Context to use
 #' @param level New log level
 #' @export
 #' @examples
 #'\dontrun{
-#' setLogLevel(sc, "ERROR")
+#' setLogLevel("ERROR")
 #'}
 
-setLogLevel <- function(sc, level) {
+setLogLevel <- function(level) {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
   callJMethod(sc, "setLogLevel", level)
 }

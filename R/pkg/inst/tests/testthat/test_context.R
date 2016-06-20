@@ -107,8 +107,8 @@ test_that("job group functions can be called", {
 })
 
 test_that("utility function can be called", {
-  sc <- sparkR.sparkContext()
-  setLogLevel(sc, "ERROR")
+  sparkR.sparkContext()
+  setLogLevel("ERROR")
   sparkR.session.stop()
 })
 
@@ -161,7 +161,7 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
 
 test_that("spark.lapply should perform simple transforms", {
   sc <- sparkR.sparkContext()
-  doubled <- spark.lapply(sc, 1:10, function(x) { 2 * x })
+  doubled <- spark.lapply(1:10, function(x) { 2 * x })
   expect_equal(doubled, as.list(2 * 1:10))
   sparkR.session.stop()
 })
