@@ -427,8 +427,12 @@ case class MapObjects private(
       case _ => ""
     }
 
+    val inputDataType = inputData.dataType match {
+      case p: PythonUserDefinedType => p.sqlType
+      case _ => inputData.dataType
+    }
 
-    val (getLength, getLoopVar) = inputData.dataType match {
+    val (getLength, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
         s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
       case ObjectType(cls) if cls.isArray =>
@@ -442,7 +446,7 @@ case class MapObjects private(
           s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
     }
 
-    val loopNullCheck = inputData.dataType match {
+    val loopNullCheck = inputDataType match {
       case _: ArrayType => s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
       case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
