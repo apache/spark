@@ -126,8 +126,7 @@ getDefaultSqlSource <- function() {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- as.DataFrame(iris)
 #' df2 <- as.DataFrame(list(3,4,5,6))
 #' df3 <- createDataFrame(iris)
@@ -238,8 +237,7 @@ as.DataFrame <- function(x, ...) {
 #' @noRd
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
 #' df <- toDF(rdd)
 #'}
@@ -261,8 +259,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' df <- jsonFile(path)
@@ -309,8 +306,7 @@ jsonFile <- function(x, ...) {
 #' @noRd
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' rdd <- texFile(sc, "path/to/json")
 #' df <- jsonRDD(sqlContext, rdd)
 #'}
@@ -401,8 +397,7 @@ parquetFile <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.txt"
 #' df <- read.text(path)
 #' }
@@ -432,8 +427,7 @@ read.text <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' createOrReplaceTempView(df, "table")
@@ -464,8 +458,7 @@ sql <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' createOrReplaceTempView(df, "table")
@@ -489,8 +482,7 @@ tableToDF <- function(tableName) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' tables("hive")
 #' }
 #' @name tables
@@ -516,8 +508,7 @@ tables <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' tableNames("hive")
 #' }
 #' @name tableNames
@@ -545,8 +536,7 @@ tableNames <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' createOrReplaceTempView(df, "table")
@@ -575,8 +565,7 @@ cacheTable <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
 #' createOrReplaceTempView(df, "table")
@@ -629,8 +618,7 @@ clearCache <- function() {
 #' @export
 #' @examples
 #' \dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df <- read.df(path, "parquet")
 #' createOrReplaceTempView(df, "table")
 #' dropTempTable("table")
@@ -694,8 +682,7 @@ dropTempView <- function(viewName) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
@@ -758,9 +745,8 @@ loadDF <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' df <- sparkRSQL.createExternalTable("myjson", path="path/to/json", source="json")
+#' sparkR.session()
+#' df <- createExternalTable("myjson", path="path/to/json", source="json")
 #' }
 #' @name createExternalTable
 #' @method createExternalTable default
@@ -806,8 +792,7 @@ createExternalTable <- function(x, ...) {
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
+#' sparkR.session()
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
 #' df <- read.jdbc(jdbcUrl, "table", predicates = list("field<=123"), user = "username")
 #' df2 <- read.jdbc(jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
