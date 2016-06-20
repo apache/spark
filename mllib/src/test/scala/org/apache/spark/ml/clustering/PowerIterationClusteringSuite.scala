@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.graphx.{Edge, Graph}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.util.Utils
 
 class PowerIterationClusteringSuite extends SparkFunSuite
   with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -75,5 +75,45 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     intercept[IllegalArgumentException] {
       new PowerIterationClustering().setInitMode("no_such_a_mode")
     }
+  }
+
+  test("power iteration clustering") {
+    // Generate two circles following the example in the PIC paper.
+    val r1 = 1.0
+    val n1 = 10
+    val r2 = 4.0
+    val n2 = 40
+    val n = n1 + n2
+    val points = genCircle(r1, n1) ++ genCircle(r2, n2)
+    val similarities = for (i <- 1 until n; j <- 0 until i) yield {
+      (i.toLong, j.toLong, sim(points(i), points(j)))
+    }
+
+    val sc = spark.sparkContext
+    val rdd = sc.parallelize(similarities)
+      .map{case (i: Long, j: Long, sim: Double) => Vectors.dense(Array(i, j, sim))}
+      .map(v => TestRow(v))
+    val data = spark.createDataFrame(rdd)
+
+    val model = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(40)
+      .fit(data)
+    val predictions = Array.fill(2)(mutable.Set.empty[Long])
+    model.assignments.collect().foreach { a =>
+      predictions(a.cluster) += a.id
+    }
+    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
+
+    val model2 = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(10)
+      .setInitMode("degree")
+      .fit(data)
+    val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
+    model2.assignments.collect().foreach { a =>
+      predictions2(a.cluster) += a.id
+    }
+    assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
   }
 }
