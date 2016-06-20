@@ -1408,9 +1408,9 @@ test_that("pivot GroupedData column", {
   sum3 <- collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
 
   correct_answer <- data.frame(
-    year=c(2013,2014,2015,2016),
-    Python=c(10000,15000,20000,22000),
-    R=c(10000, 11000, 12000, 21000)
+    year = c(2013, 2014, 2015, 2016),
+    Python = c(10000, 15000, 20000, 22000),
+    R = c(10000, 11000, 12000, 21000)
   )
   expect_equal(sum1, correct_answer)
   expect_equal(sum2, correct_answer)
