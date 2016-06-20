@@ -122,7 +122,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity,
-      subsamplingRate = 1.0, getClassWeights)
+      subsamplingRate = 1.0)
   }
 
   @Since("1.4.1")

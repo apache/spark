@@ -84,7 +84,7 @@ class Strategy @Since("1.3.0") (
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
     @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
-    @Since("2.0.0") var classWeights: Array[Double] = Array(1, 1))
+    @Since("2.0.0") @BeanProperty var classWeights: Array[Double] = Array(1.0, 1.0))
   extends Serializable {
 
   /**
@@ -99,6 +99,29 @@ class Strategy @Since("1.3.0") (
   @Since("1.2.0")
   def isMulticlassWithCategoricalFeatures: Boolean = {
     isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
+  }
+
+  /**
+   *  Make the class compatible with previous versions
+   */
+  @Since("2.0.0")
+  def this(
+    algo: Algo,
+    impurity: Impurity,
+    maxDepth: Int,
+    numClasses: Int,
+    maxBins: Int,
+    quantileCalculationStrategy: QuantileStrategy,
+    categoricalFeaturesInfo: Map[Int, Int],
+    minInstancesPerNode: Int,
+    minInfoGain: Double,
+    maxMemoryInMB: Int,
+    subsamplingRate: Double,
+    useNodeIdCache: Boolean,
+    checkpointInterval: Int) {
+    this(algo, impurity, maxDepth, numClasses, maxBins, quantileCalculationStrategy,
+      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB,
+      subsamplingRate, useNodeIdCache, checkpointInterval, Array())
   }
 
   /**

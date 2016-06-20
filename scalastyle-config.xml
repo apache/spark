@@ -94,7 +94,7 @@ This file is divided into 3 sections:
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
-    <parameters><parameter name="maxParameters"><![CDATA[10]]></parameter></parameters>
+    <parameters><parameter name="maxParameters"><![CDATA[15]]></parameter></parameters>
   </check>
 
   <check level="error" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="true"></check>
