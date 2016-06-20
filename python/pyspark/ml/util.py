@@ -263,7 +263,7 @@ class TransformerWrapper(object):
         self.df_wrap_func = lambda jdf, ctx: DataFrame(jdf, ctx)
         self.failure = None
         reader = TransformerWrapperReader(self.ctx)
-        self.ctx._gateway.jvm.\
+        self.ctx._sc._gateway.jvm.\
             org.apache.spark.ml.api.python.PythonTransformerWrapper.registerReader(reader)
 
     def df_wrapper(self, func):
