@@ -248,22 +248,18 @@ class JavaMLReadable(MLReadable):
 
 class TransformerWrapper(object):
     """
-    This class wraps a function RDD[X] -> RDD[Y] that was passed to
-    DStream.transform(), allowing it to be called from Java via Py4J's
-    callback server.
-
-    Java calls this function with a sequence of JavaRDDs and this function
-    returns a single JavaRDD pointer back to Java.
+    This class wraps a pure Python transformer, allowing it to be called from Java via Py4J's
+    callback server, making it as-like a Java side transformer.
     """
-    _emptyRDD = None
 
-    def __init__(self, ctx, transformer):
-        self.ctx = ctx
+    def __init__(self, sc, transformer):
+        self.sc = sc
+        self.sql_ctx = SQLContext.getOrCreate(self.sc)
         self.transformer = transformer
-        self.df_wrap_func = lambda jdf, ctx: DataFrame(jdf, ctx)
+        self.df_wrap_func = lambda jdf, sql_ctx: DataFrame(jdf, sql_ctx)
         self.failure = None
-        reader = TransformerWrapperReader(self.ctx)
-        self.ctx._sc._gateway.jvm.\
+        reader = TransformerWrapperReader(self.sc)
+        self.sc._gateway.jvm.\
             org.apache.spark.ml.api.python.PythonPipelineStage.registerReader(reader)
 
     def df_wrapper(self, func):
@@ -278,6 +274,9 @@ class TransformerWrapper(object):
         return self
 
     def transformSchema(self, jschema):
+        """
+        Transform Java schema with transformSchema in pure Python transformers.
+        """
         schema = _parse_datatype_json_string(jschema.json())
         converted = self.transformer.transformSchema(schema)
         return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
@@ -294,7 +293,6 @@ class TransformerWrapper(object):
         return cls.__module__ + "." + cls.__name__
 
     def transform(self, jdf):
-        # Clear the failure
         self.failure = None
         try:
             if self.ctx is None:
@@ -328,10 +326,12 @@ class TransformerWrapper(object):
 
 
 class TransformerWrapperReader(object):
-
-    def __init__(self, ctx):
+    """
+    Reader to load transformers.
+    """
+    def __init__(self, sc):
         self.failure = None
-        self.ctx = ctx
+        self.sc = sc
 
     def __get_class(self, clazz):
         """
@@ -352,7 +352,7 @@ class TransformerWrapperReader(object):
         try:
             cls = self.__get_class(clazz)
             transformer = cls.load(path)
-            return TransformerWrapper(self.ctx, transformer)
+            return TransformerWrapper(self.sc, transformer)
         except:
             self.failure = traceback.format_exc()
 
@@ -362,39 +362,29 @@ class TransformerWrapperReader(object):
 
 class TransformWrapperSerializer(object):
     """
-    This class implements a serializer for PythonTransformFunction Java
-    objects.
-
-    This is necessary because the Java PythonTransformFunction objects are
-    actually Py4J references to Python objects and thus are not directly
-    serializable. When Java needs to serialize a PythonTransformFunction,
-    it uses this class to invoke Python, which returns the serialized function
-    as a byte array.
+    This class implements a serializer for PythonTransformerWrapper Java objects.
     """
-    def __init__(self, ctx, serializer, gateway=None):
-        self.ctx = ctx
+    def __init__(self, sc, serializer):
+        self.sc = sc
         self.serializer = serializer
-        self.gateway = gateway or self.ctx._gateway
+        self.gateway = self.sc._gateway
         self.gateway.jvm\
             .org.apache.spark.ml.api.python.PythonPipelineStage.registerSerializer(self)
         self.failure = None
 
     def dumps(self, id):
-        # Clear the failure
         self.failure = None
         try:
             twrapper = self.gateway.gateway_property.pool[id]
-            # TODO: is transformer seriablizable or not?
             return bytearray(self.serializer.dumps((twrapper.df_wrap_func, twrapper.transformer)))
         except:
             self.failure = traceback.format_exc()
 
     def loads(self, data):
-        # Clear the failure
         self.failure = None
         try:
             wrap_func, transformer = self.serializer.loads(bytes(data))
-            return TransformerWrapper(self.ctx, transformer).df_wrapper(wrap_func)
+            return TransformerWrapper(self.sc, transformer).df_wrapper(wrap_func)
         except:
             self.failure = traceback.format_exc()
 
