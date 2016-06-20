@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.UserDefinedType
 
 
 case class InMemoryTableScanExec(
@@ -115,8 +113,6 @@ case class InMemoryTableScanExec(
   lazy val readPartitions = sparkContext.longAccumulator
   lazy val readBatches = sparkContext.longAccumulator
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
@@ -159,9 +155,10 @@ case class InMemoryTableScanExec(
             } else {
               true
             }
+            hasNext
+          } else {
+            true // currentBatch != null
           }
-        } else {
-          cachedBatchIterator
         }
 
       // update SQL metrics
@@ -182,7 +179,6 @@ case class InMemoryTableScanExec(
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions.add(1)
       }
-      columnarIterator
     }
   }
 }
