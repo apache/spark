@@ -873,7 +873,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         val utcTerm = ctx.freshName("utc")
         val tzClass = classOf[TimeZone].getName
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
-        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("GMT");""")
+        ctx.addMutableState(tzClass, utcTerm, s"""$utcTerm = $tzClass.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
            |${eval.code}
