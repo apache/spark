@@ -561,7 +561,7 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())
         df = self.spark.createDataFrame(
             [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
-            schema = schema)
+            schema=schema)
         df.show()
 
     def test_infer_schema_with_udt(self):
