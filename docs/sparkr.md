@@ -285,71 +285,32 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
+SparkR supports the following Machine Learning algorithms.
 
-The [summary()](api/R/summary.html) function gives the summary of a model produced by [glm()](api/R/glm.html).
+* Generalized Linear Regression Model [spark.glm()](api/R/spark.glm.html)
+* Naive Bayes [spark.naiveBayes()](api/R/spark.naiveBayes.html)
+* KMeans [spark.kmeans()](api/R/spark.kmeans.html)
+* AFT Survival Regression [spark.survreg()](api/R/spark.survreg.html)
 
-* For gaussian GLM model, it returns a list with 'devianceResiduals' and 'coefficients' components. The 'devianceResiduals' gives the min/max deviance residuals of the estimation; the 'coefficients' gives the estimated coefficients and their estimated standard errors, t values and p-values. (It only available when model fitted by normal solver.)
-* For binomial GLM model, it returns a list with 'coefficients' component which gives the estimated coefficients.
+[Generalized Linear Regression](api/R/spark.glm.html) can be used to train a model from a specified family. Currently the Gaussian, Binomial, Poisson and Gamma families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
 
-The examples below show the use of building gaussian GLM model and binomial GLM model using SparkR.
+The [summary()](api/R/summary.html) function gives the summary of a model produced by different algorithms listed above.
+It produces the similar result compared with R summary function.
 
-## Gaussian GLM model
+## Model persistence
 
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-# Create the DataFrame
-df <- createDataFrame(sqlContext, iris)
+* [write.ml](api/R/write.ml.html) allows users to save a fitted model in a given input path
+* [read.ml](api/R/read.ml.html) allows users to read/load the model which was saved using write.ml in a given path
 
-# Fit a gaussian GLM model over the dataset.
-model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
+Model persistence is supported for all Machine Learning algorithms for all families.
 
-# Model summary are returned in a similar format to R's native glm().
-summary(model)
-##$devianceResiduals
-## Min       Max     
-## -1.307112 1.412532
-##
-##$coefficients
-##                   Estimate  Std. Error t value  Pr(>|t|)    
-##(Intercept)        2.251393  0.3697543  6.08889  9.568102e-09
-##Sepal_Width        0.8035609 0.106339   7.556598 4.187317e-12
-##Species_versicolor 1.458743  0.1121079  13.01195 0           
-##Species_virginica  1.946817  0.100015   19.46525 0           
+The examples below show how to build several models:
+* GLM using the Gaussian and Binomial model families
+* AFT survival regression model
+* Naive Bayes model
+* K-Means model
 
-# Make predictions based on the model.
-predictions <- predict(model, newData = df)
-head(select(predictions, "Sepal_Length", "prediction"))
-##  Sepal_Length prediction
-##1          5.1   5.063856
-##2          4.9   4.662076
-##3          4.7   4.822788
-##4          4.6   4.742432
-##5          5.0   5.144212
-##6          5.4   5.385281
-{% endhighlight %}
-</div>
-
-## Binomial GLM model
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-# Create the DataFrame
-df <- createDataFrame(sqlContext, iris)
-training <- filter(df, df$Species != "setosa")
-
-# Fit a binomial GLM model over the dataset.
-model <- glm(Species ~ Sepal_Length + Sepal_Width, data = training, family = "binomial")
-
-# Model coefficients are returned in a similar format to R's native glm().
-summary(model)
-##$coefficients
-##               Estimate
-##(Intercept)  -13.046005
-##Sepal_Length   1.902373
-##Sepal_Width    0.404655
-{% endhighlight %}
-</div>
+{% include_example r/ml.R %}
 
 # R Function Name Conflicts
 

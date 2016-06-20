@@ -1006,7 +1006,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
     // Should throw when a static partition appears after a dynamic partition
-    intercept[SparkException] {
+    intercept[AnalysisException] {
       sql(
         """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
           |SELECT key, value, key % 5 FROM src
@@ -1033,14 +1033,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SELECT * FROM boom").queryExecution.analyzed
   }
 
-  test("SPARK-3810: PreInsertionCasts static partitioning support") {
+  test("SPARK-3810: PreprocessTableInsertion static partitioning support") {
     val analyzedPlan = {
       loadTestTable("srcpart")
       sql("DROP TABLE IF EXISTS withparts")
       sql("CREATE TABLE withparts LIKE srcpart")
       sql("INSERT INTO TABLE withparts PARTITION(ds='1', hr='2') SELECT key, value FROM src")
         .queryExecution.analyzed
-    }
+      }
 
     assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
@@ -1049,7 +1049,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
-  test("SPARK-3810: PreInsertionCasts dynamic partitioning support") {
+  test("SPARK-3810: PreprocessTableInsertion dynamic partitioning support") {
     val analyzedPlan = {
       loadTestTable("srcpart")
       sql("DROP TABLE IF EXISTS withparts")
@@ -1057,11 +1057,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
       sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, '1', '2' FROM src")
         .queryExecution.analyzed
     }
 
-    assertResult(1, "Duplicated project detected\n" + analyzedPlan) {
+    assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
       analyzedPlan.collect {
         case _: Project => ()
       }.size

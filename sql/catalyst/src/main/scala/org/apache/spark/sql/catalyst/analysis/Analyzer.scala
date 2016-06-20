@@ -452,42 +452,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        val table = lookupTableFromCatalog(u)
-        // adding the table's partitions or validate the query's partition info
-        table match {
-          case relation: CatalogRelation if relation.catalogTable.partitionColumns.nonEmpty =>
-            val tablePartitionNames = relation.catalogTable.partitionColumns.map(_.name)
-            if (parts.keys.nonEmpty) {
-              // the query's partitioning must match the table's partitioning
-              // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
-              // TODO: add better checking to pre-inserts to avoid needing this here
-              if (tablePartitionNames.size != parts.keySet.size) {
-                throw new AnalysisException(
-                  s"""Requested partitioning does not match the ${u.tableIdentifier} table:
-                     |Requested partitions: ${parts.keys.mkString(",")}
-                     |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
-              }
-              // Assume partition columns are correctly placed at the end of the child's output
-              i.copy(table = EliminateSubqueryAliases(table))
-            } else {
-              // Set up the table's partition scheme with all dynamic partitions by moving partition
-              // columns to the end of the column list, in partition order.
-              val (inputPartCols, columns) = child.output.partition { attr =>
-                tablePartitionNames.contains(attr.name)
-              }
-              // All partition columns are dynamic because this InsertIntoTable had no partitioning
-              val partColumns = tablePartitionNames.map { name =>
-                inputPartCols.find(_.name == name).getOrElse(
-                  throw new AnalysisException(s"Cannot find partition column $name"))
-              }
-              i.copy(
-                table = EliminateSubqueryAliases(table),
-                partition = tablePartitionNames.map(_ -> None).toMap,
-                child = Project(columns ++ partColumns, child))
-            }
-          case _ =>
-            i.copy(table = EliminateSubqueryAliases(table))
-        }
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&

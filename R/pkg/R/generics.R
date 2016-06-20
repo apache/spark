@@ -446,6 +446,13 @@ setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
+#' @rdname createOrReplaceTempView
+#' @export
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -466,12 +473,9 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 #' @export
 setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
-#' @rdname dropduplicates
+#' @rdname dropDuplicates
 #' @export
-setGeneric("dropDuplicates",
-           function(x, colNames = columns(x)) {
-             standardGeneric("dropDuplicates")
-           })
+setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
 
 #' @rdname nafunctions
 #' @export
@@ -551,12 +555,9 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
-#' @rdname createOrReplaceTempView
+#' @rdname registerTempTable-deprecated
 #' @export
-setGeneric("createOrReplaceTempView",
-           function(x, viewName) {
-             standardGeneric("createOrReplaceTempView")
-           })
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
 #' @rdname sample
 #' @export
@@ -677,6 +678,10 @@ setGeneric("withColumnRenamed",
 #' @rdname write.df
 #' @export
 setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
+
+#' @rdname randomSplit
+#' @export
+setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSplit") })
 
 ###################### Column Methods ##########################
 

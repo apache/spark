@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.DataFrame
+import java.util.TimeZone
 
 /**
- * An interface for systems that can collect the results of a streaming query. In order to preserve
- * exactly once semantics a sink must be idempotent in the face of multiple attempts to add the same
- * batch.
+ * Helper functions for testing date and time functionality.
  */
-trait Sink {
+object DateTimeTestUtils {
 
-  /**
-   * Adds a batch of data to this sink. The data for a given `batchId` is deterministic and if
-   * this method is called more than once with the same batchId (which will happen in the case of
-   * failures), then `data` should only be added once.
-   *
-   * Note: You cannot apply any operators on `data` except consuming it (e.g., `collect/foreach`).
-   * Otherwise, you may get a wrong result.
-   */
-  def addBatch(batchId: Long, data: DataFrame): Unit
+  val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
+
+  def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
+    val originalDefaultTimeZone = TimeZone.getDefault
+    try {
+      DateTimeUtils.resetThreadLocals()
+      TimeZone.setDefault(newDefaultTimeZone)
+      block
+    } finally {
+      TimeZone.setDefault(originalDefaultTimeZone)
+      DateTimeUtils.resetThreadLocals()
+    }
+  }
 }
