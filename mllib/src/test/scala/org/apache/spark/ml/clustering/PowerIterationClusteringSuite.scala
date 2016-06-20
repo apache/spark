@@ -17,9 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.collection.mutable
-import scala.util.Random
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.{Edge, Graph}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -31,5 +29,51 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
   import org.apache.spark.ml.clustering.PowerIterationClustering._
 
+  /** Generates a circle of points. */
+  private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
+    Array.tabulate(n) { i =>
+      val theta = 2.0 * math.Pi * i / n
+      (r * math.cos(theta), r * math.sin(theta))
+    }
+  }
 
+  /** Computes Gaussian similarity. */
+  private def sim(x: (Double, Double), y: (Double, Double)): Double = {
+    val dist2 = (x._1 - y._1) * (x._1 - y._1) + (x._2 - y._2) * (x._2 - y._2)
+    math.exp(-dist2 / 2.0)
+  }
+
+  test("default parameters") {
+    val pic = new PowerIterationClustering()
+
+    assert(pic.getK === 2)
+    assert(pic.getMaxIter === 20)
+    assert(pic.getInitMode === "random")
+    assert(pic.getFeaturesCol === "features")
+    assert(pic.getPredictionCol === "prediction")
+  }
+
+  test("set parameters") {
+    val pic = new PowerIterationClustering()
+      .setK(9)
+      .setMaxIter(33)
+      .setInitMode("degree")
+      .setFeaturesCol("test_feature")
+      .setPredictionCol("test_prediction")
+
+    assert(pic.getK === 9)
+    assert(pic.getMaxIter === 33)
+    assert(pic.getInitMode === "degree")
+    assert(pic.getFeaturesCol === "test_feature")
+    assert(pic.getPredictionCol === "test_prediction")
+  }
+
+  test("parameters validation") {
+    intercept[IllegalArgumentException] {
+      new PowerIterationClustering().setK(1)
+    }
+    intercept[IllegalArgumentException] {
+      new PowerIterationClustering().setInitMode("no_such_a_mode")
+    }
+  }
 }
