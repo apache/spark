@@ -14,7 +14,7 @@ supports operations like selection, filtering, aggregation etc. (similar to R da
 [dplyr](https://github.com/hadley/dplyr)) but on large datasets. SparkR also supports distributed
 machine learning using MLlib.
 
-# SparkDataFrames
+# SparkDataFrame
 
 A SparkDataFrame is a distributed collection of data organized into named columns. It is conceptually
 equivalent to a table in a relational database or a data frame in R, but with richer
@@ -90,13 +90,13 @@ The following Spark driver properties can be set in `sparkConfig` with `sparkR.s
 With a `SparkSession`, applications can create `SparkDataFrame`s from a local R data frame, from a [Hive table](sql-programming-guide.html#hive-tables), or from other [data sources](sql-programming-guide.html#data-sources).
 
 ### From local data frames
-The simplest way to create a data frame is to convert a local R data frame into a SparkDataFrame. Specifically we can use `createDataFrame` and pass in the local R data frame to create a  SparkDataFrame. As an example, the following creates a `SparkDataFrame` based using the `faithful` dataset from R.
+The simplest way to create a data frame is to convert a local R data frame into a SparkDataFrame. Specifically we can use `as.DataFrame` or `createDataFrame` and pass in the local R data frame to create a SparkDataFrame. As an example, the following creates a `SparkDataFrame` based using the `faithful` dataset from R.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-df <- createDataFrame(faithful)
+df <- as.DataFrame(faithful)
 
-# Displays the content of the SparkDataFrame to stdout
+# Displays the first part of the SparkDataFrame
 head(df)
 ##  eruptions waiting
 ##1     3.600      79
@@ -116,7 +116,7 @@ you can specify the packages with the `packages` argument.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.session(sparkPackages="com.databricks:spark-avro_2.11:2.0.1")
+sc <- sparkR.session(sparkPackages="com.databricks:spark-avro_2.11:3.0.0")
 {% endhighlight %}
 </div>
 
@@ -184,7 +184,7 @@ Here we include some basic examples and a complete list can be found in the [API
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 # Create the SparkDataFrame
-df <- createDataFrame(faithful)
+df <- as.DataFrame(faithful)
 
 # Get basic information about the SparkDataFrame
 df
@@ -256,7 +256,7 @@ head(df)
 </div>
 
 ## Running SQL Queries from SparkR
-A SparkDataFrame can also be registered as a temporary table in Spark SQL and registering a SparkDataFrame as a table allows you to run SQL queries over its data.
+A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
 
 <div data-lang="r"  markdown="1">
@@ -264,8 +264,8 @@ The `sql` function enables applications to run SQL queries programmatically and 
 # Load a JSON file
 people <- read.df("./examples/src/main/resources/people.json", "json")
 
-# Register this SparkDataFrame as a table.
-registerTempTable(people, "people")
+# Register this SparkDataFrame as a temporary view.
+createOrReplaceTempView(people, "people")
 
 # SQL statements can be run by using the sql method
 teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -349,5 +349,5 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - Spark's `SQLContext` and `HiveContext` have been deprecated to be replaced by `SparkSession`. Instead of `sparkR.init()`, call `sparkR.session()` in its place to instantiate the SparkSession. Once that is done, that currently active SparkSession will be used for SparkDataFrame operations.
  - The parameter `sparkExecutorEnv` is not supported by `sparkR.session`. To set environment for the executors, set Spark config properties with the prefix "spark.executorEnv.VAR_NAME", for example, "spark.executorEnv.PATH"
  - The `sqlContext` parameter is no longer required for these functions: `createDataFrame`, `as.DataFrame`, `read.json`, `jsonFile`, `read.parquet`, `parquetFile`, `read.text`, `sql`, `tables`, `tableNames`, `cacheTable`, `uncacheTable`, `clearCache`, `dropTempTable`, `read.df`, `loadDF`, `createExternalTable`.
- - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
  - The method `registerTempTable` has been deprecated to be replaced by `createOrReplaceTempView`.
+ - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
