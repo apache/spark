@@ -69,11 +69,20 @@ private[spark] class Benchmark(
    * @param name of the benchmark case
    * @param numIters if non-zero, forces exactly this many iterations to be run
    */
-  def addCase(name: String, numIters: Int = 0)(f: Int => Unit): Unit = {
+  def addCase(
+      name: String,
+      numIters: Int = 0,
+      prepare: () => Unit = () => { },
+      cleanup: () => Unit = () => { })(f: Int => Unit): Unit = {
     addTimerCase(name, numIters) { timer =>
-      timer.startTiming()
-      f(timer.iteration)
-      timer.stopTiming()
+      try {
+        prepare()
+        timer.startTiming()
+        f(timer.iteration)
+      } finally {
+        timer.stopTiming()
+        cleanup()
+      }
     }
   }
 

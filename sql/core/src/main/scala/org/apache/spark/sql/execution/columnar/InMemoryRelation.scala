@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
 
@@ -58,7 +59,7 @@ private[columnar]
 case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[columnar]
-case class ColumnarCachedBatch(numRows: Int, buffers: Array[Array[Long]])
+case class ColumnarCachedBatch(numRows: Int, buffers: ColumnarBatch)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
@@ -192,38 +193,32 @@ private[sql] case class InMemoryRelation(
     _cachedColumnBuffers = cached
   }
 
+  // IWASHERE
   private def buildBuffers2(): Unit = {
-    val output = child.output
+    val schema = StructType.fromAttributes(child.output)
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[ColumnarCachedBatch] {
         def next(): ColumnarCachedBatch = {
-          val columnVectors = output.map { attribute =>
-            new Array[Long](batchSize)
-            // ColumnVector.allocate(batchSize, attribute.dataType, MemoryMode.ON_HEAP)
-          }.toArray
-
+          val columnarBatch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP)
           var rowCount = 0
           var totalSize = 0L
           while (rowIterator.hasNext && rowCount < batchSize
             && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
             val row = rowIterator.next()
-            assert(
-              row.numFields == columnVectors.length,
-              s"Row column number mismatch, expected ${output.size} columns, " +
-                s"but got ${row.numFields}." +
-                s"\nRow content: $row")
-
+            assert(row.numFields == columnarBatch.numCols, "Row column number mismatch, " +
+              s"expected ${columnarBatch.numCols} columns, but got ${row.numFields}. \n" +
+              s"Row content: $row")
             var i = 0
             totalSize = 0
             while (i < row.numFields) {
-              columnVectors(i)(rowCount) = row.getLong(i)
+              columnarBatch.column(i).putLong(rowCount, row.getLong(i))
               totalSize += 8
               i += 1
             }
             rowCount += 1
           }
 
-          ColumnarCachedBatch(rowCount, columnVectors)
+          ColumnarCachedBatch(rowCount, columnarBatch)
         }
 
         def hasNext: Boolean = rowIterator.hasNext

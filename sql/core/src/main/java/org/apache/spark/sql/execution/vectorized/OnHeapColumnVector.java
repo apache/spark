@@ -33,28 +33,28 @@ import org.apache.spark.unsafe.Platform;
 public final class OnHeapColumnVector extends ColumnVector {
 
 //  // capacity, num longs, long1, long2, long3...
-//  public void writeExternal(ObjectOutput out) throws java.io.IOException {
-//    out.writeInt(capacity);
-//    out.writeInt(longData.length);
-//    int i;
-//    for (i = 0; i < longData.length; i++) {
-//      out.writeLong(longData[i]);
-//    }
-//  }
-//
-//  public void readExternal(ObjectInput in) throws java.io.IOException {
-//    capacity = in.readInt();
-//    int numLongs = in.readInt();
-//    longData = new long[numLongs];
-//    int i;
-//    for (i = 0; i < numLongs; i++) {
-//      longData[i] = in.readLong();
-//    }
-//  }
-//
-//  public OnHeapColumnVector() {
-//    super(10000, LongType$.MODULE$, MemoryMode.ON_HEAP);
-//  }
+  public void writeExternal(ObjectOutput out) throws java.io.IOException {
+    out.writeInt(capacity);
+    out.writeInt(longData.length);
+    int i;
+    for (i = 0; i < longData.length; i++) {
+      out.writeLong(longData[i]);
+    }
+  }
+
+  public void readExternal(ObjectInput in) throws java.io.IOException {
+    capacity = in.readInt();
+    int numLongs = in.readInt();
+    longData = new long[numLongs];
+    int i;
+    for (i = 0; i < numLongs; i++) {
+      longData[i] = in.readLong();
+    }
+  }
+
+  public OnHeapColumnVector() {
+    super(10000, LongType$.MODULE$, MemoryMode.ON_HEAP);
+  }
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
