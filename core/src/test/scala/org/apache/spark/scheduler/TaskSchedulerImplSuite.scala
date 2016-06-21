@@ -298,17 +298,25 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId).get
     assert(mgr.myLocalityLevels.toSet === Set(TaskLocality.NODE_LOCAL, TaskLocality.ANY))
-    // we should know about both executors, evne though we only scheduled tasks on one of them
+    // we should know about both executors, even though we only scheduled tasks on one of them
     assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0")))
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1")))
 
-    // suppose that now executor2 is added, we should realize that we can run process-local tasks
-    // and even though we don't schedule any tasks on the executor, we should still have it in
-    // our set of executors
-    taskScheduler.resourceOffers(Seq(new WorkerOffer("executor2", "host0", 1)))
+    // suppose that now executor2 is added, we should realize that we can run process-local tasks.
+    // And we should know its alive on the host.
+    val secondTaskDescs = taskScheduler.resourceOffers(
+      Seq(new WorkerOffer("executor2", "host0", 1))).flatten
+    assert(secondTaskDescs.size === 1)
     assert(mgr.myLocalityLevels.toSet ===
       Set(TaskLocality.PROCESS_LOCAL, TaskLocality.NODE_LOCAL, TaskLocality.ANY))
     assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0", "executor2")))
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1")))
+
+    // And even if we don't have anything left to schedule, another resource offer on yet another
+    // executor should also update the set of live executors
+    val thirdTaskDescs = taskScheduler.resourceOffers(
+      Seq(new WorkerOffer("executor3", "host1", 1))).flatten
+    assert(thirdTaskDescs.size === 0)
+    assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1", "executor3")))
   }
 }
