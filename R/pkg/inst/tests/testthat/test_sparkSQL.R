@@ -1590,7 +1590,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
+test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   df <- read.json(jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -1600,10 +1600,11 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   writeLines(lines, jsonPath2)
   df2 <- read.df(jsonPath2, "json")
 
-  unioned <- arrange(unionAll(df, df2), df$age)
+  unioned <- arrange(union(df, df2), df$age)
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
+  expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
 
   unioned2 <- arrange(rbind(unioned, df, df2), df$age)
   expect_is(unioned2, "SparkDataFrame")
@@ -1619,6 +1620,9 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned, "SparkDataFrame")
   expect_equal(count(intersected), 1)
   expect_equal(first(intersected)$name, "Andy")
+
+  # Test base::union is working
+  expect_equal(union(c(1:3), c(3:5)), c(1:5))
 
   # Test base::rbind is working
   expect_equal(length(rbind(1:4, c = 2, a = 10, 10, deparse.level = 0)), 16)
