@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
@@ -154,9 +154,9 @@ case class InMemoryRelation(
   private def buildBuffers2(): Unit = {
     val schema = StructType.fromAttributes(child.output)
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
-      new Iterator[ColumnarCachedBatch] {
-        def next(): ColumnarCachedBatch = {
-          val columnarBatch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP)
+      new Iterator[ColumnarBatch] {
+        def next(): ColumnarBatch = {
+          val columnarBatch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, batchSize)
           var rowCount = 0
           var totalSize = 0L
           while (rowIterator.hasNext && rowCount < batchSize
@@ -168,14 +168,14 @@ case class InMemoryRelation(
             var i = 0
             totalSize = 0
             while (i < row.numFields) {
-              columnarBatch.column(i).putLong(rowCount, row.getLong(i))
+              columnarBatch.column(i).appendLong(row.getLong(i))
               totalSize += 8
               i += 1
             }
             rowCount += 1
           }
-
-          ColumnarCachedBatch(rowCount, columnarBatch)
+          columnarBatch.setNumRows(rowCount)
+          columnarBatch
         }
 
         def hasNext: Boolean = rowIterator.hasNext
@@ -207,7 +207,7 @@ case class InMemoryRelation(
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
-  def cachedColumnVectors: RDD[ColumnarCachedBatch] = _cachedColumnVectors
+  def cachedColumnVectors: RDD[ColumnarBatch] = _cachedColumnVectors
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, batchStats)
