@@ -86,9 +86,8 @@ print.structType <- function(x, ...) {
 #' Create a structField object that contains the metadata for a single field in a schema.
 #'
 #' @param x The name of the field
-#' @param type The data type of the field
-#' @param nullable A logical vector indicating whether or not the field is nullable
 #' @return a structField object
+#' @rdname structField
 #' @export
 #' @examples
 #'\dontrun{
@@ -176,6 +175,10 @@ checkType <- function(type) {
   stop(paste("Unsupported type for SparkDataframe:", type))
 }
 
+#' @param type The data type of the field
+#' @param nullable A logical vector indicating whether or not the field is nullable
+#' @rdname structField
+#' @export
 structField.character <- function(x, type, nullable = TRUE) {
   if (class(x) != "character") {
     stop("Field name must be a string.")
