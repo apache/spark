@@ -201,8 +201,8 @@ createMethods()
 #' @param x a GroupedData
 #' @rdname gapply
 #' @name gapply
-#' @seealso \link{gapplyCollect}
 #' @export
+#' @seealso \link{gapplyCollect}
 #' @examples
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping
@@ -251,6 +251,7 @@ setMethod("gapply",
 #' @return a SparkDataFrame
 #' @rdname gapplyCollect
 #' @name gapplyCollect
+#' @export
 #' @seealso \link{gapply}
 #' @examples
 #' \dontrun{
