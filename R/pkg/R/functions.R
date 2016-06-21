@@ -235,7 +235,7 @@ setMethod("cbrt",
             column(jc)
           })
 
-#' Computes the ceiling of the given value.
+#' Computes the ceiling of the given value
 #'
 #' Computes the ceiling of the given value.
 #'

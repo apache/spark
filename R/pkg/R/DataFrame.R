@@ -2510,7 +2510,7 @@ setMethod("summary",
           })
 
 
-#' A set of SparkDataFrame functions working with NA falues
+#' A set of SparkDataFrame functions working with NA values
 #'
 #' dropna, na.omit - Returns a new SparkDataFrame omitting rows with null values.
 #'
