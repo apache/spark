@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
-import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -110,16 +110,25 @@ object ExpressionEncoder {
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
-    val serializer = encoders.map {
-      case e if e.flat => e.serializer.head
-      case other => CreateStruct(other.serializer)
-    }.zipWithIndex.map { case (expr, index) =>
-      expr.transformUp {
-        case BoundReference(0, t, _) =>
-          Invoke(
-            BoundReference(0, ObjectType(cls), nullable = true),
-            s"_${index + 1}",
-            t)
+    val serializer = encoders.zipWithIndex.map { case (enc, index) =>
+      val originalInputObject = enc.serializer.head.collect { case b: BoundReference => b }.head
+      val newInputObject = Invoke(
+        BoundReference(0, ObjectType(cls), nullable = true),
+        s"_${index + 1}",
+        originalInputObject.dataType)
+
+      val newSerializer = enc.serializer.map(_.transformUp {
+        case b: BoundReference if b == originalInputObject => newInputObject
+      })
+
+      if (enc.flat) {
+        newSerializer.head
+      } else {
+        val struct = CreateStruct(newSerializer)
+        val nullCheck = Or(
+          IsNull(newInputObject),
+          Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
+        If(nullCheck, Literal.create(null, struct.dataType), struct)
       }
     }
 
