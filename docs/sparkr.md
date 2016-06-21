@@ -262,15 +262,15 @@ head(df)
 {% endhighlight %}
 </div>
 
-### Applying User-defined Function
-In SparkR, we support several kinds for User-defined Functions:
+### Applying User-Defined Function
+In SparkR, we support several kinds of User-Defined Functions:
 
 #### Run a given function on a large dataset using `dapply` or `dapplyCollect`
 
 ##### dapply
-Apply a function to each partition of `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
+Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
 and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function
-should be a `data.frame`. Schema specifies the row format of the resulting `SparkDataFrame`. It must match the R function's output.
+should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match the R function's output.
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -291,7 +291,7 @@ head(collect(df1))
 </div>
 
 ##### dapplyCollect
-Like `dapply`, apply a function to each partition of `SparkDataFrame` and collect the result back. The output of function
+Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function
 should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` only can be used if the
 output of UDF run on all the partitions can fit in driver memory.
 <div data-lang="r"  markdown="1">
@@ -302,7 +302,7 @@ output of UDF run on all the partitions can fit in driver memory.
 ldf <- dapplyCollect(
          df,
          function(x) {
-           x <- cbind(x, "waiting_secs"=x$waiting * 60)
+           x <- cbind(x, "waiting_secs" = x$waiting * 60)
          })
 head(ldf, 3)
 ##  eruptions waiting waiting_secs
@@ -313,9 +313,9 @@ head(ldf, 3)
 {% endhighlight %}
 </div>
 
-#### Run many functions in parallel using `spark.lapply`
+#### Run local R functions distributed using `spark.lapply`
 
-##### lapply
+##### spark.lapply
 Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark.
 Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations
 should fit in a single machine. If that is not the case they can do something like `df <- createDataFrame(list)` and then use
