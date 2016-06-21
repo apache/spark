@@ -37,6 +37,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   var failedTaskSetReason: String = null
   var failedTaskSet = false
 
+  var taskScheduler: TaskSchedulerImpl = null
+  var dagScheduler: DAGScheduler = null
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     failedTaskSet = false
@@ -44,15 +47,27 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     failedTaskSetReason = null
   }
 
+  override def afterEach(): Unit = {
+    super.afterEach()
+    if (taskScheduler != null) {
+      taskScheduler.stop()
+      taskScheduler = null
+    }
+    if (dagScheduler != null) {
+      dagScheduler.stop()
+      dagScheduler = null
+    }
+  }
+
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     confs.foreach { case (k, v) =>
       sc.conf.set(k, v)
     }
-    val taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler = new TaskSchedulerImpl(sc)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
-    new DAGScheduler(sc, taskScheduler) {
+    dagScheduler = new DAGScheduler(sc, taskScheduler) {
       override def taskStarted(task: Task[_], taskInfo: TaskInfo): Unit = {}
       override def executorAdded(execId: String, host: String): Unit = {}
       override def taskSetFailed(
