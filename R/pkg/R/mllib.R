@@ -55,7 +55,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' Generalized Linear Models
 #'
-#' Fit generalized linear model against a Spark DataFrame. Can print, make predictions on the
+#' Fits generalized linear model against a Spark DataFrame. Users can print, make predictions on the
 #' produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
@@ -91,9 +91,8 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #' }
-
-
 #' @note spark.glm since 2.0.0
+#' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25) {
             if (is.character(family)) {
@@ -115,7 +114,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
-#' @title Fit a generalized linear model
+#' @title Generalized Linear Models (R-compliant)
+#  Fits a generalized linear model, similarly to R's glm().
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data SparkDataFrame for training.
@@ -125,16 +125,26 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
-#' @return \code{spark.glm} returns a fitted generalized linear model.
+#' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' data(iris)
+#' df <- createDataFrame(iris)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, family = "gaussian")
+#' summary(model)
+#' }
 #' @note glm since 1.5.0
+#' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25) {
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
           })
 
-#' @title Return a summary of the produced generalized linear model
+#' @title Summary of GLM model
+#  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #' @param object A fitted generalized linear model
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
 #'         including at least the coefficients, null/residual deviance, null/residual degrees
@@ -173,7 +183,8 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             return(ans)
           })
 
-#' @title Print the summary of the produced generalized linear model
+#' @title Print summary of GLM model
+#  Print the summary of GeneralizedLinearRegressionModel
 #' @rdname spark.glm
 #' @param x Summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
@@ -205,6 +216,8 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   }
 
 #' @title Make predictions using the produced generalized linear model
+#  Makes predictions from a generalized linear model produced by glm() or spark.glm(),
+#  similarly to R's predict().
 #' @param newData SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname spark.glm
@@ -459,8 +472,8 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
-#' @title Save fitted generalized linear model to the input path
-#'
+#' @title Save fitted GLM model
+#  Save the generalized linear model to the input path.
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
@@ -468,7 +481,6 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' @rdname spark.glm
 #' @export
 #' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
-#' @seealso \link{read.ml}
 setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
