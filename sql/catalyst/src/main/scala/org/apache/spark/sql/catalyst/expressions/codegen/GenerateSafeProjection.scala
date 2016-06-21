@@ -96,7 +96,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           $values[$index] = ${elementConverter.value};
         }
       }
-      final ArrayData $output = new $arrayClass($values);
+      final ArrayData $output = $arrayClass.allocate($values);
     """
 
     ExprCode(code, "false", output)

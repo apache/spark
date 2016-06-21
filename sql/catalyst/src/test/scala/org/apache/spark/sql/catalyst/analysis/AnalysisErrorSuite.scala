@@ -57,8 +57,8 @@ private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
   override def sqlType: DataType = MapType(IntegerType, IntegerType)
 
   override def serialize(ungroupableData: UngroupableData): MapData = {
-    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
-    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
+    val keyArray = GenericArrayData.allocate(ungroupableData.data.keys.toSeq)
+    val valueArray = GenericArrayData.allocate(ungroupableData.data.values.toSeq)
     new ArrayBasedMapData(keyArray, valueArray)
   }
 

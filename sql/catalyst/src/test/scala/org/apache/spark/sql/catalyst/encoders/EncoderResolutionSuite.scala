@@ -70,11 +70,11 @@ class EncoderResolutionSuite extends PlanTest {
     val bound = encoder.resolveAndBind(attrs)
 
     // If no null values appear, it should works fine
-    bound.fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
+    bound.fromRow(InternalRow(GenericArrayData.allocate(Array(1, 2))))
 
     // If there is null value, it should throw runtime exception
     val e = intercept[RuntimeException] {
-      bound.fromRow(InternalRow(new GenericArrayData(Array(1, null))))
+      bound.fromRow(InternalRow(GenericArrayData.allocate(Array(1, null))))
     }
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
   }

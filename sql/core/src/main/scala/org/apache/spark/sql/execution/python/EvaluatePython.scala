@@ -119,10 +119,10 @@ object EvaluatePython {
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
     case (c: java.util.List[_], ArrayType(elementType, _)) =>
-      new GenericArrayData(c.asScala.map { e => fromJava(e, elementType)}.toArray)
+      GenericArrayData.allocate(c.asScala.map { e => fromJava(e, elementType)}.toArray)
 
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
-      new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
+      GenericArrayData.allocate(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
     case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
       ArrayBasedMapData(

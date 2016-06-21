@@ -52,7 +52,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
-    new GenericArrayData(children.map(_.eval(input)).toArray)
+    GenericArrayData.allocate(children.map(_.eval(input)).toArray)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -76,7 +76,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
            """
         }) +
       s"""
-        final ArrayData ${ev.value} = new $arrayClass($values);
+        final ArrayData ${ev.value} = $arrayClass.allocate($values);
         this.$values = null;
       """)
   }
@@ -130,7 +130,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       throw new RuntimeException("Cannot use null as map key!")
     }
     val valueArray = values.map(_.eval(input)).toArray
-    new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
+    new ArrayBasedMapData(
+      GenericArrayData.allocate(keyArray), GenericArrayData.allocate(valueArray))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -141,8 +142,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
     ctx.addMutableState("Object[]", valueArray, s"this.$valueArray = null;")
 
-    val keyData = s"new $arrayClass($keyArray)"
-    val valueData = s"new $arrayClass($valueArray)"
+    val keyData = s"$arrayClass.allocate($keyArray)"
+    val valueData = s"$arrayClass.allocate($valueArray)"
     ev.copy(code = s"""
       final boolean ${ev.isNull} = false;
       $keyArray = new Object[${keys.size}];

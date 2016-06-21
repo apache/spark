@@ -159,9 +159,9 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): ArrayData = {
       scalaValue match {
         case a: Array[_] =>
-          new GenericArrayData(a.map(elementConverter.toCatalyst))
+          GenericArrayData.allocate(a.map(elementConverter.toCatalyst))
         case s: Seq[_] =>
-          new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
+          GenericArrayData.allocate(s.map(elementConverter.toCatalyst).toArray)
         case i: JavaIterable[_] =>
           val iter = i.iterator
           val convertedIterable = scala.collection.mutable.ArrayBuffer.empty[Any]
@@ -169,7 +169,7 @@ object CatalystTypeConverters {
             val item = iter.next()
             convertedIterable += elementConverter.toCatalyst(item)
           }
-          new GenericArrayData(convertedIterable.toArray)
+          GenericArrayData.allocate(convertedIterable.toArray)
       }
     }
 
@@ -410,7 +410,7 @@ object CatalystTypeConverters {
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
-    case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
+    case seq: Seq[Any] => GenericArrayData.allocate(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>

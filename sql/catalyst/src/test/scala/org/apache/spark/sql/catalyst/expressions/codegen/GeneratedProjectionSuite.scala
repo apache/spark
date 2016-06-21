@@ -86,7 +86,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
   test("generated unsafe projection with array of binary") {
     val row = InternalRow(
       Array[Byte](1, 2),
-      new GenericArrayData(Array(Array[Byte](1, 2), null, Array[Byte](3, 4))))
+      GenericArrayData.allocate(Array(Array[Byte](1, 2), null, Array[Byte](3, 4))))
     val fields = (BinaryType :: ArrayType(BinaryType) :: Nil).toArray[DataType]
 
     val unsafeProj = UnsafeProjection.create(fields)

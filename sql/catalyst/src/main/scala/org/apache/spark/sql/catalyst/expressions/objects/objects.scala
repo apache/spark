@@ -537,7 +537,7 @@ case class MapObjects private(
           $loopIndex += 1;
         }
 
-        ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
+        ${ev.value} = ${classOf[GenericArrayData].getName}.allocate($convertedArray);
       }
     """
     ev.copy(code = code, isNull = genInputData.isNull)

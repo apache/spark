@@ -404,7 +404,7 @@ class JacksonParser(
       values += fieldConverter.apply(parser)
     }
 
-    new GenericArrayData(values.toArray)
+    GenericArrayData.allocate(values.toArray)
   }
 
   /**
