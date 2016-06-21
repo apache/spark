@@ -318,6 +318,11 @@ class SQLTests(ReusedPySparkTestCase):
         [row] = self.spark.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
         self.assertEqual(tuple(row), (6, 5))
 
+    def test_udf_without_arguments(self):
+        self.sqlCtx.registerFunction("foo", lambda: "bar")
+        [row] = self.sqlCtx.sql("SELECT foo()").collect()
+        self.assertEqual(row[0], "bar")
+
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
         rdd = self.sc.parallelize(d)
