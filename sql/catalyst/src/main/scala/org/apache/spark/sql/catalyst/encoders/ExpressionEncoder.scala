@@ -124,6 +124,9 @@ object ExpressionEncoder {
       if (enc.flat) {
         newSerializer.head
       } else {
+        // For non-flat encoder, the input object is not top level anymore after being combined to
+        // a tuple encoder, thus it can be null and we should wrap the `CreateStruct` with `If` and
+        // null check to handle null case correctly.
         val struct = CreateStruct(newSerializer)
         val nullCheck = Or(
           IsNull(newInputObject),
