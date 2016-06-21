@@ -19,7 +19,6 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -31,7 +30,7 @@ import org.apache.spark.mllib.clustering.{PowerIterationClusteringModel => MLlib
 import org.apache.spark.mllib.clustering.PowerIterationClustering.Assignment
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 /**
@@ -52,6 +51,10 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   @Since("2.0.0")
   def getK: Int = $(k)
 
+  /**
+   * Param for the initialization algorithm. This can be either "random" to use a random vector
+   * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
+   */
   @Since("2.0.0")
   final val initMode = new Param[String](this, "initMode", "The initialization algorithm. " +
     "Supported options: 'random' and 'degree'.",
@@ -80,6 +83,11 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   }
 }
 
+/**
+ * :: Experimental ::
+ * Model fitted by PowerIterationClustering.
+ * @param parentModel a model trained by spark.mllib.clustering.PowerIterationClustering.
+ */
 @Since("2.0.0")
 @Experimental
 class PowerIterationClusteringModel private[ml] (
@@ -134,32 +142,12 @@ class PowerIterationClusteringModel private[ml] (
     sparkSession.createDataFrame(rows, schema)
   }
 
+  /**
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
+   */
   @Since("2.0.0")
   override def write: MLWriter =
     new PowerIterationClusteringModel.PowerIterationClusteringModelWriter(this)
-
-  private var trainingSummary: Option[PowerIterationClusteringSummary] = None
-
-  private[clustering] def setSummary(summary: PowerIterationClusteringSummary): this.type = {
-    this.trainingSummary = Some(summary)
-    this
-  }
-
-  /**
-   * Return true if there exists summary of model.
-   */
-  @Since("2.0.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
-
-  /**
-   * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
-   */
-  @Since("2.0.0")
-  def summary: PowerIterationClusteringSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
 }
 
 @Since("2.0.0")
@@ -201,6 +189,14 @@ object PowerIterationClusteringModel extends MLReadable[PowerIterationClustering
   }
 }
 
+/**
+ * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
+ * [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]]. From the abstract: PIC finds a very
+ * low-dimensional embedding of a dataset using truncated power iteration on a normalized pair-wise
+ * similarity matrix of the data.
+ *
+ * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
+ */
 @Since("2.0.0")
 @Experimental
 class PowerIterationClustering @Since("2.0.0") (
@@ -273,8 +269,3 @@ object PowerIterationClustering extends DefaultParamsReadable[PowerIterationClus
   override def load(path: String): PowerIterationClustering = super.load(path)
 }
 
-@Since("2.0.0")
-@Experimental
-class PowerIterationClusteringSummary private[clustering] () extends Serializable {
-
-}
