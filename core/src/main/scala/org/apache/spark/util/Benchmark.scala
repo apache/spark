@@ -74,16 +74,12 @@ private[spark] class Benchmark(
       numIters: Int = 0,
       prepare: () => Unit = () => { },
       cleanup: () => Unit = () => { })(f: Int => Unit): Unit = {
-    addTimerCase(name, numIters) { timer =>
-      try {
-        prepare()
-        timer.startTiming()
-        f(timer.iteration)
-      } finally {
-        timer.stopTiming()
-        cleanup()
-      }
+    val timedF = (timer: Benchmark.Timer) => {
+      timer.startTiming()
+      f(timer.iteration)
+      timer.stopTiming()
     }
+    benchmarks += Benchmark.Case(name, timedF, numIters, prepare, cleanup)
   }
 
   /**
@@ -110,7 +106,12 @@ private[spark] class Benchmark(
 
     val results = benchmarks.map { c =>
       println("  Running case: " + c.name)
-      measure(valuesPerIteration, c.numIters)(c.fn)
+      try {
+        c.prepare()
+        measure(valuesPerIteration, c.numIters)(c.fn)
+      } finally {
+        c.cleanup()
+      }
     }
     println
 
@@ -197,7 +198,12 @@ private[spark] object Benchmark {
     }
   }
 
-  case class Case(name: String, fn: Timer => Unit, numIters: Int)
+  case class Case(
+      name: String,
+      fn: Timer => Unit,
+      numIters: Int,
+      prepare: () => Unit = () => { },
+      cleanup: () => Unit = () => { })
   case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
 
   /**

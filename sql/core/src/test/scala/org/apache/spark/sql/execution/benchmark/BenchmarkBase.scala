@@ -28,8 +28,10 @@ import org.apache.spark.util.Benchmark
 private[benchmark] trait BenchmarkBase extends SparkFunSuite {
 
   lazy val sparkSession = SparkSession.builder
-    .master("local[1]")
+    .master("local-cluster[2,1,1024]")
     .appName("microbenchmark")
+    .config("spark.ui.enabled", true)
+    .config("spark.ui.port", 5050)
     .config("spark.sql.shuffle.partitions", 1)
     .config("spark.sql.autoBroadcastJoinThreshold", 1)
     .getOrCreate()
