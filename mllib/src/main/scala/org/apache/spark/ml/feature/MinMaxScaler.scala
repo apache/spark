@@ -85,23 +85,29 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  * transformer will be DenseVector even for sparse input.
  */
 @Experimental
-class MinMaxScaler(override val uid: String)
+@Since("1.5.0")
+class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("minMaxScal"))
 
   setDefault(min -> 0.0, max -> 1.0)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMin(value: Double): this.type = set(min, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMax(value: Double): this.type = set(max, value)
 
   @Since("2.0.0")
@@ -114,10 +120,12 @@ class MinMaxScaler(override val uid: String)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MinMaxScaler = defaultCopy(extra)
 }
 
@@ -138,24 +146,29 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
 @Experimental
+@Since("1.5.0")
 class MinMaxScalerModel private[ml] (
-    override val uid: String,
-    val originalMin: Vector,
-    val originalMax: Vector)
+    @Since("1.5.0") override val uid: String,
+    @Since("2.0.0") val originalMin: Vector,
+    @Since("2.0.0") val originalMax: Vector)
   extends Model[MinMaxScalerModel] with MinMaxScalerParams with MLWritable {
 
   import MinMaxScalerModel._
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMin(value: Double): this.type = set(min, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMax(value: Double): this.type = set(max, value)
 
   @Since("2.0.0")
@@ -181,10 +194,12 @@ class MinMaxScalerModel private[ml] (
     dataset.withColumn($(outputCol), reScale(col($(inputCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MinMaxScalerModel = {
     val copied = new MinMaxScalerModel(uid, originalMin, originalMax)
     copyValues(copied, extra).setParent(parent)

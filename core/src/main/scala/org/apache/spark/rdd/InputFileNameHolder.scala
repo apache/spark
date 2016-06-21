@@ -21,7 +21,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * This holds file names of the current Spark task. This is used in HadoopRDD,
- * FileScanRDD and InputFileName function in Spark SQL.
+ * FileScanRDD, NewHadoopRDD and InputFileName function in Spark SQL.
  */
 private[spark] object InputFileNameHolder {
   /**

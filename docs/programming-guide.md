@@ -1220,6 +1220,11 @@ storage levels is:
   <td> MEMORY_ONLY_2, MEMORY_AND_DISK_2, etc.  </td>
   <td> Same as the levels above, but replicate each partition on two cluster nodes. </td>
 </tr>
+<tr>
+  <td> OFF_HEAP (experimental) </td>
+  <td> Similar to MEMORY_ONLY_SER, but store the data in
+    <a href="configuration.html#memory-management">off-heap memory</a>. This requires off-heap memory to be enabled. </td>
+</tr>
 </table>
 
 **Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 

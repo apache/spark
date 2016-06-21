@@ -88,15 +88,13 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
-    val message = intercept[RuntimeException] {
+    val message = intercept[AnalysisException] {
       sql(
         s"""
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains("requires that the data to be inserted have the same number of columns"),
-      "SELECT clause generating a different number of columns should not be not allowed."
+    assert(message.contains("the number of columns are different")
     )
   }
 

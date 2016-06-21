@@ -64,18 +64,23 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
 @Experimental
-final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase
-  with DefaultParamsWritable {
+@Since("1.4.0")
+final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+  extends Estimator[IDFModel] with IDFBase with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("idf"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   @Since("2.0.0")
@@ -88,10 +93,12 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
     copyValues(new IDFModel(uid, idf).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): IDF = defaultCopy(extra)
 }
 
@@ -107,17 +114,20 @@ object IDF extends DefaultParamsReadable[IDF] {
  * Model fitted by [[IDF]].
  */
 @Experimental
+@Since("1.4.0")
 class IDFModel private[ml] (
-    override val uid: String,
+    @Since("1.4.0") override val uid: String,
     idfModel: feature.IDFModel)
   extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -128,17 +138,19 @@ class IDFModel private[ml] (
     dataset.withColumn($(outputCol), idf(col($(inputCol))))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): IDFModel = {
     val copied = new IDFModel(uid, idfModel)
     copyValues(copied, extra).setParent(parent)
   }
 
   /** Returns the IDF vector. */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def idf: Vector = idfModel.idf.asML
 
   @Since("1.6.0")

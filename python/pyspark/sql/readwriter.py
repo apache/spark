@@ -392,6 +392,10 @@ class DataFrameReader(ReaderUtils):
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
                                   ``1000000``.
+        :param maxMalformedLogPerPartition: sets the maximum number of malformed rows Spark will
+                                            log for each partition. Malformed records beyond this
+                                            number will be ignored. If None is set, it
+                                            uses the default value, ``10``.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
