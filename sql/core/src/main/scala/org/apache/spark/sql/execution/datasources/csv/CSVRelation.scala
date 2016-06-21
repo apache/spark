@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.io.CharArrayWriter
+
 import scala.util.control.NonFatal
 
+import com.univocity.parsers.csv.{CsvWriter, CsvWriterSettings}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.RecordWriter
@@ -145,14 +148,14 @@ object CSVRelation extends Logging {
   }
 }
 
-private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
+private[sql] class CSVOutputWriterFactory(options: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       bucketId: Option[Int],
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     if (bucketId.isDefined) sys.error("csv doesn't support bucketing")
-    new CsvOutputWriter(path, dataSchema, context, params)
+    new CsvOutputWriter(path, dataSchema, context, options)
   }
 }
 
@@ -160,10 +163,10 @@ private[sql] class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
-    params: CSVOptions) extends OutputWriter with Logging {
+    options: CSVOptions) extends OutputWriter with Logging {
 
   // create the Generator without separator inserted between 2 records
-  private[this] val text = new Text()
+  private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
@@ -177,38 +180,61 @@ private[sql] class CsvOutputWriter(
     }.getRecordWriter(context)
   }
 
+  private val headers = dataSchema.fieldNames
+
+  private[this] val writer = new CharArrayWriter()
+  private[this] val csvWriter = {
+    val writerSettings = new CsvWriterSettings
+    val format = writerSettings.getFormat
+
+    format.setDelimiter(options.delimiter)
+    format.setLineSeparator(options.rowSeparator)
+    format.setQuote(options.quote)
+    format.setQuoteEscape(options.escape)
+    format.setComment(options.comment)
+
+    writerSettings.setNullValue(options.nullValue)
+    writerSettings.setEmptyValue(options.nullValue)
+    writerSettings.setSkipEmptyLines(true)
+    writerSettings.setQuoteAllFields(false)
+    writerSettings.setHeaders(headers: _*)
+    writerSettings.setQuoteEscapingEnabled(options.escapeQuotes)
+
+    new CsvWriter(writer, writerSettings)
+  }
+  private[this] var writeHeader = options.headerFlag
+
   private val FLUSH_BATCH_SIZE = 1024L
   private var records: Long = 0L
-  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
-
-  private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
-    if (field != null) {
-      field.toString
-    } else {
-      params.nullValue
-    }
-  }
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), records == 0L && params.headerFlag)
+    val tokens = row.toSeq(dataSchema).map { field =>
+        if (field != null) field.toString else options.nullValue
+      }
+    if (writeHeader) {
+      csvWriter.writeHeaders()
+    }
+    csvWriter.writeRow(tokens: _*)
+
     records += 1
     if (records % FLUSH_BATCH_SIZE == 0) {
       flush()
     }
+    writeHeader = false
   }
 
   private def flush(): Unit = {
-    val lines = csvWriter.flush()
-    if (lines.nonEmpty) {
-      text.set(lines)
-      recordWriter.write(NullWritable.get(), text)
-    }
+    csvWriter.flush()
+    result.set(writer.toString.stripLineEnd)
+    writer.reset()
+    recordWriter.write(NullWritable.get(), result)
   }
 
   override def close(): Unit = {
     flush()
+    csvWriter.close()
     recordWriter.close(context)
   }
 }

@@ -55,52 +55,6 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
 }
 
 /**
- * Converts a sequence of string to CSV string
- *
- * @param params Parameters object for configuration
- * @param headers headers for columns
- */
-private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
-  private val writerSettings = new CsvWriterSettings
-  private val format = writerSettings.getFormat
-
-  format.setDelimiter(params.delimiter)
-  format.setLineSeparator(params.rowSeparator)
-  format.setQuote(params.quote)
-  format.setQuoteEscape(params.escape)
-  format.setComment(params.comment)
-
-  writerSettings.setNullValue(params.nullValue)
-  writerSettings.setEmptyValue(params.nullValue)
-  writerSettings.setSkipEmptyLines(true)
-  writerSettings.setQuoteAllFields(false)
-  writerSettings.setHeaders(headers: _*)
-  writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
-
-  private var buffer = new ByteArrayOutputStream()
-  private var writer = new CsvWriter(
-    new OutputStreamWriter(buffer, StandardCharsets.UTF_8),
-    writerSettings)
-
-  def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
-    if (includeHeader) {
-      writer.writeHeaders()
-    }
-    writer.writeRow(row.toArray: _*)
-  }
-
-  def flush(): String = {
-    writer.close()
-    val lines = buffer.toString.stripLineEnd
-    buffer = new ByteArrayOutputStream()
-    writer = new CsvWriter(
-      new OutputStreamWriter(buffer, StandardCharsets.UTF_8),
-      writerSettings)
-    lines
-  }
-}
-
-/**
  * Parser for parsing a line at a time. Not efficient for bulk data.
  *
  * @param params Parameters object
