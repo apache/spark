@@ -23,24 +23,21 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 class PowerIterationClusteringSuite extends SparkFunSuite
   with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  import org.apache.spark.ml.clustering.PowerIterationClustering._
+  @transient var data: Dataset[_] = _
+  final val r1 = 1.0
+  final val n1 = 10
+  final val r2 = 4.0
+  final val n2 = 40
 
-  /** Generates a circle of points. */
-  private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
-    Array.tabulate(n) { i =>
-      val theta = 2.0 * math.Pi * i / n
-      (r * math.cos(theta), r * math.sin(theta))
-    }
-  }
+  override def beforeAll(): Unit = {
+    super.beforeAll()
 
-  /** Computes Gaussian similarity. */
-  private def sim(x: (Double, Double), y: (Double, Double)): Double = {
-    val dist2 = (x._1 - y._1) * (x._1 - y._1) + (x._2 - y._2) * (x._2 - y._2)
-    math.exp(-dist2 / 2.0)
+    data = PowerIterationClusteringSuite.generatePICData(spark, r1, r2, n1, n2)
   }
 
   test("default parameters") {
@@ -78,23 +75,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
   }
 
   test("power iteration clustering") {
-    // Generate two circles following the example in the PIC paper.
-    val r1 = 1.0
-    val n1 = 10
-    val r2 = 4.0
-    val n2 = 40
     val n = n1 + n2
-    val points = genCircle(r1, n1) ++ genCircle(r2, n2)
-    val similarities = for (i <- 1 until n; j <- 0 until i) yield {
-      (i.toLong, j.toLong, sim(points(i), points(j)))
-    }
-
-    val sc = spark.sparkContext
-    val rdd = sc.parallelize(similarities)
-      .map{case (i: Long, j: Long, sim: Double) => Vectors.dense(Array(i, j, sim))}
-      .map(v => TestRow(v))
-    val data = spark.createDataFrame(rdd)
-
     val model = new PowerIterationClustering()
       .setK(2)
       .setMaxIter(40)
@@ -116,4 +97,80 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     }
     assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
   }
+
+  test("transform") {
+    val predictionColName = "pic_prediction"
+    val model = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(10)
+      .setPredictionCol(predictionColName)
+      .fit(data)
+
+    val transformed = model.transform(data)
+    val expectedColumns = Array("features", predictionColName)
+    expectedColumns.foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+  }
+
+  test("read/write") {
+    def checkModelData(model: PowerIterationClusteringModel,
+                       model2: PowerIterationClusteringModel): Unit = {
+      assert(model.getK === model2.getK)
+      val modelAssignments =
+        model.assignments.map(x => (x.id, x.cluster))
+      val model2Assignments =
+        model2.assignments.map(x => (x.id, x.cluster))
+      val unequalElements = modelAssignments.join(model2Assignments).filter {
+        case (id, (c1, c2)) => c1 != c2 }.count()
+      assert(unequalElements === 0L)
+    }
+    val pic = new PowerIterationClustering()
+    testEstimatorAndModelReadWrite(pic, data, PowerIterationClusteringSuite.allParamSettings,
+      checkModelData)
+  }
+}
+
+object PowerIterationClusteringSuite {
+
+  /** Generates a circle of points. */
+  private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
+    Array.tabulate(n) { i =>
+      val theta = 2.0 * math.Pi * i / n
+      (r * math.cos(theta), r * math.sin(theta))
+    }
+  }
+
+  /** Computes Gaussian similarity. */
+  private def sim(x: (Double, Double), y: (Double, Double)): Double = {
+    val dist2 = (x._1 - y._1) * (x._1 - y._1) + (x._2 - y._2) * (x._2 - y._2)
+    math.exp(-dist2 / 2.0)
+  }
+
+  def generatePICData(spark: SparkSession, r1: Double, r2: Double,
+    n1: Int, n2: Int): DataFrame = {
+    // Generate two circles following the example in the PIC paper.
+    val n = n1 + n2
+    val points = genCircle(r1, n1) ++ genCircle(r2, n2)
+    val similarities = for (i <- 1 until n; j <- 0 until i) yield {
+      (i.toLong, j.toLong, sim(points(i), points(j)))
+    }
+    val sc = spark.sparkContext
+    val rdd = sc.parallelize(similarities)
+      .map{case (i: Long, j: Long, sim: Double) => Vectors.dense(Array(i, j, sim))}
+      .map(v => TestRow(v))
+    spark.createDataFrame(rdd)
+  }
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "k" -> 2,
+    "maxIter" -> 10,
+    "initMode" -> "random"
+  )
 }
