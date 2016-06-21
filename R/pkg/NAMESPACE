@@ -294,6 +294,7 @@ exportMethods("%in%",
 
 exportClasses("GroupedData")
 exportMethods("agg")
+exportMethods("pivot")
 
 export("as.DataFrame",
        "cacheTable",
