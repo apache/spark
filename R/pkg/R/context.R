@@ -225,9 +225,10 @@ setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
-#' Run a function over a list of elements, distributing the computations with Spark.
+#' Run a function over a list of elements, distributing the computations with Spark
 #'
-#' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
+#' Run a function over a list of elements, distributing the computations with Spark. Applies a
+#' function in a manner that is similar to doParallel or lapply to elements of a list.
 #' The computations are distributed using Spark. It is conceptually the same as the following code:
 #'   lapply(list, func)
 #'

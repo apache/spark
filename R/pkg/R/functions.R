@@ -77,13 +77,14 @@ setMethod("acos",
             column(jc)
           })
 
-#' approxCountDistinct
+#' Returns the approximate number of distinct items in a group
 #'
-#' Aggregate function: returns the approximate number of distinct items in a group.
+#' Returns the approximate number of distinct items in a group. This is a column
+#' aggregate function.
 #'
 #' @rdname approxCountDistinct
 #' @name approxCountDistinct
-#' @family agg_funcs
+#' @return the approximate number of distinct items in a group.
 #' @export
 #' @examples \dontrun{approxCountDistinct(df$c)}
 #' @note approxCountDistinct(Column) since 1.4.0
@@ -234,7 +235,7 @@ setMethod("cbrt",
             column(jc)
           })
 
-#' ceil
+#' Computes the ceiling of the given value
 #'
 #' Computes the ceiling of the given value.
 #'
@@ -254,15 +255,16 @@ setMethod("ceil",
 #' Though scala functions has "col" function, we don't expose it in SparkR
 #' because we don't want to conflict with the "col" function in the R base
 #' package and we also have "column" function exported which is an alias of "col".
+#' @noRd
 col <- function(x) {
   column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
 
-#' column
+#' Returns a Column based on the given column name
 #'
 #' Returns a Column based on the given column name.
 #'
-#' @rdname col
+#' @rdname column
 #' @name column
 #' @family normal_funcs
 #' @export
@@ -385,9 +387,9 @@ setMethod("cosh",
             column(jc)
           })
 
-#' count
+#' Returns the number of items in a group
 #'
-#' Aggregate function: returns the number of items in a group.
+#' Returns the number of items in a group. This is a column aggregate function.
 #'
 #' @rdname count
 #' @name count
@@ -1193,7 +1195,7 @@ setMethod("sha1",
 #'
 #' Computes the signum of the given value.
 #'
-#' @rdname signum
+#' @rdname sign
 #' @name signum
 #' @family math_funcs
 #' @export
@@ -1717,7 +1719,7 @@ setMethod("datediff", signature(y = "Column"),
 
 #' hypot
 #'
-#' Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
+#' Computes "sqrt(a^2 + b^2)" without intermediate overflow or underflow.
 #'
 #' @rdname hypot
 #' @name hypot
@@ -1813,12 +1815,8 @@ setMethod("pmod", signature(y = "Column"),
           })
 
 
-#' Approx Count Distinct
-#'
-#' @family agg_funcs
 #' @rdname approxCountDistinct
 #' @name approxCountDistinct
-#' @return the approximate number of distinct items in a group.
 #' @export
 #' @examples \dontrun{approxCountDistinct(df$c, 0.02)}
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
@@ -1918,10 +1916,6 @@ setMethod("least",
             column(jc)
           })
 
-#' ceiling
-#'
-#' Computes the ceiling of the given value.
-#'
 #' @rdname ceil
 #' @name ceiling
 #' @export
@@ -1933,11 +1927,7 @@ setMethod("ceiling",
             ceil(x)
           })
 
-#' sign
-#'
-#' Computes the signum of the given value.
-#'
-#' @rdname signum
+#' @rdname sign
 #' @name sign
 #' @export
 #' @examples \dontrun{sign(df$c)}
@@ -1961,10 +1951,6 @@ setMethod("n_distinct", signature(x = "Column"),
             countDistinct(x, ...)
           })
 
-#' n
-#'
-#' Aggregate function: returns the number of items in a group.
-#'
 #' @rdname count
 #' @name n
 #' @export

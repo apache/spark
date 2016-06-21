@@ -34,6 +34,11 @@ setOldClass("jobj")
 setClass("Column",
          slots = list(jc = "jobj"))
 
+#' A set of operations working with SparkDataFrame columns
+#' @rdname columnfunctions
+#' @name columnfunctions
+NULL
+
 setMethod("initialize", "Column", function(.Object, jc) {
   .Object@jc <- jc
   .Object
@@ -47,6 +52,7 @@ setMethod("column",
 
 #' @rdname show
 #' @name show
+#' @export
 #' @note show(Column) since 1.4.0
 setMethod("show", "Column",
           function(object) {
