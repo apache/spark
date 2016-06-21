@@ -174,7 +174,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           numClasses = 100,
           maxBins = 100,
           categoricalFeaturesInfo = Map(0 -> 2, 1 -> 5))
-    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L)
+    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
     assert(tree.rootNode.prediction === lp.label)
