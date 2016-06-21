@@ -2016,6 +2016,23 @@ that these options will be deprecated in future release as more optimizations ar
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
+    <td><code>spark.sql.files.maxPartitionBytes</code></td>
+    <td>134217728 (128 MB)</td>
+    <td>
+      The maximum number of bytes to pack into a single partition when reading files.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.files.openCostInBytes</code></td>
+    <td>4194304 (4 MB)</td>
+    <td>
+      The estimated cost to open a file, measured by the number of bytes could be scanned in the same
+      time. This is used when putting multiple files into a partition. It is better to over estimated,
+      then the partitions with small files will be faster than partitions with bigger files (which is
+      scheduled first).
+    </td>
+  </tr>
+  <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
     <td>10485760 (10 MB)</td>
     <td>
