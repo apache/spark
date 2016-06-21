@@ -398,15 +398,16 @@ class DataFrame(object):
         self._jdf.persist(javaStorageLevel)
         return self
 
+    @property
     @since(2.0)
     def storageLevel(self):
         """Get the :class:`DataFrame`'s current storage level.
 
-        >>> df.storageLevel()
+        >>> df.storageLevel
         StorageLevel(False, False, False, False, 1)
-        >>> df.cache().storageLevel()
+        >>> df.cache().storageLevel
         StorageLevel(True, True, False, True, 1)
-        >>> df2.persist(StorageLevel.DISK_ONLY_2).storageLevel()
+        >>> df2.persist(StorageLevel.DISK_ONLY_2).storageLevel
         StorageLevel(True, False, False, False, 2)
         """
         java_storage_level = self._jdf.storageLevel()
