@@ -103,6 +103,7 @@ setMethod("corr",
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
 
+#' @description
 #' freqItems - Finding frequent items for columns, possibly with false positives.
 #' Using the frequent element count algorithm described in
 #' \url{http://dx.doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
@@ -129,8 +130,8 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
             collect(dataFrame(sct))
           })
 
+#' @description
 #' approxQuantile - Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
-#'
 #' The result of this algorithm has the following deterministic bound:
 #' If the SparkDataFrame has N elements and if we request the quantile at probability `p` up to
 #' error `err`, then the algorithm will return a sample `x` from the SparkDataFrame so that the
@@ -167,6 +168,7 @@ setMethod("approxQuantile",
                         as.list(probabilities), relativeError)
           })
 
+#' @description
 #' sampleBy - Returns a stratified sample without replacement based on the fraction given on each
 #' stratum.
 #'
