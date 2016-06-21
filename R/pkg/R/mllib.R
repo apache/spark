@@ -64,8 +64,8 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param epsilon Positive convergence tolerance of iterations.
-#' @param maxit Integer giving the maximal number of IRLS iterations.
+#' @param tol Positive convergence tolerance of iterations.
+#' @param maxIter Integer giving the maximal number of IRLS iterations.
 #' @return a fitted generalized linear model
 #' @rdname spark.glm
 #' @export
@@ -74,32 +74,30 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' sparkR.session()
 #' data(iris)
 #' df <- createDataFrame(iris)
-#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family="gaussian")
+#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family = "gaussian")
 #' summary(model)
 #' }
 #' @note spark.glm since 2.0.0
-setMethod(
-    "spark.glm",
-    signature(data = "SparkDataFrame", formula = "formula"),
-    function(data, formula, family = gaussian, epsilon = 1e-06, maxit = 25) {
-        if (is.character(family)) {
-            family <- get(family, mode = "function", envir = parent.frame())
-        }
-        if (is.function(family)) {
-            family <- family()
-        }
-        if (is.null(family$family)) {
-            print(family)
-            stop("'family' not recognized")
-        }
+setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25) {
+            if (is.character(family)) {
+              family <- get(family, mode = "function", envir = parent.frame())
+            }
+            if (is.function(family)) {
+              family <- family()
+            }
+            if (is.null(family$family)) {
+              print(family)
+              stop("'family' not recognized")
+            }
 
-        formula <- paste(deparse(formula), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
 
-        jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
-        "fit", formula, data@sdf, family$family, family$link,
-        epsilon, as.integer(maxit))
-        return(new("GeneralizedLinearRegressionModel", jobj = jobj))
-})
+            jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
+                                "fit", formula, data@sdf, family$family, family$link,
+                                tol, as.integer(maxIter))
+            return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+          })
 
 #' Fits a generalized linear model (R-compliant).
 #'
@@ -122,13 +120,13 @@ setMethod(
 #' sparkR.session()
 #' data(iris)
 #' df <- createDataFrame(iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, family = "gaussian")
 #' summary(model)
 #' }
 #' @note glm since 1.5.0
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
-            spark.glm(data, formula, family, epsilon, maxit)
+          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25) {
+            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
           })
 
 #' Get the summary of a generalized linear model
@@ -296,17 +294,17 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(data, ~ ., k=2, initMode="random")
+#' model <- spark.kmeans(data, ~ ., k = 4, initMode = "random")
 #' }
 #' @note spark.kmeans since 2.0.0
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, k, maxIter = 10, initMode = c("random", "k-means||")) {
+          function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
             formula <- paste(deparse(formula), collapse = "")
             initMode <- match.arg(initMode)
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
                                 as.integer(k), as.integer(maxIter), initMode)
             return(new("KMeansModel", jobj = jobj))
-         })
+          })
 
 #' Get fitted result from a k-means model
 #'
@@ -397,7 +395,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param laplace Smoothing parameter
+#' @param smoothing Smoothing parameter
 #' @return a fitted naive Bayes model
 #' @rdname spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
@@ -405,16 +403,16 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(infert)
-#' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
+#' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
 #'}
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
-    function(data, formula, laplace = 0, ...) {
-        formula <- paste(deparse(formula), collapse = "")
-        jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
-          formula, data@sdf, laplace)
-        return(new("NaiveBayesModel", jobj = jobj))
-    })
+          function(data, formula, smoothing = 1.0, ...) {
+            formula <- paste(deparse(formula), collapse = "")
+            jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
+            formula, data@sdf, smoothing)
+            return(new("NaiveBayesModel", jobj = jobj))
+          })
 
 #' Save fitted MLlib model to the input path
 #'
@@ -431,7 +429,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(infert)
-#' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
+#' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
