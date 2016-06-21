@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
@@ -30,9 +32,9 @@ import org.apache.spark.mllib.clustering.PowerIterationClustering.Assignment
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
-/*
+/**
  * Common params for PowerIterationClustering and PowerIterationClusteringModel
  */
 private[clustering] trait PowerIterationClusteringParams extends Params with HasMaxIter
@@ -77,7 +79,6 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
-
 
 @Since("2.0.0")
 @Experimental
@@ -126,11 +127,11 @@ class PowerIterationClusteringModel private[ml] (
       .saveInitMode($(initMode))
       .saveMaxIter($(maxIter))
     val rows: RDD[Row] = model.assignments.map {
-      case assignment: Assignment => Row(assignment.cluster)
+      case assignment: Assignment => Row(assignment.id, assignment.cluster)
     }
-    val schema = new StructType(Array(StructField("cluster", IntegerType)))
-    val predict = sparkSession.createDataFrame(rows, schema)
-    features.withColumn($(predictionCol), predict.col("cluster"))
+    val schema = new StructType(Array(StructField($(featuresCol), LongType),
+      StructField($(predictionCol), IntegerType)))
+    sparkSession.createDataFrame(rows, schema)
   }
 
   @Since("2.0.0")
@@ -178,7 +179,8 @@ object PowerIterationClusteringModel extends MLReadable[PowerIterationClustering
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      MLlibPowerIterationClusteringModel.SaveLoadV1_0.save(sc, instance.parentModel, path)
+      val dataPath = new Path(path, "data").toString
+      instance.parentModel.save(sc, dataPath)
     }
   }
 
@@ -189,10 +191,9 @@ object PowerIterationClusteringModel extends MLReadable[PowerIterationClustering
     private val className = classOf[PowerIterationClusteringModel].getName
 
     override def load(path: String): PowerIterationClusteringModel = {
-
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val parentModel = MLlibPowerIterationClusteringModel.SaveLoadV1_0.load(sc, path)
-
+      val dataPath = new Path(path, "data").toString
+      val parentModel = MLlibPowerIterationClusteringModel.load(sc, dataPath)
       val model = new PowerIterationClusteringModel(metadata.uid, parentModel)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
