@@ -24,9 +24,9 @@ import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object GenericArrayData {
-  def allocate(seq: Seq[Any]): GenericArrayData = new GenericArrayData(seq)
-  def allocate(list: java.util.List[Any]): GenericArrayData = new GenericArrayData(list)
-  def allocate(seqOrArray: Any): GenericArrayData = new GenericArrayData(seqOrArray)
+  def allocate(seq: Seq[Any]): GenericArrayData = new GenericRefArrayData(seq)
+  def allocate(list: java.util.List[Any]): GenericArrayData = new GenericRefArrayData(list)
+  def allocate(seqOrArray: Any): GenericArrayData = new GenericRefArrayData(seqOrArray)
   def allocate(primitiveArray: Array[Int]): GenericArrayData =
     new GenericIntArrayData(primitiveArray)
   def allocate(primitiveArray: Array[Long]): GenericArrayData =
@@ -54,7 +54,40 @@ private object GenericArrayData {
 
 }
 
-class GenericArrayData(private val _array: Array[Any]) extends ArrayData {
+abstract class GenericArrayData extends ArrayData {
+  override def get(ordinal: Int, elementType: DataType): AnyRef =
+    throw new UnsupportedOperationException("get() method is not supported")
+  override def getBoolean(ordinal: Int): Boolean =
+    throw new UnsupportedOperationException("getBoolean() method is not supported")
+  override def getByte(ordinal: Int): Byte =
+    throw new UnsupportedOperationException("getByte() method is not supported")
+  override def getShort(ordinal: Int): Short =
+    throw new UnsupportedOperationException("getShort() method is not supported")
+  override def getInt(ordinal: Int): Int =
+    throw new UnsupportedOperationException("getInt() method is not supported")
+  override def getLong(ordinal: Int): Long =
+    throw new UnsupportedOperationException("getLong() method is not supported")
+  override def getFloat(ordinal: Int): Float =
+    throw new UnsupportedOperationException("getFloat() method is not supported")
+  override def getDouble(ordinal: Int): Double =
+    throw new UnsupportedOperationException("getDouble() method is not supported")
+  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal =
+    throw new UnsupportedOperationException("getDecimal() method is not supported")
+  override def getUTF8String(ordinal: Int): UTF8String =
+    throw new UnsupportedOperationException("getUTF8String() method is not supported")
+  override def getBinary(ordinal: Int): Array[Byte] =
+    throw new UnsupportedOperationException("getBinary() method is not supported")
+  override def getInterval(ordinal: Int): CalendarInterval =
+    throw new UnsupportedOperationException("getInterval() method is not supported")
+  override def getStruct(ordinal: Int, numFields: Int): InternalRow =
+    throw new UnsupportedOperationException("getStruct() method is not supported")
+  override def getArray(ordinal: Int): ArrayData =
+    throw new UnsupportedOperationException("getArray() method is not supported")
+  override def getMap(ordinal: Int): MapData =
+    throw new UnsupportedOperationException("getMap() method is not supported")
+}
+
+final class GenericRefArrayData(val _array: Array[Any]) extends GenericArrayData {
 
   def this(seq: Seq[Any]) = this(seq.toArray)
   def this(list: java.util.List[Any]) = this(list.asScala)
@@ -70,13 +103,11 @@ class GenericArrayData(private val _array: Array[Any]) extends ArrayData {
 
   def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
 
-  override def array(): Array[Any] = _array
-
-  override def copy(): ArrayData = new GenericArrayData(array.clone())
+  override def copy(): ArrayData = new GenericRefArrayData(array.clone())
 
   override def numElements(): Int = array.length
 
-  private def getAs[T](ordinal: Int) = _array(ordinal).asInstanceOf[T]
+  private def getAs[T](ordinal: Int) = array(ordinal).asInstanceOf[T]
   override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null
   override def get(ordinal: Int, elementType: DataType): AnyRef = getAs(ordinal)
   override def getBoolean(ordinal: Int): Boolean = getAs(ordinal)
@@ -117,8 +148,8 @@ class GenericArrayData(private val _array: Array[Any]) extends ArrayData {
         return false
       }
       if (!isNullAt(i)) {
-        val o1 = _array(i)
-        val o2 = other._array(i)
+        val o1 = array(i)
+        val o2 = other.array(i)
         o1 match {
           case b1: Array[Byte] =>
             if (!o2.isInstanceOf[Array[Byte]] ||
@@ -152,7 +183,7 @@ class GenericArrayData(private val _array: Array[Any]) extends ArrayData {
         if (isNullAt(i)) {
           0
         } else {
-          _array(i) match {
+          array(i) match {
             case b: Boolean => if (b) 0 else 1
             case b: Byte => b.toInt
             case s: Short => s.toInt
@@ -173,7 +204,7 @@ class GenericArrayData(private val _array: Array[Any]) extends ArrayData {
   }
 }
 
-final class GenericIntArrayData(private val primitiveArray: Array[Int]) extends GenericArrayData {
+final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
   override def copy(): ArrayData = new GenericIntArrayData(primitiveArray)
@@ -229,7 +260,7 @@ final class GenericIntArrayData(private val primitiveArray: Array[Int]) extends 
   }
 }
 
-final class GenericLongArrayData(private val primitiveArray: Array[Long])
+final class GenericLongArrayData(val primitiveArray: Array[Long])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -287,7 +318,7 @@ final class GenericLongArrayData(private val primitiveArray: Array[Long])
   }
 }
 
-final class GenericFloatArrayData(private val primitiveArray: Array[Float])
+final class GenericFloatArrayData(val primitiveArray: Array[Float])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -349,7 +380,7 @@ final class GenericFloatArrayData(private val primitiveArray: Array[Float])
   }
 }
 
-final class GenericDoubleArrayData(private val primitiveArray: Array[Double])
+final class GenericDoubleArrayData(val primitiveArray: Array[Double])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -412,7 +443,7 @@ final class GenericDoubleArrayData(private val primitiveArray: Array[Double])
   }
 }
 
-final class GenericShortArrayData(private val primitiveArray: Array[Short])
+final class GenericShortArrayData(val primitiveArray: Array[Short])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -469,7 +500,7 @@ final class GenericShortArrayData(private val primitiveArray: Array[Short])
   }
 }
 
-final class GenericByteArrayData(private val primitiveArray: Array[Byte])
+final class GenericByteArrayData(val primitiveArray: Array[Byte])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -526,7 +557,7 @@ final class GenericByteArrayData(private val primitiveArray: Array[Byte])
   }
 }
 
-final class GenericBooleanArrayData(private val primitiveArray: Array[Boolean])
+final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
