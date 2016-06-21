@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The Collect aggregate function collects all seen expression values into a list of values.
@@ -47,28 +48,56 @@ abstract class Collect extends ImperativeAggregate {
 
   override def supportsPartial: Boolean = false
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
+  override def aggBufferAttributes: Seq[AttributeReference] =
+    AttributeReference(s"groupIndex", IntegerType)() :: Nil
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
+  override def inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 
-  protected[this] val buffer: Growable[Any] with Iterable[Any]
+  private[this] lazy val mapToBuffer =
+    new mutable.HashMap[Integer, Growable[Any] with Iterable[Any]]
 
-  override def initialize(b: MutableRow): Unit = {
-    buffer.clear()
+  protected[this] def createBuffer: Growable[Any] with Iterable[Any]
+
+  override def initialize(buffer: MutableRow): Unit = {
+    buffer.setInt(mutableAggBufferOffset, -1)
   }
 
-  override def update(b: MutableRow, input: InternalRow): Unit = {
-    buffer += child.eval(input)
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val groupIndex = buffer.getInt(mutableAggBufferOffset) match {
+      case -1 =>
+        // If not found, create a buffer for a new group
+        val newIndex = mapToBuffer.size
+        buffer.setInt(mutableAggBufferOffset, newIndex)
+        mapToBuffer.put(newIndex, createBuffer)
+        newIndex
+
+      case index =>
+        index
+    }
+    val data = child.eval(input) match {
+      case struct: UnsafeRow => struct.copy
+      case array: UnsafeArrayData => array.copy
+      case map: UnsafeMapData => map.copy
+      case str: UTF8String => str.clone
+      case d => d
+    }
+    mapToBuffer.get(groupIndex).map(_ += data).getOrElse {
+      sys.error(s"A group index ${groupIndex} not found in HashMap")
+    }
   }
 
   override def merge(buffer: MutableRow, input: InternalRow): Unit = {
     sys.error("Collect cannot be used in partial aggregations.")
   }
 
-  override def eval(input: InternalRow): Any = {
-    new GenericArrayData(buffer.toArray)
+  override def eval(buffer: InternalRow): Any = {
+    val groupIndex = buffer.getInt(mutableAggBufferOffset)
+    new GenericArrayData(mapToBuffer.get(groupIndex).map(_.toArray).getOrElse {
+      sys.error(s"A group index ${groupIndex} not found in HashMap")
+    })
   }
 }
 
@@ -92,7 +121,7 @@ case class CollectList(
 
   override def prettyName: String = "collect_list"
 
-  override protected[this] val buffer: mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
+  override protected[this] def createBuffer: mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 }
 
 /**
@@ -115,5 +144,5 @@ case class CollectSet(
 
   override def prettyName: String = "collect_set"
 
-  override protected[this] val buffer: mutable.HashSet[Any] = mutable.HashSet.empty
+  override protected[this] def createBuffer: mutable.HashSet[Any] = mutable.HashSet.empty
 }

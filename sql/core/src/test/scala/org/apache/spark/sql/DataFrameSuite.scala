@@ -1339,6 +1339,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("non-partial collect_set/collect_list aggregate test") {
+    checkAnswer(
+      testData4.groupBy("key").agg(collect_set($"value")),
+      Row(1, Array("1")) :: Row(2, Array("2")) :: Row(3, Array("3")) :: Nil
+    )
+    checkAnswer(
+      testData4.groupBy("key").agg(collect_list($"value")),
+      Row(1, Array("1", "1")) :: Row(2, Array("2", "2")) :: Row(3, Array("3", "3")) :: Nil
+    )
+  }
+
   test("fix case sensitivity of partition by") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTempPath { path =>

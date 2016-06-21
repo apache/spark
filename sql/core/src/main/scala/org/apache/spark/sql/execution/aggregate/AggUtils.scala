@@ -35,7 +35,7 @@ object AggUtils {
 
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
-    SortAggregateExec(
+    createAggregate(
       requiredChildDistributionExpressions = Some(groupingExpressions),
       groupingExpressions = groupingExpressions,
       aggregateExpressions = completeAggregateExpressions,

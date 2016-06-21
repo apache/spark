@@ -72,6 +72,18 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val testData4: DataFrame = {
+    val df = spark.sparkContext.parallelize(
+      TestData(1, "1") ::
+      TestData(1, "1") ::
+      TestData(2, "2") ::
+      TestData(2, "2") ::
+      TestData(3, "3") ::
+      TestData(3, "3") :: Nil, 2).toDF()
+    df.createOrReplaceTempView("testData4")
+    df
+  }
+
   protected lazy val negativeData: DataFrame = {
     val df = spark.sparkContext.parallelize(
       (1 to 100).map(i => TestData(-i, (-i).toString))).toDF()
