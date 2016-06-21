@@ -28,6 +28,8 @@ import org.apache.hadoop.mapreduce._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -118,9 +120,20 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
-      val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-      tokenizedIterator.flatMap(parser(_).toSeq)
+      val unsafeRowIterator = {
+        val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
+        CSVRelation.parseCsvInIterator(tokenizedIterator, dataSchema, requiredSchema.fieldNames,
+          csvOptions)
+      }
+
+      // Appends partition values
+      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+      val joinedRow = new JoinedRow()
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
+
+      unsafeRowIterator.map { dataRow =>
+        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
+      }
     }
   }
 

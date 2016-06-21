@@ -113,6 +113,8 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
+  val maxLogRecordsPerPartition = getInt("maxLogRecordsPerPartition", 1)
+
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'

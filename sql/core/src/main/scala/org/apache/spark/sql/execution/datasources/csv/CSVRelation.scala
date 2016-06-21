@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.CompletionIterator
 
 object CSVRelation extends Logging {
 
@@ -50,10 +51,11 @@ object CSVRelation extends Logging {
     }
   }
 
-  def csvParser(
+  private def csvParser(
       schema: StructType,
       requiredColumns: Array[String],
-      params: CSVOptions): Array[String] => Option[InternalRow] = {
+      params: CSVOptions,
+      malformedLinesInfo: MalformedLinesInfo): Array[String] => Option[InternalRow] = {
     val schemaFields = schema.fields
     val requiredFields = StructType(requiredColumns.map(schema(_))).fields
     val safeRequiredFields = if (params.dropMalformed) {
@@ -74,12 +76,16 @@ object CSVRelation extends Logging {
 
     (tokens: Array[String]) => {
       if (params.dropMalformed && schemaFields.length != tokens.length) {
-        logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+        val line = tokens.mkString(params.delimiter.toString)
+        malformedLinesInfo.add(line)
         None
       } else if (params.failFast && schemaFields.length != tokens.length) {
         throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
           s"${tokens.mkString(params.delimiter.toString)}")
       } else {
+        if (schemaFields.length != tokens.length) {
+          malformedLinesInfo.add(tokens.mkString(params.delimiter.toString))
+        }
         val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.length) {
           tokens ++ new Array[String](schemaFields.length - tokens.length)
         } else if (params.permissive && schemaFields.length < tokens.length) {
@@ -109,21 +115,44 @@ object CSVRelation extends Logging {
           Some(row)
         } catch {
           case NonFatal(e) if params.dropMalformed =>
-            logWarning("Parse exception. " +
-              s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+            val line = tokens.mkString(params.delimiter.toString)
+            malformedLinesInfo.add(line)
             None
         }
       }
     }
   }
 
-  def parseCsv(
+  private[csv] def parseCsvInRdd(
       tokenizedRDD: RDD[Array[String]],
       schema: StructType,
       requiredColumns: Array[String],
       options: CSVOptions): RDD[InternalRow] = {
-    val parser = csvParser(schema, requiredColumns, options)
-    tokenizedRDD.flatMap(parser(_).toSeq)
+    val malformedLinesInfo = new MalformedLinesInfo(options.maxLogRecordsPerPartition)
+    val parser = csvParser(schema, requiredColumns, options, malformedLinesInfo)
+    tokenizedRDD.mapPartitions { iter =>
+      val rows = iter.flatMap(parser(_).toSeq)
+      CompletionIterator[InternalRow, Iterator[InternalRow]](rows, {
+        if (malformedLinesInfo.malformedLineNum > 0) {
+          logWarning(s"$malformedLinesInfo")
+        }
+      })
+    }
+  }
+
+  private[csv] def parseCsvInIterator(
+      tokenizedIterator: Iterator[Array[String]],
+      schema: StructType,
+      requiredColumns: Array[String],
+      options: CSVOptions): Iterator[InternalRow] = {
+    val malformedLinesInfo = new MalformedLinesInfo(options.maxLogRecordsPerPartition)
+    val parser = csvParser(schema, requiredColumns, options, malformedLinesInfo)
+    val rows = tokenizedIterator.flatMap(parser(_).toSeq)
+    CompletionIterator[InternalRow, Iterator[InternalRow]](rows, {
+      if (malformedLinesInfo.malformedLineNum > 0) {
+        logWarning(s"$malformedLinesInfo")
+      }
+    })
   }
 
   // Skips the header line of each file if the `header` option is set to true.

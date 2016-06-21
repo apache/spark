@@ -392,6 +392,9 @@ class DataFrameReader(ReaderUtils):
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
                                   value being read. If None is set, it uses the default value,
                                   ``1000000``.
+        :param maxLogRecordsPerPartition: defines the maximum number of logs for the malformed
+                                          records that is going to be ignored. If None is set, it
+                                          uses the default value, ``1``.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
