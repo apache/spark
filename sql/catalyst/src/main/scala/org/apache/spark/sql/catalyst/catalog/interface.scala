@@ -127,7 +127,7 @@ case class CatalogTable(
     sortColumnNames: Seq[String] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
     numBuckets: Int = -1,
-    owner: String = System.getProperty("user.name"),
+    owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
