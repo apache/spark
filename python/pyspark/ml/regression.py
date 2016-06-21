@@ -894,7 +894,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
+                         impurity="variance", subsamplingRate=1.0, numTrees=20,
                          featureSubsetStrategy="auto")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1023,7 +1023,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         seed=None, impurity="variance")
+                         impurity="variance")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
