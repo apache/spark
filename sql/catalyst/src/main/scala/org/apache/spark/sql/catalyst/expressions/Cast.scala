@@ -388,7 +388,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
           values(i) = elementCast(e)
         }
       })
-      new GenericArrayData(values)
+      GenericArrayData.allocate(values)
     })
   }
 
@@ -864,7 +864,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
             }
           }
         }
-        $evPrim = new $arrayClass($values);
+        $evPrim = $arrayClass.allocate($values);
       """
   }
 

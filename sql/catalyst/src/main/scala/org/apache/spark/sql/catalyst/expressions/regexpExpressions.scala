@@ -191,14 +191,14 @@ case class StringSplit(str: Expression, pattern: Expression)
 
   override def nullSafeEval(string: Any, regex: Any): Any = {
     val strings = string.asInstanceOf[UTF8String].split(regex.asInstanceOf[UTF8String], -1)
-    new GenericArrayData(strings.asInstanceOf[Array[Any]])
+    GenericArrayData.allocate(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
+      s"""${ev.value} = $arrayClass.allocate($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"

@@ -131,7 +131,7 @@ case class PivotFirst(
     for (i <- 0 until indexSize) {
       result(i) = input.get(mutableAggBufferOffset + i, valueDataType)
     }
-    new GenericArrayData(result)
+    GenericArrayData.allocate(result)
   }
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =

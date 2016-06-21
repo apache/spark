@@ -56,7 +56,7 @@ object ColumnarTestUtils {
       case STRUCT(_) =>
         new GenericInternalRow(Array[Any](UTF8String.fromString(Random.nextString(10))))
       case ARRAY(_) =>
-        new GenericArrayData(Array[Any](Random.nextInt(), Random.nextInt()))
+        GenericArrayData.allocate(Array[Any](Random.nextInt(), Random.nextInt()))
       case MAP(_) =>
         ArrayBasedMapData(
           Map(Random.nextInt() -> UTF8String.fromString(Random.nextString(Random.nextInt(32)))))
