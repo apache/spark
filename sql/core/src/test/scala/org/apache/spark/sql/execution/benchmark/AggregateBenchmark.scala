@@ -132,8 +132,7 @@ class AggregateBenchmark extends BenchmarkBase {
 
 
   test("cache aggregate with randomized keys") {
-    val N = 20 << 21
-
+    val N = 20 << 20
     val numIters = 10
     val benchmark = new Benchmark("Cache aggregate", N)
     sparkSession.range(N)
@@ -141,39 +140,51 @@ class AggregateBenchmark extends BenchmarkBase {
       .createOrReplaceTempView("test")
 
     /**
+     * Call collect on the dataset after deleting all existing temporary files.
+     */
+    def doCollect(ds: org.apache.spark.sql.Dataset[_]): Unit = {
+      ds.sparkSession.sparkContext.parallelize(1 to 10, 10).foreach { _ =>
+        org.apache.spark.SparkEnv.get.blockManager.diskBlockManager.getAllFiles().foreach { dir =>
+          dir.delete()
+        }
+      }
+      ds.collect()
+    }
+
+    /**
      * Actually run the benchmark, optionally specifying whether to cache the dataset.
      */
-    def runBenchmark(name: String, cache: Boolean, params: Map[String, String]): Unit = {
+    def addBenchmark(name: String, cache: Boolean, params: Map[String, String]): Unit = {
       val ds = sparkSession.sql("select k, sum(id) from test group by k")
       val defaults = params.keys.map { k => (k, sparkSession.conf.get(k)) }
       val prepare = () => {
         params.foreach { case (k, v) => sparkSession.conf.set(k, v) }
         if (cache) { sparkSession.catalog.cacheTable("test") }
-        ds.collect(): Unit
+        doCollect(ds)
       }
       val cleanup = () => {
         defaults.foreach { case (k, v) => sparkSession.conf.set(k, v) }
         sparkSession.catalog.clearCache()
       }
-      benchmark.addCase(name, numIters, prepare, cleanup) { _ => ds.collect() }
+      benchmark.addCase(name, numIters, prepare, cleanup) { _ => doCollect(ds) }
     }
 
-    runBenchmark("codegen = F hashmap = F cache = F", cache = false, Map(
+    addBenchmark("codegen = F hashmap = F cache = F", cache = false, Map(
       "spark.sql.codegen.wholeStage" -> "false",
       "spark.sql.codegen.aggregate.map.columns.max" -> "0"
     ))
 
-    runBenchmark("codegen = F hashmap = F cache = T compress = F", cache = true, Map(
+    addBenchmark("codegen = F hashmap = F cache = T compress = F", cache = true, Map(
       "spark.sql.codegen.wholeStage" -> "false",
       "spark.sql.codegen.aggregate.map.columns.max" -> "0",
       "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
     ))
 
-    runBenchmark("codegen = F hashmap = F cache = T compress = T", cache = true, Map(
-      "spark.sql.codegen.wholeStage" -> "false",
-      "spark.sql.codegen.aggregate.map.columns.max" -> "0",
-      "spark.sql.inMemoryColumnarStorage.compressed" -> "true"
-    ))
+//    addBenchmark("codegen = F hashmap = F cache = T compress = T", cache = true, Map(
+//      "spark.sql.codegen.wholeStage" -> "false",
+//      "spark.sql.codegen.aggregate.map.columns.max" -> "0",
+//      "spark.sql.inMemoryColumnarStorage.compressed" -> "true"
+//    ))
 
     benchmark.run()
   }
