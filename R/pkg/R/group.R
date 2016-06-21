@@ -151,10 +151,10 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #'     period = c("1H", "1H", "2H", "2H", "1H", "1H", "2H", "2H"),
 #'     year = c(2015, 2015, 2015, 2015, 2016, 2016, 2016, 2016)
 #' ))
-#' sum(pivot(groupBy(df, "year"), "course"), "earnings")
-#' min(pivot(groupBy(df, "year"), "course", "R"), "earnings")
-#' max(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings")
-#' mean(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings")
+#' group_sum <- sum(pivot(groupBy(df, "year"), "course"), "earnings")
+#' group_min <- min(pivot(groupBy(df, "year"), "course", "R"), "earnings")
+#' group_max <- max(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings")
+#' group_mean <- mean(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings")
 #' }
 #' @note pivot since 2.0.0
 setMethod("pivot",
