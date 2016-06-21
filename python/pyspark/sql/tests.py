@@ -177,6 +177,10 @@ class DataTypeTests(unittest.TestCase):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
+    def test_empty_row(self):
+        row = Row()
+        self.assertEqual(len(row), 0)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
@@ -317,6 +321,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.spark.catalog.registerFunction("add", lambda x, y: x + y, IntegerType())
         [row] = self.spark.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
         self.assertEqual(tuple(row), (6, 5))
+
+    def test_udf_without_arguments(self):
+        self.spark.catalog.registerFunction("foo", lambda: "bar")
+        [row] = self.spark.sql("SELECT foo()").collect()
+        self.assertEqual(row[0], "bar")
 
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
