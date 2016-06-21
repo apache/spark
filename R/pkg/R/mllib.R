@@ -115,7 +115,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           })
 
 #' @title Generalized Linear Models (R-compliant)
-#  Fits a generalized linear model, similarly to R's glm().
+#'  Fits a generalized linear model, similarly to R's glm().
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data SparkDataFrame for training.
@@ -143,7 +143,6 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
           })
 
-#' @title Summary of GLM model
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #' @param object A fitted generalized linear model
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
@@ -183,7 +182,6 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             return(ans)
           })
 
-#' @title Print summary of GLM model
 #  Print the summary of GeneralizedLinearRegressionModel
 #' @rdname spark.glm
 #' @param x Summary object of fitted generalized linear model returned by \code{summary} function
@@ -215,7 +213,6 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#' @title Make predictions using the produced generalized linear model
 #  Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #  similarly to R's predict().
 #' @param newData SparkDataFrame for testing
@@ -472,7 +469,6 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
-#' @title Save fitted GLM model
 #  Save the generalized linear model to the input path.
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
