@@ -59,15 +59,15 @@ setGeneric("count", function(x) { standardGeneric("count") })
 # @export
 setGeneric("countByValue", function(x) { standardGeneric("countByValue") })
 
-# @rdname statfunctions
+# @rdname crosstab
 # @export
 setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 
-# @rdname statfunctions
+# @rdname freqItems
 # @export
 setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
 
-# @rdname statfunctions
+# @rdname approxQuantile
 # @export
 setGeneric("approxQuantile",
            function(x, col, probabilities, relativeError) {
@@ -575,7 +575,7 @@ setGeneric("sample",
 setGeneric("sample_frac",
            function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
 
-#' @rdname statfunctions
+#' @rdname sampleBy
 #' @export
 setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("sampleBy") })
 

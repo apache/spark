@@ -1777,7 +1777,7 @@ setMethod("months_between", signature(y = "Column"),
 #' nanvl
 #'
 #' Returns col1 if it is not NaN, or col2 if col1 is NaN.
-#' hhBoth inputs should be floating point columns (DoubleType or FloatType).
+#' Both inputs should be floating point columns (DoubleType or FloatType).
 #'
 #' @rdname nanvl
 #' @name nanvl
@@ -2008,6 +2008,8 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
 #' could not be found in str.
 #'
+#' @param y column to check
+#' @param x substring to check
 #' @family string_funcs
 #' @rdname instr
 #' @name instr
