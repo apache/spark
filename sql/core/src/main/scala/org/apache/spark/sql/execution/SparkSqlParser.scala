@@ -279,15 +279,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create a [[DescribeTableCommand]] logical plan.
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
-    // FORMATTED and columns are not supported. Return null and let the parser decide what to do
-    // with this (create an exception or pass it on to a different system).
+    // Describe partition and column are not supported yet. Return null and let the parser decide
+    // what to do with this (create an exception or pass it on to a different system).
     if (ctx.describeColName != null || ctx.partitionSpec != null) {
       null
     } else {
       DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         ctx.EXTENDED != null,
-        ctx.FORMATTED() != null)
+        ctx.FORMATTED != null)
     }
   }
 

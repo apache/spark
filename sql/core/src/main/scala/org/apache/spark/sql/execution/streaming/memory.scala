@@ -110,6 +110,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
         sys.error("No data selected!")
       }
   }
+
+  override def stop() {}
 }
 
 /**
