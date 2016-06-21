@@ -21,6 +21,7 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
@@ -36,7 +37,7 @@ private[sql] case class JDBCPartitioningInfo(
     upperBound: Long,
     numPartitions: Int)
 
-private[sql] object JDBCRelation {
+private[sql] object JDBCRelation extends Logging {
   /**
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
@@ -67,14 +68,16 @@ private[sql] object JDBCRelation {
       if ((upperBound - lowerBound) >= partitioning.numPartitions) {
         partitioning.numPartitions
       } else {
+        logWarning("The number of partitions is reduced because the specified number of " +
+          "partitions is less than the difference between upper bound and lower bound. " +
+          s"Updated number of partitions: ${upperBound - lowerBound}; Input number of " +
+          s"partitions: ${partitioning.numPartitions}; Lower bound: $lowerBound; " +
+          s"Upper bound: $upperBound.")
         upperBound - lowerBound
       }
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
     val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
-    // The automatic adjustment of numPartitions can ensure the following checking condition.
-    assert(stride >= 1, "The specified number of partitions should be greater than " +
-      "the difference between upper bound and lower bound")
     val column = partitioning.column
     var i: Int = 0
     var currentValue: Long = lowerBound
