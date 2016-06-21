@@ -53,7 +53,7 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
-#' Fits a generalized linear model
+#' Generalized Linear Models
 #'
 #' Fits a generalized linear model against a Spark DataFrame.
 #'
@@ -68,6 +68,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @param maxIter Integer giving the maximal number of IRLS iterations.
 #' @return a fitted generalized linear model
 #' @rdname spark.glm
+#' @name spark.glm
 #' @export
 #' @examples
 #' \dontrun{
@@ -98,9 +99,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
                                 tol, as.integer(maxIter))
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
-
 #' Fits a generalized linear model (R-compliant).
-#'
+#' 
 #' Fits a generalized linear model, similarly to R's glm().
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -129,13 +129,12 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
           })
 
-#' Get the summary of a generalized linear model
-#'
+
 #' Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #'
 #' @param object A fitted generalized linear model
 #' @return coefficients the model's coefficients, intercept
-#' @rdname summary
+#' @rdname spark.glm
 #' @export
 #' @examples
 #' \dontrun{
@@ -175,8 +174,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 
 #' Print the summary of GeneralizedLinearRegressionModel
 #'
-#' @rdname print
-#' @name print.summary.GeneralizedLinearRegressionModel
+#' @rdname spark.glm
 #' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
@@ -205,15 +203,14 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#' Predicted values based on model
-#'
+
 #' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #' similarly to R's predict().
 #'
 #' @param object A fitted generalized linear model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
-#' @rdname predict
+#' @rdname spark.glm
 #' @export
 #' @examples
 #' \dontrun{
@@ -471,8 +468,6 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
-#' Save fitted MLlib model to the input path
-#'
 #' Save the generalized linear model to the input path.
 #'
 #' @param object A fitted generalized linear model
@@ -480,8 +475,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname write.ml
-#' @name write.ml
+#' @rdname spark.glm
 #' @export
 #' @examples
 #' \dontrun{
