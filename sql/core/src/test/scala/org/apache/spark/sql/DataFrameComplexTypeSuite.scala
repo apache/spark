@@ -27,21 +27,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("create an array") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("Array(v + 3, v + 4)").collect
-  }
-
-  test("create an map") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("map(v + 3, v + 4)").collect
-  }
-
-  test("create an struct") {
-    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
-    df.selectExpr("struct(v + 3, v + 4)").collect
-  }
-
   def validate(df: DataFrame): Unit = {
     val logicalPlan = df.logicalPlan
     val queryExecution = sqlContext.sessionState.executePlan(logicalPlan)
