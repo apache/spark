@@ -127,6 +127,12 @@ object ExpressionEncoder {
         // For non-flat encoder, the input object is not top level anymore after being combined to
         // a tuple encoder, thus it can be null and we should wrap the `CreateStruct` with `If` and
         // null check to handle null case correctly.
+        // e.g. for Encoder[(Int, String)], the serializer expressions will create 2 columns, and is
+        // not able to handle the case when the input tuple is null. This is not a problem as there
+        // is a check to make sure the input object won't be null. However, if this encoder is used
+        // to create a bigger tuple encoder, the original input object becomes a filed of the new
+        // input tuple and can be null. So instead of creating a struct directly here, we should add
+        // a null/None check and return a null struct if the null/None check fails.
         val struct = CreateStruct(newSerializer)
         val nullCheck = Or(
           IsNull(newInputObject),
@@ -215,8 +221,12 @@ case class ExpressionEncoder[T](
   // (intermediate value is not an attribute). We assume that all serializer expressions use a same
   // `BoundReference` to refer to the object, and throw exception if they don't.
   assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
-  assert(serializer.flatMap(_.collect { case b: BoundReference => b}).distinct.length <= 1,
-    "all serializer expressions must use the same BoundReference.")
+  assert(serializer.flatMap { ser =>
+    val boundRefs = ser.collect { case b: BoundReference => b }
+    assert(boundRefs.nonEmpty,
+      "each serializer expression should contains at least one `BoundReference`")
+    boundRefs
+  }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
 
   /**
    * Returns a new copy of this encoder, where the `deserializer` is resolved and bound to the
