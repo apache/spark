@@ -30,18 +30,6 @@ class CsvUtilsSuite extends SparkFunSuite {
     assert(s"${malformedLinesInfo}" ===
       s"""
         |# of total malformed lines: 4
-        |3 malformed lines extracted and listed as follows;
-        |aaa, bbb, ccc
-        |ddd, eee
-        |fff, ggg, hhh, iii
-      """.stripMargin.trim)
-
-    val noSummaryLines = new MalformedLinesInfo(0)
-    noSummaryLines.add("kkk, lll, mmm")
-    noSummaryLines.add("nnn")
-    assert(s"${noSummaryLines}" ===
-      s"""
-        |# of total malformed lines: 2
       """.stripMargin.trim)
   }
 }
