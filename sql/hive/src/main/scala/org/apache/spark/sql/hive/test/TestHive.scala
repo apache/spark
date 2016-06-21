@@ -179,25 +179,19 @@ private[hive] class TestHiveSparkSession(
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  lazy val inRepoTests = {
-    if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-    } else {
-      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-        File.separator + "resources")
-    }
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+  } else {
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+      File.separator + "resources")
   }
 
   def getHiveFile(path: String): File = {
-    // Attempt to load from class loader, fall back to old system property based.
-    val resourcePath = Option(Thread.currentThread().getContextClassLoader.getResource(path))
-    resourcePath.map(rp => new File(rp.getFile)).getOrElse{
-      val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
-        hiveDevHome
-        .map(new File(_, stripped))
-        .filter(_.exists)
-        .getOrElse(new File(inRepoTests, stripped))
-    }
+    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
+    hiveDevHome
+      .map(new File(_, stripped))
+      .filter(_.exists)
+      .getOrElse(new File(inRepoTests, stripped))
   }
 
   val describedTable = "DESCRIBE (\\w+)".r
