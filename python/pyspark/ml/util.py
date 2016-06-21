@@ -390,4 +390,3 @@ class TransformWrapperSerializer(object):
 
     class Java:
         implements = ['org.apache.spark.ml.api.python.PythonTransformerWrapperSerializer']
-

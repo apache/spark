@@ -55,7 +55,7 @@ from pyspark.ml.feature import *
 from pyspark.ml.linalg import Vector, SparseVector, DenseVector, VectorUDT,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT, _convert_to_vector
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasOutputCol, HasSeed
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
@@ -64,7 +64,8 @@ from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import _java2py
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
-from pyspark.sql.functions import rand
+from pyspark.sql.functions import rand, concat, col, lit, split
+from pyspark.sql.types import StructField, StructType, StringType, ArrayType
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -202,6 +203,48 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_bool(self):
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept=1))
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
+
+
+class PipelineTests(PySparkTestCase):
+
+    class PurePythonTransformer(Transformer, HasInputCol, HasOutputCol):
+        suffix = Param(Params._dummy(), "suffix", "Suffix adds to an Integer")
+        splat = Param(Params._dummy(), "splat", "Point to split a String")
+
+        def __init__(self):
+            super(PipelineTests.PurePythonTransformer, self).__init__()
+            self._setDefault(suffix="", splat=" ")
+
+        def transformSchema(self, schema):
+            outSchema = StructField(self.getOutputCol(), StringType(), True)
+            return schema.add(outSchema)
+
+        def _transform(self, dataset):
+            inc = self.getInputCol()
+            ouc = self.getOutputCol()
+            cnt = dataset.count()
+            suf = self.getOrDefault(self.suffix)
+            return dataset.withColumn(
+                ouc, split(concat(dataset[inc], lit(" "), lit(suf), lit(" "), lit(cnt)), ' '))
+
+    def test_pipeline(self):
+        training = self.spark.createDataFrame([(1,), (2,), (3,), (4,)], ["text"])
+
+        pt = PipelineTests.PurePythonTransformer()
+        pt.setInputCol("text").setOutputCol("sentences")._set(suffix="suffix")
+        word2vec = Word2Vec(vectorSize=5, seed=42, inputCol=pt.getOutputCol(), outputCol="model")
+        pipeline = Pipeline(stages=[pt, word2vec])
+
+        model = pipeline.fit(training)
+
+        self.assertEqual(len(model.stages), 2)
+        self.assertIsInstance(model.stages[0], PipelineTests.PurePythonTransformer)
+        self.assertEqual(model.stage[0].uid, pt.uid)
+        self.assertIsInstance(model.stages[1], Word2VecModel)
+        self.assertEqual(model.stages[1].uid, word2vec.uid)
+
+        model2 = word2vec.fit(pt.transform(training))
+        self.assertEqual(model.transform(training), model2.transform(training))
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):

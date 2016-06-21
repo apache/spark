@@ -37,15 +37,15 @@ class PipelineWrapper(object):
         """
 
         sc = SparkContext._active_spark_context
+
         def __transfer_stage_to_java(py_stage):
             if isinstance(py_stage, JavaWrapper):
                 py_stage._transfer_params_to_java()
                 return py_stage._java_obj
             else:
                 wrapper = TransformerWrapper(sc, py_stage)
-                jtransformer =\
-                    sc._jvm.org.apache.spark.ml.api.python.\
-                        PythonTransformer(wrapper, wrapper.getUid())
+                jtransformer = sc._jvm.\
+                    org.apache.spark.ml.api.python.PythonTransformer(wrapper, wrapper.getUid())
                 return jtransformer
 
         return [__transfer_stage_to_java(stage) for stage in py_stages]

@@ -186,14 +186,14 @@ class PythonTransformer(
   }
 
   /**
-   * @return Serialized Python transformer
+   * Get serialized Python transformer
    */
   private[python] def getPythonTransformer: Array[Byte] = {
     callGetTransformerFromPython
   }
 
   /**
-   * @return Transformer's fully qualified class name in PySpark.
+   * Get transformer's fully qualified class name in PySpark.
    */
   private[python] def getPythonClassName: String = {
     proxy.getClassName
@@ -247,7 +247,7 @@ object PythonTransformer extends MLReadable[PythonTransformer] {
 
   override def load(path: String): PythonTransformer = super.load(path)
 
-  private class PythonTransformerWriter(instance: PythonTransformer) extends MLWriter {
+  private[python] class PythonTransformerWriter(instance: PythonTransformer) extends MLWriter {
     override def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       val extraMetadata = "pyClass" -> instance.getPythonClassName
