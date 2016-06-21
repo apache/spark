@@ -291,7 +291,9 @@ head(collect(df1))
 </div>
 
 ##### dapplyCollect
-Like `dapply`, apply a function to each partition of `SparkDataFrame` and collect the result back.
+Like `dapply`, apply a function to each partition of `SparkDataFrame` and collect the result back. The output of function
+should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` only can be used if the
+output of UDF run on all the partitions can fit in driver memory.
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -315,7 +317,9 @@ head(ldf, 3)
 
 ##### lapply
 Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark.
-Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list.
+Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations
+should fit in a single machine. If that is not the case they can do something like `df <- createDataFrame(list)` and then use
+`dapply`
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
