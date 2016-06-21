@@ -149,6 +149,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(taskSet)
     var taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
+    assert(failedTaskSet)
+    assert(failedTaskSetReason.contains("Failed to serialize task"))
 
     // Now check that we can still submit tasks
     // Even if one of the task sets has not-serializable tasks, the other task set should
