@@ -242,6 +242,30 @@ class StreamSuite extends StreamTest {
     val o2 = OutputMode.Complete
     assert(o2 === InternalOutputModes.Complete)
   }
+
+  test("explain") {
+    val inputData = MemoryStream[String]
+    val df = inputData.toDS().map(_ + "foo")
+    // Test `explain` not throwing errors
+    df.explain()
+    val q = df.writeStream.queryName("memory_explain").format("memory").start()
+      .asInstanceOf[StreamExecution]
+    try {
+      assert("N/A" === q.explainInternal(false))
+      assert("N/A" === q.explainInternal(true))
+
+      inputData.addData("abc")
+      q.processAllAvailable()
+
+      val explainWithoutExtended = q.explainInternal(false)
+      assert(explainWithoutExtended.contains("LocalTableScan"))
+
+      val explainWithExtended = q.explainInternal(true)
+      assert(explainWithExtended.contains("LocalTableScan"))
+    } finally {
+      q.stop()
+    }
+  }
 }
 
 /**
