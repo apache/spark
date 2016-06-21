@@ -1398,6 +1398,31 @@ test_that("group by, agg functions", {
   unlink(jsonPath3)
 })
 
+test_that("pivot GroupedData column", {
+  df <- createDataFrame(data.frame(
+    earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+    course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+    year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+  ))
+  sum1 <- collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
+  sum2 <- collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
+  sum3 <- collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
+  sum4 <- collect(sum(pivot(groupBy(df, "year"), "course", "R"), "earnings"))
+
+  correct_answer <- data.frame(
+    year = c(2013, 2014, 2015, 2016),
+    Python = c(10000, 15000, 20000, 22000),
+    R = c(10000, 11000, 12000, 21000)
+  )
+  expect_equal(sum1, correct_answer)
+  expect_equal(sum2, correct_answer)
+  expect_equal(sum3, correct_answer)
+  expect_equal(sum4, correct_answer[, c("year", "R")])
+
+  expect_error(collect(sum(pivot(groupBy(df, "year"), "course", c("R", "R")), "earnings")))
+  expect_error(collect(sum(pivot(groupBy(df, "year"), "course", list("R", "R")), "earnings")))
+})
+
 test_that("arrange() and orderBy() on a DataFrame", {
   df <- read.json(jsonPath)
   sorted <- arrange(df, df$age)
