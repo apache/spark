@@ -107,19 +107,17 @@ spark = SparkSession.build \
 
 <div data-lang="r"  markdown="1">
 
-Unlike Scala, Java, and Python API, we haven't finished migrating `SQLContext` to `SparkSession` for SparkR yet, so
-the entry point into all relational functionality in SparkR is still the
-`SQLContext` class in Spark 2.0. To create a basic `SQLContext`, all you need is a `SparkContext`.
+The entry point into all functionality in Spark is the [`SparkSession`](api/R/sparkR.session.html) class. To initialize a basic `SparkSession`, just call `sparkR.session()`:
 
 {% highlight r %}
-spark <- sparkRSQL.init(sc)
+sparkR.session()
 {% endhighlight %}
 
-Note that when invoked for the first time, `sparkRSQL.init()` initializes a global `SQLContext` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SQLContext` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SQLContext` instance around.
+Note that when invoked for the first time, `sparkR.session()` initializes a global `SparkSession` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SparkSession` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SparkSession` instance around.
 </div>
 </div>
 
-`SparkSession` (or `SQLContext` for SparkR) in Spark 2.0 provides builtin support for Hive features including the ability to
+`SparkSession` in Spark 2.0 provides builtin support for Hive features including the ability to
 write queries using HiveQL, access to Hive UDFs, and the ability to read data from Hive tables.
 To use these features, you do not need to have an existing Hive setup.
 
@@ -175,7 +173,7 @@ df.show()
 </div>
 
 <div data-lang="r"  markdown="1">
-With a `SQLContext`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
+With a `SparkSession`, applications can create DataFrames from a local R data.frame,
 from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
@@ -183,7 +181,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 {% highlight r %}
 df <- read.json("examples/src/main/resources/people.json")
 
-# Displays the content of the DataFrame to stdout
+# Displays the content of the DataFrame
 showDF(df)
 {% endhighlight %}
 
@@ -415,7 +413,7 @@ showDF(count(groupBy(df, "age")))
 
 For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/index.html).
 
-In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/R/index.html).
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/R/SparkDataFrame.html).
 
 </div>
 
@@ -452,7 +450,7 @@ df = spark.sql("SELECT * FROM table")
 </div>
 
 <div data-lang="r"  markdown="1">
-The `sql` function enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
+The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
 
 {% highlight r %}
 df <- sql("SELECT * FROM table")
@@ -1159,11 +1157,10 @@ for teenName in teenNames.collect():
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-# spark from the previous example is used in this example.
 
-schemaPeople # The DataFrame from the previous example.
+schemaPeople # The SparkDataFrame from the previous example.
 
-# DataFrames can be saved as Parquet files, maintaining the schema information.
+# SparkDataFrame can be saved as Parquet files, maintaining the schema information.
 write.parquet(schemaPeople, "people.parquet")
 
 # Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
@@ -1342,7 +1339,6 @@ df3.printSchema()
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-# spark from the previous example is used in this example.
 
 # Create a simple DataFrame, stored into a partition directory
 write.df(df1, "data/test_table/key=1", "parquet", "overwrite")
@@ -1621,7 +1617,7 @@ anotherPeople = spark.jsonRDD(anotherPeopleRDD)
 
 <div data-lang="r"  markdown="1">
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a DataFrame. using
-the `jsonFile` function, which loads data from a directory of JSON files where each line of the
+the `read.json()` function, which loads data from a directory of JSON files where each line of the
 files is a JSON object.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
@@ -1644,7 +1640,7 @@ printSchema(people)
 # Register this DataFrame as a table.
 createOrReplaceTempView(people, "people")
 
-# SQL statements can be run by using the sql methods provided by `spark`.
+# SQL statements can be run by using the sql methods.
 teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 {% endhighlight %}
 </div>
@@ -1759,9 +1755,11 @@ results = spark.sql("FROM src SELECT key, value").collect()
 
 <div data-lang="r"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SparkSession`, and
+When working with Hive one must instantiate `SparkSession` with Hive support. This
 adds support for finding tables in the MetaStore and writing queries using HiveQL.
 {% highlight r %}
+# enableHiveSupport defaults to TRUE
+sparkR.session(enableHiveSupport = TRUE)
 sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
@@ -1947,7 +1945,7 @@ df = spark.read.format('jdbc').options(url='jdbc:postgresql:dbserver', dbtable='
 
 {% highlight r %}
 
-df <- loadDF(spark, source="jdbc", url="jdbc:postgresql:dbserver", dbtable="schema.tablename")
+df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
 
 {% endhighlight %}
 
