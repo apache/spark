@@ -356,12 +356,13 @@
             <phase>generate-resources</phase>
             <configuration>
               <!-- Execute the shell script to generate the spark build information. -->
-              <tasks>
-                <exec executable="${project.basedir}/../build/spark-build-info">
+              <target>
+                <exec executable="bash">
+                  <arg value="${project.basedir}/../build/spark-build-info"/>
                   <arg value="${project.build.directory}/extra-resources"/>
-                  <arg value="${pom.version}"/>
+                  <arg value="${project.version}"/>
                 </exec>
-              </tasks>
+              </target>
             </configuration>
             <goals>
               <goal>run</goal>

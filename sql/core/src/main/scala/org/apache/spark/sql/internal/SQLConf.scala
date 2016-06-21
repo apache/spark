@@ -114,7 +114,7 @@ object SQLConf {
     .createWithDefault(10L * 1024 * 1024)
 
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
-    SQLConfigBuilder("spark.sql.enableFallBackToHdfsForStats")
+    SQLConfigBuilder("spark.sql.statistics.fallBackToHdfs")
     .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
       " This is useful in determining if a table is small enough to use auto broadcast joins.")
     .booleanConf
@@ -484,14 +484,14 @@ object SQLConf {
       .createWithDefault(2)
 
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
-    .doc("The default location for storing checkpoint data for continuously executing queries.")
+    .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
     .createOptional
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
-      .doc("When true, the logical plan for continuous query will be checked for unsupported" +
+      .doc("When true, the logical plan for streaming query will be checked for unsupported" +
         " operations.")
       .booleanConf
       .createWithDefault(true)
@@ -534,7 +534,7 @@ object SQLConf {
   val FILE_SINK_LOG_CLEANUP_DELAY =
     SQLConfigBuilder("spark.sql.streaming.fileSink.log.cleanupDelay")
       .internal()
-      .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .doc("How long that a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(60 * 1000L) // 10 minutes
 
@@ -544,6 +544,13 @@ object SQLConf {
       .doc("Whether file-based streaming sources will infer its own schema")
       .booleanConf
       .createWithDefault(false)
+
+  val STREAMING_POLLING_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.pollingDelay")
+      .internal()
+      .doc("How long to delay polling new data when no data is available")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(10L)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"

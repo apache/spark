@@ -24,9 +24,9 @@ if sys.version > '3':
 
 import traceback
 
-from pyspark import SparkContext, since
+from pyspark import SparkContext
+from pyspark.ml.common import inherit_doc
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.mllib.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql import SQLContext

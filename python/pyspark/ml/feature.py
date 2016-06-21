@@ -25,7 +25,7 @@ from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
            'Bucketizer',
@@ -149,7 +149,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 1.4.0
     """
 
     splits = \
@@ -486,14 +486,14 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @since("1.5.0")
+    @since("2.0.0")
     def setScalingVec(self, value):
         """
         Sets the value of :py:attr:`scalingVec`.
         """
         return self._set(scalingVec=value)
 
-    @since("1.5.0")
+    @since("2.0.0")
     def getScalingVec(self):
         """
         Gets the value of scalingVec or its default value.
@@ -1584,7 +1584,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def std(self):
         """
         Standard deviation of the StandardScalerModel.
@@ -1592,7 +1592,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("std")
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def mean(self):
         """
         Mean of the StandardScalerModel.
@@ -2260,7 +2260,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
         self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                         seed=None, windowSize=5, maxSentenceLength=1000)
+                         windowSize=5, maxSentenceLength=1000)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 

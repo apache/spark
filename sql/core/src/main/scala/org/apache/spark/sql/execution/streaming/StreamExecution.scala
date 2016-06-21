@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -52,9 +53,11 @@ class StreamExecution(
     val trigger: Trigger,
     private[sql] val triggerClock: Clock,
     val outputMode: OutputMode)
-  extends ContinuousQuery with Logging {
+  extends StreamingQuery with Logging {
 
-  import org.apache.spark.sql.streaming.ContinuousQueryListener._
+  import org.apache.spark.sql.streaming.StreamingQueryListener._
+
+  private val pollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_DELAY)
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -101,7 +104,7 @@ class StreamExecution(
   private[sql] var lastExecution: QueryExecution = null
 
   @volatile
-  private[sql] var streamDeathCause: ContinuousQueryException = null
+  private[sql] var streamDeathCause: StreamingQueryException = null
 
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
@@ -140,8 +143,8 @@ class StreamExecution(
   override def sinkStatus: SinkStatus =
     new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources).toString)
 
-  /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
-  override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)
+  /** Returns the [[StreamingQueryException]] if the query was terminated by an exception. */
+  override def exception: Option[StreamingQueryException] = Option(streamDeathCause)
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
   private def checkpointFile(name: String): String =
@@ -190,6 +193,8 @@ class StreamExecution(
             runBatch()
             // We'll increase currentBatchId after we complete processing current batch's data
             currentBatchId += 1
+          } else {
+            Thread.sleep(pollingDelayMs)
           }
           true
         } else {
@@ -199,7 +204,7 @@ class StreamExecution(
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>
-        streamDeathCause = new ContinuousQueryException(
+        streamDeathCause = new StreamingQueryException(
           this,
           s"Query $name terminated with exception: ${e.getMessage}",
           e,
@@ -227,7 +232,7 @@ class StreamExecution(
   private def populateStartOffsets(): Unit = {
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
-        logInfo(s"Resuming continuous query, starting with batch $batchId")
+        logInfo(s"Resuming streaming query, starting with batch $batchId")
         currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
         logDebug(s"Found possibly uncommitted offsets $availableOffsets")
@@ -239,7 +244,7 @@ class StreamExecution(
         }
 
       case None => // We are starting this stream for the first time.
-        logInfo(s"Starting new continuous query.")
+        logInfo(s"Starting new streaming query.")
         currentBatchId = 0
         constructNextBatch()
     }
@@ -383,7 +388,7 @@ class StreamExecution(
     postEvent(new QueryProgress(this.toInfo))
   }
 
-  private def postEvent(event: ContinuousQueryListener.Event) {
+  private def postEvent(event: StreamingQueryListener.Event) {
     sparkSession.streams.postListenerEvent(event)
   }
 
@@ -399,6 +404,7 @@ class StreamExecution(
       microBatchThread.interrupt()
       microBatchThread.join()
     }
+    uniqueSources.foreach(_.stop())
     logInfo(s"Query $name was stopped")
   }
 
@@ -468,7 +474,7 @@ class StreamExecution(
   }
 
   override def toString: String = {
-    s"Continuous Query - $name [state = $state]"
+    s"Streaming Query - $name [state = $state]"
   }
 
   def toDebugString: String = {
@@ -476,7 +482,7 @@ class StreamExecution(
       "Error:\n" + stackTraceToString(streamDeathCause.cause)
     } else ""
     s"""
-       |=== Continuous Query ===
+       |=== Streaming Query ===
        |Name: $name
        |Current Offsets: $committedOffsets
        |
@@ -490,8 +496,8 @@ class StreamExecution(
      """.stripMargin
   }
 
-  private def toInfo: ContinuousQueryInfo = {
-    new ContinuousQueryInfo(
+  private def toInfo: StreamingQueryInfo = {
+    new StreamingQueryInfo(
       this.name,
       this.id,
       this.sourceStatuses,

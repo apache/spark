@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.annotation.Experimental
+import java.util.TimeZone
 
 /**
- * :: Experimental ::
- * A class used to report information about the progress of a [[ContinuousQuery]].
- *
- * @param name The [[ContinuousQuery]] name. This name is unique across all active queries.
- * @param id The [[ContinuousQuery]] id. This id is unique across
-  *          all queries that have been started in the current process.
- * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
- * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
+ * Helper functions for testing date and time functionality.
  */
-@Experimental
-class ContinuousQueryInfo private[sql](
-  val name: String,
-  val id: Long,
-  val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+object DateTimeTestUtils {
+
+  val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
+
+  def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
+    val originalDefaultTimeZone = TimeZone.getDefault
+    try {
+      DateTimeUtils.resetThreadLocals()
+      TimeZone.setDefault(newDefaultTimeZone)
+      block
+    } finally {
+      TimeZone.setDefault(originalDefaultTimeZone)
+      DateTimeUtils.resetThreadLocals()
+    }
+  }
+}

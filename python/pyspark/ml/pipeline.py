@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-from pyspark import SparkContext
-from pyspark import keyword_only, since
-from pyspark.serializers import CloudPickleSerializer
+from pyspark import since, keyword_only, SparkContext
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable, TransformerWrapper
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
-from pyspark.mllib.common import inherit_doc, _py2java, _java2py
+from pyspark.mllib.common import _py2java, _java2py
+from pyspark.serializers import CloudPickleSerializer
 
 
 class PipelineWrapper(object):

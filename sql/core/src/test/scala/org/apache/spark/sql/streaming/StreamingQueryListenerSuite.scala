@@ -31,10 +31,10 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.JsonProtocol
 
 
-class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
+class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
-  import ContinuousQueryListener._
+  import StreamingQueryListener._
 
   after {
     spark.streams.active.foreach(_.stop())
@@ -167,35 +167,35 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("QueryStarted serialization") {
-    val queryStartedInfo = new ContinuousQueryInfo(
+    val queryStartedInfo = new StreamingQueryInfo(
       "name",
       1,
       Seq(new SourceStatus("source1", None), new SourceStatus("source2", None)),
       new SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString))
-    val queryStarted = new ContinuousQueryListener.QueryStarted(queryStartedInfo)
+    val queryStarted = new StreamingQueryListener.QueryStarted(queryStartedInfo)
     val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[ContinuousQueryListener.QueryStarted]
-    assertContinuousQueryInfoEquals(queryStarted.queryInfo, newQueryStarted.queryInfo)
+      .asInstanceOf[StreamingQueryListener.QueryStarted]
+    assertStreamingQueryInfoEquals(queryStarted.queryInfo, newQueryStarted.queryInfo)
   }
 
   test("QueryProgress serialization") {
-    val queryProcessInfo = new ContinuousQueryInfo(
+    val queryProcessInfo = new StreamingQueryInfo(
       "name",
       1,
       Seq(
         new SourceStatus("source1", Some(LongOffset(0).toString)),
         new SourceStatus("source2", Some(LongOffset(1).toString))),
       new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
-    val queryProcess = new ContinuousQueryListener.QueryProgress(queryProcessInfo)
+    val queryProcess = new StreamingQueryListener.QueryProgress(queryProcessInfo)
     val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[ContinuousQueryListener.QueryProgress]
-    assertContinuousQueryInfoEquals(queryProcess.queryInfo, newQueryProcess.queryInfo)
+      .asInstanceOf[StreamingQueryListener.QueryProgress]
+    assertStreamingQueryInfoEquals(queryProcess.queryInfo, newQueryProcess.queryInfo)
   }
 
   test("QueryTerminated serialization") {
-    val queryTerminatedInfo = new ContinuousQueryInfo(
+    val queryTerminatedInfo = new StreamingQueryInfo(
       "name",
       1,
       Seq(
@@ -203,21 +203,21 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         new SourceStatus("source2", Some(LongOffset(1).toString))),
       new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
     val exception = new RuntimeException("exception")
-    val queryQueryTerminated = new ContinuousQueryListener.QueryTerminated(
+    val queryQueryTerminated = new StreamingQueryListener.QueryTerminated(
       queryTerminatedInfo,
       Some(exception.getMessage),
       exception.getStackTrace)
     val json =
       JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[ContinuousQueryListener.QueryTerminated]
-    assertContinuousQueryInfoEquals(queryQueryTerminated.queryInfo, newQueryTerminated.queryInfo)
+      .asInstanceOf[StreamingQueryListener.QueryTerminated]
+    assertStreamingQueryInfoEquals(queryQueryTerminated.queryInfo, newQueryTerminated.queryInfo)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
 
-  private def assertContinuousQueryInfoEquals(
-      expected: ContinuousQueryInfo,
-      actual: ContinuousQueryInfo): Unit = {
+  private def assertStreamingQueryInfoEquals(
+      expected: StreamingQueryInfo,
+      actual: StreamingQueryInfo): Unit = {
     assert(expected.name === actual.name)
     assert(expected.sourceStatuses.size === actual.sourceStatuses.size)
     expected.sourceStatuses.zip(actual.sourceStatuses).foreach {
@@ -237,7 +237,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(expected.offsetDesc === actual.offsetDesc)
   }
 
-  private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
+  private def withListenerAdded(listener: StreamingQueryListener)(body: => Unit): Unit = {
     try {
       failAfter(1 minute) {
         spark.streams.addListener(listener)
@@ -248,23 +248,23 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  private def addedListeners(): Array[ContinuousQueryListener] = {
+  private def addedListeners(): Array[StreamingQueryListener] = {
     val listenerBusMethod =
-      PrivateMethod[ContinuousQueryListenerBus]('listenerBus)
+      PrivateMethod[StreamingQueryListenerBus]('listenerBus)
     val listenerBus = spark.streams invokePrivate listenerBusMethod()
-    listenerBus.listeners.toArray.map(_.asInstanceOf[ContinuousQueryListener])
+    listenerBus.listeners.toArray.map(_.asInstanceOf[StreamingQueryListener])
   }
 
-  class QueryStatusCollector extends ContinuousQueryListener {
+  class QueryStatusCollector extends StreamingQueryListener {
     // to catch errors in the async listener events
     @volatile private var asyncTestWaiter = new Waiter
 
-    @volatile var startStatus: ContinuousQueryInfo = null
-    @volatile var terminationStatus: ContinuousQueryInfo = null
+    @volatile var startStatus: StreamingQueryInfo = null
+    @volatile var terminationStatus: StreamingQueryInfo = null
     @volatile var terminationException: Option[String] = null
     @volatile var terminationStackTrace: Seq[StackTraceElement] = null
 
-    val progressStatuses = new ConcurrentLinkedQueue[ContinuousQueryInfo]
+    val progressStatuses = new ConcurrentLinkedQueue[StreamingQueryInfo]
 
     def reset(): Unit = {
       startStatus = null
