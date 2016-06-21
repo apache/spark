@@ -113,9 +113,9 @@ class Pipeline(PipelineWrapper, JavaEstimator, JavaMLReadable, JavaMLWritable):
     >>> transformed.head().words == ["a", "b", "c"]
     True
     >>> transformed.head().features
-    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> transformed.head().pca_features
-    DenseVector([1.0, 0.5774])
+    DenseVector([-1.0, 0.5774])
     >>> import tempfile
     >>> path = tempfile.mkdtemp()
     >>> featurePath = path + "/feature-transformer"
@@ -212,7 +212,8 @@ class Pipeline(PipelineWrapper, JavaEstimator, JavaMLReadable, JavaMLWritable):
         Transforms the parameter stages to Java stages.
         """
         paramMap = self.extractParamMap()
-        assert self.stages in paramMap
+        if self.stages not in paramMap:
+            return
         param = self.stages
         value = paramMap[param]
 

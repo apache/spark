@@ -205,32 +205,33 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
-class PipelineTests(PySparkTestCase):
+class PurePythonTransformer(Transformer, HasInputCol, HasOutputCol):
+    suffix = Param(Params._dummy(), "suffix", "Suffix adds to an Integer")
+    splat = Param(Params._dummy(), "splat", "Point to split a String")
 
-    class PurePythonTransformer(Transformer, HasInputCol, HasOutputCol):
-        suffix = Param(Params._dummy(), "suffix", "Suffix adds to an Integer")
-        splat = Param(Params._dummy(), "splat", "Point to split a String")
+    def __init__(self):
+        super(PurePythonTransformer, self).__init__()
+        self._setDefault(suffix="", splat=" ")
 
-        def __init__(self):
-            super(PipelineTests.PurePythonTransformer, self).__init__()
-            self._setDefault(suffix="", splat=" ")
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), ArrayType(StringType()), True)
+        return schema.add(outSchema)
 
-        def transformSchema(self, schema):
-            outSchema = StructField(self.getOutputCol(), StringType(), True)
-            return schema.add(outSchema)
+    def _transform(self, dataset):
+        inc = self.getInputCol()
+        ouc = self.getOutputCol()
+        cnt = dataset.count()
+        suf = self.getOrDefault(self.suffix)
+        return dataset.withColumn(
+            ouc, split(concat(dataset[inc], lit(" "), lit(suf), lit(" "), lit(cnt)), ' '))
 
-        def _transform(self, dataset):
-            inc = self.getInputCol()
-            ouc = self.getOutputCol()
-            cnt = dataset.count()
-            suf = self.getOrDefault(self.suffix)
-            return dataset.withColumn(
-                ouc, split(concat(dataset[inc], lit(" "), lit(suf), lit(" "), lit(cnt)), ' '))
+
+class PipelineTests(SparkSessionTestCase):
 
     def test_pipeline(self):
         training = self.spark.createDataFrame([(1,), (2,), (3,), (4,)], ["text"])
 
-        pt = PipelineTests.PurePythonTransformer()
+        pt = PurePythonTransformer()
         pt.setInputCol("text").setOutputCol("sentences")._set(suffix="suffix")
         word2vec = Word2Vec(vectorSize=5, seed=42, inputCol=pt.getOutputCol(), outputCol="model")
         pipeline = Pipeline(stages=[pt, word2vec])
@@ -238,13 +239,16 @@ class PipelineTests(PySparkTestCase):
         model = pipeline.fit(training)
 
         self.assertEqual(len(model.stages), 2)
-        self.assertIsInstance(model.stages[0], PipelineTests.PurePythonTransformer)
-        self.assertEqual(model.stage[0].uid, pt.uid)
+        self.assertIsInstance(model.stages[0], PurePythonTransformer)
+        self.assertEqual(model.stages[0].uid, pt.uid)
         self.assertIsInstance(model.stages[1], Word2VecModel)
         self.assertEqual(model.stages[1].uid, word2vec.uid)
 
         model2 = word2vec.fit(pt.transform(training))
-        self.assertEqual(model.transform(training), model2.transform(training))
+
+        result = model.transform(training).select("model").collect()
+        result2 = model2.transform(pt.transform(training)).select("model").collect()
+        self.assertListEqual(result, result2)
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
@@ -774,8 +778,16 @@ class PersistenceTest(SparkSessionTestCase):
             paramValue2 = m2.getOrDefault(m2.getParam(param.name))
             if isinstance(paramValue1, Params):
                 self._compare_pipelines(paramValue1, paramValue2)
-            else:
-                self.assertEqual(paramValue1, paramValue2)  # for general types param
+            elif isinstance(paramValue1, list):
+                if not paramValue1:
+                    self.assertEqual(paramValue2, [])
+                elif isinstance(paramValue1[0], Params):
+                    for p1, p2 in zip(paramValue1, paramValue2):
+                        self._compare_pipelines(p1, p2)
+                else:
+                    self.assertListEqual(paramValue1, paramValue2)
+            else:  # for general types param
+                self.assertEqual(paramValue1, paramValue2)
             # Assert parents are equal
             self.assertEqual(param.parent, m2.getParam(param.name).parent)
         else:
