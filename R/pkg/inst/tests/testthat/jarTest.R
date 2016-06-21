@@ -16,7 +16,7 @@
 #
 library(SparkR)
 
-sc <- sparkR.init()
+sparkSession <- sparkR.session()
 
 helloTest <- SparkR:::callJStatic("sparkR.test.hello",
                                   "helloWorld",
@@ -27,6 +27,6 @@ basicFunction <- SparkR:::callJStatic("sparkR.test.basicFunction",
                                       2L,
                                       2L)
 
-sparkR.stop()
+sparkR.session.stop()
 output <- c(helloTest, basicFunction)
 writeLines(output)

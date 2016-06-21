@@ -242,8 +242,13 @@ case class CreateDataSourceTableAsSelectCommand(
       bucketSpec = bucketSpec,
       options = optionsWithPath)
 
-    val result = dataSource.write(mode, df)
-
+    val result = try {
+      dataSource.write(mode, df)
+    } catch {
+      case ex: AnalysisException =>
+        logError(s"Failed to write to table ${tableIdent.identifier} in $mode mode", ex)
+        throw ex
+    }
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation

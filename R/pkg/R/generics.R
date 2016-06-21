@@ -446,6 +446,13 @@ setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
+#' @rdname createOrReplaceTempView
+#' @export
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
+
 #' @rdname dapply
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
@@ -548,12 +555,9 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
-#' @rdname createOrReplaceTempView
+#' @rdname registerTempTable-deprecated
 #' @export
-setGeneric("createOrReplaceTempView",
-           function(x, viewName) {
-             standardGeneric("createOrReplaceTempView")
-           })
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
 #' @rdname sample
 #' @export
@@ -605,6 +609,10 @@ setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
 #' @rdname write.json
 #' @export
 setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
+
+#' @rdname write.orc
+#' @export
+setGeneric("write.orc", function(x, path) { standardGeneric("write.orc") })
 
 #' @rdname write.parquet
 #' @export
@@ -674,6 +682,10 @@ setGeneric("withColumnRenamed",
 #' @rdname write.df
 #' @export
 setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
+
+#' @rdname randomSplit
+#' @export
+setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSplit") })
 
 ###################### Column Methods ##########################
 
@@ -985,6 +997,11 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @export
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
+#' @rdname monotonically_increasing_id
+#' @export
+setGeneric("monotonically_increasing_id",
+           function(x) { standardGeneric("monotonically_increasing_id") })
+
 #' @rdname month
 #' @export
 setGeneric("month", function(x) { standardGeneric("month") })
@@ -1117,6 +1134,10 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
+
+#' @rdname spark_partition_id
+#' @export
+setGeneric("spark_partition_id", function(x) { standardGeneric("spark_partition_id") })
 
 #' @rdname sd
 #' @export

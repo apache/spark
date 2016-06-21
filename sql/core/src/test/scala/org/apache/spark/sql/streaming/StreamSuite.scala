@@ -282,6 +282,8 @@ class FakeDefaultSource extends StreamSourceProvider {
         val startOffset = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L) + 1
         spark.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
       }
+
+      override def stop() {}
     }
   }
 }

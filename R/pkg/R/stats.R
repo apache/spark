@@ -40,6 +40,7 @@ setOldClass("jobj")
 #' df <- read.json("/path/to/file.json")
 #' ct <- crosstab(df, "title", "gender")
 #' }
+#' @note crosstab since 1.5.0
 setMethod("crosstab",
           signature(x = "SparkDataFrame", col1 = "character", col2 = "character"),
           function(x, col1, col2) {
@@ -65,6 +66,7 @@ setMethod("crosstab",
 #' df <- read.json("/path/to/file.json")
 #' cov <- cov(df, "title", "gender")
 #' }
+#' @note cov since 1.6.0
 setMethod("cov",
           signature(x = "SparkDataFrame"),
           function(x, col1, col2) {
@@ -95,6 +97,7 @@ setMethod("cov",
 #' corr <- corr(df, "title", "gender")
 #' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
+#' @note corr since 1.6.0
 setMethod("corr",
           signature(x = "SparkDataFrame"),
           function(x, col1, col2, method = "pearson") {
@@ -123,6 +126,7 @@ setMethod("corr",
 #' df <- read.json("/path/to/file.json")
 #' fi = freqItems(df, c("title", "gender"))
 #' }
+#' @note freqItems since 1.6.0
 setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
           function(x, cols, support = 0.01) {
             statFunctions <- callJMethod(x@sdf, "stat")
@@ -160,6 +164,7 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' df <- read.json("/path/to/file.json")
 #' quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
 #' }
+#' @note approxQuantile since 2.0.0
 setMethod("approxQuantile",
           signature(x = "SparkDataFrame", col = "character",
                     probabilities = "numeric", relativeError = "numeric"),
@@ -188,6 +193,7 @@ setMethod("approxQuantile",
 #' df <- read.json("/path/to/file.json")
 #' sample <- sampleBy(df, "key", fractions, 36)
 #' }
+#' @note sampleBy since 1.6.0
 setMethod("sampleBy",
           signature(x = "SparkDataFrame", col = "character",
                     fractions = "list", seed = "numeric"),

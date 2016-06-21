@@ -399,6 +399,7 @@ class StreamExecution(
       microBatchThread.interrupt()
       microBatchThread.join()
     }
+    uniqueSources.foreach(_.stop())
     logInfo(s"Query $name was stopped")
   }
 
