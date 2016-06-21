@@ -148,12 +148,13 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' df <- createDataFrame(data.frame(
 #'     earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
 #'     course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
-#'     year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+#'     period = c("1H", "1H", "2H", "2H", "1H", "1H", "2H", "2H"),
+#'     year = c(2015, 2015, 2015, 2015, 2016, 2016, 2016, 2016)
 #' ))
-#' collect(sum(pivot(groupBy(df, "year"), "course"), "earnings"))
-#' collect(sum(pivot(groupBy(df, "year"), "course", "R"), "earnings"))
-#' collect(sum(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings"))
-#' collect(sum(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings"))
+#' sum(pivot(groupBy(df, "year"), "course"), "earnings")
+#' min(pivot(groupBy(df, "year"), "course", "R"), "earnings")
+#' max(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings")
+#' mean(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings")
 #' }
 #' @note pivot since 2.0.0
 setMethod("pivot",
