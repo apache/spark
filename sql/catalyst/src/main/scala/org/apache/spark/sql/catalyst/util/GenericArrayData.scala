@@ -24,9 +24,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object GenericArrayData {
-  def allocate(seq: Seq[Any]): GenericArrayData = new GenericArrayData(seq)
-  def allocate(list: java.util.List[Any]): GenericArrayData = new GenericArrayData(list)
-  def allocate(seqOrArray: Any): GenericArrayData = new GenericArrayData(seqOrArray)
+  def allocate(seq: Seq[Any]): GenericArrayData = new GenericRefArrayData(seq)
+  def allocate(list: java.util.List[Any]): GenericArrayData = new GenericRefArrayData(list)
+  def allocate(seqOrArray: Any): GenericArrayData = new GenericRefArrayData(seqOrArray)
   def allocate(primitiveArray: Array[Int]): GenericArrayData =
     new GenericIntArrayData(primitiveArray)
   def allocate(primitiveArray: Array[Long]): GenericArrayData =
@@ -266,8 +266,8 @@ class GenericArrayData(val array: Array[Any],
         return false
       }
       if (!isNullAt(i)) {
-        val o1 = _array(i)
-        val o2 = other._array(i)
+        val o1 = array(i)
+        val o2 = other.array(i)
         o1 match {
           case b1: Array[Byte] =>
             if (!o2.isInstanceOf[Array[Byte]] ||
@@ -309,7 +309,7 @@ class GenericArrayData(val array: Array[Any],
         if (isNullAt(i)) {
           0
         } else {
-          _array(i) match {
+          array(i) match {
             case b: Boolean => if (b) 0 else 1
             case b: Byte => b.toInt
             case s: Short => s.toInt
@@ -330,7 +330,7 @@ class GenericArrayData(val array: Array[Any],
   }
 }
 
-final class GenericIntArrayData(private val primitiveArray: Array[Int]) extends GenericArrayData {
+final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
   override def copy(): ArrayData = new GenericIntArrayData(primitiveArray)
@@ -386,7 +386,7 @@ final class GenericIntArrayData(private val primitiveArray: Array[Int]) extends 
   }
 }
 
-final class GenericLongArrayData(private val primitiveArray: Array[Long])
+final class GenericLongArrayData(val primitiveArray: Array[Long])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -444,7 +444,7 @@ final class GenericLongArrayData(private val primitiveArray: Array[Long])
   }
 }
 
-final class GenericFloatArrayData(private val primitiveArray: Array[Float])
+final class GenericFloatArrayData(val primitiveArray: Array[Float])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -506,7 +506,7 @@ final class GenericFloatArrayData(private val primitiveArray: Array[Float])
   }
 }
 
-final class GenericDoubleArrayData(private val primitiveArray: Array[Double])
+final class GenericDoubleArrayData(val primitiveArray: Array[Double])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -569,7 +569,7 @@ final class GenericDoubleArrayData(private val primitiveArray: Array[Double])
   }
 }
 
-final class GenericShortArrayData(private val primitiveArray: Array[Short])
+final class GenericShortArrayData(val primitiveArray: Array[Short])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -626,7 +626,7 @@ final class GenericShortArrayData(private val primitiveArray: Array[Short])
   }
 }
 
-final class GenericByteArrayData(private val primitiveArray: Array[Byte])
+final class GenericByteArrayData(val primitiveArray: Array[Byte])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
@@ -683,7 +683,7 @@ final class GenericByteArrayData(private val primitiveArray: Array[Byte])
   }
 }
 
-final class GenericBooleanArrayData(private val primitiveArray: Array[Boolean])
+final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
