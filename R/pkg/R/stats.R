@@ -19,9 +19,10 @@
 
 setOldClass("jobj")
 
-#' crosstab
-#'
-#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
+#' @title SparkDataFrame statistic functions
+
+#' @description
+#' crosstab - Computes a pair-wise frequency table of the given columns. Also known as a contingency
 #' table. The number of distinct values for each column should be less than 1e4. At most 1e6
 #' non-zero pair frequencies will be returned.
 #'
@@ -37,9 +38,10 @@ setOldClass("jobj")
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' ct <- crosstab(df, "title", "gender")
 #' }
+#' @note crosstab since 1.5.0
 setMethod("crosstab",
           signature(x = "SparkDataFrame", col1 = "character", col2 = "character"),
           function(x, col1, col2) {
@@ -48,8 +50,6 @@ setMethod("crosstab",
             collect(dataFrame(sct))
           })
 
-#' cov
-#'
 #' Calculate the sample covariance of two numerical columns of a SparkDataFrame.
 #'
 #' @param x A SparkDataFrame
@@ -57,14 +57,15 @@ setMethod("crosstab",
 #' @param col2 the name of the second column
 #' @return the covariance of the two columns.
 #'
-#' @rdname statfunctions
+#' @rdname cov
 #' @name cov
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' cov <- cov(df, "title", "gender")
 #' }
+#' @note cov since 1.6.0
 setMethod("cov",
           signature(x = "SparkDataFrame"),
           function(x, col1, col2) {
@@ -73,8 +74,6 @@ setMethod("cov",
             callJMethod(statFunctions, "cov", col1, col2)
           })
 
-#' corr
-#'
 #' Calculates the correlation of two columns of a SparkDataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
 #' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
@@ -86,15 +85,16 @@ setMethod("cov",
 #'               only "pearson" is allowed now.
 #' @return The Pearson Correlation Coefficient as a Double.
 #'
-#' @rdname statfunctions
+#' @rdname corr
 #' @name corr
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' corr <- corr(df, "title", "gender")
 #' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
+#' @note corr since 1.6.0
 setMethod("corr",
           signature(x = "SparkDataFrame"),
           function(x, col1, col2, method = "pearson") {
@@ -103,9 +103,8 @@ setMethod("corr",
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
 
-#' freqItems
-#'
-#' Finding frequent items for columns, possibly with false positives.
+#' @description
+#' freqItems - Finding frequent items for columns, possibly with false positives.
 #' Using the frequent element count algorithm described in
 #' \url{http://dx.doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
 #'
@@ -120,9 +119,10 @@ setMethod("corr",
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' fi = freqItems(df, c("title", "gender"))
 #' }
+#' @note freqItems since 1.6.0
 setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
           function(x, cols, support = 0.01) {
             statFunctions <- callJMethod(x@sdf, "stat")
@@ -130,10 +130,8 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
             collect(dataFrame(sct))
           })
 
-#' approxQuantile
-#'
-#' Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
-#'
+#' @description
+#' approxQuantile - Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
 #' The result of this algorithm has the following deterministic bound:
 #' If the SparkDataFrame has N elements and if we request the quantile at probability `p` up to
 #' error `err`, then the algorithm will return a sample `x` from the SparkDataFrame so that the
@@ -157,9 +155,10 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
 #' }
+#' @note approxQuantile since 2.0.0
 setMethod("approxQuantile",
           signature(x = "SparkDataFrame", col = "character",
                     probabilities = "numeric", relativeError = "numeric"),
@@ -169,9 +168,9 @@ setMethod("approxQuantile",
                         as.list(probabilities), relativeError)
           })
 
-#' sampleBy
-#'
-#' Returns a stratified sample without replacement based on the fraction given on each stratum.
+#' @description
+#' sampleBy - Returns a stratified sample without replacement based on the fraction given on each
+#' stratum.
 #'
 #' @param x A SparkDataFrame
 #' @param col column that defines strata
@@ -185,9 +184,10 @@ setMethod("approxQuantile",
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' sample <- sampleBy(df, "key", fractions, 36)
 #' }
+#' @note sampleBy since 1.6.0
 setMethod("sampleBy",
           signature(x = "SparkDataFrame", col = "character",
                     fractions = "list", seed = "numeric"),

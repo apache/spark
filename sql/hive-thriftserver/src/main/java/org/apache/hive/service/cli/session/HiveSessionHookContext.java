@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 /**
  * HiveSessionHookContext.
  * Interface passed to the HiveServer2 session hook execution. This enables
- * the hook implementation to accesss session config, user and session handle
+ * the hook implementation to access session config, user and session handle
  */
 public interface HiveSessionHookContext {
 
@@ -30,17 +30,17 @@ public interface HiveSessionHookContext {
    * Retrieve session conf
    * @return
    */
-  public HiveConf getSessionConf();
+  HiveConf getSessionConf();
 
   /**
    * The get the username starting the session
    * @return
    */
-  public String getSessionUser();
+  String getSessionUser();
 
   /**
    * Retrieve handle for the session
    * @return
    */
-  public String getSessionHandle();
+  String getSessionHandle();
 }

@@ -26,7 +26,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -62,7 +61,7 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
-  @Ignore
+  @Test
   public void testCommunication() throws Exception {
     ChildProcAppHandle handle = LauncherServer.newAppHandle();
     TestClient client = null;
@@ -150,6 +149,37 @@ public class LauncherServerSuite extends BaseSuite {
       SparkLauncher.launcherConfig.remove(SparkLauncher.CHILD_CONNECTION_TIMEOUT);
       kill(handle);
       close(client);
+    }
+  }
+
+  @Test
+  public void testSparkSubmitVmShutsDown() throws Exception {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    final Semaphore semaphore = new Semaphore(0);
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+      handle.addListener(new SparkAppHandle.Listener() {
+        public void stateChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+        public void infoChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+      });
+      client = new TestClient(s);
+      client.send(new Hello(handle.getSecret(), "1.4.0"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      // Make sure the server matched the client to the handle.
+      assertNotNull(handle.getConnection());
+      close(client);
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      assertEquals(SparkAppHandle.State.LOST, handle.getState());
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
     }
   }
 

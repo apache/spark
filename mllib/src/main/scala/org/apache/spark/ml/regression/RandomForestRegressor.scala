@@ -22,13 +22,13 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
@@ -99,11 +99,18 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
-    val trees =
-      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
-        .map(_.asInstanceOf[DecisionTreeRegressionModel])
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
+    val trees = RandomForest
+      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .map(_.asInstanceOf[DecisionTreeRegressionModel])
+
     val numFeatures = oldDataset.first().features.size
-    new RandomForestRegressionModel(trees, numFeatures)
+    val m = new RandomForestRegressionModel(trees, numFeatures)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")

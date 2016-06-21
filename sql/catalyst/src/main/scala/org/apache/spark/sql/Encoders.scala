@@ -23,8 +23,10 @@ import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, DecodeUsingSerializer, EncodeUsingSerializer}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
+import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer, EncodeUsingSerializer}
 import org.apache.spark.sql.types._
 
 /**
@@ -207,7 +209,9 @@ object Encoders {
           BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
       deserializer =
         DecodeUsingSerializer[T](
-          BoundReference(0, BinaryType, nullable = true), classTag[T], kryo = useKryo),
+          Cast(GetColumnByOrdinal(0, BinaryType), BinaryType),
+          classTag[T],
+          kryo = useKryo),
       clsTag = classTag[T]
     )
   }

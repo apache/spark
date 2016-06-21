@@ -45,7 +45,9 @@ statement
     | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
-        (OPTIONS tablePropertyList)?                                   #createTableUsing
+        (OPTIONS tablePropertyList)?
+        (PARTITIONED BY partitionColumnNames=identifierList)?
+        bucketSpec?                                                    #createTableUsing
     | createTableHeader tableProvider
         (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
@@ -81,28 +83,21 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
-    | ALTER TABLE tableIdentifier partitionSpec?
-        SET FILEFORMAT fileFormat                                      #setTableFileFormat
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
-    | ALTER TABLE tableIdentifier partitionSpec?
-        CHANGE COLUMN? oldName=identifier colType
-        (FIRST | AFTER after=identifier)? (CASCADE | RESTRICT)?        #changeColumn
-    | ALTER TABLE tableIdentifier partitionSpec?
-        ADD COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?          #addColumns
-    | ALTER TABLE tableIdentifier partitionSpec?
-        REPLACE COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?      #replaceColumns
-    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
-        (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
+    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
-    | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
+    | CREATE (OR REPLACE)? TEMPORARY? VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView
+    | CREATE (OR REPLACE)? TEMPORARY VIEW
+        tableIdentifier ('(' colTypeList ')')? tableProvider
+        (OPTIONS tablePropertyList)?                                   #createTempViewUsing
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
-    | EXPLAIN explainOption* statement                                 #explain
+    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN)? statement    #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
@@ -112,26 +107,24 @@ statement
         ((FROM | IN) db=identifier)?                                   #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
+    | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
+    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | REFRESH TABLE tableIdentifier                                    #refreshTable
-    | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
-    | UNCACHE TABLE identifier                                         #uncacheTable
+    | REFRESH .*?                                                      #refreshResource
+    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
-      tableIdentifier partitionSpec?                                   #loadData
-    | ADD identifier .*?                                               #addResource
+        tableIdentifier partitionSpec?                                 #loadData
+    | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
+    | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
-    | kws=unsupportedHiveNativeCommands .*?                            #failNativeCommand
-    | hiveNativeCommands                                               #executeNativeCommand
-    ;
-
-hiveNativeCommands
-    : TRUNCATE TABLE tableIdentifier partitionSpec?
-        (COLUMNS identifierList)?
+    | RESET                                                            #resetConfiguration
+    | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
 unsupportedHiveNativeCommands
@@ -174,6 +167,10 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=TOUCH
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=COMPACT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=SET kw4=FILEFORMAT
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=ADD kw4=COLUMNS
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMNS?
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=REPLACE kw4=COLUMNS
     | kw1=START kw2=TRANSACTION
     | kw1=COMMIT
     | kw1=ROLLBACK
@@ -206,7 +203,7 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
+    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
     ;
 
@@ -255,7 +252,7 @@ tableProperty
     ;
 
 tablePropertyKey
-    : looseIdentifier ('.' looseIdentifier)*
+    : identifier ('.' identifier)*
     | STRING
     ;
 
@@ -267,22 +264,14 @@ nestedConstantList
     : '(' constantList (',' constantList)* ')'
     ;
 
-skewedLocation
-    : (constant | constantList) EQ STRING
-    ;
-
-skewedLocationList
-    : '(' skewedLocation (',' skewedLocation)* ')'
-    ;
-
 createFileFormat
     : STORED AS fileFormat
     | STORED BY storageHandler
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?         #tableFileFormat
-    | identifier                                                                           #genericFileFormat
+    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
+    | identifier                                             #genericFileFormat
     ;
 
 storageHandler
@@ -401,7 +390,8 @@ sample
     : TABLESAMPLE '('
       ( (percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
       | (expression sampleType=ROWS)
-      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON identifier)?))
+      | sampleType=BYTELENGTH_LITERAL
+      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON (identifier | qualifiedName '(' ')'))?))
       ')'
     ;
 
@@ -430,9 +420,9 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? (AS? identifier)?                     #tableName
-    | '(' queryNoWith ')' sample? (AS? identifier)?                 #aliasedQuery
-    | '(' relation ')' sample? (AS? identifier)?                    #aliasedRelation
+    : tableIdentifier sample? (AS? strictIdentifier)?               #tableName
+    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
+    | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
     ;
 
@@ -467,8 +457,8 @@ expression
     ;
 
 booleanExpression
-    : predicated                                                   #booleanDefault
-    | NOT booleanExpression                                        #logicalNot
+    : NOT booleanExpression                                        #logicalNot
+    | predicated                                                   #booleanDefault
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
     | EXISTS '(' query ')'                                         #exists
@@ -604,30 +594,17 @@ frameBound
     | expression boundType=(PRECEDING | FOLLOWING)
     ;
 
-
-explainOption
-    : LOGICAL | FORMATTED | EXTENDED | CODEGEN
-    ;
-
-transactionMode
-    : ISOLATION LEVEL SNAPSHOT            #isolationLevel
-    | READ accessMode=(ONLY | WRITE)      #transactionAccessMode
-    ;
-
 qualifiedName
     : identifier ('.' identifier)*
     ;
 
-// Identifier that also allows the use of a number of SQL keywords (mainly for backwards compatibility).
-looseIdentifier
-    : identifier
-    | FROM
-    | TO
-    | TABLE
-    | WITH
+identifier
+    : strictIdentifier
+    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
+    | UNION | INTERSECT | EXCEPT
     ;
 
-identifier
+strictIdentifier
     : IDENTIFIER             #unquotedIdentifier
     | quotedIdentifier       #quotedIdentifierAlternative
     | nonReserved            #unquotedIdentifier
@@ -657,16 +634,15 @@ nonReserved
     | GROUPING | CUBE | ROLLUP
     | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
-    | SET
+    | SET | RESET
     | VIEW | REPLACE
     | IF
     | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
-    | SNAPSHOT | READ | WRITE | ONLY
+    | START | TRANSACTION | COMMIT | ROLLBACK
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
-    | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
-    | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
+    | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
+    | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
+    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | LIST
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
@@ -674,6 +650,9 @@ nonReserved
     | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
     | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
+    | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
+    | UNBOUNDED | WHEN
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     ;
 
 SELECT: 'SELECT';
@@ -773,18 +752,12 @@ MAP: 'MAP';
 STRUCT: 'STRUCT';
 COMMENT: 'COMMENT';
 SET: 'SET';
+RESET: 'RESET';
 DATA: 'DATA';
 START: 'START';
 TRANSACTION: 'TRANSACTION';
 COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
-WORK: 'WORK';
-ISOLATION: 'ISOLATION';
-LEVEL: 'LEVEL';
-SNAPSHOT: 'SNAPSHOT';
-READ: 'READ';
-WRITE: 'WRITE';
-ONLY: 'ONLY';
 MACRO: 'MACRO';
 
 IF: 'IF';
@@ -860,8 +833,6 @@ TOUCH: 'TOUCH';
 COMPACT: 'COMPACT';
 CONCATENATE: 'CONCATENATE';
 CHANGE: 'CHANGE';
-FIRST: 'FIRST';
-AFTER: 'AFTER';
 CASCADE: 'CASCADE';
 RESTRICT: 'RESTRICT';
 CLUSTERED: 'CLUSTERED';
@@ -873,10 +844,9 @@ DATABASE: 'DATABASE' | 'SCHEMA';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
-METADATA: 'METADATA';
-REPLICATION: 'REPLICATION';
 ANALYZE: 'ANALYZE';
 COMPUTE: 'COMPUTE';
+LIST: 'LIST';
 STATISTICS: 'STATISTICS';
 PARTITIONED: 'PARTITIONED';
 EXTERNAL: 'EXTERNAL';
@@ -918,6 +888,10 @@ SMALLINT_LITERAL
 
 TINYINT_LITERAL
     : DIGIT+ 'Y'
+    ;
+
+BYTELENGTH_LITERAL
+    : DIGIT+ ('B' | 'K' | 'M' | 'G')
     ;
 
 INTEGER_VALUE

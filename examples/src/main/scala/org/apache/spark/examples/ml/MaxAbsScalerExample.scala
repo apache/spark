@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.MaxAbsScaler
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object MaxAbsScalerExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("MaxAbsScalerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("MaxAbsScalerExample")
+      .getOrCreate()
 
     // $example on$
-    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
     val scaler = new MaxAbsScaler()
       .setInputCol("features")
       .setOutputCol("scaledFeatures")
@@ -43,7 +42,7 @@ object MaxAbsScalerExample {
     val scaledData = scalerModel.transform(dataFrame)
     scaledData.show()
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
-// scalastyle:on println

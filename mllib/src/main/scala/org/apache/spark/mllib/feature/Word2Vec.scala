@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -540,14 +540,16 @@ class Word2VecModel private[spark] (
     val cosineVec = Array.fill[Float](numWords)(0)
     val alpha: Float = 1
     val beta: Float = 0
-
+    // Normalize input vector before blas.sgemv to avoid Inf value
+    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
+    if (vecNorm != 0.0f) {
+      blas.sscal(vectorSize, 1 / vecNorm, fVector, 0, 1)
+    }
     blas.sgemv(
       "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
 
-    // Need not divide with the norm of the given vector since it is constant.
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
-    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
     while (ind < numWords) {
       val norm = wordVecNorms(ind)
       if (norm == 0.0) {
@@ -557,17 +559,13 @@ class Word2VecModel private[spark] (
       }
       ind += 1
     }
-    var topResults = wordList.zip(cosVec)
+
+    wordList.zip(cosVec)
       .toSeq
       .sortBy(-_._2)
       .take(num + 1)
       .tail
-    if (vecNorm != 0.0f) {
-      topResults = topResults.map { case (word, cosVal) =>
-        (word, cosVal / vecNorm)
-      }
-    }
-    topResults.toArray
+      .toArray
   }
 
   /**
@@ -611,9 +609,8 @@ object Word2VecModel extends Loader[Word2VecModel] {
     case class Data(word: String, vector: Array[Float])
 
     def load(sc: SparkContext, path: String): Word2VecModel = {
-      val dataPath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataFrame = sqlContext.read.parquet(dataPath)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val dataFrame = spark.read.parquet(Loader.dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
 
@@ -623,9 +620,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     }
 
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
-
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val vectorSize = model.values.head.length
       val numWords = model.size
@@ -643,7 +638,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val approxSize = 4L * numWords * vectorSize
       val nPartitions = ((approxSize / partitionSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, nPartitions).toDF().write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(dataArray).repartition(nPartitions).write.parquet(Loader.dataPath(path))
     }
   }
 

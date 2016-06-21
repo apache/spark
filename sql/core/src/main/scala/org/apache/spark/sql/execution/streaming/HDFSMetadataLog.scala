@@ -175,8 +175,12 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
-      val bytes = IOUtils.toByteArray(input)
-      Some(deserialize(bytes))
+      try {
+        val bytes = IOUtils.toByteArray(input)
+        Some(deserialize(bytes))
+      } finally {
+        input.close()
+      }
     } else {
       logDebug(s"Unable to find batch $batchMetadataFile")
       None
@@ -216,8 +220,9 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
       new FileContextManager(metadataPath, hadoopConf)
     } catch {
       case e: UnsupportedFileSystemException =>
-        logWarning("Could not use FileContext API for managing metadata log file. The log may be" +
-          "inconsistent under failures.", e)
+        logWarning("Could not use FileContext API for managing metadata log files at path " +
+          s"$metadataPath. Using FileSystem API instead for managing log files. The log may be " +
+          s"inconsistent under failures.")
         new FileSystemManager(metadataPath, hadoopConf)
     }
   }

@@ -45,45 +45,19 @@ class Catalog(object):
     @ignore_unicode_prefix
     @since(2.0)
     def currentDatabase(self):
-        """Returns the current default database in this session.
-
-        >>> spark.catalog._reset()
-        >>> spark.catalog.currentDatabase()
-        u'default'
-        """
+        """Returns the current default database in this session."""
         return self._jcatalog.currentDatabase()
 
     @ignore_unicode_prefix
     @since(2.0)
     def setCurrentDatabase(self, dbName):
-        """Sets the current default database in this session.
-
-        >>> spark.catalog._reset()
-        >>> spark.sql("CREATE DATABASE some_db")
-        DataFrame[]
-        >>> spark.catalog.setCurrentDatabase("some_db")
-        >>> spark.catalog.currentDatabase()
-        u'some_db'
-        >>> spark.catalog.setCurrentDatabase("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
-        """
+        """Sets the current default database in this session."""
         return self._jcatalog.setCurrentDatabase(dbName)
 
     @ignore_unicode_prefix
     @since(2.0)
     def listDatabases(self):
-        """Returns a list of databases available across all sessions.
-
-        >>> spark.catalog._reset()
-        >>> [db.name for db in spark.catalog.listDatabases()]
-        [u'default']
-        >>> spark.sql("CREATE DATABASE some_db")
-        DataFrame[]
-        >>> [db.name for db in spark.catalog.listDatabases()]
-        [u'default', u'some_db']
-        """
+        """Returns a list of databases available across all sessions."""
         iter = self._jcatalog.listDatabases().toLocalIterator()
         databases = []
         while iter.hasNext():
@@ -101,31 +75,6 @@ class Catalog(object):
 
         If no database is specified, the current database is used.
         This includes all temporary tables.
-
-        >>> spark.catalog._reset()
-        >>> spark.sql("CREATE DATABASE some_db")
-        DataFrame[]
-        >>> spark.catalog.listTables()
-        []
-        >>> spark.catalog.listTables("some_db")
-        []
-        >>> spark.createDataFrame([(1, 1)]).registerTempTable("my_temp_tab")
-        >>> spark.sql("CREATE TABLE my_tab1 (name STRING, age INT)")
-        DataFrame[]
-        >>> spark.sql("CREATE TABLE some_db.my_tab2 (name STRING, age INT)")
-        DataFrame[]
-        >>> spark.catalog.listTables()
-        [Table(name=u'my_tab1', database=u'default', description=None, tableType=u'MANAGED',
-        isTemporary=False), Table(name=u'my_temp_tab', database=None, description=None,
-        tableType=u'TEMPORARY', isTemporary=True)]
-        >>> spark.catalog.listTables("some_db")
-        [Table(name=u'my_tab2', database=u'some_db', description=None, tableType=u'MANAGED',
-        isTemporary=False), Table(name=u'my_temp_tab', database=None, description=None,
-        tableType=u'TEMPORARY', isTemporary=True)]
-        >>> spark.catalog.listTables("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -148,28 +97,6 @@ class Catalog(object):
 
         If no database is specified, the current database is used.
         This includes all temporary functions.
-
-        >>> spark.catalog._reset()
-        >>> spark.sql("CREATE DATABASE my_db")
-        DataFrame[]
-        >>> funcNames = set(f.name for f in spark.catalog.listFunctions())
-        >>> set(["+", "floor", "to_unix_timestamp", "current_database"]).issubset(funcNames)
-        True
-        >>> spark.sql("CREATE FUNCTION my_func1 AS 'org.apache.spark.whatever'")
-        DataFrame[]
-        >>> spark.sql("CREATE FUNCTION my_db.my_func2 AS 'org.apache.spark.whatever'")
-        DataFrame[]
-        >>> spark.catalog.registerFunction("temp_func", lambda x: str(x))
-        >>> newFuncNames = set(f.name for f in spark.catalog.listFunctions()) - funcNames
-        >>> newFuncNamesDb = set(f.name for f in spark.catalog.listFunctions("my_db")) - funcNames
-        >>> sorted(list(newFuncNames))
-        [u'my_func1', u'temp_func']
-        >>> sorted(list(newFuncNamesDb))
-        [u'my_func2', u'temp_func']
-        >>> spark.catalog.listFunctions("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -193,26 +120,6 @@ class Catalog(object):
 
         Note: the order of arguments here is different from that of its JVM counterpart
         because Python does not support method overloading.
-
-        >>> spark.catalog._reset()
-        >>> spark.sql("CREATE DATABASE some_db")
-        DataFrame[]
-        >>> spark.sql("CREATE TABLE my_tab1 (name STRING, age INT)")
-        DataFrame[]
-        >>> spark.sql("CREATE TABLE some_db.my_tab2 (nickname STRING, tolerance FLOAT)")
-        DataFrame[]
-        >>> spark.catalog.listColumns("my_tab1")
-        [Column(name=u'name', description=None, dataType=u'string', nullable=True,
-        isPartition=False, isBucket=False), Column(name=u'age', description=None,
-        dataType=u'int', nullable=True, isPartition=False, isBucket=False)]
-        >>> spark.catalog.listColumns("my_tab2", "some_db")
-        [Column(name=u'nickname', description=None, dataType=u'string', nullable=True,
-        isPartition=False, isBucket=False), Column(name=u'tolerance', description=None,
-        dataType=u'float', nullable=True, isPartition=False, isBucket=False)]
-        >>> spark.catalog.listColumns("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
         """
         if dbName is None:
             dbName = self.currentDatabase()
@@ -247,7 +154,7 @@ class Catalog(object):
         if path is not None:
             options["path"] = path
         if source is None:
-            source = self._sparkSession.getConf(
+            source = self._sparkSession.conf.get(
                 "spark.sql.sources.default", "org.apache.spark.sql.parquet")
         if schema is None:
             df = self._jcatalog.createExternalTable(tableName, source, options)
@@ -259,34 +166,20 @@ class Catalog(object):
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
-    def dropTempTable(self, tableName):
-        """Drops the temporary table with the given table name in the catalog.
-        If the table has been cached before, then it will also be uncached.
+    def dropTempView(self, viewName):
+        """Drops the temporary view with the given view name in the catalog.
+        If the view has been cached before, then it will also be uncached.
 
-        >>> spark.createDataFrame([(1, 1)]).registerTempTable("my_table")
+        >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
         >>> spark.table("my_table").collect()
         [Row(_1=1, _2=1)]
-        >>> spark.catalog.dropTempTable("my_table")
+        >>> spark.catalog.dropTempView("my_table")
         >>> spark.table("my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropTempTable(tableName)
-
-    @since(2.0)
-    def registerDataFrameAsTable(self, df, tableName):
-        """Registers the given :class:`DataFrame` as a temporary table in the catalog.
-
-        >>> df = spark.createDataFrame([(2, 1), (3, 1)])
-        >>> spark.catalog.registerDataFrameAsTable(df, "my_cool_table")
-        >>> spark.table("my_cool_table").collect()
-        [Row(_1=2, _2=1), Row(_1=3, _2=1)]
-        """
-        if isinstance(df, DataFrame):
-            self._jsparkSession.registerDataFrameAsTable(df._jdf, tableName)
-        else:
-            raise ValueError("Can only register DataFrame as table")
+        self._jcatalog.dropTempView(viewName)
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -321,75 +214,22 @@ class Catalog(object):
 
     @since(2.0)
     def isCached(self, tableName):
-        """Returns true if the table is currently cached in-memory.
-
-        >>> spark.catalog._reset()
-        >>> spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("my_tab")
-        >>> spark.catalog.isCached("my_tab")
-        False
-        >>> spark.catalog.cacheTable("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
-        """
+        """Returns true if the table is currently cached in-memory."""
         return self._jcatalog.isCached(tableName)
 
     @since(2.0)
     def cacheTable(self, tableName):
-        """Caches the specified table in-memory.
-
-        >>> spark.catalog._reset()
-        >>> spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("my_tab")
-        >>> spark.catalog.isCached("my_tab")
-        False
-        >>> spark.catalog.cacheTable("my_tab")
-        >>> spark.catalog.isCached("my_tab")
-        True
-        >>> spark.catalog.cacheTable("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
-        """
+        """Caches the specified table in-memory."""
         self._jcatalog.cacheTable(tableName)
 
     @since(2.0)
     def uncacheTable(self, tableName):
-        """Removes the specified table from the in-memory cache.
-
-        >>> spark.catalog._reset()
-        >>> spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("my_tab")
-        >>> spark.catalog.cacheTable("my_tab")
-        >>> spark.catalog.isCached("my_tab")
-        True
-        >>> spark.catalog.uncacheTable("my_tab")
-        >>> spark.catalog.isCached("my_tab")
-        False
-        >>> spark.catalog.uncacheTable("does_not_exist") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        AnalysisException: ...
-        """
+        """Removes the specified table from the in-memory cache."""
         self._jcatalog.uncacheTable(tableName)
 
     @since(2.0)
     def clearCache(self):
-        """Removes all cached tables from the in-memory cache.
-
-        >>> spark.catalog._reset()
-        >>> spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("my_tab1")
-        >>> spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("my_tab2")
-        >>> spark.catalog.cacheTable("my_tab1")
-        >>> spark.catalog.cacheTable("my_tab2")
-        >>> spark.catalog.isCached("my_tab1")
-        True
-        >>> spark.catalog.isCached("my_tab2")
-        True
-        >>> spark.catalog.clearCache()
-        >>> spark.catalog.isCached("my_tab1")
-        False
-        >>> spark.catalog.isCached("my_tab2")
-        False
-        """
+        """Removes all cached tables from the in-memory cache."""
         self._jcatalog.clearCache()
 
     def _reset(self):
@@ -404,21 +244,23 @@ class Catalog(object):
 def _test():
     import os
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql.session import SparkSession
+    from pyspark.sql import SparkSession
     import pyspark.sql.catalog
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.catalog.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['spark'] = SparkSession(sc)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.catalog tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
+    globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

@@ -18,19 +18,19 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructType}
 
 class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
 
-  private lazy val left = sqlContext.createDataFrame(
+  private lazy val left = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, 2.0),
       Row(1, 2.0),
@@ -42,7 +42,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(6, null)
     )), new StructType().add("a", IntegerType).add("b", DoubleType))
 
-  private lazy val right = sqlContext.createDataFrame(
+  private lazy val right = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(2, 3.0),
       Row(2, 3.0),
@@ -53,7 +53,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(6, null)
     )), new StructType().add("c", IntegerType).add("d", DoubleType))
 
-  private lazy val rightUniqueKey = sqlContext.createDataFrame(
+  private lazy val rightUniqueKey = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(2, 3.0),
       Row(3, 2.0),
@@ -89,6 +89,18 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       ExtractEquiJoinKeys.unapply(join)
     }
 
+    val existsAttr = AttributeReference("exists", BooleanType, false)()
+    val leftSemiPlus = ExistenceJoin(existsAttr)
+    def createLeftSemiPlusJoin(join: SparkPlan): SparkPlan = {
+      val output = join.output.dropRight(1)
+      val condition = if (joinType == LeftSemi) {
+        existsAttr
+      } else {
+        Not(existsAttr)
+      }
+      ProjectExec(output, FilterExec(condition, join))
+    }
+
     test(s"$testName using ShuffledHashJoin") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -96,6 +108,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
               ShuffledHashJoinExec(
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
+            expectedAnswer,
+            sortAnswers = true)
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+              createLeftSemiPlusJoin(ShuffledHashJoinExec(
+                leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
             expectedAnswer,
             sortAnswers = true)
         }
@@ -111,6 +129,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+              createLeftSemiPlusJoin(BroadcastHashJoinExec(
+                leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
+            expectedAnswer,
+            sortAnswers = true)
         }
       }
     }
@@ -121,6 +145,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
               SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+            expectedAnswer,
+            sortAnswers = true)
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+              createLeftSemiPlusJoin(SortMergeJoinExec(
+                leftKeys, rightKeys, leftSemiPlus, boundCondition, left, right))),
             expectedAnswer,
             sortAnswers = true)
         }
@@ -134,6 +164,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
             BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
+              left, right, BuildLeft, leftSemiPlus, Some(condition)))),
+          expectedAnswer,
+          sortAnswers = true)
       }
     }
 
@@ -142,6 +178,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements(left.sqlContext.sessionState.conf).apply(
             BroadcastNestedLoopJoinExec(left, right, BuildRight, joinType, Some(condition))),
+          expectedAnswer,
+          sortAnswers = true)
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            createLeftSemiPlusJoin(BroadcastNestedLoopJoinExec(
+              left, right, BuildRight, leftSemiPlus, Some(condition)))),
           expectedAnswer,
           sortAnswers = true)
       }

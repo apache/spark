@@ -68,10 +68,16 @@ case class SortExec(
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
     // The generator for prefix
-    val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
+    val prefixExpr = SortPrefix(boundSortExpression)
+    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
     val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
-      override def computePrefix(row: InternalRow): Long = {
-        prefixProjection.apply(row).getLong(0)
+      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+      override def computePrefix(row: InternalRow):
+          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+        val prefix = prefixProjection.apply(row)
+        result.isNull = prefix.isNullAt(0)
+        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
+        result
       }
     }
 
@@ -97,11 +103,8 @@ case class SortExec(
       // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
-      val beforeSort = System.nanoTime()
-
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
-
-      sortTime += (System.nanoTime() - beforeSort) / 1000000
+      sortTime += sorter.getSortTimeNanos / 1000000
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
@@ -151,15 +154,13 @@ case class SortExec(
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
-    val startTime = ctx.freshName("startTime")
     val sortTime = metricTerm(ctx, "sortTime")
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   long $startTime = System.nanoTime();
        |   $addToSorter();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $sortTime.add((System.nanoTime() - $startTime) / 1000000);
+       |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());

@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.ml.util.MLReader
 
 /**
- * This is the Scala stub of SparkR ml.load. It will dispatch the call to corresponding
+ * This is the Scala stub of SparkR read.ml. It will dispatch the call to corresponding
  * model wrapper loading function according the class name extracted from rMetadata of the path.
  */
 private[r] object RWrappers extends MLReader[Object] {
@@ -45,7 +45,7 @@ private[r] object RWrappers extends MLReader[Object] {
       case "org.apache.spark.ml.r.KMeansWrapper" =>
         KMeansWrapper.load(path)
       case _ =>
-        throw new SparkException(s"SparkR ml.load does not support load $className")
+        throw new SparkException(s"SparkR read.ml does not support load $className")
     }
   }
 }

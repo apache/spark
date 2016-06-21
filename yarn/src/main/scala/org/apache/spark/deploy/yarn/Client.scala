@@ -158,7 +158,7 @@ private[spark] class Client(
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
-      launcherBackend.setAppId(appId.toString())
+      launcherBackend.setAppId(appId.toString)
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -168,7 +168,7 @@ private[spark] class Client(
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
-      logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+      logInfo(s"Submitting application $appId to ResourceManager")
       yarnClient.submitApplication(appContext)
       appId
     } catch {
@@ -375,6 +375,9 @@ private[spark] class Client(
     val distributedNames = new HashSet[String]
     YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
     YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+    if (credentials != null) {
+      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
       .getOrElse(fs.getDefaultReplication(destDir))
@@ -591,10 +594,11 @@ private[spark] class Client(
     copyFileToRemote(destDir, localConfArchive, replication, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
-    val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
-      resType = LocalResourceType.ARCHIVE,
-      destName = Some(LOCALIZED_CONF_DIR))
-    require(confLocalizedPath != null)
+    // Manually add the config archive to the cache manager so that the AM is launched with
+    // the proper files set up.
+    distCacheMgr.addResource(
+      remoteFs, hadoopConf, remoteConfArchivePath, localResources, LocalResourceType.ARCHIVE,
+      LOCALIZED_CONF_DIR, statCache, appMasterOnly = false)
 
     // Clear the cache-related entries from the configuration to avoid them polluting the
     // UI's environment page. This works for client mode; for cluster mode, this is handled
@@ -976,7 +980,6 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
-    UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
     amContainer
   }
@@ -997,7 +1000,8 @@ private[spark] class Client(
       sparkConf.set(KEYTAB.key, keytabFileName)
       sparkConf.set(PRINCIPAL.key, principal)
     }
-    credentials = UserGroupInformation.getCurrentUser.getCredentials
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
   }
 
   /**
@@ -1138,9 +1142,9 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.9.2-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.1-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.9.2-src.zip not found; cannot run pyspark application in YARN mode.")
+          "py4j-0.10.1-src.zip not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }

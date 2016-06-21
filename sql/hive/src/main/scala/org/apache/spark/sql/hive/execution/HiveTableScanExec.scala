@@ -73,7 +73,7 @@ case class HiveTableScanExec(
     BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
-  // Create a local copy of hiveconf,so that scan specific modifications should not impact
+  // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
   @transient
   private[this] val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -152,8 +152,10 @@ case class HiveTableScanExec(
       }
     }
     val numOutputRows = longMetric("numOutputRows")
+    // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
+    val outputSchema = schema
     rdd.mapPartitionsInternal { iter =>
-      val proj = UnsafeProjection.create(schema)
+      val proj = UnsafeProjection.create(outputSchema)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

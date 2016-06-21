@@ -22,11 +22,12 @@ import scala.util.Try
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -103,6 +104,18 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
+  override def equals(that: Any): Boolean = {
+    that match {
+      case StructType(otherFields) =>
+        java.util.Arrays.equals(
+          fields.asInstanceOf[Array[AnyRef]], otherFields.asInstanceOf[Array[AnyRef]])
+      case _ => false
+    }
+  }
+
+  private lazy val _hashCode: Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
+  override def hashCode(): Int = _hashCode
+
   /**
    * Creates a new [[StructType]] by adding a new field.
    * {{{
@@ -169,7 +182,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
   }
 
   /**
@@ -184,7 +197,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
   }
 
   /**
@@ -202,7 +215,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: String,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
   }
 
   /**
@@ -281,8 +294,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
-    s"struct<${fieldTypes.mkString(",")}>"
+    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}")
+    Utils.truncatedString(fieldTypes, "struct<", ",", ">")
   }
 
   override def sql: String = {

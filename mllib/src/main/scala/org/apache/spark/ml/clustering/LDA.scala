@@ -17,11 +17,12 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
@@ -30,7 +31,10 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
-import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVector,
+  Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.MatrixImplicits._
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
@@ -46,8 +50,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group param
    */
   @Since("1.6.0")
-  final val k = new IntParam(this, "k", "number of topics (clusters) to infer",
-    ParamValidators.gt(1))
+  final val k = new IntParam(this, "k", "The number of topics (clusters) to infer. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -161,7 +165,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
-    " algorithm used to estimate the LDA model.  Supported: " + supportedOptimizers.mkString(", "),
+    " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
     (o: String) => ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase))
 
   /** @group getParam */
@@ -405,7 +409,11 @@ sealed abstract class LDAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
-      val t = udf(oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext))
+
+      // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+      val transformer = oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext)
+
+      val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
       dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
@@ -437,7 +445,7 @@ sealed abstract class LDAModel private[ml] (
    *          collecting a large amount of data to the driver (on the order of vocabSize x k).
    */
   @Since("1.6.0")
-  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix
+  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix.asML
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
   @Since("1.6.0")
@@ -667,6 +675,8 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -681,6 +691,8 @@ class DistributedLDAModel private[ml] (
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
@@ -688,8 +700,8 @@ class DistributedLDAModel private[ml] (
   @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
-    val fs = FileSystem.get(sparkSession.sparkContext.hadoopConfiguration)
-    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, hadoopConf))
     _checkpointFiles = Array.empty[String]
   }
 
@@ -872,13 +884,13 @@ class LDA @Since("1.6.0") (
 private[clustering] object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, Vector)] = {
+  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
       .rdd
       .map { case Row(docId: Long, features: Vector) =>
-        (docId, features)
+        (docId, OldVectors.fromML(features))
       }
   }
 

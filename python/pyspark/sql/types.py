@@ -27,7 +27,7 @@ from array import array
 
 if sys.version >= "3":
     long = int
-    unicode = str
+    basestring = unicode = str
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -401,6 +401,7 @@ class StructField(DataType):
         False
         """
         assert isinstance(dataType, DataType), "dataType should be DataType"
+        assert isinstance(name, basestring), "field name should be string"
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -1045,7 +1046,7 @@ def _need_converter(dataType):
 
 
 def _create_converter(dataType):
-    """Create an converter to drop the names of fields in obj """
+    """Create a converter to drop the names of fields in obj """
     if not _need_converter(dataType):
         return lambda x: x
 
@@ -1359,7 +1360,13 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}. The fields in it can be accessed like attributes.
+    A row in L{DataFrame}.
+    The fields in it can be accessed:
+
+    * like attributes (``row.key``)
+    * like dictionary values (``row[key]``)
+
+    ``key in row`` will search through row keys.
 
     Row can be used to create a row object by using named arguments,
     the fields will be sorted by names.
@@ -1371,6 +1378,10 @@ class Row(tuple):
     ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
+    >>> 'name' in row
+    True
+    >>> 'wrong_key' in row
+    False
 
     Row also can be used to create another Row like class, then it
     could be used to create Row objects, such as
@@ -1378,6 +1389,10 @@ class Row(tuple):
     >>> Person = Row("name", "age")
     >>> Person
     <Row(name, age)>
+    >>> 'name' in Person
+    True
+    >>> 'wrong_key' in Person
+    False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
     """
@@ -1430,6 +1445,12 @@ class Row(tuple):
             return dict(zip(self.__fields__, (conv(o) for o in self)))
         else:
             return dict(zip(self.__fields__, self))
+
+    def __contains__(self, item):
+        if hasattr(self, "__fields__"):
+            return item in self.__fields__
+        else:
+            return super(Row, self).__contains__(item)
 
     # let object acts like class
     def __call__(self, *args):

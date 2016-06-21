@@ -459,7 +459,7 @@ private[spark] object SerDe {
 
 }
 
-private[r] object SerializationFormats {
+private[spark] object SerializationFormats {
   val BYTE = "byte"
   val STRING = "string"
   val ROW = "row"

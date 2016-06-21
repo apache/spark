@@ -18,20 +18,22 @@
 """
 Estimator Transformer Param Example.
 """
-from pyspark import SparkContext, SQLContext
+
 # $example on$
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-
-    sc = SparkContext(appName="EstimatorTransformerParamExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("EstimatorTransformerParamExample")\
+        .getOrCreate()
 
     # $example on$
     # Prepare training data from a list of (label, features) tuples.
-    training = sqlContext.createDataFrame([
+    training = spark.createDataFrame([
         (1.0, Vectors.dense([0.0, 1.1, 0.1])),
         (0.0, Vectors.dense([2.0, 1.0, -1.0])),
         (0.0, Vectors.dense([2.0, 1.3, 1.0])),
@@ -69,7 +71,7 @@ if __name__ == "__main__":
     print model2.extractParamMap()
 
     # Prepare test data
-    test = sqlContext.createDataFrame([
+    test = spark.createDataFrame([
         (1.0, Vectors.dense([-1.0, 1.5, 1.3])),
         (0.0, Vectors.dense([3.0, 2.0, -0.1])),
         (1.0, Vectors.dense([0.0, 2.2, -1.5]))], ["label", "features"])
@@ -84,4 +86,4 @@ if __name__ == "__main__":
         print row
     # $example off$
 
-    sc.stop()
+    spark.stop()

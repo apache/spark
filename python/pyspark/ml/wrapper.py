@@ -22,7 +22,7 @@ from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
 from pyspark.ml.util import _jvm
-from pyspark.mllib.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
 class JavaWrapper(object):
@@ -110,7 +110,8 @@ class JavaParams(JavaWrapper, Params):
         for param in self.params:
             if self._java_obj.hasParam(param.name):
                 java_param = self._java_obj.getParam(param.name)
-                if self._java_obj.isDefined(java_param):
+                # SPARK-14931: Only check set params back to avoid default params mismatch.
+                if self._java_obj.isSet(java_param):
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                     self._set(**{param.name: value})
 

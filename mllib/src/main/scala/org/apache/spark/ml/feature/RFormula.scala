@@ -25,10 +25,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
 
@@ -70,15 +70,18 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
  * will be created from the specified response variable in the formula.
  */
 @Experimental
-class RFormula(override val uid: String)
+@Since("1.5.0")
+class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("rFormula"))
 
   /**
    * R formula parameter. The formula is provided in string form.
    * @group param
    */
+  @Since("1.5.0")
   val formula: Param[String] = new Param(this, "formula", "R model formula")
 
   /**
@@ -86,15 +89,19 @@ class RFormula(override val uid: String)
    * @group setParam
    * @param value an R formula in string form (e.g. "y ~ x + z")
    */
+  @Since("1.5.0")
   def setFormula(value: String): this.type = set(formula, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getFormula: String = $(formula)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** Whether the formula specifies fitting an intercept. */
@@ -170,6 +177,7 @@ class RFormula(override val uid: String)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
   }
 
+  @Since("1.5.0")
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
     if (hasLabelCol(schema)) {
@@ -180,9 +188,11 @@ class RFormula(override val uid: String)
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
-  override def toString: String = s"RFormula(${get(formula)}) (uid=$uid)"
+  @Since("2.0.0")
+  override def toString: String = s"RFormula(${get(formula).getOrElse("")}) (uid=$uid)"
 }
 
 @Since("2.0.0")
@@ -194,13 +204,16 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 
 /**
  * :: Experimental ::
- * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
+ * Model fitted by [[RFormula]]. Fitting is required to determine the factor levels of
+ * formula terms.
+ *
  * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 @Experimental
+@Since("1.5.0")
 class RFormulaModel private[feature](
-    override val uid: String,
+    @Since("1.5.0") override val uid: String,
     private[ml] val resolvedFormula: ResolvedRFormula,
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
@@ -211,10 +224,11 @@ class RFormulaModel private[feature](
     transformLabel(pipelineModel.transform(dataset))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
     val withFeatures = pipelineModel.transformSchema(schema)
-    if (hasLabelCol(withFeatures)) {
+    if (resolvedFormula.label.isEmpty || hasLabelCol(withFeatures)) {
       withFeatures
     } else if (schema.exists(_.name == resolvedFormula.label)) {
       val nullable = schema(resolvedFormula.label).dataType match {
@@ -229,14 +243,16 @@ class RFormulaModel private[feature](
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): RFormulaModel = copyValues(
     new RFormulaModel(uid, resolvedFormula, pipelineModel))
 
+  @Since("2.0.0")
   override def toString: String = s"RFormulaModel($resolvedFormula) (uid=$uid)"
 
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label
-    if (hasLabelCol(dataset.schema)) {
+    if (labelName.isEmpty || hasLabelCol(dataset.schema)) {
       dataset.toDF
     } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {
@@ -256,8 +272,8 @@ class RFormulaModel private[feature](
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
-      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType == DoubleType,
-      "Label column already exists and is not of type DoubleType.")
+      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType.isInstanceOf[NumericType],
+      "Label column already exists and is not of type NumericType.")
   }
 
   @Since("2.0.0")

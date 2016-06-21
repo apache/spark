@@ -26,7 +26,7 @@ import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.{InternalAccumulator, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
@@ -746,7 +746,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime)")}
+      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
+        s"${UIUtils.getTimeZoneOffset()})")}
     </script>
   }
 
@@ -767,7 +768,7 @@ private[ui] object StagePage {
   }
 
   private[ui] def getSchedulerDelay(
-      info: TaskInfo, metrics: TaskMetrics, currentTime: Long): Long = {
+      info: TaskInfo, metrics: TaskMetricsUIData, currentTime: Long): Long = {
     if (info.finished) {
       val totalExecutionTime = info.finishTime - info.launchTime
       val executorOverhead = (metrics.executorDeserializeTime +

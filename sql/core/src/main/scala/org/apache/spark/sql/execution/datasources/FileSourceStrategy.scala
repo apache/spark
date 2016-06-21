@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.DataSourceScanExec.{INPUT_PATHS, PUSHED_FILTERS}
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -39,7 +41,7 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
  *    is only done on top level columns, but formats should support pruning of nested columns as
  *    well.
  *  - Construct a reader function by passing filters and the schema into the FileFormat.
- *  - Using an partition pruning predicates, enumerate the list of files that should be read.
+ *  - Using a partition pruning predicates, enumerate the list of files that should be read.
  *  - Split the files into tasks and construct a FileScanRDD.
  *  - Add any projection or filters that must be evaluated after the scan.
  *
@@ -54,7 +56,8 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
  */
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(files: HadoopFsRelation, _, _)) =>
+    case PhysicalOperation(projects, filters,
+      l @ LogicalRelation(files: HadoopFsRelation, _, table)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -106,7 +109,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
       logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
-      val readFile = files.fileFormat.buildReader(
+      val readFile = files.fileFormat.buildReaderWithPartitionValues(
         sparkSession = files.sparkSession,
         dataSchema = files.dataSchema,
         partitionSchema = files.partitionSchema,
@@ -148,11 +151,18 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
               val blockLocations = getBlockLocations(file)
-              (0L until file.getLen by maxSplitBytes).map { offset =>
-                val remaining = file.getLen - offset
-                val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                val hosts = getBlockHosts(blockLocations, offset, size)
-                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
+              if (files.fileFormat.isSplitable(files.sparkSession, files.options, file.getPath)) {
+                (0L until file.getLen by maxSplitBytes).map { offset =>
+                  val remaining = file.getLen - offset
+                  val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
+                  val hosts = getBlockHosts(blockLocations, offset, size)
+                  PartitionedFile(
+                    partition.values, file.getPath.toUri.toString, offset, size, hosts)
+                }
+              } else {
+                val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+                Seq(PartitionedFile(
+                  partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
               }
             }
           }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
@@ -192,6 +202,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           partitions
       }
 
+      val meta = Map(
+        "Format" -> files.fileFormat.toString,
+        "ReadSchema" -> prunedDataSchema.simpleString,
+        PUSHED_FILTERS -> pushedDownFilters.mkString("[", ", ", "]"),
+        INPUT_PATHS -> files.location.paths.mkString(", "))
+
       val scan =
         DataSourceScanExec.create(
           readDataColumns ++ partitionColumns,
@@ -200,10 +216,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
             readFile,
             plannedPartitions),
           files,
-          Map(
-            "Format" -> files.fileFormat.toString,
-            "PushedFilters" -> pushedDownFilters.mkString("[", ", ", "]"),
-            "ReadSchema" -> prunedDataSchema.simpleString))
+          meta,
+          table)
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)

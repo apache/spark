@@ -21,10 +21,10 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.SparkDeploySchedulerBackend
-import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import org.apache.spark.scheduler.local.LocalBackend
-import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
+import org.apache.spark.scheduler.cluster.mesos.{MesosCoarseGrainedSchedulerBackend, MesosFineGrainedSchedulerBackend}
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
+
 
 class SparkContextSchedulerCreationSuite
   extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
@@ -58,7 +58,7 @@ class SparkContextSchedulerCreationSuite
   test("local") {
     val sched = createTaskScheduler("local")
     sched.backend match {
-      case s: LocalBackend => assert(s.totalCores === 1)
+      case s: LocalSchedulerBackend => assert(s.totalCores === 1)
       case _ => fail()
     }
   }
@@ -66,7 +66,8 @@ class SparkContextSchedulerCreationSuite
   test("local-*") {
     val sched = createTaskScheduler("local[*]")
     sched.backend match {
-      case s: LocalBackend => assert(s.totalCores === Runtime.getRuntime.availableProcessors())
+      case s: LocalSchedulerBackend =>
+        assert(s.totalCores === Runtime.getRuntime.availableProcessors())
       case _ => fail()
     }
   }
@@ -75,7 +76,7 @@ class SparkContextSchedulerCreationSuite
     val sched = createTaskScheduler("local[5]")
     assert(sched.maxTaskFailures === 1)
     sched.backend match {
-      case s: LocalBackend => assert(s.totalCores === 5)
+      case s: LocalSchedulerBackend => assert(s.totalCores === 5)
       case _ => fail()
     }
   }
@@ -84,7 +85,8 @@ class SparkContextSchedulerCreationSuite
     val sched = createTaskScheduler("local[* ,2]")
     assert(sched.maxTaskFailures === 2)
     sched.backend match {
-      case s: LocalBackend => assert(s.totalCores === Runtime.getRuntime.availableProcessors())
+      case s: LocalSchedulerBackend =>
+        assert(s.totalCores === Runtime.getRuntime.availableProcessors())
       case _ => fail()
     }
   }
@@ -93,7 +95,7 @@ class SparkContextSchedulerCreationSuite
     val sched = createTaskScheduler("local[4, 2]")
     assert(sched.maxTaskFailures === 2)
     sched.backend match {
-      case s: LocalBackend => assert(s.totalCores === 4)
+      case s: LocalSchedulerBackend => assert(s.totalCores === 4)
       case _ => fail()
     }
   }
@@ -117,14 +119,14 @@ class SparkContextSchedulerCreationSuite
     val sched = createTaskScheduler("local", "client", conf)
 
     sched.backend match {
-      case s: LocalBackend => assert(s.defaultParallelism() === 16)
+      case s: LocalSchedulerBackend => assert(s.defaultParallelism() === 16)
       case _ => fail()
     }
   }
 
   test("local-cluster") {
     createTaskScheduler("local-cluster[3, 14, 1024]").backend match {
-      case s: SparkDeploySchedulerBackend => // OK
+      case s: StandaloneSchedulerBackend => // OK
       case _ => fail()
     }
   }
@@ -143,19 +145,16 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos fine-grained") {
-    testMesos("mesos://localhost:1234", classOf[MesosSchedulerBackend], coarse = false)
+    testMesos("mesos://localhost:1234", classOf[MesosFineGrainedSchedulerBackend], coarse = false)
   }
 
   test("mesos coarse-grained") {
-    testMesos("mesos://localhost:1234", classOf[CoarseMesosSchedulerBackend], coarse = true)
+    testMesos("mesos://localhost:1234", classOf[MesosCoarseGrainedSchedulerBackend], coarse = true)
   }
 
   test("mesos with zookeeper") {
     testMesos("mesos://zk://localhost:1234,localhost:2345",
-      classOf[MesosSchedulerBackend], coarse = false)
+      classOf[MesosFineGrainedSchedulerBackend], coarse = false)
   }
 
-  test("mesos with zookeeper and Master URL starting with zk://") {
-    testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
-  }
 }

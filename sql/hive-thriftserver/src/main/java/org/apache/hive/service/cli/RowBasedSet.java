@@ -130,8 +130,8 @@ public class RowBasedSet implements RowSet {
   }
 
   private static class RemovableList<E> extends ArrayList<E> {
-    public RemovableList() { super(); }
-    public RemovableList(List<E> rows) { super(rows); }
+    RemovableList() { super(); }
+    RemovableList(List<E> rows) { super(rows); }
     @Override
     public void removeRange(int fromIndex, int toIndex) {
       super.removeRange(fromIndex, toIndex);

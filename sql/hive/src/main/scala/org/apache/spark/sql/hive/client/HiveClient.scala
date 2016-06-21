@@ -218,7 +218,7 @@ private[hive] trait HiveClient {
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit
 
-  /** Drop an existing function an the database. */
+  /** Drop an existing function in the database. */
   def dropFunction(db: String, name: String): Unit
 
   /** Rename an existing function in the database. */
@@ -229,7 +229,7 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, assuming it exists. */
   final def getFunction(db: String, name: String): CatalogFunction = {
-    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException(db, name))
+    getFunctionOption(db, name).getOrElse(throw new NoSuchPermanentFunctionException(db, name))
   }
 
   /** Return an existing function in the database, or None if it doesn't exist. */

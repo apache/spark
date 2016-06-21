@@ -157,7 +157,7 @@ object HiveThriftServer2 extends Logging {
 
 
   /**
-   * A inner sparkListener called in sc.stop to clean up the HiveThriftServer2
+   * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
    */
   private[thriftserver] class HiveThriftServer2Listener(
       val server: HiveServer2,

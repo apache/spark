@@ -48,8 +48,6 @@ case class BroadcastHashJoinExec(
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
-
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)
     buildSide match {
@@ -85,6 +83,7 @@ case class BroadcastHashJoinExec(
       case LeftOuter | RightOuter => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
       case LeftAnti => codegenAnti(ctx, input)
+      case j: ExistenceJoin => codegenExistence(ctx, input)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")
@@ -404,6 +403,69 @@ case class BroadcastHashJoinExec(
          |}
          |$numOutput.add(1);
          |${consume(ctx, input)}
+       """.stripMargin
+    }
+  }
+
+  /**
+   * Generates the code for existence join.
+   */
+  private def codegenExistence(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val existsVar = ctx.freshName("exists")
+
+    val matched = ctx.freshName("matched")
+    val buildVars = genBuildSideVars(ctx, matched)
+    val checkCondition = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // filter the output via condition
+      ctx.currentVars = input ++ buildVars
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      s"""
+         |$eval
+         |${ev.code}
+         |$existsVar = !${ev.isNull} && ${ev.value};
+       """.stripMargin
+    } else {
+      s"$existsVar = true;"
+    }
+
+    val resultVar = input ++ Seq(ExprCode("", "false", existsVar))
+    if (broadcastRelation.value.keyIsUnique) {
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// find matches from HashedRelation
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |boolean $existsVar = false;
+         |if ($matched != null) {
+         |  $checkCondition
+         |}
+         |$numOutput.add(1);
+         |${consume(ctx, resultVar)}
+       """.stripMargin
+    } else {
+      val matches = ctx.freshName("matches")
+      val iteratorCls = classOf[Iterator[UnsafeRow]].getName
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// find matches from HashRelation
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
+         |boolean $existsVar = false;
+         |if ($matches != null) {
+         |  while (!$existsVar && $matches.hasNext()) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |    $checkCondition
+         |  }
+         |}
+         |$numOutput.add(1);
+         |${consume(ctx, resultVar)}
        """.stripMargin
     }
   }

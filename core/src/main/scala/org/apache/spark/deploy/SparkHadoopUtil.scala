@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, DataInputStream}
+import java.io.{ByteArrayInputStream, DataInputStream, IOException}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
-import java.util.{Arrays, Comparator}
+import java.text.DateFormat
+import java.util.{Arrays, Comparator, Date}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -34,10 +35,13 @@ import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -285,8 +289,7 @@ class SparkHadoopUtil extends Logging {
       credentials: Credentials): Long = {
     val now = System.currentTimeMillis()
 
-    val renewalInterval =
-      sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
+    val renewalInterval = sparkConf.get(TOKEN_RENEWAL_INTERVAL).get
 
     credentials.getAllTokens.asScala
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
@@ -356,6 +359,50 @@ class SparkHadoopUtil extends Logging {
     val confKey = s"fs.${scheme}.impl.disable.cache"
     newConf.setBoolean(confKey, true)
     newConf
+  }
+
+  /**
+   * Dump the credentials' tokens to string values.
+   *
+   * @param credentials credentials
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
+   */
+  private[spark] def dumpTokens(credentials: Credentials): Iterable[String] = {
+    if (credentials != null) {
+      credentials.getAllTokens.asScala.map(tokenToString)
+    } else {
+      Seq()
+    }
+  }
+
+  /**
+   * Convert a token to a string for logging.
+   * If its an abstract delegation token, attempt to unmarshall it and then
+   * print more details, including timestamps in human-readable form.
+   *
+   * @param token token to convert to a string
+   * @return a printable string value.
+   */
+  private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val buffer = new StringBuilder(128)
+    buffer.append(token.toString)
+    try {
+      val ti = token.decodeIdentifier
+      buffer.append("; ").append(ti)
+      ti match {
+        case dt: AbstractDelegationTokenIdentifier =>
+          // include human times and the renewer, which the HDFS tokens toString omits
+          buffer.append("; Renewer: ").append(dt.getRenewer)
+          buffer.append("; Issued: ").append(df.format(new Date(dt.getIssueDate)))
+          buffer.append("; Max Date: ").append(df.format(new Date(dt.getMaxDate)))
+        case _ =>
+      }
+    } catch {
+      case e: IOException =>
+        logDebug("Failed to decode $token: $e", e)
+    }
+    buffer.toString
   }
 }
 

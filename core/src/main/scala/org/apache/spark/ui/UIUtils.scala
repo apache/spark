@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.util.{Date, Locale, TimeZone}
 
 import scala.util.control.NonFatal
 import scala.xml._
@@ -337,6 +337,7 @@ private[spark] object UIUtils extends Logging {
       completed: Int,
       failed: Int,
       skipped: Int,
+      killed: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     // started + completed can be > total when there are speculative tasks
@@ -348,6 +349,7 @@ private[spark] object UIUtils extends Logging {
         {completed}/{total}
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
+        { if (killed > 0) s"($killed killed)" }
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
@@ -502,4 +504,7 @@ private[spark] object UIUtils extends Logging {
     }
     param
   }
+
+  def getTimeZoneOffset() : Int =
+    TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 }

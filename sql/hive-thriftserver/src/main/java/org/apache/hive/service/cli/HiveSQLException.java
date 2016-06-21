@@ -111,7 +111,7 @@ public class HiveSQLException extends SQLException {
 
   /**
    * Converts current object to a {@link TStatus} object
-   * @return	a {@link TStatus} object
+   * @return a {@link TStatus} object
    */
   public TStatus toTStatus() {
     // TODO: convert sqlState, etc.
@@ -125,8 +125,8 @@ public class HiveSQLException extends SQLException {
 
   /**
    * Converts the specified {@link Exception} object into a {@link TStatus} object
-   * @param e	a {@link Exception} object
-   * @return	a {@link TStatus} object
+   * @param e a {@link Exception} object
+   * @return a {@link TStatus} object
    */
   public static TStatus toTStatus(Exception e) {
     if (e instanceof HiveSQLException) {
@@ -155,7 +155,8 @@ public class HiveSQLException extends SQLException {
     if (parent != null) {
       int n = parent.length - 1;
       while (m >= 0 && n >= 0 && trace[m].equals(parent[n])) {
-        m--; n--;
+        m--;
+        n--;
       }
     }
     List<String> detail = enroll(cause, trace, m);

@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
 /**
- * Performs an sort merge join of two child relations.
+ * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
     leftKeys: Seq[Expression],
@@ -53,6 +53,8 @@ case class SortMergeJoinExec(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         (left.output ++ right.output).map(_.withNullability(true))
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>
@@ -269,6 +271,44 @@ case class SortMergeJoinExec(
             override def getRow: InternalRow = currentLeftRow
           }.toScala
 
+        case j: ExistenceJoin =>
+          new RowIterator {
+            private[this] var currentLeftRow: InternalRow = _
+            private[this] val result: MutableRow = new GenericMutableRow(Array[Any](null))
+            private[this] val smjScanner = new SortMergeJoinScanner(
+              createLeftKeyGenerator(),
+              createRightKeyGenerator(),
+              keyOrdering,
+              RowIterator.fromScala(leftIter),
+              RowIterator.fromScala(rightIter)
+            )
+            private[this] val joinRow = new JoinedRow
+
+            override def advanceNext(): Boolean = {
+              while (smjScanner.findNextOuterJoinRows()) {
+                currentLeftRow = smjScanner.getStreamedRow
+                val currentRightMatches = smjScanner.getBufferedMatches
+                var found = false
+                if (currentRightMatches != null) {
+                  var i = 0
+                  while (!found && i < currentRightMatches.length) {
+                    joinRow(currentLeftRow, currentRightMatches(i))
+                    if (boundCondition(joinRow)) {
+                      found = true
+                    }
+                    i += 1
+                  }
+                }
+                result.setBoolean(0, found)
+                numOutputRows += 1
+                return true
+              }
+              false
+            }
+
+            override def getRow: InternalRow = resultProj(joinRow(currentLeftRow, result))
+          }.toScala
+
         case x =>
           throw new IllegalArgumentException(
             s"SortMergeJoin should not take $x as the JoinType")
@@ -296,13 +336,7 @@ case class SortMergeJoinExec(
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
     vars.zipWithIndex.map { case (ev, i) =>
-      val value = ctx.freshName("value")
-      ctx.addMutableState(ctx.javaType(leftKeys(i).dataType), value, "")
-      val code =
-        s"""
-           |$value = ${ev.value};
-         """.stripMargin
-      ExprCode(code, "false", value)
+      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
     }
   }
 

@@ -33,21 +33,22 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
- * It can also work with a local setup by using a LocalBackend and setting isLocal to true.
- * It handles common logic, like determining a scheduling order across jobs, waking up to launch
- * speculative tasks, etc.
+ * It can also work with a local setup by using a [[LocalSchedulerBackend]] and setting
+ * isLocal to true. It handles common logic, like determining a scheduling order across jobs, waking
+ * up to launch speculative tasks, etc.
  *
  * Clients should first call initialize() and start(), then submit task sets through the
  * runTasks method.
  *
- * THREADING: SchedulerBackends and task-submitting clients can call this class from multiple
+ * THREADING: [[SchedulerBackend]]s and task-submitting clients can call this class from multiple
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
- * SchedulerBackends synchronize on themselves when they want to send events here, and then
+ * [[SchedulerBackend]]s synchronize on themselves when they want to send events here, and then
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
@@ -64,6 +65,11 @@ private[spark] class TaskSchedulerImpl(
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
 
+  // Duplicate copies of a task will only be launched if the original copy has been running for
+  // at least this amount of time. This is to avoid the overhead of launching speculative copies
+  // of tasks that are very short.
+  val MIN_TIME_TO_SPECULATION = 100
+
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
@@ -77,6 +83,7 @@ private[spark] class TaskSchedulerImpl(
   // on this class.
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
+  // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
 
@@ -384,14 +391,14 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
+      accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId): Boolean = {
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
       accumUpdates.flatMap { case (id, updates) =>
+        val accInfos = updates.map(acc => acc.toInfo(Some(acc.value), None))
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
-          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId,
-            updates.map(acc => acc.toInfo(Some(acc.value), None)))
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }
       }
     }
@@ -462,7 +469,7 @@ private[spark] class TaskSchedulerImpl(
   def checkSpeculatableTasks() {
     var shouldRevive = false
     synchronized {
-      shouldRevive = rootPool.checkSpeculatableTasks()
+      shouldRevive = rootPool.checkSpeculatableTasks(MIN_TIME_TO_SPECULATION)
     }
     if (shouldRevive) {
       backend.reviveOffers()

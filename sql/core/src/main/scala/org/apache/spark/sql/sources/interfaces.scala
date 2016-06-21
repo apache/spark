@@ -23,6 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -137,7 +138,8 @@ trait StreamSinkProvider {
   def createSink(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      partitionColumns: Seq[String]): Sink
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink
 }
 
 /**

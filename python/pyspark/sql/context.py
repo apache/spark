@@ -17,6 +17,7 @@
 
 from __future__ import print_function
 import sys
+import warnings
 
 if sys.version >= '3':
     basestring = unicode = str
@@ -33,7 +34,10 @@ __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 
 
 class SQLContext(object):
-    """Wrapper around :class:`SparkSession`, the main entry point to Spark SQL functionality.
+    """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+
+    As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
+    here for backward compatibility.
 
     A SQLContext can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
@@ -56,7 +60,7 @@ class SQLContext(object):
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> df = allTypes.toDF()
-        >>> df.registerTempTable("allTypes")
+        >>> df.createOrReplaceTempView("allTypes")
         >>> sqlContext.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
@@ -105,7 +109,7 @@ class SQLContext(object):
     def newSession(self):
         """
         Returns a new SQLContext as new session, that has separate SQLConf,
-        registered temporary tables and UDFs, but shared SparkContext and
+        registered temporary views and UDFs, but shared SparkContext and
         table cache.
         """
         return self.__class__(self._sc, self.sparkSession.newSession())
@@ -114,7 +118,7 @@ class SQLContext(object):
     def setConf(self, key, value):
         """Sets the given Spark SQL configuration property.
         """
-        self.sparkSession.setConf(key, value)
+        self.sparkSession.conf.set(key, value)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -127,13 +131,13 @@ class SQLContext(object):
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
         u'200'
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'10'
-        >>> sqlContext.setConf("spark.sql.shuffle.partitions", "50")
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        >>> sqlContext.setConf("spark.sql.shuffle.partitions", u"50")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'50'
         """
-        return self.sparkSession.getConf(key, defaultValue)
+        return self.sparkSession.conf.get(key, defaultValue)
 
     @property
     @since("1.3.1")
@@ -301,7 +305,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession.catalog.registerDataFrameAsTable(df, tableName)
+        df.createOrReplaceTempView(tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):
@@ -310,7 +314,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
-        self.sparkSession.catalog.dropTempTable(tableName)
+        self.sparkSession.catalog.dropTempView(tableName)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
@@ -426,15 +430,29 @@ class SQLContext(object):
 
     @property
     @since(2.0)
-    def streams(self):
-        """Returns a :class:`ContinuousQueryManager` that allows managing all the
-        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
+    def readStream(self):
         """
-        from pyspark.sql.streaming import ContinuousQueryManager
-        return ContinuousQueryManager(self._ssql_ctx.streams())
+        Returns a :class:`DataStreamReader` that can be used to read data streams
+        as a streaming :class:`DataFrame`.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamReader`
+        """
+        return DataStreamReader(self._wrapped)
+
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`StreamingQueryManager` that allows managing all the
+        :class:`StreamingQuery` StreamingQueries active on `this` context.
+
+        .. note:: Experimental.
+        """
+        from pyspark.sql.streaming import StreamingQueryManager
+        return StreamingQueryManager(self._ssql_ctx.streams())
 
 
-# TODO(andrew): deprecate this
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
@@ -444,11 +462,18 @@ class HiveContext(SQLContext):
     :param sparkContext: The SparkContext to wrap.
     :param jhiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
         :class:`HiveContext` in the JVM, instead we make all calls to this object.
+
+    .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
     """
+
+    warnings.warn(
+        "HiveContext is deprecated in Spark 2.0.0. Please use " +
+        "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+        DeprecationWarning)
 
     def __init__(self, sparkContext, jhiveContext=None):
         if jhiveContext is None:
-            sparkSession = SparkSession.withHiveSupport(sparkContext)
+            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

@@ -17,21 +17,23 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.commons.lang.StringUtils
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.datasources.HadoopFsRelation
-import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.Utils
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -85,10 +87,14 @@ private[sql] case class LogicalRDD(
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case _ => false
+    }
   }
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -120,15 +126,18 @@ private[sql] case class RDDScanExec(
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+    s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
   }
 }
 
 private[sql] trait DataSourceScanExec extends LeafExecNode {
   val rdd: RDD[InternalRow]
   val relation: BaseRelation
+  val metastoreTableIdentifier: Option[TableIdentifier]
 
-  override val nodeName: String = relation.toString
+  override val nodeName: String = {
+    s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
+  }
 
   // Ignore rdd when checking results
   override def sameResult(plan: SparkPlan): Boolean = plan match {
@@ -143,7 +152,8 @@ private[sql] case class RowDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
-    override val metadata: Map[String, String] = Map.empty)
+    override val metadata: Map[String, String],
+    override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
@@ -151,7 +161,8 @@ private[sql] case class RowDataSourceScanExec(
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+      !SparkSession.getActiveSession.get.sessionState.conf.getConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
     case _: HadoopFsRelation => true
     case _ => false
   }
@@ -174,8 +185,12 @@ private[sql] case class RowDataSourceScanExec(
   }
 
   override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
-    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
+      key + ": " + StringUtils.abbreviate(value, 100)
+    }
+
+    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
+      s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -212,7 +227,8 @@ private[sql] case class BatchedDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
-    override val metadata: Map[String, String] = Map.empty)
+    override val metadata: Map[String, String],
+    override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
@@ -220,13 +236,18 @@ private[sql] case class BatchedDataSourceScanExec(
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException
+    // in the case of fallback, this batched scan should never fail because of:
+    // 1) only primitive types are supported
+    // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
+    WholeStageCodegenExec(this).execute()
   }
 
   override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
-    val metadataStr = metadataEntries.mkString(" ", ", ", "")
-    s"BatchedScan $nodeName${output.mkString("[", ",", "]")}$metadataStr"
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
+      key + ": " + StringUtils.abbreviate(value, 100)
+    }
+    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
+    s"Batched$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -240,7 +261,7 @@ private[sql] case class BatchedDataSourceScanExec(
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"/* ${toCommentSafeString(str)} */\n" + (if (nullable) {
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
       s"""
         boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
         $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
@@ -325,7 +346,8 @@ private[sql] object DataSourceScanExec {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): DataSourceScanExec = {
+      metadata: Map[String, String] = Map.empty,
+      metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
@@ -334,15 +356,14 @@ private[sql] object DataSourceScanExec {
         case _ => None
       }
 
-      def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-        throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-          s"(${output.map(_.name).mkString(", ")})")
-      }
-
       bucketSpec.map { spec =>
         val numBuckets = spec.numBuckets
-        val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-        HashPartitioning(bucketColumns, numBuckets)
+        val bucketColumns = spec.bucketColumnNames.flatMap { n => output.find(_.name == n) }
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
+          HashPartitioning(bucketColumns, numBuckets)
+        } else {
+          UnknownPartitioning(0)
+        }
       }.getOrElse {
         UnknownPartitioning(0)
       }
@@ -351,9 +372,11 @@ private[sql] object DataSourceScanExec {
     relation match {
       case r: HadoopFsRelation
         if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
-        BatchedDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
+        BatchedDataSourceScanExec(
+          output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
       case _ =>
-        RowDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
+        RowDataSourceScanExec(
+          output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
     }
   }
 }

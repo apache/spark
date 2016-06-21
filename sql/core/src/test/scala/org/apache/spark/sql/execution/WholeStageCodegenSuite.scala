@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
-import org.apache.spark.sql.expressions.scala.typed
+import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions.{avg, broadcast, col, max}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -28,35 +28,35 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
   test("range/filter should be combined") {
-    val df = sqlContext.range(10).filter("id = 1").selectExpr("id + 1")
+    val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
     val plan = df.queryExecution.executedPlan
     assert(plan.find(_.isInstanceOf[WholeStageCodegenExec]).isDefined)
     assert(df.collect() === Array(Row(2)))
   }
 
   test("Aggregate should be included in WholeStageCodegen") {
-    val df = sqlContext.range(10).groupBy().agg(max(col("id")), avg(col("id")))
+    val df = spark.range(10).groupBy().agg(max(col("id")), avg(col("id")))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(9, 4.5)))
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
-    val df = sqlContext.range(3).groupBy("id").count().orderBy("id")
+    val df = spark.range(3).groupBy("id").count().orderBy("id")
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
   }
 
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
-    val rdd = sqlContext.sparkContext.makeRDD(Seq(Row(1, "1"), Row(1, "1"), Row(2, "2")))
+    val rdd = spark.sparkContext.makeRDD(Seq(Row(1, "1"), Row(1, "1"), Row(2, "2")))
     val schema = new StructType().add("k", IntegerType).add("v", StringType)
-    val smallDF = sqlContext.createDataFrame(rdd, schema)
-    val df = sqlContext.range(10).join(broadcast(smallDF), col("k") === col("id"))
+    val smallDF = spark.createDataFrame(rdd, schema)
+    val df = spark.range(10).join(broadcast(smallDF), col("k") === col("id"))
     assert(df.queryExecution.executedPlan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[BroadcastHashJoinExec]).isDefined)
@@ -64,7 +64,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("Sort should be included in WholeStageCodegen") {
-    val df = sqlContext.range(3, 0, -1).toDF().sort(col("id"))
+    val df = spark.range(3, 0, -1).toDF().sort(col("id"))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -75,7 +75,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   test("MapElements should be included in WholeStageCodegen") {
     import testImplicits._
 
-    val ds = sqlContext.range(10).map(_.toString)
+    val ds = spark.range(10).map(_.toString)
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -84,7 +84,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("typed filter should be included in WholeStageCodegen") {
-    val ds = sqlContext.range(10).filter(_ % 2 == 0)
+    val ds = spark.range(10).filter(_ % 2 == 0)
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -93,11 +93,11 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("back-to-back typed filter should be included in WholeStageCodegen") {
-    val ds = sqlContext.range(10).filter(_ % 2 == 0).filter(_ % 3 == 0)
+    val ds = spark.range(10).filter(_ % 2 == 0).filter(_ % 3 == 0)
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SerializeFromObjectExec]).isDefined)
+      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec]).isDefined)
     assert(ds.collect() === Array(0, 6))
   }
 
@@ -110,7 +110,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
   }
 }
