@@ -442,7 +442,7 @@ setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 #' @export
 setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 
-#' @rdname cov
+#' @rdname covar_pop
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
