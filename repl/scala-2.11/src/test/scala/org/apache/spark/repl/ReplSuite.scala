@@ -49,7 +49,8 @@ class ReplSuite extends SparkFunSuite {
 
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
-
+    Main.sparkContext = null
+    Main.sparkSession = null // causes recreation of SparkContext for each test.
     Main.conf.set("spark.master", master)
     Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
