@@ -1250,6 +1250,7 @@ dapplyInternal <- function(x, func, schema) {
 #' @family SparkDataFrame functions
 #' @rdname dapply
 #' @name dapply
+#' @seealso \link{dapplyCollect}
 #' @export
 #' @examples
 #' \dontrun{
@@ -1294,8 +1295,9 @@ setMethod("dapply",
 #'             to each partition will be passed.
 #'             The output of func should be a data.frame.
 #' @family SparkDataFrame functions
-#' @rdname dapply
+#' @rdname dapplyCollect
 #' @name dapplyCollect
+#' @seealso \link{dapply}
 #' @export
 #' @examples
 #' \dontrun{
