@@ -45,7 +45,12 @@ public class BufferHolder {
   }
 
   public BufferHolder(UnsafeRow row, int initialSize) {
-    this.fixedSize = UnsafeRow.calculateBitSetWidthInBytes(row.numFields()) + 8 * row.numFields();
+    int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
+    if (row.numFields() > (Integer.MAX_VALUE - initialSize) / 8) {
+      throw new UnsupportedOperationException(
+        "Cannot create BufferHolder from input UnsafeRow because it is too big.");
+    }
+    this.fixedSize = bitsetWidthInBytes + 8 * row.numFields();
     this.buffer = new byte[fixedSize + initialSize];
     this.row = row;
     this.row.pointTo(buffer, buffer.length);
@@ -55,6 +60,11 @@ public class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   public void grow(int neededSize) {
+    if (neededSize > Integer.MAX_VALUE / 2 - totalSize()) {
+      throw new UnsupportedOperationException(
+        "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
+          "exceeds size limitation " + Integer.MAX_VALUE / 2);
+    }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
