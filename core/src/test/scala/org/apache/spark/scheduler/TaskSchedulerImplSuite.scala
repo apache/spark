@@ -293,29 +293,30 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(taskSet)
     val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
 
-    val firstTasks = taskScheduler.resourceOffers(Seq(
+    val firstTaskAttempts = taskScheduler.resourceOffers(Seq(
       new WorkerOffer("executor0", "host0", 1),
       new WorkerOffer("executor1", "host1", 1)
     )).flatten
-    assert(Set("executor0", "executor1") === firstTasks.map{_.executorId}.toSet)
+    assert(Set("executor0", "executor1") === firstTaskAttempts.map(_.executorId).toSet)
 
     // fail one of the tasks, but leave the other running
-    val failedTask = firstTasks.find(_.executorId == "executor0").get
+    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
     taskScheduler.handleFailedTask(tsm, failedTask.taskId, TaskState.FAILED, TaskResultLost)
     // at this point, our failed task could run on the other executor, so don't give up the task
     // set yet.
+    assert(!failedTaskSet)
 
-    // but now we fail our second executor.  The other task still has a failed executor it can
-    // run on, but our first failed task does not.  So we should fail the task set.
+    // Now we fail our second executor.  The other task can still run on executor1, so make an offer
+    // on that executor, and make sure that the other task (not the failed one) is assigned there
     taskScheduler.executorLost("executor1", SlaveLost("oops"))
-      val nextTasks =
-        taskScheduler.resourceOffers(Seq(new WorkerOffer("executor0", "host0", 1))).flatten
+    val nextTaskAttempts =
+      taskScheduler.resourceOffers(Seq(new WorkerOffer("executor0", "host0", 1))).flatten
     // Note: Its OK if some future change makes this already realize the taskset has become
     // unschedulable at this point (though in the current implementation, we're sure it will not)
-    assert(nextTasks.size === 1)
-    assert(nextTasks.head.executorId === "executor0")
-    assert(nextTasks.head.attemptNumber === 1)
-    assert(nextTasks.head.index != failedTask.index)
+    assert(nextTaskAttempts.size === 1)
+    assert(nextTaskAttempts.head.executorId === "executor0")
+    assert(nextTaskAttempts.head.attemptNumber === 1)
+    assert(nextTaskAttempts.head.index != failedTask.index)
 
     // now we should definitely realize that our task set is unschedulable, because the only
     // task left can't be scheduled on any executors due to the blacklist
@@ -323,8 +324,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     sc.listenerBus.waitUntilEmpty(100000)
     assert(tsm.isZombie)
     assert(failedTaskSet)
-    assert(failedTaskSetReason.contains("Aborting TaskSet 0.0 because it has a task which cannot " +
-      "be scheduled on any executor due to blacklists"))
+    assert(failedTaskSetReason.contains(s"Aborting TaskSet 0.0 because Task ${failedTask.index} " +
+      s"cannot be scheduled on any executor due to blacklists."))
   }
 
 }
