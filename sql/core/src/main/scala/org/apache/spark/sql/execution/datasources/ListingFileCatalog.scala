@@ -92,7 +92,7 @@ class ListingFileCatalog(
 
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
-        logInfo(s"Listing $path on driver")
+        logTrace(s"Listing $path on driver")
 
         val childStatuses = {
           val stats = fs.listStatus(path)

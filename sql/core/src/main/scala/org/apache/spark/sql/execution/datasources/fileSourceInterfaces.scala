@@ -389,7 +389,7 @@ private[sql] object HadoopFsRelation extends Logging {
   // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
   // start with "." are also ignored.
   def listLeafFiles(fs: FileSystem, status: FileStatus, filter: PathFilter): Array[FileStatus] = {
-    logInfo(s"Listing ${status.getPath}")
+    logTrace(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
     if (shouldFilterOut(name)) {
       Array.empty
