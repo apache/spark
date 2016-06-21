@@ -1080,7 +1080,7 @@ private class LogisticAggregator(
         if (label == i) 1.0 else 0.0
       }
       features.foreachActive { (index, value) =>
-        if (value != 0.0) {
+        if (featuresStd(index) != 0.0 && value != 0.0) {
           val x = if (standardize) value / featuresStd(index) else value
           gradient(i * numFeaturesPlusIntercept + index) += weight * multiplier * x
         }
