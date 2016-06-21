@@ -235,8 +235,6 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #' similarly to R package e1071's predict.
 #'
 #' @param object A fitted naive Bayes model
-#' @param newData SparkDataFrame for testing
-#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -378,8 +376,6 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
 #' @param object A fitted k-means model
-#' @param newData SparkDataFrame for testing
-#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -621,8 +617,6 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' similarly to R package survival's predict.
 #'
 #' @param object A fitted AFT survival regression model
-#' @param newData SparkDataFrame for testing
-#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
