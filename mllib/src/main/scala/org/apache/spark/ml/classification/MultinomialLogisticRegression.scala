@@ -280,7 +280,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
           val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
-            val isIntercept = $(fitIntercept) && ((index + 1) % coefWithInterceptLength == 0)
+            val isIntercept = $(fitIntercept) && ((index + 1) % numFeaturesPlusIntercept == 0)
             if (isIntercept) {
               0.0
             } else {
@@ -308,7 +308,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
-        val initialCoefficientsWithIntercept = Vectors.zeros(numClasses * coefWithInterceptLength)
+        val initialCoefficientsWithIntercept = Vectors.zeros(numClasses * numFeaturesPlusIntercept)
 
         if ($(fitIntercept)) {
           /*
