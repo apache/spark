@@ -189,7 +189,7 @@ private[hive] class TestHiveSparkSession(
   }
 
   def getHiveFile(path: String): File = {
-    // Attempt to load from class loader, fall back to old system property based.
+    // Attempt to load from class loader, fall back to old system property based for Python tests.
     val resourcePath = Option(Thread.currentThread().getContextClassLoader.getResource(path))
     resourcePath.map(rp => new File(rp.getFile)).getOrElse{
       val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
