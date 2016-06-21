@@ -19,6 +19,7 @@ package org.apache.spark.examples.sql.streaming;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.OutputMode;
+import org.apache.spark.sql.streaming.StreamingQuery;
 
 import java.util.regex.Pattern;
 
@@ -34,7 +35,7 @@ import java.util.regex.Pattern;
  *    `$ bin/run-example org.apache.spark.examples.sql.streaming.JavaStructuredNetworkWordCount
  *    localhost 9999 <checkpoint dir>`
  */
-public class JavaStructuredNetworkWordCount {
+public final class JavaStructuredNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
   public static void main(String[] args) throws Exception {
@@ -43,26 +44,40 @@ public class JavaStructuredNetworkWordCount {
       System.exit(1);
     }
 
+    String host = args[0];
+    int port = Integer.parseInt(args[1]);
+    String checkpointDir = args[2];
+
     SparkSession spark = SparkSession
       .builder()
       .appName("JavaStructuredNetworkWordCount")
       .getOrCreate();
 
-    Dataset<String> df = spark.readStream().format("socket").option("host", args[0])
-      .option("port", args[1]).load().as(Encoders.STRING());
-
-    Dataset<String> words = df.select(functions.explode(functions.split(df.col("value"), " ")).alias("word"))
+    // input lines (may be multiple words on each line)
+    Dataset<String> lines = spark
+      .readStream()
+      .format("socket")
+      .option("host", host)
+      .option("port", port)
+      .load()
       .as(Encoders.STRING());
 
+    // input words
+    Dataset<String> words = lines.select(
+        functions.explode(
+          functions.split(lines.col("value"), " ")
+        ).alias("word")
+      ).as(Encoders.STRING());
+
+    // the count for each distinct word
     Dataset<Row> wordCounts = words.groupBy("word").count();
 
-    wordCounts.writeStream()
-      .outputMode(OutputMode.Complete())
+    StreamingQuery query = wordCounts.writeStream()
+      .outputMode("complete")
       .format("console")
-      .option("checkpointLocation", args[2])
-      .start()
-      .awaitTermination();
+      .option("checkpointLocation", checkpointDir)
+      .start();
 
-    spark.stop();
+    query.awaitTermination();
   }
 }

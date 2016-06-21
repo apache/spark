@@ -41,6 +41,10 @@ object StructuredNetworkWordCount {
       System.exit(1)
     }
 
+    val host = args(0)
+    val port = args(1).toInt
+    val checkpointDir = args(2)
+
     val spark = SparkSession
       .builder
       .appName("StructuredNetworkWordCount")
@@ -48,23 +52,29 @@ object StructuredNetworkWordCount {
 
     import spark.implicits._
 
-    val df = spark.readStream
+    // input lines (may be multiple words on each line)
+    val lines = spark.readStream
       .format("socket")
-      .option("host", args(0))
-      .option("port", args(1))
+      .option("host", host)
+      .option("port", port)
       .load().as[String]
 
-    val words = df.select(functions.explode(functions.split(df.col("value"), " ")).alias("word"))
+    // input words
+    val words = lines.select(
+      functions.explode(
+        functions.split(lines.col("value"), " ")
+      ).alias("word"))
+
+    // the count for each distinct word
     val wordCounts = words.groupBy("word").count()
 
-    wordCounts.writeStream
-      .outputMode(OutputMode.Complete())
+    val query = wordCounts.writeStream
+      .outputMode("complete")
       .format("console")
-      .option("checkpointLocation", args(2))
+      .option("checkpointLocation", checkpointDir)
       .start()
-      .awaitTermination()
 
-    spark.stop()
+    query.awaitTermination()
   }
 }
 // scalastyle:on println

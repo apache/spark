@@ -39,19 +39,38 @@ if __name__ == "__main__":
         print("Usage: network_wordcount.py <hostname> <port> <checkpoint dir>", file=sys.stderr)
         exit(-1)
 
+    host = sys.argv[1]
+    port = int(sys.argv[2])
+    checkpointDir = sys.argv[3]
+
     spark = SparkSession\
         .builder\
         .appName("StructuredNetworkWordCount")\
         .getOrCreate()
 
+    # input lines (may be multiple words on each line)
+    lines = spark\
+        .readStream\
+        .format('socket')\
+        .option('host', host)\
+        .option('port', port)\
+        .load()
 
-    df = spark.readStream.format('socket').option('host', sys.argv[1])\
-        .option('port', sys.argv[2]).load()
+    # input words
+    words = lines.select(\
+        explode(\
+            split(lines.value, ' ')\
+        ).alias('word')\
+    )
 
-    words = df.select(explode(split(df.value, ' ')).alias('word'))
+    # the count for each distinct word
     wordCounts = words.groupBy('word').count()
 
-    wordCounts.writeStream.outputMode('complete').format('console')\
-        .option('checkpointLocation', sys.argv[3]).start().awaitTermination()
+    query = wordCounts\
+        .writeStream\
+        .outputMode('complete')\
+        .format('console')\
+        .option('checkpointLocation', checkpointDir)\
+        .start()
 
-    spark.stop()
+    query.awaitTermination()
