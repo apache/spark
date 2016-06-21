@@ -434,19 +434,19 @@ setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
-#' @rdname statfunctions
+#' @rdname cov
 #' @export
 setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
-#' @rdname statfunctions
+#' @rdname corr
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
-#' @rdname statfunctions
+#' @rdname cov
 #' @export
 setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 
-#' @rdname statfunctions
+#' @rdname covar_pop
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
