@@ -237,7 +237,7 @@ class PipelineTests(PySparkTestCase):
             pipeline_model = pipeline.fit(dataset)
             return pipeline_model.transform(dataset)
         self.assertEqual(dataset.index, doTransform(Pipeline()).index)
-        self.assertEqual(dataset.index, doTransform(Pipeline(stages=None)).index)
+        self.assertEqual(dataset.index, doTransform(Pipeline(stages=[])).index)
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
