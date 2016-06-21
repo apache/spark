@@ -120,27 +120,35 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
  * Extracts a vocabulary from document collections and generates a [[CountVectorizerModel]].
  */
 @Experimental
-class CountVectorizer(override val uid: String)
+@Since("1.5.0")
+class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[CountVectorizerModel] with CountVectorizerParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("cntVec"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setVocabSize(value: Int): this.type = set(vocabSize, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMinDF(value: Double): this.type = set(minDF, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMinTF(value: Double): this.type = set(minTF, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   @Since("2.0.0")
@@ -176,10 +184,12 @@ class CountVectorizer(override val uid: String)
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): CountVectorizer = defaultCopy(extra)
 }
 
@@ -196,26 +206,34 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
 @Experimental
-class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])
+@Since("1.5.0")
+class CountVectorizerModel(
+    @Since("1.5.0") override val uid: String,
+    @Since("1.5.0") val vocabulary: Array[String])
   extends Model[CountVectorizerModel] with CountVectorizerParams with MLWritable {
 
   import CountVectorizerModel._
 
+  @Since("1.5.0")
   def this(vocabulary: Array[String]) = {
     this(Identifiable.randomUID("cntVecModel"), vocabulary)
     set(vocabSize, vocabulary.length)
   }
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setMinTF(value: Double): this.type = set(minTF, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
@@ -252,10 +270,12 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
     dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): CountVectorizerModel = {
     val copied = new CountVectorizerModel(uid, vocabulary).setParent(parent)
     copyValues(copied, extra)

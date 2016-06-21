@@ -85,21 +85,28 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  * which is computed as the square root of the unbiased sample variance.
  */
 @Experimental
-class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
-  with StandardScalerParams with DefaultParamsWritable {
+@Since("1.2.0")
+class StandardScaler @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
+  extends Estimator[StandardScalerModel] with StandardScalerParams with DefaultParamsWritable {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("stdScal"))
 
   /** @group setParam */
+  @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setWithMean(value: Boolean): this.type = set(withMean, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setWithStd(value: Boolean): this.type = set(withStd, value)
 
   @Since("2.0.0")
@@ -113,10 +120,12 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 
@@ -135,18 +144,21 @@ object StandardScaler extends DefaultParamsReadable[StandardScaler] {
  * @param mean Mean of the StandardScalerModel
  */
 @Experimental
+@Since("1.2.0")
 class StandardScalerModel private[ml] (
-    override val uid: String,
-    val std: Vector,
-    val mean: Vector)
+    @Since("1.4.0") override val uid: String,
+    @Since("2.0.0") val std: Vector,
+    @Since("2.0.0") val mean: Vector)
   extends Model[StandardScalerModel] with StandardScalerParams with MLWritable {
 
   import StandardScalerModel._
 
   /** @group setParam */
+  @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -161,10 +173,12 @@ class StandardScalerModel private[ml] (
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScalerModel = {
     val copied = new StandardScalerModel(uid, std, mean)
     copyValues(copied, extra).setParent(parent)
