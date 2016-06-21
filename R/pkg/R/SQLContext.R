@@ -67,7 +67,7 @@ dispatchFunc <- function(newFuncSig, x, ...) {
 }
 
 #' return the SparkSession
-#' @note getSparkSession since 2.0.0
+#' @noRd
 getSparkSession <- function() {
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     get(".sparkRsession", envir = .sparkREnv)
@@ -77,7 +77,7 @@ getSparkSession <- function() {
 }
 
 #' infer the SQL type
-#' @note infer_type since 1.4.0
+#' @noRd
 infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
@@ -451,7 +451,7 @@ sql <- function(x, ...) {
 #' Create a SparkDataFrame from a SparkSQL Table
 #'
 #' Returns the specified Table as a SparkDataFrame.  The Table must have already been registered
-#' in the SQLContext.
+#' in the SparkSession.
 #'
 #' @param tableName The SparkSQL Table to convert to a SparkDataFrame.
 #' @return SparkDataFrame

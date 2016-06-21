@@ -36,6 +36,8 @@ sparkR.stop <- function() {
   sparkR.session.stop()
 }
 
+#' Stop the Spark Session and Spark Context
+#'
 #' Stop the Spark Session and Spark Context.
 #'
 #' Also terminates the backend this R session is connected to.
@@ -88,7 +90,7 @@ sparkR.session.stop <- function() {
   clearJobjs()
 }
 
-#' (Deprecated) Initialize a new Spark Context.
+#' (Deprecated) Initialize a new Spark Context
 #'
 #' This function initializes a new SparkContext.
 #'
@@ -249,7 +251,7 @@ sparkR.sparkContext <- function(
   sc
 }
 
-#' (Deprecated) Initialize a new SQLContext.
+#' (Deprecated) Initialize a new SQLContext
 #'
 #' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
@@ -278,7 +280,7 @@ sparkRSQL.init <- function(jsc = NULL) {
   sparkR.session(enableHiveSupport = FALSE)
 }
 
-#' (Deprecated) Initialize a new HiveContext.
+#' (Deprecated) Initialize a new HiveContext
 #'
 #' This function creates a HiveContext from an existing JavaSparkContext
 #'

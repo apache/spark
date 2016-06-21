@@ -463,6 +463,7 @@ setMethod("createOrReplaceTempView",
           })
 
 #' (Deprecated) Register Temporary Table
+#'
 #' Registers a SparkDataFrame as a Temporary Table in the SQLContext
 #' @param x A SparkDataFrame
 #' @param tableName A character vector containing the name of the table
@@ -606,10 +607,10 @@ setMethod("unpersist",
 #'
 #' The following options for repartition are possible:
 #' \itemize{
-#'  \item{"Option 1"} {Return a new SparkDataFrame partitioned by
+#'  \item{1.} {Return a new SparkDataFrame partitioned by
 #'                      the given columns into `numPartitions`.}
-#'  \item{"Option 2"} {Return a new SparkDataFrame that has exactly `numPartitions`.}
-#'  \item{"Option 3"} {Return a new SparkDataFrame partitioned by the given column(s),
+#'  \item{2.} {Return a new SparkDataFrame that has exactly `numPartitions`.}
+#'  \item{3.} {Return a new SparkDataFrame partitioned by the given column(s),
 #'                      using `spark.sql.shuffle.partitions` as number of partitions.}
 #'}
 #' @param x A SparkDataFrame
@@ -1053,7 +1054,7 @@ setMethod("limit",
             dataFrame(res)
           })
 
-#' Take the first NUM rows of a SparkDataFrame and return a the results as a data.frame
+#' Take the first NUM rows of a SparkDataFrame and return a the results as a R data.frame
 #'
 #' @family SparkDataFrame functions
 #' @rdname take
@@ -1076,7 +1077,7 @@ setMethod("take",
 
 #' Head
 #'
-#' Return the first NUM rows of a SparkDataFrame as a data.frame. If NUM is NULL,
+#' Return the first NUM rows of a SparkDataFrame as a R data.frame. If NUM is NULL,
 #' then head() returns the first 6 rows in keeping with the current data.frame
 #' convention in R.
 #'
@@ -1157,7 +1158,6 @@ setMethod("toRDD",
 #'
 #' @param x a SparkDataFrame
 #' @return a GroupedData
-#' @seealso GroupedData
 #' @family SparkDataFrame functions
 #' @rdname groupBy
 #' @name groupBy
@@ -1242,9 +1242,9 @@ dapplyInternal <- function(x, func, schema) {
 #'
 #' @param x A SparkDataFrame
 #' @param func A function to be applied to each partition of the SparkDataFrame.
-#'             func should have only one parameter, to which a data.frame corresponds
+#'             func should have only one parameter, to which a R data.frame corresponds
 #'             to each partition will be passed.
-#'             The output of func should be a data.frame.
+#'             The output of func should be a R data.frame.
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               It must match the output of func.
 #' @family SparkDataFrame functions
@@ -1291,9 +1291,9 @@ setMethod("dapply",
 #'
 #' @param x A SparkDataFrame
 #' @param func A function to be applied to each partition of the SparkDataFrame.
-#'             func should have only one parameter, to which a data.frame corresponds
+#'             func should have only one parameter, to which a R data.frame corresponds
 #'             to each partition will be passed.
-#'             The output of func should be a data.frame.
+#'             The output of func should be a R data.frame.
 #' @family SparkDataFrame functions
 #' @rdname dapplyCollect
 #' @name dapplyCollect
@@ -1641,7 +1641,6 @@ setMethod("select", signature(x = "SparkDataFrame", col = "character"),
             }
           })
 
-#' @family SparkDataFrame functions
 #' @rdname select
 #' @export
 #' @note select(SparkDataFrame, Column) since 1.4.0
@@ -1654,7 +1653,6 @@ setMethod("select", signature(x = "SparkDataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
-#' @family SparkDataFrame functions
 #' @rdname select
 #' @export
 #' @note select(SparkDataFrame, list) since 1.4.0
@@ -2001,7 +1999,6 @@ setMethod("filter",
             dataFrame(sdf)
           })
 
-#' @family SparkDataFrame functions
 #' @rdname filter
 #' @name where
 #' @note where since 1.4.0
@@ -2222,11 +2219,13 @@ setMethod("merge",
             joinRes
           })
 
+#' Creates a list of columns by replacing the intersected ones with aliases
+#'
 #' Creates a list of columns by replacing the intersected ones with aliases.
 #' The name of the alias column is formed by concatanating the original column name and a suffix.
 #'
-#' @param x a SparkDataFrame on which the
-#' @param intersectedColNames a list of intersected column names
+#' @param x a SparkDataFrame
+#' @param intersectedColNames a list of intersected column names of the SparkDataFrame
 #' @param suffix a suffix for the column name
 #' @return list of columns
 #'
@@ -2513,9 +2512,9 @@ setMethod("summary",
           })
 
 
-#' dropna
+#' A set of SparkDataFrame functions working with NA values
 #'
-#' Returns a new SparkDataFrame omitting rows with null values.
+#' dropna, na.omit - Returns a new SparkDataFrame omitting rows with null values.
 #'
 #' @param x A SparkDataFrame.
 #' @param how "any" or "all".
@@ -2567,9 +2566,7 @@ setMethod("na.omit",
             dropna(object, how, minNonNulls, cols)
           })
 
-#' fillna
-#'
-#' Replace null values.
+#' fillna - Replace null values.
 #'
 #' @param x A SparkDataFrame.
 #' @param value Value to replace null values with.
@@ -2640,7 +2637,7 @@ setMethod("fillna",
             dataFrame(sdf)
           })
 
-#' Download data from a SparkDataFrame into a data.frame
+#' Download data from a SparkDataFrame into a R data.frame
 #'
 #' This function downloads the contents of a SparkDataFrame into an R's data.frame.
 #' Since data.frames are held in memory, ensure that you have enough memory

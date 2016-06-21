@@ -430,7 +430,7 @@ setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
 #' @export
 setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
 
-#' @rdname schema
+#' @rdname columns
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
 
@@ -495,7 +495,7 @@ setGeneric("na.omit",
              standardGeneric("na.omit")
            })
 
-#' @rdname schema
+#' @rdname dtypes
 #' @export
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
@@ -551,7 +551,7 @@ setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 #' @export
 setGeneric("orderBy", function(x, col, ...) { standardGeneric("orderBy") })
 
-#' @rdname schema
+#' @rdname printSchema
 #' @export
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
@@ -638,7 +638,7 @@ setGeneric("schema", function(x) { standardGeneric("schema") })
 #' @export
 setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
 
-#' @rdname select
+#' @rdname selectExpr
 #' @export
 setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
 
@@ -693,67 +693,67 @@ setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSp
 
 ###################### Column Methods ##########################
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
-#' @rdname column
+#' @rdname between
 #' @export
 setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
-#' @rdname column
+#' @rdname cast
 #' @export
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("desc", function(x) { standardGeneric("desc") })
 
-#' @rdname column
+#' @rdname endsWith
 #' @export
 setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("like", function(x, ...) { standardGeneric("like") })
 
-#' @rdname column
+#' @rdname columnfunctions
 #' @export
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
-#' @rdname column
+#' @rdname startsWith
 #' @export
 setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
-#' @rdname column
+#' @rdname when
 #' @export
 setGeneric("when", function(condition, value) { standardGeneric("when") })
 
-#' @rdname column
+#' @rdname otherwise
 #' @export
 setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 
@@ -825,7 +825,7 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @export
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
-#' @rdname col
+#' @rdname column
 #' @export
 setGeneric("column", function(x) { standardGeneric("column") })
 
@@ -1119,7 +1119,7 @@ setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 #' @export
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
 
-#' @rdname signum
+#' @rdname sign
 #' @export
 setGeneric("signum", function(x) { standardGeneric("signum") })
 
