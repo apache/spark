@@ -21,6 +21,7 @@ import java.util.Random
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Codec
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
@@ -332,7 +333,7 @@ abstract class RDD[T: ClassTag](
     }) match {
       case Left(blockResult) =>
         if (readCachedBlock) {
-          val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
+          val existingMetrics = context.taskMetrics().inputMetrics
           existingMetrics.incBytesRead(blockResult.bytes)
           new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
             override def next(): T = {
@@ -433,8 +434,11 @@ abstract class RDD[T: ClassTag](
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
    * data distributed using a hash partitioner.
    */
-  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
+  def coalesce(numPartitions: Int, shuffle: Boolean = false,
+               partitionCoalescer: Option[PartitionCoalescer] = Option.empty)
+              (implicit ord: Ordering[T] = null)
       : RDD[T] = withScope {
+    require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
       val distributePartition = (index: Int, items: Iterator[T]) => {
@@ -451,9 +455,10 @@ abstract class RDD[T: ClassTag](
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
-        numPartitions).values
+        numPartitions,
+        partitionCoalescer).values
     } else {
-      new CoalescedRDD(this, numPartitions)
+      new CoalescedRDD(this, numPartitions, partitionCoalescer)
     }
   }
 
@@ -694,14 +699,14 @@ abstract class RDD[T: ClassTag](
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String): RDD[String] = withScope {
-    new PipedRDD(this, command)
+    pipe(command)
   }
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String, env: Map[String, String]): RDD[String] = withScope {
-    new PipedRDD(this, command, env)
+    pipe(command, env)
   }
 
   /**
@@ -721,6 +726,9 @@ abstract class RDD[T: ClassTag](
    *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
    *                          for (e &lt;- record._2) {f(e)}
    * @param separateWorkingDir Use separate working directories for each task.
+   * @param bufferSize Buffer size for the stdin writer for the piped process.
+   * @param encoding Char encoding used for interacting (via stdin, stdout and stderr) with
+   *                 the piped process
    * @return the result RDD
    */
   def pipe(
@@ -728,11 +736,15 @@ abstract class RDD[T: ClassTag](
       env: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false): RDD[String] = withScope {
+      separateWorkingDir: Boolean = false,
+      bufferSize: Int = 8192,
+      encoding: String = Codec.defaultCharsetCodec.name): RDD[String] = withScope {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
-      separateWorkingDir)
+      separateWorkingDir,
+      bufferSize,
+      encoding)
   }
 
   /**
@@ -1101,10 +1113,21 @@ abstract class RDD[T: ClassTag](
   /**
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
+   *
+   * The confidence is the probability that the error bounds of the result will
+   * contain the true value. That is, if countApprox were called repeatedly
+   * with confidence 0.9, we would expect 90% of the results to contain the
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
+   * @return a potentially incomplete result, with error bounds
    */
   def countApprox(
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = withScope {
+    require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
     val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
       var result = 0L
       while (iter.hasNext) {
@@ -1131,10 +1154,15 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Approximate version of countByValue().
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
+   * @return a potentially incomplete result, with error bounds
    */
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
       (implicit ord: Ordering[T] = null)
       : PartialResult[Map[T, BoundedDouble]] = withScope {
+    require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }

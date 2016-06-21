@@ -237,3 +237,13 @@ a.expandbutton {
   color: #333;
   text-decoration: none;
 }
+
+.log-more-btn, .log-new-btn {
+  width: 100%
+}
+
+.no-new-alert {
+  text-align: center;
+  margin: 0;
+  padding: 4px 0;
+}

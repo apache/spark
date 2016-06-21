@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.parquet.schema.MessageTypeParser
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -54,7 +54,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -78,7 +78,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -375,7 +375,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         StructField("lowerCase", StringType),
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation.mergeMetastoreParquetSchema(
+      ParquetFileFormat.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("lowercase", StringType),
           StructField("uppercase", DoubleType, nullable = false))),
@@ -390,7 +390,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       StructType(Seq(
         StructField("UPPERCase", DoubleType, nullable = false)))) {
 
-      ParquetRelation.mergeMetastoreParquetSchema(
+      ParquetFileFormat.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false))),
 
@@ -401,7 +401,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     // Metastore schema contains additional non-nullable fields.
     assert(intercept[Throwable] {
-      ParquetRelation.mergeMetastoreParquetSchema(
+      ParquetFileFormat.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("uppercase", DoubleType, nullable = false),
           StructField("lowerCase", BinaryType, nullable = false))),
@@ -412,7 +412,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     // Conflicting non-nullable field names
     intercept[Throwable] {
-      ParquetRelation.mergeMetastoreParquetSchema(
+      ParquetFileFormat.mergeMetastoreParquetSchema(
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
@@ -426,7 +426,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         StructField("firstField", StringType, nullable = true),
         StructField("secondField", StringType, nullable = true),
         StructField("thirdfield", StringType, nullable = true)))) {
-      ParquetRelation.mergeMetastoreParquetSchema(
+      ParquetFileFormat.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -439,7 +439,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     // Merge should fail if the Metastore contains any additional fields that are not
     // nullable.
     assert(intercept[Throwable] {
-      ParquetRelation.mergeMetastoreParquetSchema(
+      ParquetFileFormat.mergeMetastoreParquetSchema(
         StructType(Seq(
           StructField("firstfield", StringType, nullable = true),
           StructField("secondfield", StringType, nullable = true),
@@ -451,31 +451,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   }
 
   test("schema merging failure error message") {
+    import testImplicits._
+
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sqlContext.range(3).write.parquet(s"$path/p=1")
-      sqlContext.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
+      spark.range(3).write.parquet(s"$path/p=1")
+      spark.range(3).select('id cast IntegerType as 'id).write.parquet(s"$path/p=2")
 
       val message = intercept[SparkException] {
-        sqlContext.read.option("mergeSchema", "true").parquet(path).schema
+        spark.read.option("mergeSchema", "true").parquet(path).schema
       }.getMessage
 
-      assert(message.contains("Failed merging schema of file"))
-    }
-
-    // test for second merging (after read Parquet schema in parallel done)
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      sqlContext.range(3).write.parquet(s"$path/p=1")
-      sqlContext.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
-
-      sqlContext.sparkContext.conf.set("spark.default.parallelism", "20")
-
-      val message = intercept[SparkException] {
-        sqlContext.read.option("mergeSchema", "true").parquet(path).schema
-      }.getMessage
-
-      assert(message.contains("Failed merging schema:"))
+      assert(message.contains("Failed merging schema"))
     }
   }
 
@@ -1065,18 +1052,26 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       parquetSchema: String,
       catalystSchema: StructType,
       expectedSchema: String): Unit = {
+    testSchemaClipping(testName, parquetSchema, catalystSchema,
+      MessageTypeParser.parseMessageType(expectedSchema))
+  }
+
+  private def testSchemaClipping(
+      testName: String,
+      parquetSchema: String,
+      catalystSchema: StructType,
+      expectedSchema: MessageType): Unit = {
     test(s"Clipping - $testName") {
-      val expected = MessageTypeParser.parseMessageType(expectedSchema)
-      val actual = CatalystReadSupport.clipParquetSchema(
+      val actual = ParquetReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
 
       try {
-        expected.checkContains(actual)
-        actual.checkContains(expected)
+        expectedSchema.checkContains(actual)
+        actual.checkContains(expectedSchema)
       } catch { case cause: Throwable =>
         fail(
           s"""Expected clipped schema:
-             |$expected
+             |$expectedSchema
              |Actual clipped schema:
              |$actual
            """.stripMargin,
@@ -1429,7 +1424,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = "message root {}")
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
 
   testSchemaClipping(
     "disjoint field sets",

@@ -33,6 +33,11 @@ object SortPrefixUtils {
     override def compare(prefix1: Long, prefix2: Long): Int = 0
   }
 
+  /**
+   * Dummy sort prefix result to use for empty rows.
+   */
+  private val emptyPrefix = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+
   def getPrefixComparator(sortOrder: SortOrder): PrefixComparator = {
     sortOrder.dataType match {
       case StringType =>
@@ -66,21 +71,56 @@ object SortPrefixUtils {
   }
 
   /**
+   * Returns whether the specified SortOrder can be satisfied with a radix sort on the prefix.
+   */
+  def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
+    sortOrder.dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
+           TimestampType | FloatType | DoubleType =>
+        true
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Returns whether the fully sorting on the specified key field is possible with radix sort.
+   */
+  def canSortFullyWithPrefix(field: StructField): Boolean = {
+    canSortFullyWithPrefix(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+  }
+
+  /**
    * Creates the prefix computer for the first field in the given schema, in ascending order.
    */
   def createPrefixGenerator(schema: StructType): UnsafeExternalRowSorter.PrefixComputer = {
     if (schema.nonEmpty) {
       val boundReference = BoundReference(0, schema.head.dataType, nullable = true)
-      val prefixProjection = UnsafeProjection.create(
-        SortPrefix(SortOrder(boundReference, Ascending)))
+      val prefixExpr = SortPrefix(SortOrder(boundReference, Ascending))
+      val prefixProjection = UnsafeProjection.create(prefixExpr)
       new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow): Long = {
-          prefixProjection.apply(row).getLong(0)
+        private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+        override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          val prefix = prefixProjection.apply(row)
+          if (prefix.isNullAt(0)) {
+            result.isNull = true
+            result.value = prefixExpr.nullValue
+          } else {
+            result.isNull = false
+            result.value = prefix.getLong(0)
+          }
+          result
         }
       }
     } else {
       new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow): Long = 0
+        override def computePrefix(row: InternalRow):
+            UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+          emptyPrefix
+        }
       }
     }
   }

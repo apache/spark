@@ -17,22 +17,30 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.StreamTest
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.expressions.scala.typed
+import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
 
 object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
+class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    StateStore.stop()
+  }
 
   import testImplicits._
 
-  test("simple count") {
+  test("simple count, update mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
@@ -41,18 +49,83 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
         .agg(count("*"))
         .as[(Int, Long)]
 
-    testStream(aggregated)(
+    testStream(aggregated, Update)(
       AddData(inputData, 3),
       CheckLastBatch((3, 1)),
       AddData(inputData, 3, 2),
       CheckLastBatch((3, 2), (2, 1)),
       StopStream,
-      StartStream,
+      StartStream(),
       AddData(inputData, 3, 2, 1),
       CheckLastBatch((3, 3), (2, 2), (1, 1)),
       // By default we run in new tuple mode.
       AddData(inputData, 4, 4, 4, 4),
       CheckLastBatch((4, 4))
+    )
+  }
+
+  test("simple count, complete mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 3),
+      CheckLastBatch((3, 1)),
+      AddData(inputData, 2),
+      CheckLastBatch((3, 1), (2, 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch((3, 2), (2, 2), (1, 1)),
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch((4, 4), (3, 2), (2, 2), (1, 1))
+    )
+  }
+
+  test("simple count, append mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    val e = intercept[AnalysisException] {
+      testStream(aggregated, Append)()
+    }
+    Seq("append", "not supported").foreach { m =>
+      assert(e.getMessage.toLowerCase.contains(m.toLowerCase))
+    }
+  }
+
+  test("sort after aggregate in complete mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .toDF("value", "count")
+        .orderBy($"count".desc)
+        .as[(Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 3),
+      CheckLastBatch(isSorted = true, (3, 1)),
+      AddData(inputData, 2, 3),
+      CheckLastBatch(isSorted = true, (3, 2), (2, 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch(isSorted = true, (3, 3), (2, 2), (1, 1)),
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch(isSorted = true, (4, 4), (3, 3), (2, 2), (1, 1))
     )
   }
 
@@ -65,30 +138,11 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
         .agg(count("*"))
         .as[(Int, Int, Long)]
 
-    testStream(aggregated)(
+    testStream(aggregated, Update)(
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 1), (2, 3, 1)),
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 2), (2, 3, 2))
-    )
-  }
-
-  test("multiple aggregations") {
-    val inputData = MemoryStream[Int]
-
-    val aggregated =
-      inputData.toDF()
-        .groupBy($"value")
-        .agg(count("*") as 'count)
-        .groupBy($"value" % 2)
-        .agg(sum($"count"))
-        .as[(Int, Long)]
-
-    testStream(aggregated)(
-      AddData(inputData, 1, 2, 3, 4),
-      CheckLastBatch((0, 2), (1, 2)),
-      AddData(inputData, 1, 3, 5),
-      CheckLastBatch((1, 5))
     )
   }
 
@@ -109,11 +163,11 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
           .agg(count("*"))
           .as[(Int, Long)]
 
-    testStream(aggregated)(
-      StartStream,
+    testStream(aggregated, Update)(
+      StartStream(),
       AddData(inputData, 1, 2, 3, 4),
       ExpectFailure[SparkException](),
-      StartStream,
+      StartStream(),
       CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))
     )
   }
@@ -122,7 +176,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
     val inputData = MemoryStream[(String, Int)]
     val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
 
-    testStream(aggregated)(
+    testStream(aggregated, Update)(
       AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),
       CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
     )

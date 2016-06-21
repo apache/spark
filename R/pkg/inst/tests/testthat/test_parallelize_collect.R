@@ -33,7 +33,8 @@ numPairs <- list(list(1, 1), list(1, 2), list(2, 2), list(2, 3))
 strPairs <- list(list(strList, strList), list(strList, strList))
 
 # JavaSparkContext handle
-jsc <- sparkR.init()
+sparkSession <- sparkR.session()
+jsc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Tests
 

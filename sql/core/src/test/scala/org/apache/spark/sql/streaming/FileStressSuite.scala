@@ -23,9 +23,7 @@ import java.util.UUID
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{ContinuousQuery, ContinuousQueryException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 /**
@@ -38,10 +36,18 @@ import org.apache.spark.util.Utils
  *
  * At the end, the resulting files are loaded and the answer is checked.
  */
-class FileStressSuite extends StreamTest with SharedSQLContext {
+class FileStressSuite extends StreamTest {
   import testImplicits._
 
-  test("fault tolerance stress test") {
+  testQuietly("fault tolerance stress test - unpartitioned output") {
+    stressTest(partitionWrites = false)
+  }
+
+  testQuietly("fault tolerance stress test - partitioned output") {
+    stressTest(partitionWrites = true)
+  }
+
+  def stressTest(partitionWrites: Boolean): Unit = {
     val numRecords = 10000
     val inputDir = Utils.createTempDir(namePrefix = "stream.input").getCanonicalPath
     val stagingDir = Utils.createTempDir(namePrefix = "stream.staging").getCanonicalPath
@@ -51,7 +57,7 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     @volatile
     var continue = true
     @volatile
-    var stream: ContinuousQuery = null
+    var stream: StreamingQuery = null
 
     val writer = new Thread("stream writer") {
       override def run(): Unit = {
@@ -92,19 +98,37 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     }
     writer.start()
 
-    val input = sqlContext.read.format("text").stream(inputDir)
-    def startStream(): ContinuousQuery = input
+    val input = spark.readStream.format("text").load(inputDir)
+
+    def startStream(): StreamingQuery = {
+      val output = input
         .repartition(5)
         .as[String]
         .mapPartitions { iter =>
           val rand = Random.nextInt(100)
-          if (rand < 5) { sys.error("failure") }
+          if (rand < 10) {
+            sys.error("failure")
+          }
           iter.map(_.toLong)
         }
-        .write
-        .format("parquet")
-        .option("checkpointLocation", checkpoint)
-        .startStream(outputDir)
+        .map(x => (x % 400, x.toString))
+        .toDF("id", "data")
+
+      if (partitionWrites) {
+        output
+          .writeStream
+          .partitionBy("id")
+          .format("parquet")
+          .option("checkpointLocation", checkpoint)
+          .start(outputDir)
+      } else {
+        output
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpoint)
+          .start(outputDir)
+      }
+    }
 
     var failures = 0
     val streamThread = new Thread("stream runner") {
@@ -115,7 +139,7 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
         try {
           stream.awaitTermination()
         } catch {
-          case ce: ContinuousQueryException =>
+          case ce: StreamingQueryException =>
             failures += 1
         }
       }
@@ -124,6 +148,6 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     streamThread.join()
 
     logError(s"Stream restarted $failures times.")
-    assert(sqlContext.read.parquet(outputDir).distinct().count() == numRecords)
+    assert(spark.read.parquet(outputDir).distinct().count() == numRecords)
   }
 }

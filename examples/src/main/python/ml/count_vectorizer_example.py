@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import CountVectorizer
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="CountVectorizerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("CountVectorizerExample")\
+        .getOrCreate()
 
     # $example on$
     # Input data: Each row is a bag of words with a ID.
-    df = sqlContext.createDataFrame([
+    df = spark.createDataFrame([
         (0, "a b c".split(" ")),
         (1, "a b b c a".split(" "))
     ], ["id", "words"])
@@ -41,4 +42,4 @@ if __name__ == "__main__":
     result.show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

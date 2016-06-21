@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.{List => JList}
 import java.util.UUID
 
+import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
@@ -30,9 +32,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -134,6 +136,11 @@ final class OneVsRestModel private[ml] (
     private[ml] val labelMetadata: Metadata,
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
+
+  /** A Python-friendly auxiliary constructor. */
+  private[ml] def this(uid: String, models: JList[_ <: ClassificationModel[_, _]]) = {
+    this(uid, Metadata.empty, models.asScala.toArray)
+  }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {

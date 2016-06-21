@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.io.File
 
 import scala.collection.Map
+import scala.io.Codec
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
@@ -171,7 +172,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       val pipedPwd = nums.pipe(Seq("pwd"), separateWorkingDir = true)
       val collectPwd = pipedPwd.collect()
       assert(collectPwd(0).contains("tasks/"))
-      val pipedLs = nums.pipe(Seq("ls"), separateWorkingDir = true).collect()
+      val pipedLs = nums.pipe(Seq("ls"), separateWorkingDir = true, bufferSize = 16384).collect()
       // make sure symlinks were created
       assert(pipedLs.length > 0)
       // clean up top level tasks directory
@@ -207,7 +208,16 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
         }
       }
       val hadoopPart1 = generateFakeHadoopPartition()
-      val pipedRdd = new PipedRDD(nums, "printenv " + varName)
+      val pipedRdd =
+        new PipedRDD(
+          nums,
+          PipedRDD.tokenize("printenv " + varName),
+          Map(),
+          null,
+          null,
+          false,
+          4092,
+          Codec.defaultCharsetCodec.name)
       val tContext = TaskContext.empty()
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray

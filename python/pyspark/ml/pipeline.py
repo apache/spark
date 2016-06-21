@@ -20,31 +20,12 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from pyspark import SparkContext
-from pyspark import since
+from pyspark import since, keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLReadable, MLWritable
+from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaParams
-from pyspark.mllib.common import inherit_doc
-
-
-@inherit_doc
-class PipelineMLWriter(JavaMLWriter):
-    """
-    Private Pipeline utility class that can save ML instances through their Scala implementation.
-
-    We can currently use JavaMLWriter, rather than MLWriter, since Pipeline implements _to_java.
-    """
-
-
-@inherit_doc
-class PipelineMLReader(JavaMLReader):
-    """
-    Private utility class that can load Pipeline instances through their Scala implementation.
-
-    We can currently use JavaMLReader, rather than MLReader, since Pipeline implements _from_java.
-    """
+from pyspark.ml.common import inherit_doc
 
 
 @inherit_doc
@@ -61,7 +42,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     stage. If a stage is a :py:class:`Transformer`, its
     :py:meth:`Transformer.transform` method will be called to produce
     the dataset for the next stage. The fitted model from a
-    :py:class:`Pipeline` is an :py:class:`PipelineModel`, which
+    :py:class:`Pipeline` is a :py:class:`PipelineModel`, which
     consists of fitted models and transformers, corresponding to the
     pipeline stages. If there are no stages, the pipeline acts as an
     identity transformer.
@@ -90,8 +71,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         :param value: a list of transformers or estimators
         :return: the pipeline instance
         """
-        self._set(stages=value)
-        return self
+        return self._set(stages=value)
 
     @since("1.3.0")
     def getStages(self):
@@ -154,8 +134,8 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -166,7 +146,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     @since("2.0.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return PipelineMLReader(cls)
+        return JavaMLReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -202,27 +182,6 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
 
 @inherit_doc
-class PipelineModelMLWriter(JavaMLWriter):
-    """
-    Private PipelineModel utility class that can save ML instances through their Scala
-    implementation.
-
-    We can (currently) use JavaMLWriter, rather than MLWriter, since PipelineModel implements
-    _to_java.
-    """
-
-
-@inherit_doc
-class PipelineModelMLReader(JavaMLReader):
-    """
-    Private utility class that can load PipelineModel instances through their Scala implementation.
-
-    We can currently use JavaMLReader, rather than MLReader, since PipelineModel implements
-    _from_java.
-    """
-
-
-@inherit_doc
 class PipelineModel(Model, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
@@ -254,8 +213,8 @@ class PipelineModel(Model, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineModelMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -265,8 +224,8 @@ class PipelineModel(Model, MLReadable, MLWritable):
     @classmethod
     @since("2.0.0")
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
-        return PipelineModelMLReader(cls)
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):

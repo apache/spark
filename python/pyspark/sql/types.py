@@ -27,7 +27,7 @@ from array import array
 
 if sys.version >= "3":
     long = int
-    unicode = str
+    basestring = unicode = str
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -401,6 +401,7 @@ class StructField(DataType):
         False
         """
         assert isinstance(dataType, DataType), "dataType should be DataType"
+        assert isinstance(name, basestring), "field name should be string"
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -442,6 +443,15 @@ class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
     This is the data type representing a :class:`Row`.
+
+    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    A contained :class:`StructField` can be accessed by name or position.
+
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct1["f1"]
+    StructField(f1,StringType,true)
+    >>> struct1[0]
+    StructField(f1,StringType,true)
     """
     def __init__(self, fields=None):
         """
@@ -463,7 +473,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -508,19 +518,44 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
         return self
 
+    def __iter__(self):
+        """Iterate the fields"""
+        return iter(self.fields)
+
+    def __len__(self):
+        """Return the number of fields."""
+        return len(self.fields)
+
+    def __getitem__(self, key):
+        """Access fields by name or slice."""
+        if isinstance(key, str):
+            for field in self:
+                if field.name == key:
+                    return field
+            raise KeyError('No StructField named {0}'.format(key))
+        elif isinstance(key, int):
+            try:
+                return self.fields[key]
+            except IndexError:
+                raise IndexError('StructType index out of range')
+        elif isinstance(key, slice):
+            return StructType(self.fields[key])
+        else:
+            raise TypeError('StructType keys should be strings, integers or slices')
+
     def simpleString(self):
-        return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
+        return 'struct<%s>' % (','.join(f.simpleString() for f in self))
 
     def __repr__(self):
         return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self.fields))
+                ",".join(str(field) for field in self))
 
     def jsonValue(self):
         return {"type": self.typeName(),
-                "fields": [f.jsonValue() for f in self.fields]}
+                "fields": [f.jsonValue() for f in self]}
 
     @classmethod
     def fromJson(cls, json):
@@ -1011,7 +1046,7 @@ def _need_converter(dataType):
 
 
 def _create_converter(dataType):
-    """Create an converter to drop the names of fields in obj """
+    """Create a converter to drop the names of fields in obj """
     if not _need_converter(dataType):
         return lambda x: x
 
@@ -1325,7 +1360,13 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}. The fields in it can be accessed like attributes.
+    A row in L{DataFrame}.
+    The fields in it can be accessed:
+
+    * like attributes (``row.key``)
+    * like dictionary values (``row[key]``)
+
+    ``key in row`` will search through row keys.
 
     Row can be used to create a row object by using named arguments,
     the fields will be sorted by names.
@@ -1337,6 +1378,10 @@ class Row(tuple):
     ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
+    >>> 'name' in row
+    True
+    >>> 'wrong_key' in row
+    False
 
     Row also can be used to create another Row like class, then it
     could be used to create Row objects, such as
@@ -1344,6 +1389,10 @@ class Row(tuple):
     >>> Person = Row("name", "age")
     >>> Person
     <Row(name, age)>
+    >>> 'name' in Person
+    True
+    >>> 'wrong_key' in Person
+    False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
     """
@@ -1352,11 +1401,7 @@ class Row(tuple):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
-        if args:
-            # create row class or objects
-            return tuple.__new__(self, args)
-
-        elif kwargs:
+        if kwargs:
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
@@ -1364,7 +1409,8 @@ class Row(tuple):
             return row
 
         else:
-            raise ValueError("No args or kwargs")
+            # create row class or objects
+            return tuple.__new__(self, args)
 
     def asDict(self, recursive=False):
         """
@@ -1396,6 +1442,12 @@ class Row(tuple):
             return dict(zip(self.__fields__, (conv(o) for o in self)))
         else:
             return dict(zip(self.__fields__, self))
+
+    def __contains__(self, item):
+        if hasattr(self, "__fields__"):
+            return item in self.__fields__
+        else:
+            return super(Row, self).__contains__(item)
 
     # let object acts like class
     def __call__(self, *args):

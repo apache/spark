@@ -48,7 +48,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:latest"
+    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
@@ -62,7 +62,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   override def dataPreparation(conn: Connection): Unit = {
   }
 
-  ignore("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl

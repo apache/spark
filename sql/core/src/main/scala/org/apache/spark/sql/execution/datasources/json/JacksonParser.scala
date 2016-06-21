@@ -50,7 +50,7 @@ object JacksonParser extends Logging {
 
   /**
    * Parse the current token (and related children) according to a desired schema
-   * This is an wrapper for the method `convertField()` to handle a row wrapped
+   * This is a wrapper for the method `convertField()` to handle a row wrapped
    * with an array.
    */
   def convertRootField(

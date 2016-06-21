@@ -504,7 +504,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Returns a utility object to get structs.
-   * provided to keep API compabilitity with InternalRow for code generation
+   * provided to keep API compatibility with InternalRow for code generation
    */
   public ColumnarBatch.Row getStruct(int rowId, int size) {
     resultStruct.rowId = rowId;
@@ -569,9 +569,9 @@ public abstract class ColumnVector implements AutoCloseable {
 
   public final void putDecimal(int rowId, Decimal value, int precision) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
-      putInt(rowId, value.toInt());
+      putInt(rowId, (int) value.toUnscaledLong());
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      putLong(rowId, value.toLong());
+      putLong(rowId, value.toUnscaledLong());
     } else {
       BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
       putByteArray(rowId, bigInteger.toByteArray());

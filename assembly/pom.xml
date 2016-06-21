@@ -38,6 +38,13 @@
   </properties>
 
   <dependencies>
+    <!-- Prevent our dummy JAR from being included in Spark distributions or uploaded to YARN -->
+    <dependency>
+      <groupId>org.spark-project.spark</groupId>
+      <artifactId>unused</artifactId>
+      <version>1.0.0</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>

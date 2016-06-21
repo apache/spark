@@ -18,20 +18,20 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.RFormula
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object RFormulaExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("RFormulaExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("RFormulaExample")
+      .getOrCreate()
 
     // $example on$
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       (7, "US", 18, 1.0),
       (8, "CA", 12, 0.0),
       (9, "NZ", 15, 0.0)
@@ -43,7 +43,8 @@ object RFormulaExample {
     val output = formula.fit(dataset).transform(dataset)
     output.select("features", "label").show()
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

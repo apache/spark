@@ -423,9 +423,9 @@ private[sql] object StatFunctions extends Logging {
     def cleanElement(element: Any): String = {
       if (element == null) "null" else element.toString
     }
-    // get the distinct values of column 2, so that we can make them the column names
+    // get the distinct sorted values of column 2, so that we can make them the column names
     val distinctCol2: Map[Any, Int] =
-      counts.map(e => cleanElement(e.get(1))).distinct.zipWithIndex.toMap
+      counts.map(e => cleanElement(e.get(1))).distinct.sorted.zipWithIndex.toMap
     val columnSize = distinctCol2.size
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
       s"exceed 1e4. Currently $columnSize")
@@ -454,6 +454,6 @@ private[sql] object StatFunctions extends Logging {
     }
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
-    Dataset.ofRows(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
+    Dataset.ofRows(df.sparkSession, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
 }

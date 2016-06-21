@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
 
@@ -41,7 +41,7 @@ import org.apache.spark.unsafe.KVIterator
  *  - Step 0: Do hash-based aggregation.
  *  - Step 1: Sort all entries of the hash map based on values of grouping expressions and
  *            spill them to disk.
- *  - Step 2: Create a external sorter based on the spilled sorted map entries and reset the map.
+ *  - Step 2: Create an external sorter based on the spilled sorted map entries and reset the map.
  *  - Step 3: Get a sorted [[KVIterator]] from the external sorter.
  *  - Step 4: Repeat step 0 until no more input.
  *  - Step 5: Initialize sort-based aggregation on the sorted iterator.
@@ -82,13 +82,13 @@ class TungstenAggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
     testFallbackStartsAt: Option[(Int, Int)],
-    numOutputRows: LongSQLMetric,
-    dataSize: LongSQLMetric,
-    spillSize: LongSQLMetric)
+    numOutputRows: SQLMetric,
+    peakMemory: SQLMetric,
+    spillSize: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -415,11 +415,11 @@ class TungstenAggregationIterator(
       if (!hasNext) {
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-        val peakMemory = Math.max(mapMemory, sorterMemory)
+        val maxMemory = Math.max(mapMemory, sorterMemory)
         val metrics = TaskContext.get().taskMetrics()
-        dataSize += peakMemory
+        peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore
-        metrics.incPeakExecutionMemory(peakMemory)
+        metrics.incPeakExecutionMemory(maxMemory)
       }
       numOutputRows += 1
       res
@@ -434,12 +434,12 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   /**
-   * Generate a output row when there is no input and there is no grouping expression.
+   * Generate an output row when there is no input and there is no grouping expression.
    */
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     if (groupingExpressions.isEmpty) {
       sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
-      // We create a output row and copy it. So, we can free the map.
+      // We create an output row and copy it. So, we can free the map.
       val resultCopy =
         generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer).copy()
       hashMap.free()

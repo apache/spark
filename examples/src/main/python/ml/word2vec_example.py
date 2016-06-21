@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import Word2Vec
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="Word2VecExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("Word2VecExample")\
+        .getOrCreate()
 
     # $example on$
     # Input data: Each row is a bag of words from a sentence or document.
-    documentDF = sqlContext.createDataFrame([
+    documentDF = spark.createDataFrame([
         ("Hi I heard about Spark".split(" "), ),
         ("I wish Java could use case classes".split(" "), ),
         ("Logistic regression models are neat".split(" "), )
@@ -42,4 +43,4 @@ if __name__ == "__main__":
         print(feature)
     # $example off$
 
-    sc.stop()
+    spark.stop()

@@ -44,7 +44,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
@@ -71,6 +70,7 @@ import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
+import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.StatCounter;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -288,7 +288,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreach() {
-    final Accumulator<Integer> accum = sc.accumulator(0);
+    final LongAccumulator accum = sc.sc().longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
@@ -301,7 +301,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreachPartition() {
-    final Accumulator<Integer> accum = sc.accumulator(0);
+    final LongAccumulator accum = sc.sc().longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
       @Override
@@ -1378,6 +1378,7 @@ public class JavaAPISuite implements Serializable {
     assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void accumulators() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
@@ -1644,7 +1645,7 @@ public class JavaAPISuite implements Serializable {
           return new Tuple2<>(i % 2, 1);
         }
       });
-    Map<Integer, Object> fractions = Maps.newHashMap();
+    Map<Integer, Double> fractions = new HashMap<>();
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
@@ -1670,7 +1671,7 @@ public class JavaAPISuite implements Serializable {
               return new Tuple2<>(i % 2, 1);
           }
       });
-    Map<Integer, Object> fractions = Maps.newHashMap();
+    Map<Integer, Double> fractions = new HashMap<>();
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
