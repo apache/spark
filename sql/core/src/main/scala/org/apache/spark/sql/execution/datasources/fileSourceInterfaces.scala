@@ -399,6 +399,7 @@ private[sql] object HadoopFsRelation extends Logging {
         val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir, filter))
         if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
       }
+      // statuses do not have any dirs.
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus => f
 
