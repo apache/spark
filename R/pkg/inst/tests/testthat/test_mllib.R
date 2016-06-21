@@ -363,7 +363,7 @@ test_that("spark.naiveBayes", {
   t <- as.data.frame(Titanic)
   t1 <- t[t$Freq > 0, -5]
   df <- suppressWarnings(createDataFrame(t1))
-  m <- spark.naiveBayes(df, Survived ~ .)
+  m <- spark.naiveBayes(df, Survived ~ ., smoothing = 0.0)
   s <- summary(m)
   expect_equal(as.double(s$apriori[1, "Yes"]), 0.5833333, tolerance = 1e-6)
   expect_equal(sum(s$apriori), 1)
