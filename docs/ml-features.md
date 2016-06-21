@@ -251,11 +251,12 @@ frequently and don't carry as much meaning.
 `StopWordsRemover` takes as input a sequence of strings (e.g. the output
 of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
 words from the input sequences. The list of stopwords is specified by
-the `stopWords` parameter.  We provide [a list of stop
-words](http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words) by
-default, accessible by calling `getStopWords` on a newly instantiated
-`StopWordsRemover` instance. A boolean parameter `caseSensitive` indicates
-if the matches should be case sensitive (false by default).
+the `stopWords` parameter. Default stop words for some languages are accessible 
+by calling `StopWordsRemover.loadDefaultStopWords(language)`, for which available 
+options are "danish", "dutch", "english", "finnish", "french", "german", "hungarian", 
+"italian", "norwegian", "portuguese", "russian", "spanish", "swedish" and "turkish". 
+A boolean parameter `caseSensitive` indicates if the matches should be case sensitive 
+(false by default).
 
 **Examples**
 
@@ -346,7 +347,10 @@ for more details on the API.
 
 Binarization is the process of thresholding numerical features to binary (0/1) features.
 
-`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold` for binarization. Feature values greater than the threshold are binarized to 1.0; values equal to or less than the threshold are binarized to 0.0.
+`Binarizer` takes the common parameters `inputCol` and `outputCol`, as well as the `threshold`
+for binarization. Feature values greater than the threshold are binarized to 1.0; values equal
+to or less than the threshold are binarized to 0.0. Both Vector and Double types are supported
+for `inputCol`.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
