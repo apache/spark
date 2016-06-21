@@ -72,7 +72,7 @@ class DecisionTreeClassifierSuite
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
-  test("Binary classification with setting explicit uniform class weights") {
+  test("Binary classification with explicitly setting uniform class weights") {
     val dt = new DecisionTreeClassifier()
       .setImpurity("WeightedGini")
       .setMaxDepth(2)

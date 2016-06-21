@@ -102,17 +102,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
-  /**
-   * An array that stores the weights of class labels. All elements must be non-negative.
-   * (default = Array(1, 1))
-   * @group Param
-   */
-  final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
-    " that stores the weights of class labels. All elements must be non-negative.")
-
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
-    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10,
-    classWeights -> Array(1.0, 1.0))
+    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /** @group setParam */
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
@@ -153,12 +144,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
-  /** @group SetParam */
-  def setClassWeights(value: Array[Double]): this.type = set(classWeights, value)
-
-  /** @group GetParam */
-  final def getClassWeights: Array[Double] = $(classWeights)
-
   /**
    * Specifies how often to checkpoint the cached node IDs.
    * E.g. 10 means that the cache will get checkpointed every 10 iterations.
@@ -176,7 +161,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams
       numClasses: Int,
       oldAlgo: OldAlgo.Algo,
       oldImpurity: OldImpurity,
-      subsamplingRate: Double): OldStrategy = {
+      subsamplingRate: Double,
+      classWeights: Array[Double]): OldStrategy = {
     val strategy = OldStrategy.defaultStrategy(oldAlgo)
     strategy.impurity = oldImpurity
     strategy.checkpointInterval = getCheckpointInterval
@@ -189,8 +175,31 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
     strategy.subsamplingRate = subsamplingRate
-    strategy.classWeights = getClassWeights
+    strategy.classWeights = classWeights
     strategy
+  }
+
+  /** (private[ml]) Create a Strategy whose interface is compatible with the old API. */
+  private[ml] def getOldStrategy(
+    categoricalFeatures: Map[Int, Int],
+    numClasses: Int,
+    oldAlgo: OldAlgo.Algo,
+    oldImpurity: OldImpurity,
+    subsamplingRate: Double): OldStrategy = {
+  val strategy = OldStrategy.defaultStrategy(oldAlgo)
+  strategy.impurity = oldImpurity
+  strategy.checkpointInterval = getCheckpointInterval
+  strategy.maxBins = getMaxBins
+  strategy.maxDepth = getMaxDepth
+  strategy.maxMemoryInMB = getMaxMemoryInMB
+  strategy.minInfoGain = getMinInfoGain
+  strategy.minInstancesPerNode = getMinInstancesPerNode
+  strategy.useNodeIdCache = getCacheNodeIds
+  strategy.numClasses = numClasses
+  strategy.categoricalFeaturesInfo = categoricalFeatures
+  strategy.subsamplingRate = subsamplingRate
+  strategy.classWeights = Array(1.0, 1.0)
+  strategy
   }
 }
 
@@ -210,13 +219,27 @@ private[ml] trait TreeClassifierParams extends Params {
     s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
     (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
 
-  setDefault(impurity -> "gini")
+  /**
+   * An array that stores the weights of class labels. All elements must be non-negative.
+   * (default = Array(1.0, 1.0))
+   * @group Param
+   */
+  final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
+    " that stores the weights of class labels. All elements must be non-negative.")
+
+  setDefault(impurity -> "gini", classWeights -> Array(1.0, 1.0))
 
   /** @group setParam */
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase
+
+  /** @group SetParam */
+  def setClassWeights(value: Array[Double]): this.type = set(classWeights, value)
+
+  /** @group GetParam */
+  final def getClassWeights: Array[Double] = $(classWeights)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -257,13 +280,28 @@ private[ml] trait TreeRegressorParams extends Params {
     s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
     (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
 
-  setDefault(impurity -> "variance")
+  /**
+   * An array that stores the weights of class labels. This parameter will be ignored in
+   * regression trees.
+   * (default = Array())
+   * @group Param
+   */
+  final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
+    " that stores the weights of class labels. All elements must be non-negative.")
+
+  setDefault(impurity -> "variance", classWeights -> Array())
 
   /** @group setParam */
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase
+
+  /** @group SetParam */
+  def setClassWeights(value: Array[Double]): this.type = set(classWeights, value)
+
+  /** @group GetParam */
+  final def getClassWeights: Array[Double] = $(classWeights)
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -330,9 +368,19 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
       categoricalFeatures: Map[Int, Int],
       numClasses: Int,
       oldAlgo: OldAlgo.Algo,
-      oldImpurity: OldImpurity): OldStrategy = {
+      oldImpurity: OldImpurity,
+      classWeights: Array[Double]): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo,
-      oldImpurity, getSubsamplingRate)
+      oldImpurity, getSubsamplingRate, classWeights)
+  }
+
+  private[ml] def getOldStrategy(
+    categoricalFeatures: Map[Int, Int],
+    numClasses: Int,
+    oldAlgo: OldAlgo.Algo,
+    oldImpurity: OldImpurity): OldStrategy = {
+  super.getOldStrategy(categoricalFeatures, numClasses, oldAlgo,
+      oldImpurity, getSubsamplingRate, Array(1.0, 1.0))
   }
 }
 
@@ -475,7 +523,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
       categoricalFeatures: Map[Int, Int],
       oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
     val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2,
-      oldAlgo, OldVariance)
+      oldAlgo, OldVariance, Array(1.0, 1.0))
 
     // NOTE: The old API does not support "seed" so we ignore it.
     new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)

@@ -102,7 +102,7 @@ class Strategy @Since("1.3.0") (
   }
 
   /**
-   *  Make the class compatible with previous versions
+   *  Make the Strategy class compatible with old API
    */
   @Since("2.0.0")
   def this(

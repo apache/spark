@@ -238,7 +238,7 @@ private object RandomForestClassifierSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification,
-        rf.getOldImpurity)
+        rf.getOldImpurity, rf.getSubsamplingRate, rf.getClassWeights)
     val oldModel = OldRandomForest.trainClassifier(
       data.map(OldLabeledPoint.fromML), oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy,
       rf.getSeed.toInt)
