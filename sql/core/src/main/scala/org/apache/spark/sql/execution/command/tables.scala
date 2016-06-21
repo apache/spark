@@ -643,6 +643,10 @@ case class ShowPartitionsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
 
+    if (!catalog.tableExists(table)) {
+      throw new AnalysisException(s" Table does not exist")
+    }
+
     if (catalog.isTemporaryTable(table)) {
       throw new AnalysisException(
         s"SHOW PARTITIONS is not allowed on a temporary table: ${table.unquotedString}")
