@@ -34,6 +34,7 @@ setOldClass("jobj")
 #'
 #' @rdname crosstab
 #' @name crosstab
+#' @family stat functions
 #' @export
 #' @examples
 #' \dontrun{
@@ -58,6 +59,7 @@ setMethod("crosstab",
 #'
 #' @rdname cov
 #' @name cov
+#' @family stat functions
 #' @export
 #' @examples
 #'\dontrun{
@@ -86,6 +88,7 @@ setMethod("cov",
 #'
 #' @rdname corr
 #' @name corr
+#' @family stat functions
 #' @export
 #' @examples
 #'\dontrun{
@@ -117,6 +120,7 @@ setMethod("corr",
 #'
 #' @rdname freqItems
 #' @name freqItems
+#' @family stat functions
 #' @export
 #' @examples
 #' \dontrun{
@@ -154,6 +158,7 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #'
 #' @rdname approxQuantile
 #' @name approxQuantile
+#' @family stat functions
 #' @export
 #' @examples
 #' \dontrun{
@@ -184,6 +189,7 @@ setMethod("approxQuantile",
 #'
 #' @rdname sampleBy
 #' @name sampleBy
+#' @family stat functions
 #' @export
 #' @examples
 #'\dontrun{
