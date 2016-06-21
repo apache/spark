@@ -281,4 +281,34 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
+  test("SPARK-16106 locality levels updated if executor added to existing host") {
+    // val taskScheduler = setupScheduler("spark.locality.wait" -> "0s")
+    val taskScheduler = setupScheduler()
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, 0,
+      (0 until 2).map { _ => Seq(TaskLocation("host0", "executor2"))}: _*
+    ))
+
+    val taskDescs = taskScheduler.resourceOffers(Seq(
+      new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1)
+    )).flatten
+    // only schedule one task because of locality
+    assert(taskDescs.size === 1)
+
+    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId).get
+    assert(mgr.myLocalityLevels.toSet === Set(TaskLocality.NODE_LOCAL, TaskLocality.ANY))
+    // we should know about both executors, evne though we only scheduled tasks on one of them
+    assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0")))
+    assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1")))
+
+    // suppose that now executor2 is added, we should realize that we can run process-local tasks
+    // and even though we don't schedule any tasks on the executor, we should still have it in
+    // our set of executors
+    taskScheduler.resourceOffers(Seq(new WorkerOffer("executor2", "host0", 1)))
+    assert(mgr.myLocalityLevels.toSet ===
+      Set(TaskLocality.PROCESS_LOCAL, TaskLocality.NODE_LOCAL, TaskLocality.ANY))
+    assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0", "executor2")))
+    assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1")))
+  }
 }
