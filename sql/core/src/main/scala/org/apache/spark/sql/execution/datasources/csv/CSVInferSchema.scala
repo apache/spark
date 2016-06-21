@@ -38,10 +38,32 @@ private[csv] object CSVInferSchema {
    *     2. Merge row types to find common type
    *     3. Replace any null types with string type
    */
-  def infer(
-      tokenRdd: RDD[Array[String]],
-      header: Array[String],
-      options: CSVOptions): StructType = {
+  def infer(csv: RDD[String], options: CSVOptions): StructType = {
+    // Filter comments and empty strings
+    val filteredRdd = csv.mapPartitions(CSVUtils.filterCommentAndEmpty(_, options))
+    val firstLine = filteredRdd.first()
+    // Filter the header if exists
+    // TODO: If there is data same with header, then it will be skipped too.
+    val dropHeaderRdd = if (options.headerFlag) {
+      filteredRdd.filter(_ != firstLine)
+    } else {
+      filteredRdd
+    }
+    // Read header
+    val firstRow = UnivocityParser.tokenizeLine(firstLine, options)
+    val header = if (options.headerFlag) {
+      firstRow.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          s"_c$index"
+        } else {
+          value
+        }
+      }
+    } else {
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
+    }
+
+    val tokenRdd = UnivocityParser.tokenize(dropHeaderRdd, options)
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val rootTypes: Array[DataType] =
       tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
