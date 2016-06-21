@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SQLTestUtils
@@ -197,6 +197,8 @@ abstract class OrcSuite extends QueryTest
 }
 
 class OrcSourceSuite extends OrcSuite {
+  import spark.implicits._
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -215,6 +217,49 @@ class OrcSourceSuite extends OrcSuite {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
          |)
        """.stripMargin)
+  }
+
+  test("orc - API") {
+    val userSchema = new StructType().add("s", StringType)
+    val data = Seq("1", "2", "3")
+    val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
+
+    // Writer
+    spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).orc(dir)
+    val df = spark.read.orc(dir)
+    checkAnswer(df, spark.createDataset(data).toDF())
+    val schema = df.schema
+
+    // Reader, without user specified schema
+    intercept[IllegalArgumentException] {
+      testRead(spark.read.orc(), Seq.empty, schema)
+    }
+    testRead(spark.read.orc(dir), data, schema)
+    testRead(spark.read.orc(dir, dir), data ++ data, schema)
+    testRead(spark.read.orc(Seq(dir, dir): _*), data ++ data, schema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.orc).get, data, schema)
+
+    // Reader, with user specified schema, should just apply user schema on the file data
+    testRead(spark.read.schema(userSchema).orc(), Seq.empty, userSchema)
+    spark.read.schema(userSchema).orc(dir).printSchema()
+
+    spark.read.schema(userSchema).orc(dir).explain(true)
+
+    spark.read.schema(userSchema).orc().show()
+    spark.read.schema(userSchema).orc(dir).show()
+    val expData = Seq[String](null, null, null)
+    testRead(spark.read.schema(userSchema).orc(dir), expData, userSchema)
+    testRead(spark.read.schema(userSchema).orc(dir, dir), expData ++ expData, userSchema)
+    testRead(spark.read.schema(userSchema).orc(Seq(dir, dir): _*), expData ++ expData, userSchema)
+
+  }
+  private def testRead(
+      df: => DataFrame,
+      expectedResult: Seq[String],
+      expectedSchema: StructType): Unit = {
+    checkAnswer(df, spark.createDataset(expectedResult).toDF())
+    assert(df.schema === expectedSchema)
   }
 
   test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {

@@ -212,7 +212,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   }
 
   test("illegal format name") {
-    val e = intercept[AnalysisException] {
+    val e = intercept[ClassNotFoundException] {
       spark.read.format("illegal").load("/test")
     }
     assert(e.getMessage.contains("Failed to find data source: illegal"))
@@ -231,12 +231,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   test("prevent all column partitioning") {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
-      intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
-      }
-      intercept[AnalysisException] {
-        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
-      }
+      }.getMessage
+      assert(e.contains("Cannot use all columns for partition columns"))
     }
   }
 
@@ -318,9 +316,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[AnalysisException] {
+    val e = intercept[IllegalArgumentException] {
       testRead(spark.read.json(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
     testRead(spark.read.json(dir), data, schema)
     testRead(spark.read.json(dir, dir), data ++ data, schema)
     testRead(spark.read.json(Seq(dir, dir): _*), data ++ data, schema)
@@ -344,9 +343,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[AnalysisException] {
+    val e = intercept[IllegalArgumentException] {
       testRead(spark.read.parquet(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(e.contains("'path' is not specified"))
     testRead(spark.read.parquet(dir), data, schema)
     testRead(spark.read.parquet(dir, dir), data ++ data, schema)
     testRead(spark.read.parquet(Seq(dir, dir): _*), data ++ data, schema)
@@ -361,23 +361,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     testRead(spark.read.schema(userSchema).parquet(dir, dir), expData ++ expData, userSchema)
     testRead(
       spark.read.schema(userSchema).parquet(Seq(dir, dir): _*), expData ++ expData, userSchema)
-  }
-
-  /**
-   * This only tests whether API compiles, but does not run it as orc()
-   * cannot be run without Hive classes.
-   */
-  ignore("orc - API") {
-    // Reader, with user specified schema
-    // Refer to csv-specific test suites for behavior without user specified schema
-    spark.read.schema(userSchema).orc()
-    spark.read.schema(userSchema).orc(dir)
-    spark.read.schema(userSchema).orc(dir, dir, dir)
-    spark.read.schema(userSchema).orc(Seq(dir, dir): _*)
-    Option(dir).map(spark.read.schema(userSchema).orc)
-
-    // Writer
-    spark.range(10).write.orc(dir)
   }
 
   private def testRead(
