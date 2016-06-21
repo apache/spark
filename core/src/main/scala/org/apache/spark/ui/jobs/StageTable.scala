@@ -21,6 +21,7 @@ import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.JavaConverters._
 import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -39,6 +40,11 @@ private[ui] class StageTableBase(
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
+  val allParameters = request.getParameterMap().asScala.toMap
+  val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
+    .map(para => para._1 + "=" + para._2(0)).mkString("&")
+  val reservedBasePath = basePath + "?" + parameterOtherTable
+
   val parameterStagePage = request.getParameter(stageTag + ".page")
   val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
   val parameterStageSortDesc = request.getParameter(stageTag + ".desc")
@@ -72,7 +78,7 @@ private[ui] class StageTableBase(
     new StagePagedTable(
       stages,
       stageTag,
-      basePath,
+      reservedBasePath,
       progressListener,
       isFairScheduler,
       killEnabled,
@@ -158,7 +164,7 @@ private[ui] class StagePagedTable(
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
     basePath +
-      s"?$pageNumberFormField=$page" +
+      s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
       s"&$stageTag.desc=$desc" +
       s"&$pageSizeFormField=$pageSize"
@@ -166,7 +172,7 @@ private[ui] class StagePagedTable(
 
   override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"$basePath?$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc"
+    s"$basePath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc"
   }
 
   override def headers: Seq[Node] = {
@@ -209,7 +215,7 @@ private[ui] class StagePagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             basePath +
-              s"?$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
               s"&$stageTag.desc=${!desc}" +
               s"&$stageTag.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
@@ -225,7 +231,7 @@ private[ui] class StagePagedTable(
           if (sortable) {
             val headerLink = Unparsed(
               basePath +
-                s"?$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
                 s"&$stageTag.pageSize=$pageSize")
 
             <th>
