@@ -21,6 +21,7 @@ import java.util.HashMap
 
 import org.apache.spark.SparkConf
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
@@ -132,31 +133,35 @@ class AggregateBenchmark extends BenchmarkBase {
 
 
   test("cache aggregate with randomized keys") {
-    val N = 20 << 20
+    val N = 20 << 19
     val numIters = 10
     val benchmark = new Benchmark("Cache aggregate", N)
     sparkSession.range(N)
       .selectExpr("id", "floor(rand() * 10000) as k")
       .createOrReplaceTempView("test")
+    val expectedAnswer = sparkSession.sql("select k, sum(id) from test group by k").collect().toSeq
 
     /**
      * Call collect on the dataset after deleting all existing temporary files.
      */
-    def doCollect(ds: org.apache.spark.sql.Dataset[_]): Unit = {
-      ds.sparkSession.sparkContext.parallelize(1 to 10, 10).foreach { _ =>
+    def doCollect(df: org.apache.spark.sql.DataFrame): Unit = {
+      df.sparkSession.sparkContext.parallelize(1 to 10, 10).foreach { _ =>
         org.apache.spark.SparkEnv.get.blockManager.diskBlockManager.getAllFiles().foreach { dir =>
           dir.delete()
         }
       }
-      ds.collect()
+      QueryTest.checkAnswer(df, expectedAnswer) match {
+        case Some(errMessage) => throw new RuntimeException(errMessage)
+        case None => // all good
+      }
     }
 
     /**
      * Actually run the benchmark, optionally specifying whether to cache the dataset.
      */
-    def addBenchmark(name: String, cache: Boolean, params: Map[String, String]): Unit = {
+    def addBenchmark(name: String, cache: Boolean, params: Map[String, String] = Map()): Unit = {
       val ds = sparkSession.sql("select k, sum(id) from test group by k")
-      val defaults = params.keys.map { k => (k, sparkSession.conf.get(k)) }
+      val defaults = params.keys.flatMap { k => sparkSession.conf.getOption(k).map((k, _)) }
       val prepare = () => {
         params.foreach { case (k, v) => sparkSession.conf.set(k, v) }
         if (cache) { sparkSession.catalog.cacheTable("test") }
@@ -169,14 +174,19 @@ class AggregateBenchmark extends BenchmarkBase {
       benchmark.addCase(name, numIters, prepare, cleanup) { _ => doCollect(ds) }
     }
 
-    addBenchmark("codegen = F hashmap = F cache = F", cache = false, Map(
-      "spark.sql.codegen.wholeStage" -> "false",
-      "spark.sql.codegen.aggregate.map.columns.max" -> "0"
+    // ALL OF THESE ARE codegen = F, hashmap = F
+    sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
+    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "0")
+
+    addBenchmark("cache = F", cache = false)
+
+    addBenchmark("cache = T columnar = F compress = F", cache = true, Map(
+      "spark.sql.inMemoryColumnarScan" -> "false",
+      "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
     ))
 
-    addBenchmark("codegen = F hashmap = F cache = T compress = F", cache = true, Map(
-      "spark.sql.codegen.wholeStage" -> "false",
-      "spark.sql.codegen.aggregate.map.columns.max" -> "0",
+    addBenchmark("cache = T columnar = T compress = F", cache = true, Map(
+      "spark.sql.inMemoryColumnarScan" -> "true",
       "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
     ))
 

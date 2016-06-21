@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.types.UserDefinedType
 
 
@@ -108,7 +109,7 @@ private[sql] case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  protected override def doExecute(): RDD[InternalRow] = {
+  private def doExecuteRow(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
     if (enableAccumulators) {
@@ -176,48 +177,40 @@ private[sql] case class InMemoryTableScanExec(
     }
   }
 
-//  protected override def doExecute(): RDD[InternalRow] = {
-//    val childOutput = relation.child.output
-//    relation.cachedColumnVectors.mapPartitionsInternal { batchIter =>
-//      new Iterator[InternalRow] {
-//        private val unsafeRow = new UnsafeRow(childOutput.size)
-//        private val bufferHolder = new BufferHolder(unsafeRow)
-//        private val rowWriter = new UnsafeRowWriter(bufferHolder, childOutput.size)
-//        private var currentBatch: ColumnarCachedBatch = null
-//        private var currentRowIndex = 0 // row index within each batch
-//
-//        override def hasNext: Boolean = {
-//          if (currentBatch == null) {
-//            val hasNext = batchIter.hasNext
-//            if (hasNext) {
-//              currentBatch = batchIter.next()
-//              currentRowIndex = 0
-//            }
-//            hasNext
-//          } else {
-//            true // currentBatch != null
-//          }
-//        }
-//
-//        override def next(): InternalRow = {
-//          if (currentBatch == null) {
-//            throw new NoSuchElementException
-//          }
-//          rowWriter.zeroOutNullBytes()
-//          // Populate the row
-//          childOutput.zipWithIndex.foreach { case (attr, colIndex) =>
-//            val colValue = currentBatch.buffers(colIndex)(currentRowIndex)
-//            rowWriter.write(colIndex, colValue)
-//          }
-//          // If we have consumed this batch, move onto the next one
-//          currentRowIndex += 1
-//          if (currentRowIndex == currentBatch.numRows) {
-//            currentBatch = null
-//          }
-//          unsafeRow
-//        }
-//      }
-//    }
-//  }
+  private def doExecuteColumnar(): RDD[InternalRow] = {
+    relation.cachedColumnVectors.mapPartitionsInternal { batchIter =>
+      new Iterator[InternalRow] {
+        private var currentRowIterator: java.util.Iterator[ColumnarBatch.Row] = null
+
+        override def hasNext: Boolean = {
+          if (currentRowIterator == null && batchIter.hasNext) {
+            currentRowIterator = batchIter.next().rowIterator
+          }
+          currentRowIterator != null && currentRowIterator.hasNext
+        }
+
+        override def next(): InternalRow = {
+          if (!hasNext) {
+            throw new NoSuchElementException
+          }
+          val row = currentRowIterator.next()
+          if (!currentRowIterator.hasNext) {
+            currentRowIterator = null
+          }
+          row
+        }
+      }
+    }
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val useColumnarScan = relation.child.sqlContext.conf.getConfString(
+      "spark.sql.inMemoryColumnarScan", "true").toBoolean
+    if (useColumnarScan) {
+      doExecuteColumnar()
+    } else {
+      doExecuteRow()
+    }
+  }
 
 }
