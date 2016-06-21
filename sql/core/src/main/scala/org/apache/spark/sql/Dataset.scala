@@ -1813,11 +1813,11 @@ class Dataset[T] private[sql](
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val groupCols = colNames.map {
-      colName => queryExecution.analyzed.resolve(Seq(colName), resolver).getOrElse {
+    val allColumns = queryExecution.analyzed.output
+    val groupCols = colNames.map { colName =>
+      allColumns.find(col => resolver(col.name, colName)).getOrElse(
         throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
-      }
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
     }
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
