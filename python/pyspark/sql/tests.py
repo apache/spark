@@ -177,6 +177,10 @@ class DataTypeTests(unittest.TestCase):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
+    def test_empty_row(self):
+        row = Row()
+        self.assertEqual(len(row), 0)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
