@@ -107,9 +107,8 @@ class RandomForestClassifier @Since("1.4.0") (
     val numClasses: Int = getNumClasses(dataset)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy =
-      super.getOldStrategy(categoricalFeatures = categoricalFeatures, numClasses = numClasses,
-        oldAlgo = OldAlgo.Classification, oldImpurity = getOldImpurity,
-        subsamplingRate = getSubsamplingRate, classWeights = getClassWeights)
+      super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification,
+        getOldImpurity, getSubsamplingRate, getClassWeights)
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)

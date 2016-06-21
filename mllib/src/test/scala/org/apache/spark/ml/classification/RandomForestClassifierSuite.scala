@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.io.Source
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -33,7 +31,6 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -213,7 +210,7 @@ class RandomForestClassifierSuite
       assert(model.numClasses === model2.numClasses)
     }
 
-    val rf = new RandomForestClassifier().setNumTrees(2).setClassWeights(Array())
+    val rf = new RandomForestClassifier().setNumTrees(2)
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")

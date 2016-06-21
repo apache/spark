@@ -342,6 +342,8 @@ private[ml] object DecisionTreeModelReadWrite {
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 
+    // Get class weights to construct ImpurityCalculator. This value
+    // is ignored unless the impurity is WeightedGini
     val classWeights: Array[Double] = {
       val classWeightsJson: JValue = metadata.getParamValue("classWeights")
       compact(render(classWeightsJson)).split("\\[|,|\\]")
@@ -445,6 +447,8 @@ private[ml] object EnsembleModelReadWrite {
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 
+    // Get class weights to construct ImpurityCalculator. This value
+    // is ignored unless the impurity is WeightedGini
     val classWeights: Array[Double] = {
       val classWeightsJson: JValue = metadata.getParamValue("classWeights")
       val classWeightsArray = compact(render(classWeightsJson)).split("\\[|,|\\]")

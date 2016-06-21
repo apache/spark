@@ -21,11 +21,10 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 
 /**
  * :: Experimental ::
- * Class for calculating the
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
- * during binary classification.
+ * Class for calculating the Gini impurity with class weights using
+ * altered prior method during classification.
  */
-@Since("1.0.0")
+@Since("2.0.0")
 @Experimental
 object WeightedGini extends Impurity {
 
@@ -36,7 +35,7 @@ object WeightedGini extends Impurity {
    * @param weightedTotalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
-  @Since("1.1.0")
+  @Since("2.0.0")
   @DeveloperApi
   override def calculate(weightedCounts: Array[Double], weightedTotalCount: Double): Double = {
     if (weightedTotalCount == 0) {
@@ -61,7 +60,7 @@ object WeightedGini extends Impurity {
    * @param sumSquares summation of squares of the labels
    * @return information value, or 0 if count = 0
    */
-  @Since("1.0.0")
+  @Since("2.0.0")
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("WeightedGini.calculate")
@@ -70,7 +69,7 @@ object WeightedGini extends Impurity {
    * Get this impurity instance.
    * This is useful for passing impurity parameters to a Strategy in Java.
    */
-  @Since("1.1.0")
+  @Since("2.0.0")
   def instance: this.type = this
 
 }
@@ -179,10 +178,10 @@ private[spark] class WeightedGiniCalculator(stats: Array[Double], classWeights: 
       s"Two ImpurityCalculator instances cannot be added with different counts sizes." +
         s"  Sizes are ${stats.length} and ${other.stats.length}.")
     val otherCalculator = other.asInstanceOf[WeightedGiniCalculator]
+    val len = otherCalculator.stats.length
     var i = 0
-    val len = other.stats.length
     while (i < len) {
-      stats(i) += other.stats(i)
+      stats(i) += otherCalculator.stats(i)
       weightedStats(i) += otherCalculator.weightedStats(i)
       i += 1
     }
@@ -198,10 +197,10 @@ private[spark] class WeightedGiniCalculator(stats: Array[Double], classWeights: 
       s"Two ImpurityCalculator instances cannot be subtracted with different counts sizes." +
         s"  Sizes are ${stats.length} and ${other.stats.length}.")
     val otherCalculator = other.asInstanceOf[WeightedGiniCalculator]
+    val len = otherCalculator.stats.length
     var i = 0
-    val len = other.stats.length
     while (i < len) {
-      stats(i) -= other.stats(i)
+      stats(i) -= otherCalculator.stats(i)
       weightedStats(i) -= otherCalculator.weightedStats(i)
       i += 1
     }

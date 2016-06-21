@@ -155,7 +155,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
-  /** (private[ml]) Create a Strategy instance to use with the old API. */
+  /** (private[ml]) Create a Strategy instance. */
   private[ml] def getOldStrategy(
       categoricalFeatures: Map[Int, Int],
       numClasses: Int,
@@ -181,25 +181,25 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 
   /** (private[ml]) Create a Strategy whose interface is compatible with the old API. */
   private[ml] def getOldStrategy(
-    categoricalFeatures: Map[Int, Int],
-    numClasses: Int,
-    oldAlgo: OldAlgo.Algo,
-    oldImpurity: OldImpurity,
-    subsamplingRate: Double): OldStrategy = {
-  val strategy = OldStrategy.defaultStrategy(oldAlgo)
-  strategy.impurity = oldImpurity
-  strategy.checkpointInterval = getCheckpointInterval
-  strategy.maxBins = getMaxBins
-  strategy.maxDepth = getMaxDepth
-  strategy.maxMemoryInMB = getMaxMemoryInMB
-  strategy.minInfoGain = getMinInfoGain
-  strategy.minInstancesPerNode = getMinInstancesPerNode
-  strategy.useNodeIdCache = getCacheNodeIds
-  strategy.numClasses = numClasses
-  strategy.categoricalFeaturesInfo = categoricalFeatures
-  strategy.subsamplingRate = subsamplingRate
-  strategy.classWeights = Array(1.0, 1.0)
-  strategy
+      categoricalFeatures: Map[Int, Int],
+      numClasses: Int,
+      oldAlgo: OldAlgo.Algo,
+      oldImpurity: OldImpurity,
+      subsamplingRate: Double): OldStrategy = {
+    val strategy = OldStrategy.defaultStrategy(oldAlgo)
+    strategy.impurity = oldImpurity
+    strategy.checkpointInterval = getCheckpointInterval
+    strategy.maxBins = getMaxBins
+    strategy.maxDepth = getMaxDepth
+    strategy.maxMemoryInMB = getMaxMemoryInMB
+    strategy.minInfoGain = getMinInfoGain
+    strategy.minInstancesPerNode = getMinInstancesPerNode
+    strategy.useNodeIdCache = getCacheNodeIds
+    strategy.numClasses = numClasses
+    strategy.categoricalFeaturesInfo = categoricalFeatures
+    strategy.subsamplingRate = subsamplingRate
+    strategy.classWeights = Array(1.0, 1.0)
+    strategy
   }
 }
 

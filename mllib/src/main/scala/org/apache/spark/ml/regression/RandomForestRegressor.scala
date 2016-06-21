@@ -98,9 +98,8 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
-      super.getOldStrategy(categoricalFeatures, numClasses = 0,
-        OldAlgo.Regression, getOldImpurity, getSubsamplingRate,
-        classWeights = Array())
+      super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression,
+        getOldImpurity, getSubsamplingRate, classWeights = Array())
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
