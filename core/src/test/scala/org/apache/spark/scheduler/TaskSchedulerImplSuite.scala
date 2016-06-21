@@ -33,14 +33,14 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     with Logging {
 
 
-  var failedTaskSetExc: Option[Throwable] = None
+  var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
   var failedTaskSet = false
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     failedTaskSet = false
-    failedTaskSetExc = None
+    failedTaskSetException = None
     failedTaskSetReason = null
   }
 
@@ -63,7 +63,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         // dependent jobs
         failedTaskSet = true
         failedTaskSetReason = reason
-        failedTaskSetExc = exception
+        failedTaskSetException = exception
       }
     }
     taskScheduler

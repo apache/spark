@@ -583,52 +583,60 @@ private[spark] class TaskSetManager(
    * spark.task.maxFailures. We need to detect this so we can fail the task set, otherwise the job
    * will hang.
    *
-   * The check here is a balance between being sure to catch the issue, but not wasting
-   * too much time inside the scheduling loop.  Just check if the last task is schedulable
-   * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
-   * really be fast unless you've got a bunch of things blacklisted.  Its possible it won't detect
-   * the unschedulable task immediately, but if it returns false, there is at least *some* task
-   * that is schedulable, and after scheduling all of those, we'll eventually find the unschedulable
-   * task.
+   * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
+   * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
+   * making sure at least one of the unscheduled tasks is schedulable. This means we may not detect
+   * the hang as quickly as we could have, but we'll always detect the hang eventually, and the
+   * method is faster in the typical case. In the worst case, this method can take
+   * O(maxTaskFailures) time, but it will be faster when there haven't been any task failures (this
+   * is because the method picks on unscheduled task, and then iterates through each executor until
+   * it finds one that the task hasn't failed on already).
    */
   private[scheduler] def abortIfTaskSetCompletelyBlacklisted(
       executorsByHost: HashMap[String, HashSet[String]]): Unit = {
+
+    /**
+     * Return the partitionId of some task which is pending, but do not remove it from the list of
+     * pending tasks.
+     */
+    def pollPendingTask: Option[Int] = {
+      // usually this will just take the last pending task, but because of the lazy removal
+      // from each list, we may need to go deeper in the list.  We poll from the end because
+      // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
+      // an unschedulable task this way.
+      var indexOffset = allPendingTasks.size
+      while (indexOffset > 0) {
+        indexOffset -= 1
+        val indexInTaskSet = allPendingTasks(indexOffset)
+        if (copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)) {
+          val partitionId = taskSet.tasks(indexInTaskSet).partitionId
+          return Some(partitionId)
+        }
+      }
+      None
+    }
+
     // If no executors have registered yet, don't abort the stage, just wait.  We probably
     // got here because a task set was added before the executors registered.
-    if (executorsByHost.nonEmpty) {
+    // Workaround for SPARK-16106: just checking executorsByHost.nonEmpty should be enough, but
+    // because of that issue we can end up with hosts with no executors.  The end result is that
+    // if a user has a nonserializable task, it could look like all tasks had been blacklisted.
+    val numExecs = executorsByHost.values.map{_.size}.sum
+    if (numExecs > 0) {
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
-      pollPendingTask.foreach { task =>
+      pollPendingTask.foreach { partitionId =>
         executorsByHost.foreach { case (host, execs) =>
           execs.foreach { exec =>
-            if (!executorIsBlacklisted(exec, task)) {
+            if (!executorIsBlacklisted(exec, partitionId)) {
               return
             }
           }
         }
-        abort(s"Aborting ${taskSet} because it has a task which cannot be scheduled on any" +
+        abort(s"Aborting ${taskSet} because Task $partitionId cannot be scheduled on any" +
           s" executor due to blacklists.")
       }
     }
-  }
-
-  /**
-   * Return some task which is pending, but do not remove it from the list of pending tasks.
-   * Used as a simple way to test if this task set is schedulable anywhere, or if it has been
-   * completely blacklisted.
-   */
-  private def pollPendingTask: Option[Int] = {
-    // usually this will just take the last pending task, but because of the lazy removal
-    // from each list, we may need to go deeper in the list
-    var indexOffset = allPendingTasks.size
-    while (indexOffset > 0) {
-      indexOffset -= 1
-      val index = allPendingTasks(indexOffset)
-      if (copiesRunning(index) == 0 && !successful(index)) {
-        return Some(index)
-      }
-    }
-    None
   }
 
   /**
