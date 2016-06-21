@@ -149,7 +149,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 1.4.0
     """
 
     splits = \
@@ -486,14 +486,14 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @since("1.5.0")
+    @since("2.0.0")
     def setScalingVec(self, value):
         """
         Sets the value of :py:attr:`scalingVec`.
         """
         return self._set(scalingVec=value)
 
-    @since("1.5.0")
+    @since("2.0.0")
     def getScalingVec(self):
         """
         Gets the value of scalingVec or its default value.
@@ -1584,7 +1584,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def std(self):
         """
         Standard deviation of the StandardScalerModel.
@@ -1592,7 +1592,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("std")
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def mean(self):
         """
         Mean of the StandardScalerModel.
