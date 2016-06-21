@@ -968,7 +968,9 @@ private[spark] object RandomForest extends Logging {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
-    val splits = {
+    val splits = if (featureSamples.isEmpty) {
+      Array.empty[Double]
+    } else {
       val numSplits = metadata.numSplits(featureIndex)
 
       // get count for each distinct value
