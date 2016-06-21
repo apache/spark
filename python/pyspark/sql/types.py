@@ -1401,7 +1401,11 @@ class Row(tuple):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
-        if kwargs:
+        if args:
+            # create row class or objects
+            return tuple.__new__(self, args)
+
+        elif kwargs:
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
@@ -1409,8 +1413,7 @@ class Row(tuple):
             return row
 
         else:
-            # create row class or objects
-            return tuple.__new__(self, args)
+            raise ValueError("No args or kwargs")
 
     def asDict(self, recursive=False):
         """
