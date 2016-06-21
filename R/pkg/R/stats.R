@@ -22,9 +22,7 @@ setOldClass("jobj")
 #' @title SparkDataFrame statistic functions
 
 #' @description
-#' crosstab - Computes a pair-wise frequency table of the given columns
-#'
-#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
+#' crosstab - Computes a pair-wise frequency table of the given columns. Also known as a contingency
 #' table. The number of distinct values for each column should be less than 1e4. At most 1e6
 #' non-zero pair frequencies will be returned.
 #'
