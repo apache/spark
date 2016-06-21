@@ -733,7 +733,7 @@ public class JavaAPISuite implements Serializable {
     assertEquals(20/6.0, rdd.mean(), 0.01);
     assertEquals(20/6.0, rdd.mean(), 0.01);
     assertEquals(6.22222, rdd.variance(), 0.01);
-    assertEquals(rdd.variance(), rdd.popVariance(), 0.01);
+    assertEquals(rdd.variance(), rdd.popVariance());
     assertEquals(7.46667, rdd.sampleVariance(), 0.01);
     assertEquals(2.49444, rdd.stdev(), 0.01);
     assertEquals(rdd.stdev(), rdd.popStdev(), 0.01);
