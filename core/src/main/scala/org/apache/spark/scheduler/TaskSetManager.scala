@@ -588,9 +588,9 @@ private[spark] class TaskSetManager(
    * making sure at least one of the unscheduled tasks is schedulable. This means we may not detect
    * the hang as quickly as we could have, but we'll always detect the hang eventually, and the
    * method is faster in the typical case. In the worst case, this method can take
-   * O(maxTaskFailures) time, but it will be faster when there haven't been any task failures (this
-   * is because the method picks on unscheduled task, and then iterates through each executor until
-   * it finds one that the task hasn't failed on already).
+   * O(maxTaskFailures + numTasks) time, but it will be faster when there haven't been any task
+   * failures (this is because the method picks on unscheduled task, and then iterates through each
+   * executor until it finds one that the task hasn't failed on already).
    */
   private[scheduler] def abortIfTaskSetCompletelyBlacklisted(
       executorsByHost: HashMap[String, HashSet[String]]): Unit = {
