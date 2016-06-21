@@ -59,6 +59,7 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 #' @export
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the SparkDataFrame is cached
+#' @noRd
 dataFrame <- function(sdf, isCached = FALSE) {
   new("SparkDataFrame", sdf, isCached)
 }
@@ -119,7 +120,7 @@ setMethod("schema",
 #' Print the logical and physical Catalyst plans to the console for debugging.
 #'
 #' @param x A SparkDataFrame
-#' @param extended Logical. If extended is False, explain() only prints the physical plan.
+#' @param extended Logical. If extended is FALSE, explain() only prints the physical plan.
 #' @family SparkDataFrame functions
 #' @rdname explain
 #' @name explain
@@ -175,6 +176,8 @@ setMethod("isLocal",
 #'
 #' @param x A SparkDataFrame
 #' @param numRows The number of rows to print. Defaults to 20.
+#' @param truncate Whether truncate long strings. If true, strings more than 20 characters will be
+#' truncated and all cells will be aligned right
 #'
 #' @family SparkDataFrame functions
 #' @rdname showDF
@@ -1854,7 +1857,7 @@ setMethod("withColumnRenamed",
             select(x, cols)
           })
 
-#' @param newColPair A named pair of the form new_column_name = existing_column
+#' @param ... A named pair of the form new_column_name = existing_column
 #' @rdname rename
 #' @name rename
 #' @export
