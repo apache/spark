@@ -372,7 +372,10 @@ class SessionCatalog(
    * If no database is specified, this will first attempt to drop a temporary table with
    * the same name, then, if that does not exist, drop the table from the current database.
    */
-  def dropTable(name: TableIdentifier, ignoreIfNotExists: Boolean): Unit = synchronized {
+  def dropTable(
+      name: TableIdentifier,
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
@@ -380,7 +383,7 @@ class SessionCatalog(
       // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
       // Instead, log it as an error message.
       if (tableExists(TableIdentifier(table, Option(db)))) {
-        externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
+        externalCatalog.dropTable(db, table, ignoreIfNotExists = true, purge = purge)
       } else if (!ignoreIfNotExists) {
         throw new NoSuchTableException(db = db, table = table)
       }
@@ -525,13 +528,14 @@ class SessionCatalog(
   def dropPartitions(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = {
     requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists)
+    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists, purge)
   }
 
   /**
@@ -876,7 +880,7 @@ class SessionCatalog(
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
     listTables(default).foreach { table =>
-      dropTable(table, ignoreIfNotExists = false)
+      dropTable(table, ignoreIfNotExists = false, purge = false)
     }
     listFunctions(default).foreach { func =>
       if (func.database.isDefined) {

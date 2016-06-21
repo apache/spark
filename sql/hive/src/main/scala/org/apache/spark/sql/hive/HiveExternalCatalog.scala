@@ -192,9 +192,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   override def dropTable(
       db: String,
       table: String,
-      ignoreIfNotExists: Boolean): Unit = withClient {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withClient {
     requireDbExists(db)
-    client.dropTable(db, table, ignoreIfNotExists)
+    client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
@@ -295,9 +296,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = withClient {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    client.dropPartitions(db, table, parts, ignoreIfNotExists)
+    client.dropPartitions(db, table, parts, ignoreIfNotExists, purge)
   }
 
   override def renamePartitions(
