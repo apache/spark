@@ -24,7 +24,7 @@ test_that("Check masked functions", {
   namesOfMaskedCompletely <- c("cov", "filter", "sample")
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window", "as.data.frame")
+                     "summary", "transform", "drop", "window", "as.data.frame", "union")
   if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
     namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
   }

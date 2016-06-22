@@ -375,7 +375,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       // Save model data: coefficients, intercept, scale
       val data = Data(instance.coefficients, instance.intercept, instance.scale)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -388,7 +388,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
         .select("coefficients", "intercept", "scale").head()
       val coefficients = data.getAs[Vector](0)
       val intercept = data.getDouble(1)

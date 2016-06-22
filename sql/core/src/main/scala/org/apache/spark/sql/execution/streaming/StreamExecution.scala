@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -55,6 +56,8 @@ class StreamExecution(
   extends StreamingQuery with Logging {
 
   import org.apache.spark.sql.streaming.StreamingQueryListener._
+
+  private val pollingDelayMs = sparkSession.conf.get(SQLConf.STREAMING_POLLING_DELAY)
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -190,6 +193,8 @@ class StreamExecution(
             runBatch()
             // We'll increase currentBatchId after we complete processing current batch's data
             currentBatchId += 1
+          } else {
+            Thread.sleep(pollingDelayMs)
           }
           true
         } else {
