@@ -198,7 +198,7 @@ createMethods()
 #'
 #' Applies a R function to each group in the input GroupedData
 #'
-#' @param x a GroupedData
+#' @param x A GroupedData
 #' @rdname gapply
 #' @name gapply
 #' @export
@@ -235,6 +235,7 @@ createMethods()
 setMethod("gapply",
           signature(x = "GroupedData"),
           function(x, func, schema) {
+            try(if (is.null(schema)) stop("schema cannot be NULL"))
             gapplyInternal(x, func, schema)
           })
 
@@ -243,7 +244,7 @@ setMethod("gapply",
 #' Applies a R function to each group in the input GroupedData and collects the result
 #' back to R as a data.frame.
 #'
-#' @param x a GroupedData
+#' @param x A GroupedData
 #' @param func A function to be applied to each group partition specified by GroupedData.
 #'             The function `func` takes as argument a key - grouping columns and
 #'             a data frame - a local R data.frame.

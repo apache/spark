@@ -2232,7 +2232,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
-  df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
+  df1 <- gapply(df, "a", function(key, x) { x }, schema(df))
   actual <- collect(df1)
   expect_identical(actual, expected)
 
