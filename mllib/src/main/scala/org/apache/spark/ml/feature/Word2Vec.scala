@@ -240,7 +240,7 @@ class Word2VecModel private[ml] (
    * of the word. Returns a dataframe with the words and the cosine similarities between the
    * synonyms and the given word vector.
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   def findSynonyms(word: Vector, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
     spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
