@@ -118,4 +118,19 @@ public final class UnsafeMapData extends MapData {
     mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return mapCopy;
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof UnsafeMapData) {
+      UnsafeMapData other = (UnsafeMapData) o;
+      return this.keyArray().equals(other.keyArray()) &&
+        this.valueArray().equals(other.valueArray());
+    }
+    return false;
+  }
+
+  @Override
+  public int hashCode() {
+    return keyArray().hashCode() * 37 + valueArray().hashCode();
+  }
 }
