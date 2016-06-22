@@ -395,6 +395,8 @@ sparkR.session <- function(
 #' @param groupid the ID to be assigned to job groups
 #' @param description description for the job group ID
 #' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @rdname setJobGroup
+#' @name setJobGroup
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -414,12 +416,17 @@ setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
     setJobGroup.default(groupId, description, interruptOnCancel)
   } else {
     # Parameter order is shifted
-    setJobGroup.default(sc, groupId, description)
+    groupIdToUse <- sc
+    descriptionToUse <- groupId
+    interruptOnCancelToUse <- description
+    setJobGroup.default(groupIdToUse, descriptionToUse, interruptOnCancelToUse)
   }
 }
 
 #' Clear current job group ID and its description
 #'
+#' @rdname clearJobGroup
+#' @name clearJobGroup
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -445,6 +452,8 @@ clearJobGroup <- function(sc) {
 #' Cancel active jobs for the specified group
 #'
 #' @param groupId the ID of job group to be cancelled
+#' @rdname cancelJobGroup
+#' @name cancelJobGroup
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -463,7 +472,8 @@ cancelJobGroup <- function(sc, groupId) {
     cancelJobGroup.default(groupId)
   } else {
     # Parameter order is shifted
-    cancelJobGroup.default(sc)
+    groupIdToUse <- sc
+    cancelJobGroup.default(groupIdToUse)
   }
 }
 
