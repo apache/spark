@@ -60,14 +60,28 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
-   * in number of elements, not number of bytes.
+   * in number of elements, not number of bytes. isConstant indicates whether this is a constant
+   * column. In case of constant constant, we set the capacity to 1 because we don't need to store
+   * many duplicate values.
    */
-  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
-    if (mode == MemoryMode.OFF_HEAP) {
-      return new OffHeapColumnVector(capacity, type);
-    } else {
-      return new OnHeapColumnVector(capacity, type);
+  public static ColumnVector allocate(
+      int capacity,
+      DataType type,
+      MemoryMode mode,
+      boolean isConstant) {
+    int childCapacity = capacity;
+    if (isConstant) {
+      capacity = 1;
     }
+    if (mode == MemoryMode.OFF_HEAP) {
+      return new OffHeapColumnVector(capacity, childCapacity, type, isConstant);
+    } else {
+      return new OnHeapColumnVector(capacity, childCapacity, type, isConstant);
+    }
+  }
+
+  public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
+    return allocate(capacity, type, mode, false);
   }
 
   /**
@@ -923,7 +937,7 @@ public abstract class ColumnVector implements AutoCloseable {
   public ColumnVector reserveDictionaryIds(int capacity) {
     if (dictionaryIds == null) {
       dictionaryIds = allocate(capacity, DataTypes.IntegerType,
-        this instanceof OnHeapColumnVector ? MemoryMode.ON_HEAP : MemoryMode.OFF_HEAP);
+        this instanceof OnHeapColumnVector ? MemoryMode.ON_HEAP : MemoryMode.OFF_HEAP, isConstant);
     } else {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
@@ -942,14 +956,19 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected ColumnVector(int capacity, DataType type, MemoryMode memMode) {
+  protected ColumnVector(
+      int capacity,
+      int childCapacity,
+      DataType type,
+      MemoryMode memMode,
+      boolean isConstant) {
     this.capacity = capacity;
     this.type = type;
+    this.isConstant = isConstant;
 
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
-      int childCapacity = capacity;
       if (type instanceof ArrayType) {
         childType = ((ArrayType)type).elementType();
       } else {
@@ -957,22 +976,25 @@ public abstract class ColumnVector implements AutoCloseable {
         childCapacity *= DEFAULT_ARRAY_LENGTH;
       }
       this.childColumns = new ColumnVector[1];
-      this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode);
+      this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode, false);
       this.resultArray = new Array(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
       this.childColumns = new ColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
-        this.childColumns[i] = ColumnVector.allocate(capacity, st.fields()[i].dataType(), memMode);
+        this.childColumns[i] = ColumnVector.allocate(capacity, st.fields()[i].dataType(), memMode,
+          isConstant);
       }
       this.resultArray = null;
       this.resultStruct = new ColumnarBatch.Row(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new ColumnVector[2];
-      this.childColumns[0] = ColumnVector.allocate(capacity, DataTypes.IntegerType, memMode);
-      this.childColumns[1] = ColumnVector.allocate(capacity, DataTypes.LongType, memMode);
+      this.childColumns[0] = ColumnVector.allocate(capacity, DataTypes.IntegerType, memMode,
+        isConstant);
+      this.childColumns[1] = ColumnVector.allocate(capacity, DataTypes.LongType, memMode,
+        isConstant);
       this.resultArray = null;
       this.resultStruct = new ColumnarBatch.Row(this.childColumns);
     } else {

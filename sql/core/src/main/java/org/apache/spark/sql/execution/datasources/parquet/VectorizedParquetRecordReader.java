@@ -178,20 +178,20 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     }
 
-    columnarBatch = ColumnarBatch.allocate(batchSchema, memMode);
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
+      columnarBatch = ColumnarBatch.allocate(batchSchema, memMode, partitionIdx, missingColumns);
       for (int i = 0; i < partitionColumns.fields().length; i++) {
         ColumnVectorUtils.populate(columnarBatch.column(i + partitionIdx), partitionValues, i);
-        columnarBatch.column(i + partitionIdx).setIsConstant();
       }
+    } else {
+      columnarBatch = ColumnarBatch.allocate(batchSchema, memMode, missingColumns);
     }
 
     // Initialize missing columns with nulls.
     for (int i = 0; i < missingColumns.length; i++) {
       if (missingColumns[i]) {
         columnarBatch.column(i).putNulls(0, columnarBatch.capacity());
-        columnarBatch.column(i).setIsConstant();
       }
     }
   }
