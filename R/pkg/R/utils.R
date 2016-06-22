@@ -115,6 +115,7 @@ isRDD <- function(name, env) {
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
 #'}
+#' @note hashCode since 1.4.0
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])

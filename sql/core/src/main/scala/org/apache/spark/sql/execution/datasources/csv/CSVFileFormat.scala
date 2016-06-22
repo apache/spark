@@ -120,7 +120,14 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
       val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
       val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-      tokenizedIterator.flatMap(parser(_).toSeq)
+      var numMalformedRecords = 0
+      tokenizedIterator.flatMap { recordTokens =>
+        val row = parser(recordTokens, numMalformedRecords)
+        if (row.isEmpty) {
+          numMalformedRecords += 1
+        }
+        row
+      }
     }
   }
 
