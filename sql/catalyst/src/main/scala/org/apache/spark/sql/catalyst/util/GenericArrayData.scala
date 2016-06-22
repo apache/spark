@@ -25,19 +25,19 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object GenericArrayData {
   def allocate(seq: Seq[Any]): GenericArrayData = new GenericRefArrayData(seq)
-  def allocate(list: java.util.List[Any]): GenericArrayData = new GenericRefArrayData(list)
-  def allocate(seqOrArray: Any): GenericArrayData = new GenericRefArrayData(seqOrArray)
-  def allocate(primitiveArray: Array[Int]): GenericArrayData =
+  def allocate(list: java.util.List[Any]): GenericRefArrayData = new GenericRefArrayData(list)
+  def allocate(seqOrArray: Any): GenericRefArrayData = new GenericRefArrayData(seqOrArray)
+  def allocate(primitiveArray: Array[Int]): GenericIntArrayData =
     new GenericIntArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Long]): GenericArrayData =
+  def allocate(primitiveArray: Array[Long]): GenericLongArrayData =
     new GenericLongArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Float]): GenericArrayData =
+  def allocate(primitiveArray: Array[Float]): GenericFloatArrayData =
     new GenericFloatArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Double]): GenericArrayData =
+  def allocate(primitiveArray: Array[Double]): GenericDoubleArrayData =
     new GenericDoubleArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Short]): GenericArrayData =
+  def allocate(primitiveArray: Array[Short]): GenericShortArrayData =
     new GenericShortArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Byte]): GenericArrayData =
+  def allocate(primitiveArray: Array[Byte]): GenericByteArrayData =
     new GenericByteArrayData(primitiveArray)
   def allocate(primitiveArray: Array[Boolean]): GenericArrayData =
     new GenericBooleanArrayData(primitiveArray)
@@ -128,6 +128,7 @@ class GenericArrayData(val array: Array[Any],
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
 
+<<<<<<< 8df1c34a012f074c4c970374cbd9ef6b43d2a4ab
   override def isNullAt(ordinal: Int): Boolean = {
     if (booleanArray != null || byteArray != null || shortArray != null || intArray != null ||
       longArray != null || floatArray != null || doubleArray != null) {
@@ -333,7 +334,7 @@ class GenericArrayData(val array: Array[Any],
 final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericIntArrayData(primitiveArray)
+  override def copy(): GenericIntArrayData = new GenericIntArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -344,7 +345,6 @@ final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericA
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericIntArrayData]) {
@@ -356,41 +356,17 @@ final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericA
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val update: Int = primitiveArray(i)
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
 final class GenericLongArrayData(val primitiveArray: Array[Long])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericLongArrayData(primitiveArray)
+  override def copy(): GenericLongArrayData = new GenericLongArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -401,7 +377,6 @@ final class GenericLongArrayData(val primitiveArray: Array[Long])
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericLongArrayData]) {
@@ -413,42 +388,17 @@ final class GenericLongArrayData(val primitiveArray: Array[Long])
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val l = primitiveArray(i)
-      val update: Int = (l ^ (l >>> 32)).toInt
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
 final class GenericFloatArrayData(val primitiveArray: Array[Float])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericFloatArrayData(primitiveArray)
+  override def copy(): GenericFloatArrayData = new GenericFloatArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -459,7 +409,6 @@ final class GenericFloatArrayData(val primitiveArray: Array[Float])
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericFloatArrayData]) {
@@ -471,46 +420,17 @@ final class GenericFloatArrayData(val primitiveArray: Array[Float])
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (java.lang.Float.isNaN(o1)) {
-        if (!java.lang.Float.isNaN(o2)) {
-          return false;
-        }
-      } else if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val f = primitiveArray(i)
-      val update: Int = java.lang.Float.floatToIntBits(f)
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
 final class GenericDoubleArrayData(val primitiveArray: Array[Double])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericDoubleArrayData(primitiveArray)
+  override def copy(): GenericDoubleArrayData = new GenericDoubleArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -521,7 +441,6 @@ final class GenericDoubleArrayData(val primitiveArray: Array[Double])
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericDoubleArrayData]) {
@@ -533,47 +452,17 @@ final class GenericDoubleArrayData(val primitiveArray: Array[Double])
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (java.lang.Double.isNaN(o1)) {
-        if (!java.lang.Double.isNaN(o2)) {
-          return false;
-        }
-      } else if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val d = primitiveArray(i)
-      val b = java.lang.Double.doubleToLongBits(d)
-      val update: Int = (b ^ (b >>> 32)).toInt
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
 final class GenericShortArrayData(val primitiveArray: Array[Short])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericShortArrayData(primitiveArray)
+  override def copy(): GenericShortArrayData = new GenericShortArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -584,7 +473,6 @@ final class GenericShortArrayData(val primitiveArray: Array[Short])
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericShortArrayData]) {
@@ -596,41 +484,17 @@ final class GenericShortArrayData(val primitiveArray: Array[Short])
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val update: Int = primitiveArray(i).toInt
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
 final class GenericByteArrayData(val primitiveArray: Array[Byte])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericByteArrayData(primitiveArray)
+  override def copy(): GenericByteArrayData = new GenericByteArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -641,7 +505,6 @@ final class GenericByteArrayData(val primitiveArray: Array[Byte])
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericByteArrayData]) {
@@ -653,41 +516,17 @@ final class GenericByteArrayData(val primitiveArray: Array[Byte])
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val update: Int = primitiveArray(i).toInt
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
 final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): ArrayData = new GenericBooleanArrayData(primitiveArray)
+  override def copy(): GenericBooleanArrayData = new GenericBooleanArrayData(primitiveArray.clone())
 
   override def numElements(): Int = primitiveArray.length
 
@@ -698,7 +537,6 @@ final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
     System.arraycopy(primitiveArray, 0, array, 0, numElements)
     array
   }
-  override def toString(): String = primitiveArray.mkString("[", ",", "]")
 
   override def equals(o: Any): Boolean = {
     if (!o.isInstanceOf[GenericBooleanArrayData]) {
@@ -710,33 +548,9 @@ final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
       return false
     }
 
-    val len = numElements()
-    if (len != other.numElements()) {
-      return false
-    }
-
-    var i = 0
-    while (i < len) {
-      val o1 = primitiveArray(i)
-      val o2 = other.primitiveArray(i)
-      if (o1 != o2) {
-        return false
-      }
-      i += 1
-    }
-    true
+    java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
 
-  override def hashCode: Int = {
-    var result: Int = 37
-    var i = 0
-    val len = numElements()
-    while (i < len) {
-      val update: Int = if (primitiveArray(i)) 1 else 0
-      result = 37 * result + update
-      i += 1
-    }
-    result
-  }
+  override def hashCode: Int = java.util.Arrays.hashCode(primitiveArray)
 }
 
