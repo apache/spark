@@ -186,7 +186,7 @@ object PCAModel extends MLReadable[PCAModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.pc, instance.explainedVariance)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -217,12 +217,12 @@ object PCAModel extends MLReadable[PCAModel] {
       val dataPath = new Path(path, "data").toString
       val model = if (hasExplainedVariance) {
         val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
-          sqlContext.read.parquet(dataPath)
+          sparkSession.read.parquet(dataPath)
             .select("pc", "explainedVariance")
             .head()
         new PCAModel(metadata.uid, pc, explainedVariance)
       } else {
-        val Row(pc: DenseMatrix) = sqlContext.read.parquet(dataPath).select("pc").head()
+        val Row(pc: DenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
         new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
       }
       DefaultParamsReader.getAndSetParams(model, metadata)
