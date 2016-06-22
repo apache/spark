@@ -57,10 +57,10 @@ if __name__ == "__main__":
         .load()
 
     # Split the lines into words
-    words = lines.select(\
-        explode(\
-            split(lines.value, ' ')\
-        ).alias('word')\
+    words = lines.select(
+        explode(
+            split(lines.value, ' ')
+        ).alias('word')
     )
 
     # Generate running word count
