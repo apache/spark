@@ -28,7 +28,6 @@ import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, StructType}
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -463,27 +462,4 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
     }
   }
-
-  test("column nullability and comment - write and then read") {
-    val schema = StructType(
-      StructField("cl1", IntegerType, nullable = false,
-        new MetadataBuilder().putString("comment", "test").build()) ::
-        StructField("cl2", IntegerType, nullable = true) ::
-        StructField("cl3", IntegerType, nullable = true) :: Nil)
-    val row = Row(3, null, 4)
-    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
-
-    val tableName = "tab"
-    withTable(tableName) {
-      df.write.format("orc").mode("overwrite").saveAsTable(tableName)
-      // Verify the DDL command result: DESCRIBE TABLE
-      checkAnswer(
-        sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
-        Row("cl1", "test") :: Nil)
-      // Verify the schema
-      val expectedFields = schema.fields.map(f => f.copy(nullable = true))
-      assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
-    }
-  }
-
 }
