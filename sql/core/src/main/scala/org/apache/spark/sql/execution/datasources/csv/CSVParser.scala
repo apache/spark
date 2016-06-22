@@ -59,14 +59,10 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
  * @param params Parameters object for configuration
  * @param headers headers for columns
  */
-private[sql] class LineCsvWriter(
-    params: CSVOptions,
-    headers: Seq[String],
-    charArrayWriter: CharArrayWriter)
-  extends Logging {
-
+private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
+  private val buffer = new CharArrayWriter()
 
   format.setDelimiter(params.delimiter)
   format.setLineSeparator(params.rowSeparator)
@@ -81,7 +77,7 @@ private[sql] class LineCsvWriter(
   writerSettings.setHeaders(headers: _*)
   writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
 
-  private val writer = new CsvWriter(charArrayWriter, writerSettings)
+  private val writer = new CsvWriter(buffer, writerSettings)
 
   def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
     if (includeHeader) {
@@ -92,8 +88,8 @@ private[sql] class LineCsvWriter(
 
   def flush(): String = {
     writer.flush()
-    val lines = charArrayWriter.toString.stripLineEnd
-    charArrayWriter.reset()
+    val lines = buffer.toString.stripLineEnd
+    buffer.reset()
     lines
   }
 

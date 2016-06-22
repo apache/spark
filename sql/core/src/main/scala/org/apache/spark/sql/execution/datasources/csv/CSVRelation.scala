@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.CharArrayWriter
-
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -182,7 +180,7 @@ private[sql] class CsvOutputWriter(
   private val FLUSH_BATCH_SIZE = 1024L
   private var records: Long = 0L
   private val csvWriter =
-    new LineCsvWriter(params, dataSchema.fieldNames.toSeq, new CharArrayWriter())
+    new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
 
   private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
     if (field != null) {
