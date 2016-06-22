@@ -71,8 +71,8 @@ private[hive] case class HiveSimpleUDF(
   override lazy val dataType = javaClassToDataType(method.getReturnType)
 
   @transient
-  lazy val unwrapper = unwrapperFor(ObjectInspectorFactory.getReflectionObjectInspector(
-    method.getGenericReturnType(), ObjectInspectorOptions.JAVA))
+  lazy val returnInspector = ObjectInspectorFactory.getReflectionObjectInspector(
+    method.getGenericReturnType(), ObjectInspectorOptions.JAVA)
 
   @transient
   private lazy val cached: Array[AnyRef] = new Array[AnyRef](children.length)
@@ -87,7 +87,7 @@ private[hive] case class HiveSimpleUDF(
       method,
       function,
       conversionHelper.convertIfNecessary(inputs : _*): _*)
-    unwrapper(ret)
+    unwrap(ret, returnInspector)
   }
 
   override def toString: String = {
@@ -134,9 +134,6 @@ private[hive] case class HiveGenericUDF(
   }
 
   @transient
-  private lazy val unwrapper = unwrapperFor(returnInspector)
-
-  @transient
   private lazy val isUDFDeterministic = {
     val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic()
@@ -159,7 +156,7 @@ private[hive] case class HiveGenericUDF(
         .set(() => children(idx).eval(input))
       i += 1
     }
-    unwrapper(function.evaluate(deferredObjects))
+    unwrap(function.evaluate(deferredObjects), returnInspector)
   }
 
   override def prettyName: String = name
@@ -213,9 +210,6 @@ private[hive] case class HiveGenericUDTF(
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray
 
-  @transient
-  private lazy val unwrapper = unwrapperFor(outputInspector)
-
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
 
@@ -232,7 +226,7 @@ private[hive] case class HiveGenericUDTF(
       // We need to clone the input here because implementations of
       // GenericUDTF reuse the same object. Luckily they are always an array, so
       // it is easy to clone.
-      collected += unwrapper(input).asInstanceOf[InternalRow]
+      collected += unwrap(input, outputInspector).asInstanceOf[InternalRow]
     }
 
     def collectRows(): Seq[InternalRow] = {
@@ -299,12 +293,9 @@ private[hive] case class HiveUDAFFunction(
   private lazy val returnInspector = functionAndInspector._2
 
   @transient
-  private lazy val unwrapper = unwrapperFor(returnInspector)
-
-  @transient
   private[this] var buffer: GenericUDAFEvaluator.AggregationBuffer = _
 
-  override def eval(input: InternalRow): Any = unwrapper(function.evaluate(buffer))
+  override def eval(input: InternalRow): Any = unwrap(function.evaluate(buffer), returnInspector)
 
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
