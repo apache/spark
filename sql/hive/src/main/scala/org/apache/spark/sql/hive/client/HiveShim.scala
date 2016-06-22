@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
-import java.lang.reflect.{Method, Modifier}
+import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
@@ -701,8 +701,12 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       deleteData: Boolean,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = {
-    dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
-      ignoreIfNotExists: JBoolean, purge: JBoolean)
+    try {
+      dropTableMethod.invoke(hive, dbName, tableName, deleteData: JBoolean,
+        ignoreIfNotExists: JBoolean, purge: JBoolean)
+    } catch {
+      case e: InvocationTargetException => throw e.getCause()
+    }
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
@@ -795,7 +799,11 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
     val dropOptions = dropOptionsClass.newInstance().asInstanceOf[Object]
     dropOptionsDeleteData.setBoolean(dropOptions, deleteData)
     dropOptionsPurge.setBoolean(dropOptions, purge)
-    dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
+    try {
+      dropPartitionMethod.invoke(hive, dbName, tableName, part, dropOptions)
+    } catch {
+      case e: InvocationTargetException => throw e.getCause()
+    }
   }
 
 }
