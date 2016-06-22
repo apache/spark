@@ -96,6 +96,9 @@ case class InMemoryRelation(
     buildColumnarBuffers()
   }
 
+  /**
+   * Batch the input rows using [[ColumnBuilder]]s.
+   */
   private def buildBuffers(): Unit = {
     val output = child.output
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
@@ -150,6 +153,9 @@ case class InMemoryRelation(
     _cachedColumnBuffers = cached
   }
 
+  /**
+   * Batch the input rows using [[ColumnarBatch]]es.
+   */
   private def buildColumnarBuffers(): Unit = {
     val schema = StructType.fromAttributes(child.output)
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
