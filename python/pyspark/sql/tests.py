@@ -568,15 +568,15 @@ class SQLTests(ReusedPySparkTestCase):
     def test_nested_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT()))
         df = self.spark.createDataFrame(
-             [(i % 3, [PythonOnlyPoint(float(i), float(i))]) for i in range(10)],
-             schema=schema)
+            [(i % 3, [PythonOnlyPoint(float(i), float(i))]) for i in range(10)],
+            schema=schema)
         df.collect()
 
         schema = StructType().add("key", LongType()).add("val",
                                                          MapType(LongType(), PythonOnlyUDT()))
         df = self.spark.createDataFrame(
-                [(i % 3, {i % 3: PythonOnlyPoint(float(i + 1), float(i + 1))}) for i in range(10)],
-                schema=schema)
+            [(i % 3, {i % 3: PythonOnlyPoint(float(i + 1), float(i + 1))}) for i in range(10)],
+            schema=schema)
         df.collect()
 
     def test_complex_nested_udt_in_df(self):
