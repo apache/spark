@@ -754,7 +754,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
-    conf.set("spark.master", "yarn-client")
+    conf.set("spark.master", "yarn")
+    conf.set("spark.submit.deployMode", "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "false")) === false)

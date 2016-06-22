@@ -156,7 +156,7 @@ class SparkContext(object):
         self.sparkHome = self._conf.get("spark.home", None)
 
         # Let YARN know it's a pyspark app, so it distributes needed libraries.
-        if self.master == "yarn-client":
+        if self.master == "yarn":
             self._conf.set("spark.yarn.isPython", "true")
 
         for (k, v) in self._conf.getAll():
