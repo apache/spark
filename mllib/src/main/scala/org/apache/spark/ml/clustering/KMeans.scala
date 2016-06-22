@@ -105,7 +105,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel)
-  extends Model[KMeansModel] with KMeansParams with MLWritable with PMMLExportable {
+  extends Model[KMeansModel] with KMeansParams with MLWritable with PMMLWritable {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -214,7 +214,21 @@ object KMeansModel extends MLReadable[KMeansModel] {
   /** [[MLWriter]] instance for [[KMeansModel]] */
   private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
 
+    override val supportedFormats = List("native", "pmml")
+
     override protected def saveImpl(path: String): Unit = {
+      if (format == "native") {
+        saveNative(path)
+      } else {
+        savePMML(path)
+      }
+    }
+
+    private def savePMML(path: String): Unit = {
+      parentModel.toPMML(sc, path)
+    }
+
+    private def saveNative(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: cluster centers

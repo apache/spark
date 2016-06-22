@@ -98,7 +98,23 @@ abstract class MLWriter extends BaseReadWrite with Logging {
           s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
       }
     }
-    saveImpl(path)
+    if (source in supportedFormmats) {
+      saveImpl(path)
+    } else {
+      throw new IllegalArgumentException(s"Format ${source} is not supported in this model")
+    }
+  }
+
+  protected val supportedFormats = List("native")
+
+  protected var source = "native"
+  /**
+   * Specifies the underlying output data format. Default is "native" with some models also
+   * supporting "pmml".
+   */
+  def format(source: String): MLWriter = {
+    this.source = source
+    this
   }
 
   /**
@@ -142,6 +158,23 @@ trait MLWritable {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = write.save(path)
+}
+
+/**
+ * :: Experimental ::
+ *
+ * Trait for classes that can be exported to PMML.
+ */
+@Experimental
+@Since("2.1.0")
+trait PMMLWritable extends MLWritable {
+  /**
+   * Save this ML instance to the input path in PMML format. A shortcut of
+   * `write.format("pmml").save(path)`.
+   */
+  def toPMML(path: String): Unit = {
+    write.format("pmml").save(path)
+  }
 }
 
 /**
