@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
+import org.apache.spark.mllib.tree.impurity.{ChiSquared, Entropy, Gini, Impurity, Variance}
 
 /**
  * Stores all the configuration options for tree construction
@@ -140,7 +140,7 @@ class Strategy @Since("1.3.0") (
         require(numClasses >= 2,
           s"DecisionTree Strategy for Classification must have numClasses >= 2," +
           s" but numClasses = $numClasses.")
-        require(Set(Gini, Entropy).contains(impurity),
+        require(Set(Gini, Entropy, ChiSquared).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
           s"  Valid settings: Gini, Entropy")
       case Regression =>

@@ -26,6 +26,7 @@ private[mllib] object Impurities {
     case "gini" => Gini
     case "entropy" => Entropy
     case "variance" => Variance
+    case "chisquared" => ChiSquared
     case _ => throw new IllegalArgumentException(s"Did not recognize Impurity name: $name")
   }
 

@@ -1521,6 +1521,8 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.mllib.tree.impurity.Entropy.calculate"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.mllib.tree.impurity.ChiSquared.calculate"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.mllib.tree.impurity.Variance.calculate")
       ) ++
       Seq( // Package-private classes removed in SPARK-2341
