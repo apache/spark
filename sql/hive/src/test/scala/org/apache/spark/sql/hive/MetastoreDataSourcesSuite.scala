@@ -537,18 +537,18 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("path required error") {
-    assert(
-      intercept[AnalysisException] {
-        sparkSession.catalog.createExternalTable(
-          "createdJsonTable",
-          "org.apache.spark.sql.json",
-          Map.empty[String, String])
+    withTable("createdJsonTable") {
+      assert(
+        intercept[IllegalArgumentException] {
+          sparkSession.catalog.createExternalTable(
+            "createdJsonTable",
+            "org.apache.spark.sql.json",
+            Map.empty[String, String])
 
-        table("createdJsonTable")
-      }.getMessage.contains("Unable to infer schema"),
-      "We should complain that path is not specified.")
-
-    sql("DROP TABLE IF EXISTS createdJsonTable")
+          table("createdJsonTable")
+        }.getMessage.contains("'path' is not specified"),
+        "We should complain that path is not specified.")
+    }
   }
 
   test("scan a parquet table created through a CTAS statement") {
