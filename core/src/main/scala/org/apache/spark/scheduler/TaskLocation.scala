@@ -64,8 +64,8 @@ private[spark] object TaskLocation {
 
   /**
    * Create a TaskLocation from a string returned by getPreferredLocations.
-   * These strings have the form [executorLocationTag][hostname][executorid], [hostname], or hdfs_cache_[hostname],
-   * depending on whether the location is cached.
+   * These strings have the form [executorLocationTag][hostname][executorid], [hostname], or
+   * hdfs_cache_[hostname], depending on whether the location is cached.
    */
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
