@@ -51,9 +51,22 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   }
 
   /**
+   * The base hadoop configuration which is shared among all spark sessions. It is based on the
+   * default hadoop configuration of Spark, with custom configurations inside `hive-site.xml`.
+   */
+  lazy val hadoopConf: Configuration = {
+    val conf = new Configuration(sparkContext.hadoopConfiguration)
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      conf.addResource(configFile)
+    }
+    conf
+  }
+
+  /**
    * A catalog that interacts with external systems.
    */
-  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(sparkContext.hadoopConfiguration)
+  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(hadoopConf)
 
   /**
    * A classloader used to load all user-added jar.
