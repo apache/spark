@@ -214,6 +214,6 @@ public class DataTypes {
       throw new IllegalArgumentException("fields should have distinct names.");
     }
 
-    return StructType$.MODULE$.apply(fields);
+    return new StructType(fields);
   }
 }

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.bytes.BytesUtils;
@@ -30,6 +32,8 @@ import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.types.ArrayType;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -68,6 +72,11 @@ public class VectorizedColumnReader {
   private final int maxDefLevel;
 
   /**
+   * Maximum repetition level for this column.
+   */
+  private final int maxRepLevel;
+
+  /**
    * Repetition/Definition/Value readers.
    */
   private SpecificParquetRecordReaderBase.IntIterator repetitionLevelColumn;
@@ -77,7 +86,8 @@ public class VectorizedColumnReader {
   // Only set if vectorized decoding is true. This is used instead of the row by row decoding
   // with `definitionLevelColumn`.
   private VectorizedRleValuesReader defColumn;
-
+  private VectorizedRleValuesReader defColumnCopy;
+ 
   /**
    * Total number of values in this column (in this row group).
    */
@@ -96,6 +106,7 @@ public class VectorizedColumnReader {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
+    this.maxRepLevel = descriptor.getMaxRepetitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
@@ -114,32 +125,45 @@ public class VectorizedColumnReader {
       throw new IOException("totalValueCount == 0");
     }
   }
-
-  /**
-   * Advances to the next value. Returns true if the value is non-null.
-   */
-  private boolean next() throws IOException {
-    if (valuesRead >= endOfPageValueCount) {
-      if (valuesRead >= totalValueCount) {
-        // How do we get here? Throw end of stream exception?
-        return false;
-      }
-      readPage();
-    }
-    ++valuesRead;
-    // TODO: Don't read for flat schemas
-    //repetitionLevel = repetitionLevelColumn.nextInt();
-    return definitionLevelColumn.nextInt() == maxDefLevel;
-  }
-
+  
   /**
    * Reads `total` values from this columnReader into column.
    */
-  void readBatch(int total, ColumnVector column) throws IOException {
+  public void readBatch(int total, ColumnVector column) throws IOException {
+    boolean isNestedColumn = column.getParentColumn() != null;
+    boolean isRepeatedColumn = maxRepLevel > 0;
     int rowId = 0;
-    while (total > 0) {
+    int valuesReadInPage = 0;
+    int repeatedRowId = 0;
+
+    Map<Integer, Integer> rowIds = new HashMap<Integer, Integer>();
+    Map<Integer, Integer> offsets = new HashMap<Integer, Integer>();
+
+    while (true) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
+      // When we reach the end of this page, we update repetition info of this column
+      // and then read next page.
+      if (leftInPage == 0) {
+        // Update repetition info for this column.
+        if (valuesReadInPage > 0 && isNestedColumn) {
+          updateReptitionInfo(column, rowIds, offsets, valuesReadInPage, total);
+          if (rowIds.containsKey(1)) {
+            repeatedRowId = rowIds.get(1);
+          }
+          valuesReadInPage = 0;
+        }
+      }
+      // Stop condition:
+      // If we are going to read data in repeated column, the stop condition is that we
+      // read `total` repeated columns. Eg., if we want to read 5 records of an array of int column.
+      // we can't just read 5 integers. Instead, we have to read the integers until 5 arrays are put
+      // into this array column.
+      if (isRepeatedColumn) {
+        if (repeatedRowId >= total) break;
+      } else {
+        if (total <= 0) break;
+      }
       if (leftInPage == 0) {
         readPage();
         leftInPage = (int) (endOfPageValueCount - valuesRead);
@@ -147,7 +171,8 @@ public class VectorizedColumnReader {
       int num = Math.min(total, leftInPage);
       if (useDictionary) {
         // Read and decode dictionary ids.
-        ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
+        int dictionaryCapacity = Math.max(total, rowId + num);
+        ColumnVector dictionaryIds = column.reserveDictionaryIds(dictionaryCapacity);
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
 
@@ -167,7 +192,7 @@ public class VectorizedColumnReader {
       } else {
         if (column.hasDictionary() && rowId != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
-          // does not support a mix of dictionary and not so we will decode the dictionary.
+          // does not support a mix of dictionary and not, so we will decode the dictionary.
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);
@@ -201,9 +226,12 @@ public class VectorizedColumnReader {
         }
       }
 
+      valuesReadInPage += num;
       valuesRead += num;
       rowId += num;
-      total -= num;
+      if (!isRepeatedColumn) {
+        total -= num;
+      }
     }
   }
 
@@ -478,10 +506,195 @@ public class VectorizedColumnReader {
     }
   }
 
+  /**
+   * Inserts arrays into parent repeated columns.
+   */
+  private void insertRepeatedArray(
+      ColumnVector column,
+      Map<Integer, Integer> rowIds,
+      Map<Integer, Integer> offsets,
+      Map<Integer, Integer> reptitionMap,
+      int total,
+      int repLevel) throws IOException {
+    ColumnVector parentRepeatedColumn = column;
+    int curRepLevel = maxRepLevel;
+    while (true) {
+      parentRepeatedColumn = parentRepeatedColumn.getNearestParentArrayColumn();
+      if (parentRepeatedColumn != null) {
+        int parentColRepLevel = parentRepeatedColumn.getRepLevel();
+        // Only process the parent columns whose repetition levels are equal to or more than
+        // the given repetition level (less than or equal to max repetition level).
+        // E.g., when the current repetition level is 1 and max repetition level us 2,
+        // we only add arrays into the column whose repetition level is 1.
+        if (parentColRepLevel >= repLevel) {
+          // Current row id at this column.
+          int rowId = 0;
+          if (rowIds.containsKey(curRepLevel)) {
+            rowId = rowIds.get(curRepLevel);
+          }
+          // Repetition count.
+          int repCount = 0;
+          if (reptitionMap.containsKey(curRepLevel)) {
+            repCount = reptitionMap.get(curRepLevel);
+          }
+          // Offset of values.
+          int offset = 0;
+          if (offsets.containsKey(curRepLevel)) {
+            offset = offsets.get(curRepLevel);
+          }
+
+          parentRepeatedColumn.putArray(rowId, offset, repCount);
+
+          offset += repCount;
+          repCount = 0;
+          rowId++;
+
+          offsets.put(curRepLevel, offset);
+          reptitionMap.put(curRepLevel, repCount);
+          rowIds.put(curRepLevel, rowId);
+
+          // Increase the repetition count for parent repetition level as we add a new record.
+          if (curRepLevel > 1) {
+            int nextRepCount = 0;
+            if (reptitionMap.containsKey(curRepLevel - 1)) {
+              nextRepCount = reptitionMap.get(curRepLevel - 1);
+            }
+            reptitionMap.put(curRepLevel - 1, nextRepCount + 1);
+          }
+
+          if (curRepLevel == 1 && rowId == total) {
+            return;
+          }
+          curRepLevel--;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Reads repetition level for each value and updates length and offset info for above columns,
+   * recursively.
+   */
+  private void updateReptitionInfo(
+      ColumnVector column,
+      Map<Integer, Integer> rowIds,
+      Map<Integer, Integer> offsets,
+      int valuesReadInPage,
+      int total) throws IOException {
+    // Keeps repetition levels and corresponding repetition counts.
+    Map<Integer, Integer> reptitionMap = new HashMap<Integer, Integer>();
+
+    if (column.getParentColumn() != null) {
+      int prevRepLevel = -1;
+
+      for (int i = 0; i < valuesReadInPage; i++) {
+        int repLevel = repetitionLevelColumn.nextInt();
+        int defLevel = definitionLevelColumn.nextInt();
+
+        if (prevRepLevel >= 0) {
+          // When a new record begins at lower repetition level,
+          // we insert array into repeated column.
+          if (repLevel < maxRepLevel) {
+            insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
+          }
+        }
+        prevRepLevel = repLevel;
+
+        // When definition level is less than max definition level,
+        // there is a null value.
+        if (defLevel < maxDefLevel) {
+          int offset = 0;
+          if (offsets.containsKey(maxRepLevel)) {
+            offset = offsets.get(maxRepLevel);
+          }
+
+          if (column.getParentColumn().getDefLevel() == maxDefLevel) {
+            insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
+            offsets.put(maxRepLevel, offset + 1);
+          } else if (defLevel == 0) {
+            // A null record at root level.
+            // Obtain most-top column (repetition level 1).
+            ColumnVector topColumn = column.getParentColumn();
+            while (topColumn.getParentColumn() != null) {
+              topColumn = topColumn.getParentColumn();
+            }
+            // Get its current row id.
+            int rowId = 0;
+            if (rowIds.containsKey(1)) {
+              rowId = rowIds.get(1);
+            }
+            // Insert null record and increase row id.
+            topColumn.putNull(rowId);
+            rowIds.put(1, rowId + 1);
+
+            // Increse row id at later repetition levels.
+            for (int j = 2; j <= maxRepLevel; j++) {
+              rowId = 0;
+              if (rowIds.containsKey(j)) {
+                rowId = rowIds.get(j);
+              }
+              rowIds.put(j, rowId + 1);
+            }
+
+            // Move to next offset in max repetition level as we processed the current value.
+            offsets.put(maxRepLevel, offset + 1);
+
+            prevRepLevel = -1;
+          } else if (repLevel == maxRepLevel) {
+            // A null value at max repetition level.
+            // This null value is repeated in a wrapping group. Simply increase repetition count.
+            int repCount = 0;
+            if (reptitionMap.containsKey(repLevel)) {
+              repCount = reptitionMap.get(repLevel);
+            }
+            reptitionMap.put(repLevel, repCount + 1);
+          } else {
+            // Null value at definition level > 0.
+            int repCount = 0;
+            if (reptitionMap.containsKey(maxRepLevel)) {
+              repCount = reptitionMap.get(maxRepLevel);
+            }
+            reptitionMap.put(maxRepLevel, repCount + 1);
+          }
+        } else {
+          // Determine the repetition level of non-null values.
+
+          // A new record begins with non-null value.
+          if (maxRepLevel == 0) {
+            // A required record at root level.
+            int repCount = 0;
+            if (reptitionMap.containsKey(1)) {
+              repCount = reptitionMap.get(1);
+            }
+            reptitionMap.put(1, repCount + 1);
+            // insertArrayForRepetition(column, rowIds, offsets, reptitionMap, total,
+            //  0, 1);
+            insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, maxRepLevel - 1);
+          } else {
+            // Repeated values. We increase repetition count.
+            if (reptitionMap.containsKey(maxRepLevel)) {
+              reptitionMap.put(maxRepLevel, reptitionMap.get(maxRepLevel) + 1);
+            } else {
+              reptitionMap.put(maxRepLevel, 1);
+            }
+          }
+        }
+      }
+      if (prevRepLevel >= 0) {
+        insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, 0);
+      }
+    }
+  }
+
   private void readPageV1(DataPageV1 page) throws IOException {
     this.pageValueCount = page.getValueCount();
     ValuesReader rlReader = page.getRlEncoding().getValuesReader(descriptor, REPETITION_LEVEL);
     ValuesReader dlReader;
+    ValuesReader dlReaderCopy;
 
     // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
@@ -489,14 +702,17 @@ public class VectorizedColumnReader {
     }
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
+    this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
     dlReader = this.defColumn;
+    dlReaderCopy = this.defColumnCopy;
     this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(dlReader);
+    this.definitionLevelColumn = new ValuesReaderIntIterator(dlReaderCopy);
     try {
       byte[] bytes = page.getBytes().toByteArray();
       rlReader.initFromPage(pageValueCount, bytes, 0);
       int next = rlReader.getNextOffset();
       dlReader.initFromPage(pageValueCount, bytes, next);
+      dlReaderCopy.initFromPage(pageValueCount, bytes, next);
       next = dlReader.getNextOffset();
       initDataReader(page.getValueEncoding(), bytes, next);
     } catch (IOException e) {
@@ -511,8 +727,11 @@ public class VectorizedColumnReader {
 
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumn);
+    this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumnCopy);
     this.defColumn.initFromBuffer(
+        this.pageValueCount, page.getDefinitionLevels().toByteArray());
+    this.defColumnCopy.initFromBuffer(
         this.pageValueCount, page.getDefinitionLevels().toByteArray());
     try {
       initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);

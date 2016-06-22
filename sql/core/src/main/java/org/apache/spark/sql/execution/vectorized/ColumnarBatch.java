@@ -79,6 +79,8 @@ public final class ColumnarBatch {
     return new ColumnarBatch(schema, maxRows, memMode);
   }
 
+  public int numFields() { return columns.length; }
+
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
    * calling this. This must be called at the end to clean up memory allocations.

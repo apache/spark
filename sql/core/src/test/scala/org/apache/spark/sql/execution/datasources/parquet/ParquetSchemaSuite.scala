@@ -63,7 +63,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
       val expected = sqlSchema
       assert(
-        actual === expected,
+        DataType.equalsIgnoreCompatibleNullability(actual, expected),
         s"""Schema mismatch.
            |Expected schema: ${expected.json}
            |Actual schema:   ${actual.json}

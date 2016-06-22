@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
@@ -27,6 +28,7 @@ import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedColumnReader;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -480,7 +482,8 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract double getDouble(int rowId);
 
   /**
-   * Puts a byte array that already exists in this column.
+   * Puts an array that already exists in this column.
+   * This method only updates array length and offset data in this column.
    */
   public abstract void putArray(int rowId, int offset, int length);
 
@@ -827,6 +830,28 @@ public abstract class ColumnVector implements AutoCloseable {
   public final ColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
 
   /**
+   * Returns the number of childColumns.
+   */
+  public final int getChildColumnNums() {
+    if (childColumns == null) {
+      return 0;
+    } else {
+      return childColumns.length;
+    }
+  }
+
+  /**
+   * Returns whether this ColumnVector represents complex types such as Array, Map, Struct.
+   */
+  public final boolean isComplex() {
+    if (type instanceof ArrayType || type instanceof StructType || type instanceof MapType) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /**
    * Returns the elements appended.
    */
   public final int getElementsAppended() { return elementsAppended; }
@@ -840,6 +865,16 @@ public abstract class ColumnVector implements AutoCloseable {
    * Marks this column as being constant.
    */
   public final void setIsConstant() { isConstant = true; }
+
+  /**
+   * Returns definition level for this column. This value is valid only if isComplex() return true.
+   */
+  public final int getDefLevel() { return defLevel; }
+
+  /**
+   * Returns repetition level for this column. This value is valid only if isComplex() return true.
+   */
+  public final int getRepLevel() { return repLevel; }
 
   /**
    * Maximum number of rows that can be stored in this column.
@@ -867,6 +902,16 @@ public abstract class ColumnVector implements AutoCloseable {
    * across resets.
    */
   protected boolean isConstant;
+
+  /**
+   * Max definition level of this column. This value is valid only if this is a nested column.
+   */
+  protected int defLevel;
+
+  /**
+   * Max repetition level of this column. This value is valid only if this is a nested column.
+   */
+  protected int repLevel;
 
   /**
    * Default size of each array length value. This grows as necessary.
@@ -904,6 +949,70 @@ public abstract class ColumnVector implements AutoCloseable {
    * Reusable column for ids of dictionary.
    */
   protected ColumnVector dictionaryIds;
+
+  /**
+   * Associated VectorizedColumnReader which is used to load data into this ColumnVector.
+   * If this is a complex type such as array or struct, the VectorizedColumnReader will be
+   * null.
+   */
+  protected VectorizedColumnReader columnReader;
+
+  /**
+   * The parent ColumnVector of this column. If this column is not an element of nested column,
+   * then this is null.
+   */
+  protected ColumnVector parentColumn;
+
+  /**
+   * Sets the columnReader for this column.
+   */
+  public void setColumnReader(VectorizedColumnReader columnReader) {
+    this.columnReader = columnReader;
+  }
+
+  /**
+   * Sets the parent column for this column.
+   */
+  public void setParentColumn(ColumnVector column) {
+    this.parentColumn = column;
+  }
+
+  /**
+   * Returns the parent column for this column.
+   */
+  public ColumnVector getParentColumn() {
+    return this.parentColumn;
+  }
+
+  /**
+   * Returns the nearest parent column which is an Array column.
+   */
+  public ColumnVector getNearestParentArrayColumn() {
+    ColumnVector parentCol = this.parentColumn;
+    while (parentCol != null && !parentCol.isArray()) {
+      parentCol = parentCol.parentColumn;
+    }
+    return parentCol;
+  }
+
+  /**
+   * Returns if this ColumnVector has initialized VectorizedColumnReader.
+   */
+  public boolean hasColumnReader() {
+    return this.columnReader != null;
+  }
+
+  /**
+   * Reads `total` values from associated columnReader into this column.
+   */
+  public void readBatch(int total) throws IOException {
+    if (this.columnReader != null) {
+      this.columnReader.readBatch(total, this);
+    } else {
+      throw new RuntimeException("The reader of this ColumnVector is not initialized yet. " +
+        "Failed to call readBatch().");
+    }
+  }
 
   /**
    * Update the dictionary.
@@ -951,27 +1060,47 @@ public abstract class ColumnVector implements AutoCloseable {
       DataType childType;
       int childCapacity = capacity;
       if (type instanceof ArrayType) {
+        ArrayType arrayType = (ArrayType)type;
+        if (arrayType.metadata().contains("defLevel")) {
+          this.defLevel = (int)arrayType.metadata().getLong("defLevel");
+          this.repLevel = (int)arrayType.metadata().getLong("repLevel");
+        }
         childType = ((ArrayType)type).elementType();
+        this.defLevel = defLevel;
       } else {
         childType = DataTypes.ByteType;
         childCapacity *= DEFAULT_ARRAY_LENGTH;
       }
       this.childColumns = new ColumnVector[1];
       this.childColumns[0] = ColumnVector.allocate(childCapacity, childType, memMode);
+      this.childColumns[0].setParentColumn(this);
       this.resultArray = new Array(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
+      StructType structType = (StructType)type;
+      if (structType.metadata().contains("defLevel")) {
+        this.defLevel = (int)structType.metadata().getLong("defLevel");
+        this.repLevel = (int)structType.metadata().getLong("repLevel");
+      }
       StructType st = (StructType)type;
       this.childColumns = new ColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
-        this.childColumns[i] = ColumnVector.allocate(capacity, st.fields()[i].dataType(), memMode);
+        int fieldDefLevel = 0;
+        if (st.fields()[i].metadata().contains("defLevel")) {
+          fieldDefLevel = (int)st.fields()[i].metadata().getLong("defLevel");
+        }
+
+        this.childColumns[i] =
+          ColumnVector.allocate(capacity, st.fields()[i].dataType(), memMode);
+        this.childColumns[i].setParentColumn(this);
       }
       this.resultArray = null;
       this.resultStruct = new ColumnarBatch.Row(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new ColumnVector[2];
-      this.childColumns[0] = ColumnVector.allocate(capacity, DataTypes.IntegerType, memMode);
+      this.childColumns[0] =
+        ColumnVector.allocate(capacity, DataTypes.IntegerType, memMode);
       this.childColumns[1] = ColumnVector.allocate(capacity, DataTypes.LongType, memMode);
       this.resultArray = null;
       this.resultStruct = new ColumnarBatch.Row(this.childColumns);

@@ -196,12 +196,12 @@ object DataType {
    */
   private[types] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
-      case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
+      case (ArrayType(leftElementType, _, _), ArrayType(rightElementType, _, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
       case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
         equalsIgnoreNullability(leftKeyType, rightKeyType) &&
           equalsIgnoreNullability(leftValueType, rightValueType)
-      case (StructType(leftFields), StructType(rightFields)) =>
+      case (StructType(leftFields, _), StructType(rightFields, _)) =>
         leftFields.length == rightFields.length &&
           leftFields.zip(rightFields).forall { case (l, r) =>
             l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
@@ -226,7 +226,7 @@ object DataType {
    */
   private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
     (from, to) match {
-      case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
+      case (ArrayType(fromElement, fn, _), ArrayType(toElement, tn, _)) =>
         (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
 
       case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
@@ -234,7 +234,7 @@ object DataType {
           equalsIgnoreCompatibleNullability(fromKey, toKey) &&
           equalsIgnoreCompatibleNullability(fromValue, toValue)
 
-      case (StructType(fromFields), StructType(toFields)) =>
+      case (StructType(fromFields, _), StructType(toFields, _)) =>
         fromFields.length == toFields.length &&
           fromFields.zip(toFields).forall { case (fromField, toField) =>
             fromField.name == toField.name &&

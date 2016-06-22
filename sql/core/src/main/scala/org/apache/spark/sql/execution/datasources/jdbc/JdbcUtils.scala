@@ -193,7 +193,7 @@ object JdbcUtils extends Logging {
                 case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
-                case ArrayType(et, _) =>
+                case ArrayType(et, _, _) =>
                   // remove type length parameters from end of type name
                   val typeName = getJdbcType(et, dialect).databaseTypeDefinition
                     .toLowerCase.split("\\(")(0)

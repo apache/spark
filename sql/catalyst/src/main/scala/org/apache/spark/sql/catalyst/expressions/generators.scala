@@ -115,14 +115,14 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(et, containsNull) => new StructType().add("col", et, containsNull)
+    case ArrayType(et, containsNull, _) => new StructType().add("col", et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>
       new StructType().add("key", kt, false).add("value", vt, valueContainsNull)
   }
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     child.dataType match {
-      case ArrayType(et, _) =>
+      case ArrayType(et, _, _) =>
         val inputArray = child.eval(input).asInstanceOf[ArrayData]
         if (inputArray == null) {
           Nil

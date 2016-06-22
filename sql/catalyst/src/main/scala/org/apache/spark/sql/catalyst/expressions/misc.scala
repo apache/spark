@@ -315,7 +315,7 @@ abstract class HashExpression[E] extends Expression {
         val numBytes = s"$input.numBytes()"
         s"$result = $hasher.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
 
-      case ArrayType(et, containsNull) =>
+      case ArrayType(et, containsNull, _) =>
         val index = ctx.freshName("index")
         s"""
           for (int $index = 0; $index < $input.numElements(); $index++) {
@@ -336,7 +336,7 @@ abstract class HashExpression[E] extends Expression {
           }
         """
 
-      case StructType(fields) =>
+      case StructType(fields, _) =>
         fields.zipWithIndex.map { case (field, index) =>
           nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
         }.mkString("\n")
@@ -385,7 +385,7 @@ abstract class InterpretedHashFunction {
       case array: ArrayData =>
         val elementType = dataType match {
           case udt: UserDefinedType[_] => udt.sqlType.asInstanceOf[ArrayType].elementType
-          case ArrayType(et, _) => et
+          case ArrayType(et, _, _) => et
         }
         var result = seed
         var i = 0
@@ -417,7 +417,7 @@ abstract class InterpretedHashFunction {
         val types: Array[DataType] = dataType match {
           case udt: UserDefinedType[_] =>
             udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
-          case StructType(fields) => fields.map(_.dataType)
+          case StructType(fields, _) => fields.map(_.dataType)
         }
         var result = seed
         var i = 0

@@ -92,7 +92,11 @@ import org.apache.spark.util.Utils
  * }}}
  */
 @DeveloperApi
-case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
+case class StructType(
+    fields: Array[StructField],
+    metadata: Metadata = Metadata.empty) extends DataType with Seq[StructField] {
+
+  def this(fields: Array[StructField]) = this(fields, Metadata.empty)
 
   /** No-arg constructor for kryo. */
   def this() = this(Array.empty[StructField])
@@ -106,7 +110,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def equals(that: Any): Boolean = {
     that match {
-      case StructType(otherFields) =>
+      case StructType(otherFields, _) =>
         java.util.Arrays.equals(
           fields.asInstanceOf[Array[AnyRef]], otherFields.asInstanceOf[Array[AnyRef]])
       case _ => false
@@ -371,11 +375,11 @@ object StructType extends AbstractDataType {
     }
   }
 
-  def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
+  def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray, Metadata.empty)
 
   def apply(fields: java.util.List[StructField]): StructType = {
     import scala.collection.JavaConverters._
-    StructType(fields.asScala)
+    apply(fields.asScala)
   }
 
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
@@ -383,7 +387,7 @@ object StructType extends AbstractDataType {
 
   def removeMetadata(key: String, dt: DataType): DataType =
     dt match {
-      case StructType(fields) =>
+      case StructType(fields, _) =>
         val newFields = fields.map { f =>
           val mb = new MetadataBuilder()
           f.copy(dataType = removeMetadata(key, f.dataType),
@@ -395,8 +399,8 @@ object StructType extends AbstractDataType {
 
   private[sql] def merge(left: DataType, right: DataType): DataType =
     (left, right) match {
-      case (ArrayType(leftElementType, leftContainsNull),
-      ArrayType(rightElementType, rightContainsNull)) =>
+      case (ArrayType(leftElementType, leftContainsNull, _),
+      ArrayType(rightElementType, rightContainsNull, _)) =>
         ArrayType(
           merge(leftElementType, rightElementType),
           leftContainsNull || rightContainsNull)
@@ -408,7 +412,7 @@ object StructType extends AbstractDataType {
           merge(leftValueType, rightValueType),
           leftContainsNull || rightContainsNull)
 
-      case (StructType(leftFields), StructType(rightFields)) =>
+      case (StructType(leftFields, _), StructType(rightFields, _)) =>
         val newFields = ArrayBuffer.empty[StructField]
         // This metadata will record the fields that only exist in one of two StructTypes
         val optionalMeta = new MetadataBuilder()

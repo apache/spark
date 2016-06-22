@@ -435,7 +435,7 @@ case class MapObjects private(
         s"${genInputData.value}.length" -> s"${genInputData.value}[$loopIndex]"
       case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
         s"${genInputData.value}.size()" -> s"${genInputData.value}.get($loopIndex)"
-      case ArrayType(et, _) =>
+      case ArrayType(et, _, _) =>
         s"${genInputData.value}.numElements()" -> ctx.getValue(genInputData.value, et, loopIndex)
       case ObjectType(cls) if cls == classOf[Object] =>
         s"$seq == null ? $array.length : $seq.size()" ->

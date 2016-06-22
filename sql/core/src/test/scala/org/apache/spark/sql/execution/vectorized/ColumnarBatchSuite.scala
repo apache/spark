@@ -617,7 +617,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             assert(r1.getString(ordinal) == r2.getString(ordinal), "Seed = " + seed)
           case CalendarIntervalType =>
             assert(r1.getInterval(ordinal) === r2.get(ordinal).asInstanceOf[CalendarInterval])
-          case ArrayType(childType, n) =>
+          case ArrayType(childType, n, _) =>
             val a1 = r1.getArray(ordinal).array
             val a2 = r2.getList(ordinal).toArray
             assert(a1.length == a2.length, "Seed = " + seed)
@@ -649,7 +649,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
                 }
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
-          case StructType(childFields) =>
+          case StructType(childFields, _) =>
             compareStruct(childFields, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>

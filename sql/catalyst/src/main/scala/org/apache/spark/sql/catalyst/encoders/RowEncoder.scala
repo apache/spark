@@ -119,7 +119,7 @@ object RowEncoder {
         "fromString",
         inputObject :: Nil)
 
-    case t @ ArrayType(et, _) => et match {
+    case t @ ArrayType(et, _, _) => et match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
         // TODO: validate input type for primitive array.
         NewInstance(
@@ -152,7 +152,7 @@ object RowEncoder {
         convertedKeys :: convertedValues :: Nil,
         dataType = t)
 
-    case StructType(fields) =>
+    case StructType(fields, _) =>
       val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
         val fieldValue = serializerFor(
           ValidateExternalType(
@@ -259,7 +259,7 @@ object RowEncoder {
     case StringType =>
       Invoke(input, "toString", ObjectType(classOf[String]))
 
-    case ArrayType(et, nullable) =>
+    case ArrayType(et, nullable, _) =>
       val arrayData =
         Invoke(
           MapObjects(deserializerFor(_), input, et),
@@ -284,7 +284,7 @@ object RowEncoder {
         "toScalaMap",
         keyData :: valueData :: Nil)
 
-    case schema @ StructType(fields) =>
+    case schema @ StructType(fields, _) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),

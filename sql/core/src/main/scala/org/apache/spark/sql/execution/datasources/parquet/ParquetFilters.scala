@@ -192,7 +192,7 @@ private[sql] object ParquetFilters {
    * fields.
    */
   private def getFieldMap(dataType: DataType): Array[(String, DataType)] = dataType match {
-    case StructType(fields) =>
+    case StructType(fields, _) =>
       fields.filter { f =>
         !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
           !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)

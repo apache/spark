@@ -63,9 +63,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+    case ArrayType(dt, _, _) if RowOrdering.isOrderable(dt) =>
       TypeCheckResult.TypeCheckSuccess
-    case ArrayType(dt, _) =>
+    case ArrayType(dt, _, _) =>
       TypeCheckResult.TypeCheckFailure(
         s"$prettyName does not support sorting array of type ${dt.simpleString}")
     case _ =>
@@ -75,9 +75,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   @transient
   private lazy val lt: Comparator[Any] = {
     val ordering = base.dataType match {
-      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(n: AtomicType, _, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
     new Comparator[Any]() {
@@ -98,9 +98,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   @transient
   private lazy val gt: Comparator[Any] = {
     val ordering = base.dataType match {
-      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(n: AtomicType, _, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
     new Comparator[Any]() {
@@ -144,7 +144,7 @@ case class ArrayContains(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] = right.dataType match {
     case NullType => Seq()
     case _ => left.dataType match {
-      case n @ ArrayType(element, _) => Seq(n, element)
+      case n @ ArrayType(element, _, _) => Seq(n, element)
       case _ => Seq()
     }
   }

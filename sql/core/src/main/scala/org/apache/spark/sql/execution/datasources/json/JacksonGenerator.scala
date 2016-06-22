@@ -53,7 +53,7 @@ private[sql] object JacksonGenerator {
       // an ArrayData at here, instead of a Vector.
       case (udt: UserDefinedType[_], v) => valWriter(udt.sqlType, v)
 
-      case (ArrayType(ty, _), v: ArrayData) =>
+      case (ArrayType(ty, _, _), v: ArrayData) =>
         gen.writeStartArray()
         v.foreach(ty, (_, value) => valWriter(ty, value))
         gen.writeEndArray()
@@ -66,7 +66,7 @@ private[sql] object JacksonGenerator {
         })
         gen.writeEndObject()
 
-      case (StructType(ty), v: InternalRow) =>
+      case (StructType(ty, _), v: InternalRow) =>
         gen.writeStartObject()
         var i = 0
         while (i < ty.length) {

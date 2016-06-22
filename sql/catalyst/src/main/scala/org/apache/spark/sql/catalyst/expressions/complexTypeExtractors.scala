@@ -48,12 +48,12 @@ object ExtractValue {
       resolver: Resolver): Expression = {
 
     (child.dataType, extraction) match {
-      case (StructType(fields), NonNullLiteral(v, StringType)) =>
+      case (StructType(fields, _), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         GetStructField(child, ordinal, Some(fieldName))
 
-      case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
+      case (ArrayType(StructType(fields, _), containsNull, _), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
@@ -65,7 +65,7 @@ object ExtractValue {
 
       case (otherType, _) =>
         val errorMsg = otherType match {
-          case StructType(_) =>
+          case StructType(_, _) =>
             s"Field name should be String Literal, but it's $extraction"
           case other =>
             s"Can't extract value from $child"

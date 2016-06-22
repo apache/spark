@@ -1683,7 +1683,7 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
 
   def samePrimitiveType(lhs: StructType, rhs: StructType): Boolean = {
     (lhs, rhs) match {
-      case (StructType(Array(f1)), StructType(Array(f2))) => f1.dataType == f2.dataType
+      case (StructType(Array(f1), _), StructType(Array(f2), _)) => f1.dataType == f2.dataType
       case _ => false
     }
   }

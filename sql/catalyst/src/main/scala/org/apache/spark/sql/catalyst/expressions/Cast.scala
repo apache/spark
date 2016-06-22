@@ -62,7 +62,7 @@ object Cast {
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 
-    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+    case (ArrayType(fromType, fn, _), ArrayType(toType, tn, _)) =>
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
 
@@ -72,7 +72,7 @@ object Cast {
         canCast(fromValue, toValue) &&
         resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
 
-    case (StructType(fromFields), StructType(toFields)) =>
+    case (StructType(fromFields, _), StructType(toFields, _)) =>
       fromFields.length == toFields.length &&
         fromFields.zip(toFields).forall {
           case (fromField, toField) =>

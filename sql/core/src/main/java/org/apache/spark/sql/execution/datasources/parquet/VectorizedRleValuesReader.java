@@ -498,7 +498,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void readBinary(int total, ColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
-
+ 
   @Override
   public void readBooleans(int total, ColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
