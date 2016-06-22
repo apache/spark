@@ -723,7 +723,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     testData.select($"*").show(1000)
   }
 
-  test("showString: truncate = [true, false]") {
+  test("showString: truncate = [0, 20]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
@@ -733,7 +733,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                    ||111111111111111111111|
                                    |+---------------------+
                                    |""".stripMargin
-    assert(df.showString(10, false) === expectedAnswerForFalse)
+    assert(df.showString(10, truncate = 0) === expectedAnswerForFalse)
     val expectedAnswerForTrue = """+--------------------+
                                   ||               value|
                                   |+--------------------+
@@ -741,7 +741,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                   ||11111111111111111...|
                                   |+--------------------+
                                   |""".stripMargin
-    assert(df.showString(10, true) === expectedAnswerForTrue)
+    assert(df.showString(10, truncate = 20) === expectedAnswerForTrue)
+  }
+
+  test("showString: truncate = [3, 17]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+-----+
+                                   ||value|
+                                   |+-----+
+                                   ||    1|
+                                   ||  111|
+                                   |+-----+
+                                   |""".stripMargin
+    assert(df.showString(10, truncate = 3) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+-----------------+
+                                  ||            value|
+                                  |+-----------------+
+                                  ||                1|
+                                  ||11111111111111...|
+                                  |+-----------------+
+                                  |""".stripMargin
+    assert(df.showString(10, truncate = 17) === expectedAnswerForTrue)
   }
 
   test("showString(negative)") {
