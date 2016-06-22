@@ -49,6 +49,12 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
 
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
+    if (conf.contains("spark.yarn.credentials.file")) {
+      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
+    }
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray)
     totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(conf)
@@ -61,12 +67,6 @@ private[spark] class YarnClientSchedulerBackend(
     super.start()
     waitForApplication()
 
-    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
-    // reads the credentials from HDFS, just like the executors and updates its own credentials
-    // cache.
-    if (conf.contains("spark.yarn.credentials.file")) {
-      YarnSparkHadoopUtil.get.startExecutorDelegationTokenRenewer(conf)
-    }
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
   }
