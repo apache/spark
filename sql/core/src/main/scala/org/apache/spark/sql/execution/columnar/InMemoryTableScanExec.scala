@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode}
+import org.apache.spark.sql.execution.{BatchedDataSourceScanExec, CodegenSupport, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.vectorized.{ColumnVector, ColumnarBatch}
 import org.apache.spark.sql.types.{DataType, UserDefinedType}
@@ -130,7 +130,7 @@ case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  override protected def doExecute(): RDD[InternalRow] = {
+  protected override def doExecute(): RDD[InternalRow] = {
     assert(!useColumnarScan)
     val numOutputRows = longMetric("numOutputRows")
 
@@ -212,7 +212,9 @@ case class InMemoryTableScanExec(
 
   /**
    * Produce code to process the input iterator as [[ColumnarBatch]]es.
+   *
    * This produces an [[UnsafeRow]] for each row in each batch.
+   * DUPLICATE CODE ALERT: This is copied directly from [[BatchedDataSourceScanExec]].
    */
   override protected def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
@@ -268,7 +270,9 @@ case class InMemoryTableScanExec(
 
   /**
    * Generate [[ColumnVector]] expressions for our parent to consume as rows.
+   *
    * This is called once per [[ColumnarBatch]].
+   * DUPLICATE CODE ALERT: This is copied directly from [[BatchedDataSourceScanExec]].
    */
   private def genCodeColumnVector(
       ctx: CodegenContext,

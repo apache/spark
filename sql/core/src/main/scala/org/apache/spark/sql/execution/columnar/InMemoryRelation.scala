@@ -86,12 +86,17 @@ case class InMemoryRelation(
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
     buildBuffers()
+  }
+
+  if (_cachedColumnVectors == null) {
     buildColumnarBuffers()
   }
 
   def recache(): Unit = {
     _cachedColumnBuffers.unpersist()
+    _cachedColumnVectors.unpersist()
     _cachedColumnBuffers = null
+    _cachedColumnVectors = null
     buildBuffers()
     buildColumnarBuffers()
   }
@@ -173,6 +178,7 @@ case class InMemoryRelation(
             var i = 0
             totalSize = 0
             while (i < row.numFields) {
+              // HACK ALERT: This doesn't work for other data types! :)
               columnarBatch.column(i).putLong(rowCount, row.getLong(i))
               totalSize += 8
               i += 1
