@@ -394,7 +394,9 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) reserveInternal(requiredCapacity * 2);
+    if (requiredCapacity > capacity) {
+      reserveInternal((int) Math.min(Integer.MAX_VALUE, requiredCapacity * 2L));
+    }
   }
 
   // Spilt this function out since it is the slow path.

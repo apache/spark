@@ -424,7 +424,9 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) reserveInternal(requiredCapacity * 2);
+    if (requiredCapacity > capacity) {
+      reserveInternal((int) Math.min(Integer.MAX_VALUE, requiredCapacity * 2L));
+    }
   }
 
   // Split out the slow path.
