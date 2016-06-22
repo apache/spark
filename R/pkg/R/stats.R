@@ -19,10 +19,9 @@
 
 setOldClass("jobj")
 
-#' @title SparkDataFrame statistic functions
-
-#' @description
-#' crosstab - Computes a pair-wise frequency table of the given columns. Also known as a contingency
+#' Computes a pair-wise frequency table of the given columns
+#'
+#' Computes a pair-wise frequency table of the given columns. Also known as a contingency
 #' table. The number of distinct values for each column should be less than 1e4. At most 1e6
 #' non-zero pair frequencies will be returned.
 #'
@@ -33,8 +32,9 @@ setOldClass("jobj")
 #'         of `col2`. The name of the first column will be `$col1_$col2`. Pairs that have no
 #'         occurrences will have zero as their counts.
 #'
-#' @rdname statfunctions
+#' @rdname crosstab
 #' @name crosstab
+#' @family stat functions
 #' @export
 #' @examples
 #' \dontrun{
@@ -59,6 +59,7 @@ setMethod("crosstab",
 #'
 #' @rdname cov
 #' @name cov
+#' @family stat functions
 #' @export
 #' @examples
 #'\dontrun{
@@ -87,6 +88,7 @@ setMethod("cov",
 #'
 #' @rdname corr
 #' @name corr
+#' @family stat functions
 #' @export
 #' @examples
 #'\dontrun{
@@ -103,8 +105,10 @@ setMethod("corr",
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
 
-#' @description
-#' freqItems - Finding frequent items for columns, possibly with false positives.
+
+#' Finding frequent items for columns, possibly with false positives
+#'
+#' Finding frequent items for columns, possibly with false positives.
 #' Using the frequent element count algorithm described in
 #' \url{http://dx.doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
 #'
@@ -114,8 +118,9 @@ setMethod("corr",
 #'                Should be greater than 1e-4. Default support = 0.01.
 #' @return a local R data.frame with the frequent items in each column
 #'
-#' @rdname statfunctions
+#' @rdname freqItems
 #' @name freqItems
+#' @family stat functions
 #' @export
 #' @examples
 #' \dontrun{
@@ -130,8 +135,9 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
             collect(dataFrame(sct))
           })
 
-#' @description
-#' approxQuantile - Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
+#' Calculates the approximate quantiles of a numerical column of a SparkDataFrame
+#'
+#' Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
 #' The result of this algorithm has the following deterministic bound:
 #' If the SparkDataFrame has N elements and if we request the quantile at probability `p` up to
 #' error `err`, then the algorithm will return a sample `x` from the SparkDataFrame so that the
@@ -150,8 +156,9 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #'                      Note that values greater than 1 are accepted but give the same result as 1.
 #' @return The approximate quantiles at the given probabilities.
 #'
-#' @rdname statfunctions
+#' @rdname approxQuantile
 #' @name approxQuantile
+#' @family stat functions
 #' @export
 #' @examples
 #' \dontrun{
@@ -168,8 +175,9 @@ setMethod("approxQuantile",
                         as.list(probabilities), relativeError)
           })
 
-#' @description
-#' sampleBy - Returns a stratified sample without replacement based on the fraction given on each
+#' Returns a stratified sample without replacement
+#'
+#' Returns a stratified sample without replacement based on the fraction given on each
 #' stratum.
 #'
 #' @param x A SparkDataFrame
@@ -179,8 +187,9 @@ setMethod("approxQuantile",
 #' @param seed random seed
 #' @return A new SparkDataFrame that represents the stratified sample
 #'
-#' @rdname statfunctions
+#' @rdname sampleBy
 #' @name sampleBy
+#' @family stat functions
 #' @export
 #' @examples
 #'\dontrun{

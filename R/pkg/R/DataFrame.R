@@ -59,6 +59,7 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 #' @export
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the SparkDataFrame is cached
+#' @noRd
 dataFrame <- function(sdf, isCached = FALSE) {
   new("SparkDataFrame", sdf, isCached)
 }
@@ -119,7 +120,7 @@ setMethod("schema",
 #' Print the logical and physical Catalyst plans to the console for debugging.
 #'
 #' @param x A SparkDataFrame
-#' @param extended Logical. If extended is False, explain() only prints the physical plan.
+#' @param extended Logical. If extended is FALSE, explain() only prints the physical plan.
 #' @family SparkDataFrame functions
 #' @rdname explain
 #' @name explain
@@ -175,6 +176,8 @@ setMethod("isLocal",
 #'
 #' @param x A SparkDataFrame
 #' @param numRows The number of rows to print. Defaults to 20.
+#' @param truncate Whether truncate long strings. If true, strings more than 20 characters will be
+#' truncated and all cells will be aligned right
 #'
 #' @family SparkDataFrame functions
 #' @rdname showDF
@@ -1854,7 +1857,7 @@ setMethod("withColumnRenamed",
             select(x, cols)
           })
 
-#' @param newColPair A named pair of the form new_column_name = existing_column
+#' @param ... A named pair of the form new_column_name = existing_column
 #' @rdname rename
 #' @name rename
 #' @export
@@ -2248,7 +2251,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
   cols
 }
 
-#' rbind
+#' Return a new SparkDataFrame containing the union of rows
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
 #' and another SparkDataFrame. This is equivalent to `UNION ALL` in SQL.
@@ -2258,39 +2261,64 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @param y A SparkDataFrame
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
-#' @rdname rbind
-#' @name unionAll
+#' @rdname union
+#' @name union
+#' @seealso \link{rbind}
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
 #' df1 <- read.json(path)
 #' df2 <- read.json(path2)
-#' unioned <- unionAll(df, df2)
+#' unioned <- union(df, df2)
+#' unions <- rbind(df, df2, df3, df4)
 #' }
+#' @note union since 2.0.0
+setMethod("union",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            unioned <- callJMethod(x@sdf, "union", y@sdf)
+            dataFrame(unioned)
+          })
+
+#' unionAll is deprecated - use union instead
+#' @rdname union
+#' @name unionAll
+#' @export
 #' @note unionAll since 1.4.0
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y) {
-            unioned <- callJMethod(x@sdf, "unionAll", y@sdf)
-            dataFrame(unioned)
+            .Deprecated("union")
+            union(x, y)
           })
 
 #' Union two or more SparkDataFrames
 #'
-#' Returns a new SparkDataFrame containing rows of all parameters.
+#' Union two or more SparkDataFrames. This is equivalent to `UNION ALL` in SQL.
+#' Note that this does not remove duplicate rows across the two SparkDataFrames.
 #'
+#' @param x A SparkDataFrame
+#' @param ... Additional SparkDataFrame
+#' @return A SparkDataFrame containing the result of the union.
+#' @family SparkDataFrame functions
 #' @rdname rbind
 #' @name rbind
+#' @seealso \link{union}
 #' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' unions <- rbind(df, df2, df3, df4)
+#' }
 #' @note rbind since 1.5.0
 setMethod("rbind",
           signature(... = "SparkDataFrame"),
           function(x, ..., deparse.level = 1) {
             if (nargs() == 3) {
-              unionAll(x, ...)
+              union(x, ...)
             } else {
-              unionAll(x, Recall(..., deparse.level = 1))
+              union(x, Recall(..., deparse.level = 1))
             }
           })
 

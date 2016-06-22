@@ -2143,7 +2143,7 @@ options.
 ## Upgrading From Spark SQL 1.6 to 2.0
 
  - `SparkSession` is now the new entry point of Spark that replaces the old `SQLContext` and
-   `HiveContext`. Note that the old SQLContext and HiveContext are kept for backward compatibility.
+   `HiveContext`. Note that the old SQLContext and HiveContext are kept for backward compatibility. A new `catalog` interface is accessible from `SparkSession` - existing API on databases and tables access such as `listTables`, `createExternalTable`, `dropTempView`, `cacheTable` are moved here.
 
  - Dataset API and DataFrame API are unified. In Scala, `DataFrame` becomes a type alias for
    `Dataset[Row]`, while Java API users must replace `DataFrame` with `Dataset<Row>`. Both the typed
@@ -2152,6 +2152,10 @@ options.
    Python and R is not a language feature, the concept of Dataset does not apply to these languages’
    APIs. Instead, `DataFrame` remains the primary programing abstraction, which is analogous to the
    single-node data frame notion in these languages.
+
+ - Dataset and DataFrame API `unionAll` has been deprecated and replaced by `union`
+ - Dataset and DataFrame API `explode` has been deprecated, alternatively, use `functions.explode()` with `select` or `flatMap`
+ - Dataset and DataFrame API `registerTempTable` has been deprecated and replaced by `createOrReplaceTempView`
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
