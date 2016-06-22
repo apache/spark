@@ -152,14 +152,6 @@ class KMeansModel private[ml] (
   }
 
   /**
-   * Export the model to stream result in PMML format
-   */
-  @Since("1.6.0")
-  override def toPMML(streamResult: StreamResult): Unit = {
-    parentModel.toPMML(streamResult)
-  }
-
-  /**
    * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    *
    * For [[KMeansModel]], this does NOT currently save the training [[summary]].
@@ -217,15 +209,14 @@ object KMeansModel extends MLReadable[KMeansModel] {
     override val supportedFormats = List("native", "pmml")
 
     override protected def saveImpl(path: String): Unit = {
-      if (format == "native") {
-        saveNative(path)
-      } else {
-        savePMML(path)
+      source match {
+        case "native" => saveNative(path)
+        case "pmml" => savePMML(path)
       }
     }
 
     private def savePMML(path: String): Unit = {
-      parentModel.toPMML(sc, path)
+      instance.parentModel.toPMML(sc, path)
     }
 
     private def saveNative(path: String): Unit = {

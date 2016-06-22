@@ -98,10 +98,11 @@ abstract class MLWriter extends BaseReadWrite with Logging {
           s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
       }
     }
-    if (source in supportedFormmats) {
+    if (supportedFormats.contains(source)) {
       saveImpl(path)
     } else {
-      throw new IllegalArgumentException(s"Format ${source} is not supported in this model")
+      throw new IllegalArgumentException(s"Format ${source} is not supported by this model " +
+        s"try one of (${supportedFormats})")
     }
   }
 
@@ -113,7 +114,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
    * supporting "pmml".
    */
   def format(source: String): MLWriter = {
-    this.source = source
+    this.source = source.toLowerCase()
     this
   }
 
