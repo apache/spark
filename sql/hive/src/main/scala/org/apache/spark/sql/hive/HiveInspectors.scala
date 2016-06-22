@@ -606,13 +606,13 @@ private[hive] trait HiveInspectors {
       // currently, hive doesn't provide the ConstantStructObjectInspector
       case si: StructObjectInspector =>
         val fields = si.getAllStructFieldRefs.asScala
-        val fieldsToUnwrap = fields.zip(
-          fields.map(_.getFieldObjectInspector).map(unwrapperFor))
+        val unwrappers = fields.map { field =>
+          val unwrapper = unwrapperFor(field.getFieldObjectInspector)
+          data: Any => unwrapper(si.getStructFieldData(data, field))
+        }
         data: Any => {
           if (data != null) {
-            InternalRow.fromSeq(fieldsToUnwrap.map { case (field, unwrapper) =>
-              unwrapper(si.getStructFieldData(data, field))
-            })
+            InternalRow.fromSeq(unwrappers.map(_(data)))
           } else {
             null
           }
