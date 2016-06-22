@@ -174,8 +174,8 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
-   * Indicates if this function supports partial aggregation.
-   * Currently Hive UDAF is the only one that doesn't support partial aggregation.
+   * Indicates if this function needs to aggregate values group-by-group in a single step.
+   * If false, we must always use a `SortAggregateExec` operator without partial aggregates.
    */
   def supportsPartial: Boolean = true
 
