@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
@@ -32,7 +33,7 @@ case class OrcData(intField: Int, stringField: String)
 
 abstract class OrcSuite extends QueryTest
     with TestHiveSingleton with SQLTestUtils with BeforeAndAfterAll {
-  import spark._
+  import spark.implicits._
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -194,30 +195,6 @@ abstract class OrcSuite extends QueryTest
       assert(e.contains("Codec [illegal] is not available. Known codecs are"))
     }
   }
-}
-
-class OrcSourceSuite extends OrcSuite {
-  import spark.implicits._
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    spark.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_source
-         |USING org.apache.spark.sql.hive.orc
-         |OPTIONS (
-         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
-         |)
-       """.stripMargin)
-
-    spark.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_as_source
-         |USING org.apache.spark.sql.hive.orc
-         |OPTIONS (
-         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
-         |)
-       """.stripMargin)
-  }
 
   test("orc - API") {
     val userSchema = new StructType().add("s", StringType)
@@ -240,26 +217,51 @@ class OrcSourceSuite extends OrcSuite {
     // Test explicit calls to single arg method - SPARK-16009
     testRead(Option(dir).map(spark.read.orc).get, data, schema)
 
-    // Reader, with user specified schema, should just apply user schema on the file data
+    // Reader, with user specified schema, report an exception as schema in file different
+    // from user schema.
     testRead(spark.read.schema(userSchema).orc(), Seq.empty, userSchema)
-    spark.read.schema(userSchema).orc(dir).printSchema()
-
-    spark.read.schema(userSchema).orc(dir).explain(true)
-
-    spark.read.schema(userSchema).orc().show()
-    spark.read.schema(userSchema).orc(dir).show()
-    val expData = Seq[String](null, null, null)
-    testRead(spark.read.schema(userSchema).orc(dir), expData, userSchema)
-    testRead(spark.read.schema(userSchema).orc(dir, dir), expData ++ expData, userSchema)
-    testRead(spark.read.schema(userSchema).orc(Seq(dir, dir): _*), expData ++ expData, userSchema)
-
+    var e = intercept[SparkException] {
+      testRead(spark.read.schema(userSchema).orc(dir), Seq.empty, userSchema)
+    }.getMessage
+    assert(e.contains("Field \"s\" does not exist"))
+    e = intercept[SparkException] {
+      testRead(spark.read.schema(userSchema).orc(dir, dir), Seq.empty, userSchema)
+    }.getMessage
+    assert(e.contains("Field \"s\" does not exist"))
+    e = intercept[SparkException] {
+      testRead(spark.read.schema(userSchema).orc(Seq(dir, dir): _*), Seq.empty, userSchema)
+    }.getMessage
+    assert(e.contains("Field \"s\" does not exist"))
   }
+
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],
       expectedSchema: StructType): Unit = {
     checkAnswer(df, spark.createDataset(expectedResult).toDF())
     assert(df.schema === expectedSchema)
+  }
+}
+
+class OrcSourceSuite extends OrcSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    spark.sql(
+      s"""CREATE TEMPORARY TABLE normal_orc_source
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |)
+       """.stripMargin)
+
+    spark.sql(
+      s"""CREATE TEMPORARY TABLE normal_orc_as_source
+         |USING org.apache.spark.sql.hive.orc
+         |OPTIONS (
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |)
+       """.stripMargin)
   }
 
   test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
