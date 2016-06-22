@@ -246,57 +246,78 @@ class JavaMLReadable(MLReadable):
         return JavaMLReader(cls)
 
 
-class TransformerWrapper(object):
+class StageWrapper(object):
     """
-    This class wraps a pure Python transformer, allowing it to be called from Java via Py4J's
-    callback server, making it as-like a Java side transformer.
+    This class wraps a pure Python stage, allowing it to be called from Java via Py4J's
+    callback server, making it as-like a Java side PipelineStage.
     """
 
-    def __init__(self, sc, transformer):
+    def __init__(self, sc, stage):
         self.sc = sc
         self.sql_ctx = SQLContext.getOrCreate(self.sc)
-        self.transformer = transformer
-        self.df_wrap_func = lambda jdf, sql_ctx: DataFrame(jdf, sql_ctx)
+        self.stage = stage
         self.failure = None
-        reader = TransformerWrapperReader(self.sc)
+        reader = StageReader(self.sc)
         self.sc._gateway.jvm.\
             org.apache.spark.ml.api.python.PythonPipelineStage.registerReader(reader)
 
-    def df_wrapper(self, func):
-        self.df_wrap_func = func
-        return self
-
     def getUid(self):
-        return self.transformer.uid
+        self.failure = None
+        try:
+            return self.stage.uid
+        except:
+            self.failure = traceback.format_exc()
 
     def copy(self, extra):
-        self.transformer = self.transformer.copy(extra)
-        return self
+        self.failure = None
+        try:
+            self.stage = self.stage.copy(extra)
+            return self
+        except:
+            self.failure = traceback.format_exc()
 
     def transformSchema(self, jschema):
         """
-        Transform Java schema with transformSchema in pure Python transformers.
+        Transform Java schema with transformSchema in pure Python stages.
         """
-        schema = _parse_datatype_json_string(jschema.json())
-        converted = self.transformer.transformSchema(schema)
-        return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
-
-    def getTransformer(self):
         self.failure = None
         try:
-            return bytearray(CloudPickleSerializer().dumps(self.transformer))
+            schema = _parse_datatype_json_string(jschema.json())
+            converted = self.stage.transformSchema(schema)
+            return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
+        except:
+            self.failure = traceback.format_exc()
+
+    def getStage(self):
+        self.failure = None
+        try:
+            return bytearray(CloudPickleSerializer().dumps(self.stage))
         except:
             self.failure = traceback.format_exc()
 
     def getClassName(self):
-        cls = self.transformer.__class__
-        return cls.__module__ + "." + cls.__name__
+        self.failure = None
+        try:
+            cls = self.stage.__class__
+            return cls.__module__ + "." + cls.__name__
+        except:
+            self.failure = traceback.format_exc()
+
+    def fit(self, jdf):
+        self.failure = None
+        try:
+            df = DataFrame(jdf, self.sql_ctx) if jdf else None
+            m = self.stage.fit(df)
+            if m:
+                return StageWrapper(self.sc, m)
+        except:
+            self.failure = traceback.format_exc()
 
     def transform(self, jdf):
         self.failure = None
         try:
-            df = self.df_wrap_func(jdf, self.sql_ctx) if jdf else None
-            r = self.transformer.transform(df)
+            df = DataFrame(jdf, self.sql_ctx) if jdf else None
+            r = self.stage.transform(df)
             if r:
                 return r._jdf
         except:
@@ -308,20 +329,20 @@ class TransformerWrapper(object):
     def save(self, path):
         self.failure = None
         try:
-            self.transformer.save(path)
+            self.stage.save(path)
         except:
             self.failure = traceback.format_exc()
 
     def __repr__(self):
-        return "TransformerWrapper(%s)" % self.transformer
+        return "StageWrapper(%s)" % self.stage
 
     class Java:
-        implements = ['org.apache.spark.ml.api.python.PythonTransformerWrapper']
+        implements = ['org.apache.spark.ml.api.python.PythonStageWrapper']
 
 
-class TransformerWrapperReader(object):
+class StageReader(object):
     """
-    Reader to load transformers.
+    Reader to load Python stages.
     """
     def __init__(self, sc):
         self.failure = None
@@ -346,17 +367,17 @@ class TransformerWrapperReader(object):
         try:
             cls = self.__get_class(clazz)
             transformer = cls.load(path)
-            return TransformerWrapper(self.sc, transformer)
+            return StageWrapper(self.sc, transformer)
         except:
             self.failure = traceback.format_exc()
 
     class Java:
-        implements = ['org.apache.spark.ml.api.python.PythonTransformerWrapperReader']
+        implements = ['org.apache.spark.ml.api.python.PythonStageReader']
 
 
-class TransformWrapperSerializer(object):
+class StageSerializer(object):
     """
-    This class implements a serializer for PythonTransformerWrapper Java objects.
+    This class implements a serializer for PythonStageWrapper Java objects.
     """
     def __init__(self, sc, serializer):
         self.sc = sc
@@ -369,16 +390,16 @@ class TransformWrapperSerializer(object):
     def dumps(self, id):
         self.failure = None
         try:
-            twrapper = self.gateway.gateway_property.pool[id]
-            return bytearray(self.serializer.dumps((twrapper.df_wrap_func, twrapper.transformer)))
+            wrapper = self.gateway.gateway_property.pool[id]
+            return bytearray(self.serializer.dumps(wrapper.stage))
         except:
             self.failure = traceback.format_exc()
 
     def loads(self, data):
         self.failure = None
         try:
-            wrap_func, transformer = self.serializer.loads(bytes(data))
-            return TransformerWrapper(self.sc, transformer).df_wrapper(wrap_func)
+            stage = self.serializer.loads(bytes(data))
+            return StageWrapper(self.sc, stage)
         except:
             self.failure = traceback.format_exc()
 
@@ -386,7 +407,7 @@ class TransformWrapperSerializer(object):
         return self.failure
 
     def __repr__(self):
-        return "TransformerWrapperSerializer(%s)" % self.serializer
+        return "StageSerializer(%s)" % self.serializer
 
     class Java:
-        implements = ['org.apache.spark.ml.api.python.PythonTransformerWrapperSerializer']
+        implements = ['org.apache.spark.ml.api.python.PythonStageSerializer']

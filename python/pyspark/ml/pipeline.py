@@ -18,7 +18,7 @@
 from pyspark import since, keyword_only, SparkContext
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable, TransformerWrapper
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, StageWrapper
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import _py2java, _java2py
 from pyspark.serializers import CloudPickleSerializer
@@ -43,7 +43,7 @@ class PipelineWrapper(object):
                 py_stage._transfer_params_to_java()
                 return py_stage._java_obj
             else:
-                wrapper = TransformerWrapper(sc, py_stage)
+                wrapper = StageWrapper(sc, py_stage)
                 jtransformer = sc._jvm.\
                     org.apache.spark.ml.api.python.PythonTransformer(wrapper, wrapper.getUid())
                 return jtransformer
