@@ -56,6 +56,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Sparse")(sparseIntArray)
     benchmark.addCase("Dense ")(denseIntArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Allocate GenericArrayData for int:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Sparse                                          40 /   43        522.2           1.9       1.0X
+    Dense                                            0 /    0  209715200.0           0.0  401598.7X
+    */
   }
 
   def allocateGenericDoubleArray(iters: Int): Unit = {
@@ -83,6 +91,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Sparse")(sparseDoubleArray)
     benchmark.addCase("Dense ")(denseDoubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Allocate GenericArrayData for double:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Sparse                                          40 /   44        523.2           1.9       1.0X
+    Dense                                            0 /    0  225500215.1           0.0  431013.0X
+    */
   }
 
   def getPrimitiveIntArray(iters: Int): Unit = {
@@ -110,6 +126,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Sparse int")(sparseIntArray)
     benchmark.addCase("Dense  int")(denseIntArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Get int primitive array:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Sparse int                                      67 /   70        783.9           1.3       1.0X
+    Dense  int                                      41 /   43       1263.8           0.8       1.6X
+    */
   }
 
   def getPrimitiveDoubleArray(iters: Int): Unit = {
@@ -137,6 +161,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Sparse double")(sparseDoubleArray)
     benchmark.addCase("Dense  double")(denseDoubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Get double primitive array:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Sparse double                                  211 /  217        248.6           4.0       1.0X
+    Dense  double                                   95 /  100        554.1           1.8       2.2X
+    */
   }
 
   def readGenericIntArray(iters: Int): Unit = {
@@ -179,6 +211,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Sparse")(sparseIntArray)
     benchmark.addCase("Dense ")(denseIntArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Read GenericArrayData Int:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Sparse                                         160 /  163       1314.5           0.8       1.0X
+    Dense                                           68 /   69       3080.0           0.3       2.3X
+    */
   }
 
   def readGenericDoubleArray(iters: Int): Unit = {
@@ -221,14 +261,22 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Sparse")(sparseDoubleArray)
     benchmark.addCase("Dense ")(denseDoubleArray)
     benchmark.run
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Read GenericArrayData Double:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Sparse                                         611 /  613        343.3           2.9       1.0X
+    Dense                                          199 /  202       1051.5           1.0       3.1X
+    */
   }
 
-  ignore("allocate GenericArrayData") {
+  test("allocate GenericArrayData") {
     allocateGenericIntArray(20)
     allocateGenericDoubleArray(20)
   }
 
-  ignore("get primitive array") {
+  test("get primitive array") {
     getPrimitiveIntArray(50)
     getPrimitiveDoubleArray(50)
   }
