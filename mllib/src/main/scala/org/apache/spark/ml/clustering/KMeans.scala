@@ -129,7 +129,7 @@ class KMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
+  def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)

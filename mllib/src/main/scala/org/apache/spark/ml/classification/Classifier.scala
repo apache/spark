@@ -197,7 +197,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * This default implementation for classification predicts the index of the maximum value
    * from [[predictRaw()]].
    */
-  override protected def predict(features: FeaturesType): Double = {
+  override def predict(features: FeaturesType): Double = {
     raw2prediction(predictRaw(features))
   }
 
