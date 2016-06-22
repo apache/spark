@@ -24,7 +24,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object GenericArrayData {
-  def allocate(seq: Seq[Any]): GenericArrayData = new GenericRefArrayData(seq)
+  def allocate(array: Array[Any]): GenericRefArrayData = new GenericRefArrayData(array)
+  def allocate(seq: Seq[Any]): GenericRefArrayData = new GenericRefArrayData(seq)
   def allocate(list: java.util.List[Any]): GenericRefArrayData = new GenericRefArrayData(list)
   def allocate(seqOrArray: Any): GenericRefArrayData = new GenericRefArrayData(seqOrArray)
   def allocate(primitiveArray: Array[Int]): GenericIntArrayData =
