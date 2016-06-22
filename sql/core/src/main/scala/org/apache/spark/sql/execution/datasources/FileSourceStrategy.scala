@@ -157,7 +157,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
   }
 
   /**
-   * Create a list of RDD partitions ([[FilePartition]]) for bucketed reads.
+   * Create an RDD for bucketed reads.
    * The non-bucketed variant of this function is [[createNonBucketedReadRDD]].
    *
    * The algorithm is pretty simple: each RDD partition being returned should include all the files
@@ -194,7 +194,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
   }
 
   /**
-   * Create a list of RDD partitions ([[FilePartition]]) for non-bucketed reads.
+   * Create an RDD for non-bucketed reads.
    * The bucketed variant of this function is [[createBucketedReadRDD]].
    *
    * @param readFile a function to read each (part of a) file.
