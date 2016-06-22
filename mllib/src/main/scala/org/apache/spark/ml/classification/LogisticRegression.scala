@@ -675,12 +675,13 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
       val dataPath = new Path(path, "data").toString
       val data = sqlContext.read.format("parquet").load(dataPath)
-        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
+        .select("numClasses", "numFeatures", "intercept", "coefficients")
+      val row = MLUtils.convertVectorColumnsToML(data, "coefficients").head()
       // We will need numClasses, numFeatures in the future for multinomial logreg support.
       // val numClasses = data.getInt(0)
       // val numFeatures = data.getInt(1)
-      val intercept = data.getDouble(2)
-      val coefficients = data.getAs[Vector](3)
+      val intercept = row.getDouble(2)
+      val coefficients = row.getAs[Vector](3)
       val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
