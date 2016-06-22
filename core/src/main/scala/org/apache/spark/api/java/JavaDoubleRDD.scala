@@ -204,11 +204,13 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
 
   /**
    * Compute the population standard deviation of this RDD's elements.
+   * @since 2.1.0
    */
   def popStdev(): JDouble = srdd.popStdev()
 
   /**
    * Compute the population variance of this RDD's elements.
+   * @since 2.1.0
    */
   def popVariance(): JDouble = srdd.popVariance()
 
