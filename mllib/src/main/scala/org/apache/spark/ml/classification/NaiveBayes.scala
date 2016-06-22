@@ -130,8 +130,8 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 @Experimental
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("1.5.0") val pi: Vector,
-    @Since("1.5.0") val theta: Matrix)
+    @Since("2.0.0") val pi: Vector,
+    @Since("2.0.0") val theta: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
