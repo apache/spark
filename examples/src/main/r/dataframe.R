@@ -17,9 +17,8 @@
 
 library(SparkR)
 
-# Initialize SparkContext and SQLContext
-sc <- sparkR.init(appName="SparkR-DataFrame-example")
-sqlContext <- sparkRSQL.init(sc)
+# Initialize SparkSession
+sc <- sparkR.session(appName="SparkR-DataFrame-example")
 
 # Create a simple local data.frame
 localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18))
@@ -44,14 +43,14 @@ printSchema(peopleDF)
 # Register this DataFrame as a table.
 createOrReplaceTempView(peopleDF, "people")
 
-# SQL statements can be run by using the sql methods provided by sqlContext
+# SQL statements can be run by using the sql methods
 teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
 # Call collect to get a local data.frame
 teenagersLocalDF <- collect(teenagers)
 
-# Print the teenagers in our dataset 
+# Print the teenagers in our dataset
 print(teenagersLocalDF)
 
-# Stop the SparkContext now
-sparkR.stop()
+# Stop the SparkSession now
+sparkR.session.stop()

@@ -18,27 +18,61 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, RelationalGroupedDataset, Row, SaveMode, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.types._
 
-private[sql] object SQLUtils {
+private[sql] object SQLUtils extends Logging {
   SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
 
-  def createSQLContext(jsc: JavaSparkContext): SQLContext = {
-    SQLContext.getOrCreate(jsc.sc)
+  private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
   }
 
-  def getJavaSparkContext(sqlCtx: SQLContext): JavaSparkContext = {
-    new JavaSparkContext(sqlCtx.sparkContext)
+  def getOrCreateSparkSession(
+      jsc: JavaSparkContext,
+      sparkConfigMap: JMap[Object, Object],
+      enableHiveSupport: Boolean): SparkSession = {
+    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
+      SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+    } else {
+      if (enableHiveSupport) {
+        logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
+          "Spark is not built with Hive; falling back to without Hive support.")
+      }
+      SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
+    }
+    setSparkContextSessionConf(spark, sparkConfigMap)
+    spark
+  }
+
+  def setSparkContextSessionConf(
+      spark: SparkSession,
+      sparkConfigMap: JMap[Object, Object]): Unit = {
+    for ((name, value) <- sparkConfigMap.asScala) {
+      spark.conf.set(name.toString, value.toString)
+    }
+    for ((name, value) <- sparkConfigMap.asScala) {
+      spark.sparkContext.conf.set(name.toString, value.toString)
+    }
+  }
+
+  def getJavaSparkContext(spark: SparkSession): JavaSparkContext = {
+    new JavaSparkContext(spark.sparkContext)
   }
 
   def createStructType(fields : Seq[StructField]): StructType = {
@@ -95,10 +129,10 @@ private[sql] object SQLUtils {
     StructField(name, dtObj, nullable)
   }
 
-  def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
+  def createDF(rdd: RDD[Array[Byte]], schema: StructType, sparkSession: SparkSession): DataFrame = {
     val num = schema.fields.length
     val rowRDD = rdd.map(bytesToRow(_, schema))
-    sqlContext.createDataFrame(rowRDD, schema)
+    sparkSession.createDataFrame(rowRDD, schema)
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
@@ -191,18 +225,18 @@ private[sql] object SQLUtils {
   }
 
   def loadDF(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    sqlContext.read.format(source).options(options).load()
+    sparkSession.read.format(source).options(options).load()
   }
 
   def loadDF(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    sqlContext.read.format(source).schema(schema).options(options).load()
+    sparkSession.read.format(source).schema(schema).options(options).load()
   }
 
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
@@ -225,6 +259,24 @@ private[sql] object SQLUtils {
         true
       case _ =>
         false
+    }
+  }
+
+  def getTables(sparkSession: SparkSession, databaseName: String): DataFrame = {
+    databaseName match {
+      case n: String if n != null && n.trim.nonEmpty =>
+        Dataset.ofRows(sparkSession, ShowTablesCommand(Some(n), None))
+      case _ =>
+        Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
+    }
+  }
+
+  def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
+    databaseName match {
+      case n: String if n != null && n.trim.nonEmpty =>
+        sparkSession.catalog.listTables(n).collect().map(_.name)
+      case _ =>
+        sparkSession.catalog.listTables().collect().map(_.name)
     }
   }
 }
