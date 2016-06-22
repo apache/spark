@@ -50,8 +50,6 @@ case class PartitionedFile(
 /**
  * A collection of file blocks that should be read as a single task
  * (possibly from multiple partitioned directories).
- *
- * TODO: This currently does not take locality information about the files into account.
  */
 case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends RDDPartition
 
