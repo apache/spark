@@ -23,7 +23,7 @@ import scala.collection.Map
 import scala.collection.mutable.Stack
 import scala.reflect.ClassTag
 
-import org.apache.commons.lang.ClassUtils
+import org.apache.commons.lang3.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
