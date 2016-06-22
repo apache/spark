@@ -42,8 +42,7 @@ private[ui] class StageTableBase(
     isFailedStage: Boolean) {
   val allParameters = request.getParameterMap().asScala.toMap
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
-    .map(para => para._1 + "=" + para._2(0)).mkString("&")
-  val reservedBasePath = basePath + "?" + parameterOtherTable
+    .map(para => para._1 + "=" + para._2(0))
 
   val parameterStagePage = request.getParameter(stageTag + ".page")
   val parameterStageSortColumn = request.getParameter(stageTag + ".sort")
@@ -78,7 +77,7 @@ private[ui] class StageTableBase(
     new StagePagedTable(
       stages,
       stageTag,
-      reservedBasePath,
+      basePath,
       progressListener,
       isFairScheduler,
       killEnabled,
@@ -86,7 +85,8 @@ private[ui] class StageTableBase(
       stagePageSize,
       stageSortColumn,
       stageSortDesc,
-      isFailedStage
+      isFailedStage,
+      parameterOtherTable
     ).table(page)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -138,7 +138,8 @@ private[ui] class StagePagedTable(
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
-    isFailedStage: Boolean) extends PagedTable[StageTableRowData] {
+    isFailedStage: Boolean,
+    parameterOtherTable: Iterable[String]) extends PagedTable[StageTableRowData] {
 
   override def tableId: String = stageTag + "-table"
 
@@ -150,6 +151,8 @@ private[ui] class StagePagedTable(
   override def prevPageSizeFormField: String = stageTag + ".prevPageSize"
 
   override def pageNumberFormField: String = stageTag + ".page"
+
+  val parameterPath = basePath + "?" + parameterOtherTable.mkString("&")
 
   override val dataSource = new StageDataSource(
     stages,
@@ -163,7 +166,7 @@ private[ui] class StagePagedTable(
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    basePath +
+    parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
       s"&$stageTag.desc=$desc" +
@@ -172,7 +175,7 @@ private[ui] class StagePagedTable(
 
   override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"$basePath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc"
+    s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc"
   }
 
   override def headers: Seq[Node] = {
@@ -214,7 +217,7 @@ private[ui] class StagePagedTable(
 
         if (header == sortColumn) {
           val headerLink = Unparsed(
-            basePath +
+            parameterPath +
               s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
               s"&$stageTag.desc=${!desc}" +
               s"&$stageTag.pageSize=$pageSize")
@@ -230,7 +233,7 @@ private[ui] class StagePagedTable(
         } else {
           if (sortable) {
             val headerLink = Unparsed(
-              basePath +
+              parameterPath +
                 s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
                 s"&$stageTag.pageSize=$pageSize")
 
