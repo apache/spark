@@ -216,4 +216,3 @@ private[sql] class CsvOutputWriter(
     recordWriter.close(context)
   }
 }
-
