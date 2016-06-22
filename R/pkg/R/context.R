@@ -246,7 +246,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'   \preformatted{
 #'     train <- function(hyperparam) {
 #'       library(MASS)
-#'       lm.ridge(“y ~ x+z”, data, lambda=hyperparam)
+#'       lm.ridge("y ~ x+z", data, lambda=hyperparam)
 #'       model
 #'     }
 #'   }
