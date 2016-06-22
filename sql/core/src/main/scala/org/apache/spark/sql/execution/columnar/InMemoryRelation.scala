@@ -86,14 +86,14 @@ case class InMemoryRelation(
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
     buildBuffers()
-    buildBuffers2()
+    buildColumnarBuffers()
   }
 
   def recache(): Unit = {
     _cachedColumnBuffers.unpersist()
     _cachedColumnBuffers = null
     buildBuffers()
-    buildBuffers2()
+    buildColumnarBuffers()
   }
 
   private def buildBuffers(): Unit = {
@@ -150,8 +150,7 @@ case class InMemoryRelation(
     _cachedColumnBuffers = cached
   }
 
-  // IWASHERE
-  private def buildBuffers2(): Unit = {
+  private def buildColumnarBuffers(): Unit = {
     val schema = StructType.fromAttributes(child.output)
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[ColumnarBatch] {
@@ -168,7 +167,7 @@ case class InMemoryRelation(
             var i = 0
             totalSize = 0
             while (i < row.numFields) {
-              columnarBatch.column(i).appendLong(row.getLong(i))
+              columnarBatch.column(i).putLong(rowCount, row.getLong(i))
               totalSize += 8
               i += 1
             }
