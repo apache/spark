@@ -15,174 +15,235 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.execution.benchmark
 
+import scala.concurrent.duration._
+
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark [[GenericArrayData]] for Dense and Sparse with primitive type
+ * To run this:
+ *  build/sbt "sql/test-only *benchmark.GenericArrayDataBenchmark"
+ *
+ * Benchmarks in this file are skipped in normal builds.
  */
-object GenericArrayDataBenchmark {
-/*
+class GenericArrayDataBenchmark extends BenchmarkBase {
+
   def allocateGenericIntArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 10
+    val count = 1024 * 1024
     var array: GenericArrayData = null
 
     val primitiveIntArray = new Array[Int](count)
     val denseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         array = GenericArrayData.allocate(primitiveIntArray)
+        n += 1
       }
     }
     val sparseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         array = new GenericRefArrayData(primitiveIntArray)
+        n += 1
       }
     }
 
-    val benchmark = new Benchmark("Allocate GenericArrayData for int", count * iters)
+    val benchmark = new Benchmark("Allocate GenericArrayData for int", count * iters,
+      minNumIters = 10, minTime = 1.milliseconds)
     benchmark.addCase("Sparse")(sparseIntArray)
     benchmark.addCase("Dense ")(denseIntArray)
+    benchmark.run
   }
 
   def allocateGenericDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 10
+    val count = 1024 * 1024
     var array: GenericArrayData = null
 
     val primitiveDoubleArray = new Array[Int](count)
     val denseDoubleArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         array = GenericArrayData.allocate(primitiveDoubleArray)
+        n += 1
       }
     }
     val sparseDoubleArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         array = new GenericRefArrayData(primitiveDoubleArray)
+        n += 1
       }
     }
 
-    val benchmark = new Benchmark("Allocate GenericArrayData for double", count * iters)
+    val benchmark = new Benchmark("Allocate GenericArrayData for double", count * iters,
+      minNumIters = 10, minTime = 1.milliseconds)
     benchmark.addCase("Sparse")(sparseDoubleArray)
     benchmark.addCase("Dense ")(denseDoubleArray)
+    benchmark.run
   }
 
   def getPrimitiveIntArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 10
+    val count = 1024 * 1024
 
     val intSparseArray: GenericArrayData = new GenericRefArrayData(new Array[Int](count))
     val intDenseArray: GenericArrayData = GenericArrayData.allocate(new Array[Int](count))
     var primitiveIntArray: Array[Int] = null
     val sparseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         primitiveIntArray = intSparseArray.toIntArray
+        n += 1
       }
     }
     val denseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         primitiveIntArray = intDenseArray.toIntArray
+        n += 1
       }
     }
 
     val benchmark = new Benchmark("Get int primitive array", count * iters)
     benchmark.addCase("Sparse int")(sparseIntArray)
     benchmark.addCase("Dense  int")(denseIntArray)
+    benchmark.run
   }
 
   def getPrimitiveDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 10
+    val count = 1024 * 1024
 
     val doubleSparseArray: GenericArrayData = new GenericRefArrayData(new Array[Double](count))
     val doubleDenseArray: GenericArrayData = GenericArrayData.allocate(new Array[Double](count))
     var primitiveDoubleArray: Array[Double] = null
     val sparseDoubleArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         primitiveDoubleArray = doubleSparseArray.toDoubleArray
+        n += 1
       }
     }
     val denseDoubleArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         primitiveDoubleArray = doubleDenseArray.toDoubleArray
+        n += 1
       }
     }
 
     val benchmark = new Benchmark("Get double primitive array", count * iters)
     benchmark.addCase("Sparse double")(sparseDoubleArray)
     benchmark.addCase("Dense  double")(denseDoubleArray)
+    benchmark.run
   }
 
   def readGenericIntArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 10
+    val count = 1024 * 1024 * 2
     var result: Int = 0
 
     val sparseArray = new GenericRefArrayData(new Array[Int](count))
     val sparseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         val len = sparseArray.numElements
         var sum = 0
-        for (i <- 0 until len - 1) {
+        var i = 0
+        while (i < len) {
           sum += sparseArray.getInt(i)
+          i += 1
         }
         result = sum
+        n += 1
       }
     }
 
     val denseArray = GenericArrayData.allocate(new Array[Int](count))
     val denseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+      var n = 0
+      while (n < iters) {
         val len = denseArray.numElements
         var sum = 0
-        for (i <- 0 until len - 1) {
+        var i = 0
+        while (i < len) {
           sum += denseArray.getInt(i)
+          i += 1
         }
         result = sum
+        n += 1
       }
     }
 
     val benchmark = new Benchmark("Read GenericArrayData Int", count * iters)
     benchmark.addCase("Sparse")(sparseIntArray)
     benchmark.addCase("Dense ")(denseIntArray)
+    benchmark.run
   }
 
   def readGenericDoubleArray(iters: Int): Unit = {
-    val count = 1024 * 1024 * 10
-    var result: Int = 0
+    val count = 1024 * 1024 * 2
+    var result: Double = 0
 
-    val sparseArray = new GenericRefArrayData(new Array[Int](count))
-    val sparseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+    val sparseArray = new GenericRefArrayData(new Array[Double](count))
+    val sparseDoubleArray = { i: Int =>
+      var n = 0
+      while (n < iters) {
         val len = sparseArray.numElements
-        var sum = 0
-        for (i <- 0 until len - 1) {
-          sum += sparseArray.getInt(i)
+        var sum = 0.toDouble
+        var i = 0
+        while (i < len) {
+          sum += sparseArray.getDouble(i)
+          i += 1
         }
         result = sum
+        n += 1
       }
     }
 
-    val denseArray = GenericArrayData.allocate(new Array[Int](count))
-    val denseIntArray = { i: Int =>
-      for (n <- 0L until iters) {
+    val denseArray = GenericArrayData.allocate(new Array[Double](count))
+    val denseDoubleArray = { i: Int =>
+      var n = 0
+      while (n < iters) {
         val len = denseArray.numElements
-        var sum = 0
-        for (i <- 0 until len - 1) {
-          sum += denseArray.getInt(i)
+        var sum = 0.toDouble
+        var i = 0
+        while (i < len) {
+          sum += denseArray.getDouble(i)
+          i += 1
         }
         result = sum
+        n += 1
       }
     }
 
     val benchmark = new Benchmark("Read GenericArrayData Double", count * iters)
-    benchmark.addCase("Sparse")(sparseIntArray)
-    benchmark.addCase("Dense ")(denseIntArray)
+    benchmark.addCase("Sparse")(sparseDoubleArray)
+    benchmark.addCase("Dense ")(denseDoubleArray)
+    benchmark.run
+  }
+
+  ignore("allocate GenericArrayData") {
+    allocateGenericIntArray(20)
+    allocateGenericDoubleArray(20)
+  }
+
+  ignore("get primitive array") {
+    getPrimitiveIntArray(50)
+    getPrimitiveDoubleArray(50)
+  }
+
+  test("read elements in GenericArrayData") {
+    readGenericIntArray(100)
+    readGenericDoubleArray(100)
   }
 
   def main(args: Array[String]): Unit = {
-    allocateGenericIntArray(1024)
-    allocateGenericDoubleArray(1024)
-    getPrimitiveIntArray(1024)
-    getPrimitiveDoubleArray(1024)
-    readGenericIntArray(512)
-    readGenericDoubleArray(512)
+    allocateGenericIntArray(20)
+    allocateGenericDoubleArray(20)
+    getPrimitiveIntArray(50)
+    getPrimitiveDoubleArray(50)
+    readGenericIntArray(20)
+    readGenericDoubleArray(20)
   }
-*/
 }
