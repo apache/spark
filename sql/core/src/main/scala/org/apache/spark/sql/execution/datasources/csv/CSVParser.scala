@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.{ByteArrayOutputStream, OutputStreamWriter, StringReader}
+import java.io.{ByteArrayOutputStream, CharArrayWriter, OutputStreamWriter, StringReader}
 import java.nio.charset.StandardCharsets
 
 import com.univocity.parsers.csv._
@@ -51,6 +51,53 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
     if (headers != null) settings.setHeaders(headers: _*)
 
     new CsvParser(settings)
+  }
+}
+
+/**
+ * Converts a sequence of string to CSV string
+ *
+ * @param params Parameters object for configuration
+ * @param headers headers for columns
+ */
+private[sql] class LineCsvWriter(
+    params: CSVOptions,
+    headers: Seq[String],
+    charArrayWriter: CharArrayWriter) extends Logging {
+  private val writerSettings = new CsvWriterSettings
+  private val format = writerSettings.getFormat
+
+  format.setDelimiter(params.delimiter)
+  format.setLineSeparator(params.rowSeparator)
+  format.setQuote(params.quote)
+  format.setQuoteEscape(params.escape)
+  format.setComment(params.comment)
+
+  writerSettings.setNullValue(params.nullValue)
+  writerSettings.setEmptyValue(params.nullValue)
+  writerSettings.setSkipEmptyLines(true)
+  writerSettings.setQuoteAllFields(false)
+  writerSettings.setHeaders(headers: _*)
+  writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
+
+  private val writer = new CsvWriter(charArrayWriter, writerSettings)
+
+  def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
+    if (includeHeader) {
+      writer.writeHeaders()
+    }
+    writer.writeRow(row.toArray: _*)
+  }
+
+  def flush(): String = {
+    writer.flush()
+    val lines = charArrayWriter.toString.stripLineEnd
+    charArrayWriter.reset()
+    lines
+  }
+
+  def close(): Unit = {
+    writer.close()
   }
 }
 
@@ -207,3 +254,4 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
 
   override def close(): Unit = { }
 }
+
