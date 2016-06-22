@@ -35,7 +35,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
 
   private[metrics] val properties = new Properties()
-  private[metrics] var propertyCategories: mutable.HashMap[String, Properties] = null
+  private[metrics] var perInstanceProperties: mutable.HashMap[String, Properties] = null
+
+  private[metrics] var metricsNamespaceConfParam: String = null
 
   private def setDefaultProperties(prop: Properties) {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
@@ -58,14 +60,16 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
       case _ =>
     }
 
-    propertyCategories = subProperties(properties, INSTANCE_REGEX)
-    if (propertyCategories.contains(DEFAULT_PREFIX)) {
-      val defaultProperty = propertyCategories(DEFAULT_PREFIX).asScala
-      for((inst, prop) <- propertyCategories if (inst != DEFAULT_PREFIX);
+    perInstanceProperties = subProperties(properties, INSTANCE_REGEX)
+    if (perInstanceProperties.contains(DEFAULT_PREFIX)) {
+      val defaultProperty = perInstanceProperties(DEFAULT_PREFIX).asScala
+      for((inst, prop) <- perInstanceProperties if (inst != DEFAULT_PREFIX);
           (k, v) <- defaultProperty if (prop.get(k) == null)) {
         prop.put(k, v)
       }
     }
+
+    metricsNamespaceConfParam = properties.getProperty("namespace-conf-param", "spark.app.id")
   }
 
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
@@ -80,9 +84,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   }
 
   def getInstance(inst: String): Properties = {
-    propertyCategories.get(inst) match {
+    perInstanceProperties.get(inst) match {
       case Some(s) => s
-      case None => propertyCategories.getOrElse(DEFAULT_PREFIX, new Properties)
+      case None => perInstanceProperties.getOrElse(DEFAULT_PREFIX, new Properties)
     }
   }
 

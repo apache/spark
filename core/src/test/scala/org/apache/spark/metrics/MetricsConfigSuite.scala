@@ -81,6 +81,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     setMetricsProperty(sparkConf, "master.sink.console.unit", "minutes")
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
+    assert(conf.metricsNamespaceConfParam == "spark.app.id")
 
     val masterProp = conf.getInstance("master")
     assert(masterProp.size() === 5)
@@ -133,13 +134,24 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
   }
 
+  test("MetricsConfig with alternate namespace set") {
+    val sparkConf = new SparkConf
+    sparkConf.set(
+      "spark.metrics.conf",
+      getClass.getClassLoader.getResource("test_metrics_config_namespace.properties").getFile()
+    )
+    val conf = new MetricsConfig(sparkConf)
+    conf.initialize()
+    assert(conf.metricsNamespaceConfParam == "spark.app.name")
+  }
+
   test("MetricsConfig with subProperties") {
     val sparkConf = new SparkConf(loadDefaults = false)
     sparkConf.set("spark.metrics.conf", filePath)
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
 
-    val propCategories = conf.propertyCategories
+    val propCategories = conf.perInstanceProperties
     assert(propCategories.size === 3)
 
     val masterProp = conf.getInstance("master")
