@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.{ByteArrayOutputStream, CharArrayWriter, OutputStreamWriter, StringReader}
-import java.nio.charset.StandardCharsets
+import java.io.{CharArrayWriter, StringReader}
 
 import com.univocity.parsers.csv._
 
@@ -63,7 +62,9 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
 private[sql] class LineCsvWriter(
     params: CSVOptions,
     headers: Seq[String],
-    charArrayWriter: CharArrayWriter) extends Logging {
+    charArrayWriter: CharArrayWriter)
+  extends Logging {
+
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
 
