@@ -83,7 +83,7 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
-  // key is partitionId (aka TaskInfo.index), value is a Map of executor id to when it failed
+  // key is taskId, value is a Map of executor id to when it failed
   private val failedExecutors = new HashMap[Int, HashMap[String, Long]]()
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
@@ -270,9 +270,9 @@ private[spark] class TaskSetManager(
    * Is this re-execution of a failed task on an executor it already failed in before
    * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed ?
    */
-  private[scheduler] def executorIsBlacklisted(execId: String, partitionId: Int): Boolean = {
-    if (failedExecutors.contains(partitionId)) {
-      val failed = failedExecutors.get(partitionId).get
+  private[scheduler] def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
+    if (failedExecutors.contains(taskId)) {
+      val failed = failedExecutors.get(taskId).get
 
       return failed.contains(execId) &&
         clock.getTimeMillis() - failed.get(execId).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
