@@ -113,8 +113,8 @@ def determine_modules_to_test(changed_modules):
     modules_to_test = set()
     for module in changed_modules:
         modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
-    # If we need to run all of the tests, then we should short-circuit and return 'root'
     modules_to_test = modules_to_test.union(set(changed_modules))
+    # If we need to run all of the tests, then we should short-circuit and return 'root'
     if modules.root in modules_to_test:
         return [modules.root]
     return modules_to_test
