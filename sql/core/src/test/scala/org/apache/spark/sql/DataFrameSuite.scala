@@ -1538,10 +1538,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15230: distinct() does not handle column name with dot properly") {
-    val rowRDD = sparkContext.parallelize(Seq(Row(1), Row(1), Row(2)))
-    val schema = StructType(Array(StructField("column.with.dot", IntegerType, nullable = false)))
-    val df = spark.createDataFrame(rowRDD, schema)
-
-    checkAnswer(df.select(new Column("`column.with.dot`")).distinct(), Seq(Row(1), Row(2)))
+    val df = Seq(1, 1, 2).toDF("column.with.dot")
+    checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
   }
 }
