@@ -60,7 +60,8 @@ object StructuredNetworkWordCount {
     val words = lines.select(
       explode(
         split(lines.col("value"), " ")
-      ).alias("word"))
+      ).alias("word")
+    )
 
     // Generate running word count
     val wordCounts = words.groupBy("word").count()

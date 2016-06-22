@@ -19,8 +19,6 @@ package org.apache.spark.examples.sql.streaming;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.StreamingQuery;
 
-import java.util.regex.Pattern;
-
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  *
@@ -34,7 +32,6 @@ import java.util.regex.Pattern;
  *    localhost 9999 <checkpoint dir>`
  */
 public final class JavaStructuredNetworkWordCount {
-  private static final Pattern SPACE = Pattern.compile(" ");
 
   public static void main(String[] args) throws Exception {
     if (args.length < 3) {
@@ -60,11 +57,11 @@ public final class JavaStructuredNetworkWordCount {
       .load();
 
     // Split the lines into words
-    Dataset<String> words = lines.select(
-        functions.explode(
-          functions.split(lines.col("value"), " ")
-        ).alias("word")
-      ).as(Encoders.STRING());
+    Dataset<Row> words = lines.select(
+      functions.explode(
+        functions.split(lines.col("value"), " ")
+      ).alias("word")
+    );
 
     // Generate running word count
     Dataset<Row> wordCounts = words.groupBy("word").count();
