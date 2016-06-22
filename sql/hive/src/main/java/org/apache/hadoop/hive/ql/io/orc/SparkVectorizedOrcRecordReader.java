@@ -28,7 +28,6 @@ import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
@@ -68,41 +67,41 @@ public class SparkVectorizedOrcRecordReader
      */
     private ColumnVector createColumnVector(ObjectInspector inspector) {
       switch(inspector.getCategory()) {
-      case PRIMITIVE:
-        {
-          PrimitiveTypeInfo primitiveTypeInfo =
-            (PrimitiveTypeInfo) ((PrimitiveObjectInspector)inspector).getTypeInfo();
-          switch(primitiveTypeInfo.getPrimitiveCategory()) {
-            case BOOLEAN:
-            case BYTE:
-            case SHORT:
-            case INT:
-            case LONG:
-            case DATE:
-            case INTERVAL_YEAR_MONTH:
-              return new LongColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
-            case FLOAT:
-            case DOUBLE:
-              return new DoubleColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
-            case BINARY:
-            case STRING:
-            case CHAR:
-            case VARCHAR:
-              BytesColumnVector column = new BytesColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
-              column.initBuffer();
-              return column;
-            case DECIMAL:
-              DecimalTypeInfo tInfo = (DecimalTypeInfo) primitiveTypeInfo;
-              return new DecimalColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
-                  tInfo.precision(), tInfo.scale());
-            default:
-              throw new RuntimeException("Vectorizaton is not supported for datatype:"
-                  + primitiveTypeInfo.getPrimitiveCategory());
+        case PRIMITIVE:
+          {
+            PrimitiveTypeInfo primitiveTypeInfo =
+              (PrimitiveTypeInfo) ((PrimitiveObjectInspector)inspector).getTypeInfo();
+            switch(primitiveTypeInfo.getPrimitiveCategory()) {
+              case BOOLEAN:
+              case BYTE:
+              case SHORT:
+              case INT:
+              case LONG:
+              case DATE:
+              case INTERVAL_YEAR_MONTH:
+                return new LongColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
+              case FLOAT:
+              case DOUBLE:
+                return new DoubleColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
+              case BINARY:
+              case STRING:
+              case CHAR:
+              case VARCHAR:
+                BytesColumnVector column = new BytesColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
+                column.initBuffer();
+                return column;
+              case DECIMAL:
+                DecimalTypeInfo tInfo = (DecimalTypeInfo) primitiveTypeInfo;
+                return new DecimalColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+                    tInfo.precision(), tInfo.scale());
+              default:
+                throw new RuntimeException("Vectorizaton is not supported for datatype:"
+                    + primitiveTypeInfo.getPrimitiveCategory());
+            }
           }
-        }
-      default:
-        throw new RuntimeException("Vectorization is not supported for datatype:"
-            + inspector.getCategory());
+        default:
+          throw new RuntimeException("Vectorization is not supported for datatype:"
+              + inspector.getCategory());
       }
     }
 
@@ -113,9 +112,9 @@ public class SparkVectorizedOrcRecordReader
      * @param cvList ColumnVectors are populated in this list
      */
     private void allocateColumnVector(StructObjectInspector oi,
-        List<ColumnVector> cvList) throws HiveException {
+        List<ColumnVector> cvList) {
       if (cvList == null) {
-        throw new HiveException("Null columnvector list");
+        throw new RuntimeException("Null columnvector list");
       }
       if (oi == null) {
         return;
@@ -130,12 +129,11 @@ public class SparkVectorizedOrcRecordReader
     /**
      * Create VectorizedRowBatch from ObjectInspector
      *
-     * @param oi
-     * @return
-     * @throws HiveException
+     * @param oi StructObjectInspector
+     * @return VectorizedRowBatch
      */
     private VectorizedRowBatch constructVectorizedRowBatch(
-        StructObjectInspector oi) throws HiveException {
+        StructObjectInspector oi) {
       final List<ColumnVector> cvList = new LinkedList<ColumnVector>();
       allocateColumnVector(oi, cvList);
       final VectorizedRowBatch result = new VectorizedRowBatch(cvList.size());
@@ -167,11 +165,7 @@ public class SparkVectorizedOrcRecordReader
 
     @Override
     public VectorizedRowBatch createValue() {
-      try {
-        return constructVectorizedRowBatch((StructObjectInspector)this.objectInspector);
-      } catch (HiveException e) {
-      }
-      return null;
+      return constructVectorizedRowBatch((StructObjectInspector)this.objectInspector);
     }
 
     @Override
