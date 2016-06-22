@@ -432,7 +432,7 @@ sealed abstract class LDAModel private[ml] (
    * If Online LDA was used and [[optimizeDocConcentration]] was set to false,
    * then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def estimatedDocConcentration: Vector = getModel.docConcentration
 
   /**
