@@ -174,9 +174,9 @@ class AggregateBenchmark extends BenchmarkBase {
       benchmark.addCase(name, numIters, prepare, cleanup) { _ => doCollect(ds) }
     }
 
-    // ALL OF THESE ARE codegen = F, hashmap = F
-    sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
-    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "0")
+    // ALL OF THESE ARE codegen = T hashmap = T
+    sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "100")
 
     addBenchmark("cache = F", cache = false)
 
@@ -190,9 +190,8 @@ class AggregateBenchmark extends BenchmarkBase {
       "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
     ))
 
-//    addBenchmark("codegen = F hashmap = F cache = T compress = T", cache = true, Map(
-//      "spark.sql.codegen.wholeStage" -> "false",
-//      "spark.sql.codegen.aggregate.map.columns.max" -> "0",
+//    addBenchmark("cache = T columnar = F compress = T", cache = true, Map(
+//      "spark.sql.inMemoryColumnarScan" -> "false",
 //      "spark.sql.inMemoryColumnarStorage.compressed" -> "true"
 //    ))
 
