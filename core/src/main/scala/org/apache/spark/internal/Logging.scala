@@ -32,7 +32,7 @@ private[spark] trait Logging {
 
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
-  @transient private lazy val log_ : Logger = {
+  @transient lazy val log : Logger = {
     initializeLogIfNecessary(false)
     LoggerFactory.getLogger(logName)
   }
@@ -42,9 +42,6 @@ private[spark] trait Logging {
     // Ignore trailing $'s in the class names for Scala objects
     this.getClass.getName.stripSuffix("$")
   }
-
-  // Method to get or create the logger for this object
-  protected def log: Logger = log_
 
   // Log methods that take only a String
   protected def logInfo(msg: => String) {
