@@ -60,8 +60,8 @@ object StructField {
       nullable: Boolean,
       comment: String): StructField =
   new StructField(
-      name,
-      dataType,
-      nullable,
-      metadata = new MetadataBuilder().putString("comment", comment).build())
+    name,
+    dataType,
+    nullable,
+    metadata = new MetadataBuilder().putString("comment", comment).build())
 }
