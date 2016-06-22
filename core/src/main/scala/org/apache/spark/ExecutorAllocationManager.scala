@@ -244,6 +244,21 @@ private[spark] class ExecutorAllocationManager(
     executor.awaitTermination(10, TimeUnit.SECONDS)
   }
 
+  def setExecutorBusy(info: TaskInfo): Unit = {
+    val executorId = info.executorId
+    allocationManager.synchronized {
+      // This guards against the race condition in which the `SparkListenerTaskStart`
+      // event is posted before the `SparkListenerBlockManagerAdded` event, which is
+      // possible because these events are posted in different threads. (see SPARK-4951)
+      if (!allocationManager.executorIds.contains(executorId)) {
+        allocationManager.onExecutorAdded(executorId)
+      }
+
+      // Mark the executor on which this task is scheduled as busy
+      allocationManager.onExecutorBusy(executorId)
+    }
+  }
+
   /**
    * Reset the allocation manager to the initial state. Currently this will only be called in
    * yarn-client mode when AM re-registers after a failure.
@@ -609,12 +624,6 @@ private[spark] class ExecutorAllocationManager(
 
       allocationManager.synchronized {
         numRunningTasks += 1
-        // This guards against the race condition in which the `SparkListenerTaskStart`
-        // event is posted before the `SparkListenerBlockManagerAdded` event, which is
-        // possible because these events are posted in different threads. (see SPARK-4951)
-        if (!allocationManager.executorIds.contains(executorId)) {
-          allocationManager.onExecutorAdded(executorId)
-        }
 
         // If this is the last pending task, mark the scheduler queue as empty
         stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
@@ -622,9 +631,7 @@ private[spark] class ExecutorAllocationManager(
           allocationManager.onSchedulerQueueEmpty()
         }
 
-        // Mark the executor on which this task is scheduled as busy
         executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
-        allocationManager.onExecutorBusy(executorId)
       }
     }
 
