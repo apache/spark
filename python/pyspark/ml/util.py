@@ -44,6 +44,18 @@ def _jvm():
         raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
 
 
+def _get_class(clazz):
+        """
+        Loads Python class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
+
+
 class Identifiable(object):
     """
     Object with a unique ID.
@@ -348,24 +360,13 @@ class StageReader(object):
         self.failure = None
         self.sc = sc
 
-    def __get_class(self, clazz):
-        """
-        Loads Python class from its name.
-        """
-        parts = clazz.split('.')
-        module = ".".join(parts[:-1])
-        m = __import__(module)
-        for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
-
     def getLastFailure(self):
         return self.failure
 
     def load(self, path, clazz):
         self.failure = None
         try:
-            cls = self.__get_class(clazz)
+            cls = _get_class(clazz)
             transformer = cls.load(path)
             return StageWrapper(self.sc, transformer)
         except:

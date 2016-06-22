@@ -211,6 +211,7 @@ class PythonModel(@transient private var proxy: PythonStageWrapper)
     callFromPython(proxy.transformSchema(schema))
   }
 }
+
 /**
  * A proxy transformer for all PySpark transformers implemented in pure Python.
  *

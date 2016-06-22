@@ -16,10 +16,11 @@
 #
 
 from pyspark import since, keyword_only, SparkContext
+from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable, StageWrapper
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, StageWrapper, _get_class
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.mllib.common import _py2java, _java2py
 from pyspark.serializers import CloudPickleSerializer
 
@@ -39,28 +40,26 @@ class PipelineWrapper(object):
         sc = SparkContext._active_spark_context
 
         def __transfer_stage_to_java(py_stage):
-            if isinstance(py_stage, JavaWrapper):
+            if isinstance(py_stage, JavaParams):
                 py_stage._transfer_params_to_java()
                 return py_stage._java_obj
             else:
                 wrapper = StageWrapper(sc, py_stage)
-                jtransformer = sc._jvm.\
-                    org.apache.spark.ml.api.python.PythonTransformer(wrapper, wrapper.getUid())
-                return jtransformer
+                if isinstance(py_stage, Estimator):
+                    jstage = sc._jvm.\
+                        org.apache.spark.ml.api.python.PythonEstimator(wrapper)
+                elif isinstance(py_stage, Model):
+                    jstage = sc._jvm.\
+                        org.apache.spark.ml.api.python.PythonModel(wrapper)
+                elif isinstance(py_stage, Transformer):
+                    jstage = sc._jvm.\
+                        org.apache.spark.ml.api.python.PythonTransformer(wrapper)
+                else:
+                    raise Exception(
+                        "Unimplemented Scala wrapper for Python type %s" % type(py_stage))
+                return jstage
 
         return [__transfer_stage_to_java(stage) for stage in py_stages]
-
-    @staticmethod
-    def __get_class(clazz):
-        """
-        Loads class from its name.
-        """
-        parts = clazz.split('.')
-        module = ".".join(parts[:-1])
-        m = __import__(module)
-        for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
 
     def _transfer_stages_from_java(self, java_sc, java_stages):
         """
@@ -73,7 +72,7 @@ class PipelineWrapper(object):
                 return CloudPickleSerializer().loads(bytes(java_stage.getPythonTransformer()))
             stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
             # Generate a default new instance from the stage_name class.
-            py_stage = self.__get_class(stage_name)()
+            py_stage = _get_class(stage_name)()
             # Load information from java_stage to the instance.
             py_stage._java_obj = java_stage
             py_stage._resetUid(_java2py(java_sc, java_stage.uid()))

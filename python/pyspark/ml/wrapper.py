@@ -21,7 +21,7 @@ from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
-from pyspark.ml.util import _jvm
+from pyspark.ml.util import _jvm, _get_class
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
@@ -154,19 +154,9 @@ class JavaParams(JavaWrapper, Params):
 
         Meta-algorithms such as Pipeline should override this method as a classmethod.
         """
-        def __get_class(clazz):
-            """
-            Loads Python class from its name.
-            """
-            parts = clazz.split('.')
-            module = ".".join(parts[:-1])
-            m = __import__(module)
-            for comp in parts[1:]:
-                m = getattr(m, comp)
-            return m
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
-        py_type = __get_class(stage_name)
+        py_type = _get_class(stage_name)
         if issubclass(py_type, JavaParams):
             # Load information from java_stage to the instance.
             py_stage = py_type()
