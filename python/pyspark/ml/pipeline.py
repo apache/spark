@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import re
+
 from pyspark import since, keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.common import inherit_doc
@@ -67,9 +69,9 @@ class PipelineWrapper(object):
         """
 
         def __transfer_stage_from_java(java_stage):
-            if java_stage.getClass().getName()\
-                    == "org.apache.spark.ml.api.python.PythonTransformer":
-                return CloudPickleSerializer().loads(bytes(java_stage.getPythonTransformer()))
+            if re.match("org\.apache\.spark\.ml\.api\.python\.Python*",
+                        java_stage.getClass().getName()):
+                return CloudPickleSerializer().loads(bytes(java_stage.getPythonStage()))
             stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
             # Generate a default new instance from the stage_name class.
             py_stage = _get_class(stage_name)()

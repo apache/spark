@@ -45,7 +45,7 @@ private[python] trait PythonStageWrapper {
 
   def transformSchema(schema: StructType): StructType
 
-  def getTransformer: Array[Byte]
+  def getStage: Array[Byte]
 
   def getClassName: String
 
@@ -233,13 +233,6 @@ class PythonTransformer(@transient private var proxy: PythonStageWrapper)
   }
 
   /**
-   * Get serialized Python transformer
-   */
-  private[python] def getPythonTransformer: Array[Byte] = {
-    callFromPython(proxy.getTransformer)
-  }
-
-  /**
    * Get transformer's fully qualified class name in PySpark.
    */
   private[python] def getPythonClassName: String = {
@@ -312,6 +305,13 @@ trait PythonStageBase {
       throw new SparkException("An exception was raised by Python:\n" + failure)
     }
     result
+  }
+
+  /**
+   * Get serialized Python transformer
+   */
+  private[python] def getPythonStage: Array[Byte] = {
+    callFromPython(getProxy.getStage)
   }
 }
 /**
