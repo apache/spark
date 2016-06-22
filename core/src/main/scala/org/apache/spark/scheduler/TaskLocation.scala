@@ -64,14 +64,14 @@ private[spark] object TaskLocation {
 
   /**
    * Create a TaskLocation from a string returned by getPreferredLocations.
-   * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
-   * location is cached.
+   * These strings have the form [executorLocationTag][hostname][executorid], [hostname], or hdfs_cache_[hostname],
+   * depending on whether the location is cached.
    */
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
       if (str.startsWith(executorLocationTag)) {
-        val splits = str.split("_")
+        val splits = str.split("_", 3)
         if (splits.length != 3) {
           throw new IllegalArgumentException("Illegal executor location format: " + str)
         }
