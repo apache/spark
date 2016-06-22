@@ -281,7 +281,7 @@ case class NewInstance(
     val constructorCall = outer.map { gen =>
       s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
     }.getOrElse {
-      if (!cls.isInstanceOf[GenericArrayData]) {
+      if (!cls.isAssignableFrom(classOf[GenericArrayData])) {
         s"new $className(${argValues.mkString(", ")})"
       } else {
         s"${cls.getName}.allocate(${argValues.mkString(", ")})"
