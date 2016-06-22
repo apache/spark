@@ -62,7 +62,6 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
 private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
-  private val buffer = new CharArrayWriter()
 
   format.setDelimiter(params.delimiter)
   format.setLineSeparator(params.rowSeparator)
@@ -77,6 +76,7 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   writerSettings.setHeaders(headers: _*)
   writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
 
+  private val buffer = new CharArrayWriter()
   private val writer = new CsvWriter(buffer, writerSettings)
 
   def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
