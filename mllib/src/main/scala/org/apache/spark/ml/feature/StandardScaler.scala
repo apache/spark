@@ -200,7 +200,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.std, instance.mean)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -211,7 +211,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     override def load(path: String): StandardScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(std: Vector, mean: Vector) = sqlContext.read.parquet(dataPath)
+      val Row(std: Vector, mean: Vector) = sparkSession.read.parquet(dataPath)
         .select("std", "mean")
         .head()
       val model = new StandardScalerModel(metadata.uid, std, mean)
