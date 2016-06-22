@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -219,31 +219,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       }
       intercept[AnalysisException] {
         spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
-      }
-    }
-  }
-
-  test("column nullability and comment - write and then read") {
-    import testImplicits._
-
-    Seq("json", "parquet", "csv").foreach { format =>
-      val schema = StructType(
-        StructField("cl1", IntegerType, nullable = false,
-          new MetadataBuilder().putString("comment", "test").build()) ::
-          StructField("cl2", IntegerType, nullable = true) ::
-          StructField("cl3", IntegerType, nullable = true) :: Nil)
-      val row = Row(3, null, 4)
-      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
-
-      val tableName = "tab"
-      withTable(tableName) {
-        df.write.format(format).mode("overwrite").saveAsTable(tableName)
-        // Verify the DDL command result: DESCRIBE TABLE
-        checkAnswer(
-          sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
-          Row("cl1", "test") :: Nil)
-        // Verify the schema
-        assert(spark.table(tableName).schema == schema.asNullable)
       }
     }
   }
