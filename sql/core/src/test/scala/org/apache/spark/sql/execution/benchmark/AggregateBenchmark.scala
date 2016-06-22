@@ -158,7 +158,7 @@ class AggregateBenchmark extends BenchmarkBase {
     }
 
     /**
-     * Actually run the benchmark, optionally specifying whether to cache the dataset.
+     * Add a benchmark case, optionally specifying whether to cache the dataset.
      */
     def addBenchmark(name: String, cache: Boolean, params: Map[String, String] = Map()): Unit = {
       val ds = sparkSession.sql(query)
@@ -195,6 +195,16 @@ class AggregateBenchmark extends BenchmarkBase {
 //      "spark.sql.inMemoryColumnarScan" -> "false",
 //      "spark.sql.inMemoryColumnarStorage.compressed" -> "true"
 //    ))
+
+    /*
+     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.9.5
+     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+     Cache random keys:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+     --------------------------------------------------------------------------------------------
+     cache = F                                 906 / 1160         23.2          43.2       1.0X
+     cache = T columnar = F compress = F      1141 / 1234         18.4          54.4       0.8X
+     cache = T columnar = T compress = F       535 /  797         39.2          25.5       1.7X
+     */
 
     benchmark.run()
   }

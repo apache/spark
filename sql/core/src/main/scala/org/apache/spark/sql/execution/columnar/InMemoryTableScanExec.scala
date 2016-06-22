@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.execution.vectorized.{ColumnVector, ColumnarBatch}
 import org.apache.spark.sql.types.{DataType, UserDefinedType}
 
 
@@ -35,6 +35,17 @@ private[sql] case class InMemoryTableScanExec(
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
   extends LeafExecNode with CodegenSupport {
+
+  private val useColumnarScan = relation.child.sqlContext.conf.getConfString(
+    "spark.sql.inMemoryColumnarScan", "true").toBoolean
+
+  override val supportCodegen: Boolean = useColumnarScan
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    // HACK ALERT: This is actually an RDD[ColumnarBatch].
+    // We're taking advantage of Scala's type erasure here to pass these batches along.
+    Seq(relation.cachedColumnVectors.asInstanceOf[RDD[InternalRow]])
+  }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
@@ -110,7 +121,8 @@ private[sql] case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  private def doExecuteRow(): RDD[InternalRow] = {
+  override protected def doExecute(): RDD[InternalRow] = {
+    assert(!useColumnarScan)
     val numOutputRows = longMetric("numOutputRows")
 
     if (enableAccumulators) {
@@ -178,81 +190,10 @@ private[sql] case class InMemoryTableScanExec(
     }
   }
 
-  private def doExecuteColumnar(): RDD[InternalRow] = {
-    relation.cachedColumnVectors.mapPartitionsInternal { batchIter =>
-      new Iterator[InternalRow] {
-        private var currentRowIterator: java.util.Iterator[ColumnarBatch.Row] = null
-
-        override def hasNext: Boolean = {
-          if (currentRowIterator == null && batchIter.hasNext) {
-            currentRowIterator = batchIter.next().rowIterator
-          }
-          currentRowIterator != null && currentRowIterator.hasNext
-        }
-
-        override def next(): InternalRow = {
-          if (!hasNext) {
-            throw new NoSuchElementException
-          }
-          val row = currentRowIterator.next()
-          if (!currentRowIterator.hasNext) {
-            currentRowIterator = null
-          }
-          row
-        }
-      }
-    }
-  }
-
-//  protected override def doExecute(): RDD[InternalRow] = {
-//    val useColumnarScan = relation.child.sqlContext.conf.getConfString(
-//      "spark.sql.inMemoryColumnarScan", "true").toBoolean
-//    if (useColumnarScan) {
-//      doExecuteColumnar()
-//    } else {
-//      doExecuteRow()
-//    }
-//  }
-
-  private val useColumnarScan = relation.child.sqlContext.conf.getConfString(
-    "spark.sql.inMemoryColumnarScan", "true").toBoolean
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    // HACK ALERT
-    Seq(relation.cachedColumnVectors.asInstanceOf[RDD[InternalRow]])
-  }
-
-  override def supportCodegen: Boolean = useColumnarScan
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    assert(!useColumnarScan, "this should only be used as a backup")
-    doExecuteRow()
-  }
-
-  private def genCodeColumnVector(
-      ctx: CodegenContext,
-      columnVar: String,
-      ordinal: String,
-      dataType: DataType,
-      nullable: Boolean): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(columnVar, dataType, ordinal)
-    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
-    val valueVar = ctx.freshName("value")
-    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
-      s"""
-        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
-        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
-      """
-    } else {
-      s"$javaType ${valueVar} = $value;"
-    }).trim
-    ExprCode(code, isNullVar, valueVar)
-  }
-
-  // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
-  // never requires UnsafeRow as input.
+  /**
+   * Produce code to process the input iterator as [[ColumnarBatch]]es.
+   * This produces an [[UnsafeRow]] for each row in each batch.
+   */
   override protected def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
     // PhysicalRDD always just has one input
@@ -303,6 +244,32 @@ private[sql] case class InMemoryTableScanExec(
        |  $nextBatch();
        |}
      """.stripMargin
+  }
+
+  /**
+   * Generate [[ColumnVector]] expressions for our parent to consume as rows.
+   * This is called once per [[ColumnarBatch]].
+   */
+  private def genCodeColumnVector(
+      ctx: CodegenContext,
+      columnVar: String,
+      ordinal: String,
+      dataType: DataType,
+      nullable: Boolean): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue(columnVar, dataType, ordinal)
+    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
+    val valueVar = ctx.freshName("value")
+    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
+      s"""
+        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
+        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      s"$javaType ${valueVar} = $value;"
+    }).trim
+    ExprCode(code, isNullVar, valueVar)
   }
 
 }

@@ -16,9 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.io.Externalizable;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
@@ -59,10 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVectors are intended to be reused.
  */
-public abstract class ColumnVector implements AutoCloseable {// , Externalizable {
-
-//  public void writeExternal(ObjectOutput out) throws java.io.IOException { }
-//  public void readExternal(ObjectInput in) throws java.io.IOException { }
+public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Allocates a column to store elements of `type` on or off heap.
@@ -856,7 +850,7 @@ public abstract class ColumnVector implements AutoCloseable {// , Externalizable
   /**
    * Data type for this column.
    */
-  protected DataType type;
+  protected final DataType type;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
