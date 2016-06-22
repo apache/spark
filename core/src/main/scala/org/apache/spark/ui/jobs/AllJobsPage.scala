@@ -256,7 +256,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </td>
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
-           failed = job.numFailedTasks, skipped = job.numSkippedTasks,
+           failed = job.numFailedTasks, skipped = job.numSkippedTasks, killed = job.numKilledTasks,
            total = job.numTasks - job.numSkippedTasks)}
         </td>
       </tr>

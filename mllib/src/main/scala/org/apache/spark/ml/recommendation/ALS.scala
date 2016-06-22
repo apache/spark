@@ -430,15 +430,11 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setIntermediateStorageLevel(value: String): this.type = {
-    set(intermediateStorageLevel, value)
-  }
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setFinalStorageLevel(value: String): this.type = {
-    set(finalStorageLevel, value)
-  }
+  def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.

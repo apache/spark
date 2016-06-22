@@ -92,7 +92,6 @@ class TypedColumn[-T, U](
 }
 
 /**
- * :: Experimental ::
  * A column that will be computed based on the data in a [[DataFrame]].
  *
  * A new column is constructed based on the input columns present in a dataframe:
@@ -121,7 +120,6 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-@Experimental
 class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -131,6 +129,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       UnresolvedStar(Some(parts))
     case _ => UnresolvedAttribute.quotedString(name)
   })
+
+  override def toString: String = usePrettyExpression(expr).sql
+
+  override def equals(that: Any): Boolean = that match {
+    case that: Column => that.expr.equals(this.expr)
+    case _ => false
+  }
+
+  override def hashCode: Int = this.expr.hashCode()
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -158,29 +165,19 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
-    case c: Cast => c.transformUp {
-      case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
-    } match {
-      case ne: NamedExpression => ne
-      case other => Alias(expr, usePrettyExpression(expr).sql)()
-    }
+    case c: Cast =>
+      c.transformUp {
+        case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
+      } match {
+        case ne: NamedExpression => ne
+        case other => Alias(expr, usePrettyExpression(expr).sql)()
+      }
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
-
-
-
-  override def toString: String = usePrettyExpression(expr).sql
-
-  override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
-    case _ => false
-  }
-
-  override def hashCode: Int = this.expr.hashCode
 
   /**
    * Provides a type hint about the expected return value of this column.  This information can

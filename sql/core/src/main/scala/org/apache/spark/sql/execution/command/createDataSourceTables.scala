@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
@@ -118,8 +119,8 @@ case class CreateDataSourceTableCommand(
 /**
  * A command used to create a data source table using the result of a query.
  *
- * Note: This is different from [[CreateTableAsSelect]]. Please check the syntax for difference.
- * This is not intended for temporary tables.
+ * Note: This is different from [[CreateTableAsSelectLogicalPlan]]. Please check the syntax for
+ * difference. This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -137,6 +138,8 @@ case class CreateDataSourceTableAsSelectCommand(
     options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
@@ -166,7 +169,7 @@ case class CreateDataSourceTableAsSelectCommand(
         options
       }
 
-    var existingSchema = None: Option[StructType]
+    var existingSchema = Option.empty[StructType]
     if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
@@ -194,6 +197,15 @@ case class CreateDataSourceTableAsSelectCommand(
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+              // check if the file formats match
+              l.relation match {
+                case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
+                  throw new AnalysisException(
+                    s"The file format of the existing table $tableIdent is " +
+                      s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
+                      s"format `$provider`")
+                case _ =>
+              }
               if (query.schema.size != l.schema.size) {
                 throw new AnalysisException(
                   s"The column number of the existing schema[${l.schema}] " +
@@ -230,8 +242,13 @@ case class CreateDataSourceTableAsSelectCommand(
       bucketSpec = bucketSpec,
       options = optionsWithPath)
 
-    val result = dataSource.write(mode, df)
-
+    val result = try {
+      dataSource.write(mode, df)
+    } catch {
+      case ex: AnalysisException =>
+        logError(s"Failed to write to table ${tableIdent.identifier} in $mode mode", ex)
+        throw ex
+    }
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation

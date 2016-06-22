@@ -22,7 +22,6 @@ import java.io.File
 
 import com.google.common.io.{ByteStreams, Files}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 
 object HiveFromSpark {
@@ -35,8 +34,6 @@ object HiveFromSpark {
   ByteStreams.copy(kv1Stream, Files.newOutputStreamSupplier(kv1File))
 
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("HiveFromSpark")
-
     // When working with Hive, one must instantiate `SparkSession` with Hive support, including
     // connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined
     // functions. Users who do not have an existing Hive deployment can still enable Hive support.
@@ -45,10 +42,9 @@ object HiveFromSpark {
     // which defaults to the directory `spark-warehouse` in the current directory that the spark
     // application is started.
     val spark = SparkSession.builder
-      .config(sparkConf)
+      .appName("HiveFromSpark")
       .enableHiveSupport()
       .getOrCreate()
-    val sc = spark.sparkContext
 
     import spark.implicits._
     import spark.sql
@@ -74,7 +70,7 @@ object HiveFromSpark {
     }
 
     // You can also use RDDs to create temporary views within a HiveContext.
-    val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
+    val rdd = spark.sparkContext.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
     rdd.toDF().createOrReplaceTempView("records")
 
     // Queries can then join RDD data with data stored in Hive.
