@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
  */
 private[sql] class CsvReader(params: CSVOptions) {
 
-  private lazy val parser: CsvParser = {
+  private val parser: CsvParser = {
     val settings = new CsvParserSettings()
     val format = settings.getFormat
     format.setDelimiter(params.delimiter)

@@ -38,7 +38,6 @@ object CSVRelation extends Logging {
 
   def univocityTokenizer(
       file: RDD[String],
-      header: Seq[String],
       firstLine: String,
       params: CSVOptions): RDD[Array[String]] = {
     // If header is set, make sure firstLine is materialized before sending to executors.

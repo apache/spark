@@ -145,7 +145,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val rdd = baseRdd(sparkSession, options, inputPaths)
     // Make sure firstLine is materialized before sending to executors
     val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
+    CSVRelation.univocityTokenizer(rdd, firstLine, options)
   }
 
   /**
