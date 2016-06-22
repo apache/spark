@@ -643,12 +643,6 @@ object MimaExcludes {
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
-        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
-      ) ++ Seq(
-        // [SPARK-11171] [SPARK-11237] Add PMML export for ML
-        ProblemFilters.exclude[UpdateForwarderBodyProblem]("org.apache.spark.mllib.pmml.PMMLExportable.toPMML"),
-        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.pmml.PMMLExportable.toPMML")
-      ) ++ Seq(
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
         // [SPARK-14617] Remove deprecated APIs in TaskMetrics
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.InputMetrics$"),
