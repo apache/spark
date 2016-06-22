@@ -392,13 +392,14 @@ private[sql] object HadoopFsRelation extends Logging {
     logTrace(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
     if (shouldFilterOut(name)) {
-      Array.empty
+      Array.empty[FileStatus]
     } else {
       val statuses = {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
         val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir, filter))
         if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
       }
+      // statuses do not have any dirs.
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus => f
 
@@ -460,7 +461,9 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
-        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter)).getOrElse(Array.empty)
+        // TODO: We need to avoid of using Try at here.
+        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter))
+          .getOrElse(Array.empty[FileStatus])
       }
     }.map { status =>
       val blockLocations = status match {
