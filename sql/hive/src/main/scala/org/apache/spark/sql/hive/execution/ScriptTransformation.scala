@@ -322,10 +322,10 @@ private class ScriptTransformationWriterThread(
         throw e
     } finally {
       try {
-        outputStream.close()
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }
+        outputStream.close()
       } catch {
         case NonFatal(exceptionFromFinallyBlock) =>
           if (!threwException) {
