@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
@@ -120,17 +122,18 @@ public final class UnsafeMapData extends MapData {
   }
 
   @Override
-  public boolean equals(Object o) {
-    if (o instanceof UnsafeMapData) {
-      UnsafeMapData other = (UnsafeMapData) o;
-      return this.keyArray().equals(other.keyArray()) &&
-        this.valueArray().equals(other.valueArray());
+  public boolean equals(Object other) {
+    if (other instanceof UnsafeMapData) {
+      UnsafeMapData o = (UnsafeMapData) other;
+      return sizeInBytes == o.sizeInBytes &&
+        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
+                sizeInBytes);
     }
     return false;
   }
 
   @Override
   public int hashCode() {
-    return keyArray().hashCode() * 37 + valueArray().hashCode();
+    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
   }
 }
