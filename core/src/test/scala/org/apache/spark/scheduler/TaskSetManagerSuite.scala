@@ -810,7 +810,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(4)
     // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
     sc.conf.set("spark.speculation.multiplier", "0.0")
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
     }
@@ -832,6 +833,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(sched.endedTasks(id) === Success)
     }
 
+    // check speculatable tasks requires a non-zero runtime for the tasks
+    clock.advance(1)
     assert(manager.checkSpeculatableTasks(0))
     // Offer resource to start the speculative attempt for the running task
     val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
