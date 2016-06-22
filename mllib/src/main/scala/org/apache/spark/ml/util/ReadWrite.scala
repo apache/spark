@@ -134,7 +134,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
 
   // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
+  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -199,7 +199,7 @@ abstract class MLReader[T] extends BaseReadWrite {
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
 
   // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
+  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
