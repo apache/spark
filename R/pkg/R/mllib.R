@@ -114,8 +114,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
-#' @title Generalized Linear Models (R-compliant)
-#'  Fits a generalized linear model, similarly to R's glm().
+#' Generalized Linear Models (R-compliant)
+#'
+#' Fits a generalized linear model, similarly to R's glm().
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data SparkDataFrame for training.
@@ -144,6 +145,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
+#'
 #' @param object A fitted generalized linear model
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
 #'         including at least the coefficients, null/residual deviance, null/residual degrees
@@ -182,7 +184,8 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             return(ans)
           })
 
-#  Print the summary of GeneralizedLinearRegressionModel
+#  Prints the summary of GeneralizedLinearRegressionModel
+#'
 #' @rdname spark.glm
 #' @param x Summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
@@ -215,6 +218,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 
 #  Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #  similarly to R's predict().
+#'
 #' @param newData SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname spark.glm
@@ -469,7 +473,8 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
-#  Save the generalized linear model to the input path.
+#  Saves the generalized linear model to the input path.
+#'
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
