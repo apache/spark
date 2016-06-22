@@ -26,6 +26,7 @@ import scala.language.existentials
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -127,6 +128,22 @@ class CodegenContext {
 
   def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
     mutableStates += ((javaType, variableName, initCode))
+  }
+
+  /**
+   * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
+   * that the variable is safely stored, which is important for (potentially) byte array backed
+   * data types like: UTF8String, ArrayData, MapData & InternalRow.
+   */
+  def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
+    val value = freshName(variableName)
+    addMutableState(javaType(dataType), value, "")
+    val code = dataType match {
+      case StringType => s"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
+      case _ => s"$value = $initCode;"
+    }
+    ExprCode(code, "false", value)
   }
 
   def declareMutableStates(): String = {
@@ -490,6 +507,7 @@ class CodegenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
+      INPUT_ROW = "i"
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
       val funcCode: String =
@@ -885,6 +903,8 @@ object CodeGenerator extends Logging {
           val result = doCompile(code)
           val endTime = System.nanoTime()
           def timeMs: Double = (endTime - startTime).toDouble / 1000000
+          CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
+          CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
           result
         }

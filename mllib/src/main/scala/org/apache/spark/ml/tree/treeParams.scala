@@ -151,7 +151,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * [[org.apache.spark.SparkContext]].
    * Must be >= 1.
    * (default = 10)
-   * @group expertSetParam
+   * @group setParam
    */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 

@@ -160,11 +160,17 @@ private[spark] class ApplicationMaster(
     }
 
     // Distribute the conf archive to executors.
-    sparkConf.get(CACHED_CONF_ARCHIVE).foreach { uri =>
-      val fs = FileSystem.get(new URI(uri), yarnConf)
+    sparkConf.get(CACHED_CONF_ARCHIVE).foreach { path =>
+      val uri = new URI(path)
+      val fs = FileSystem.get(uri, yarnConf)
       val status = fs.getFileStatus(new Path(uri))
-      setupDistributedCache(uri, LocalResourceType.ARCHIVE, status.getModificationTime().toString,
-        status.getLen.toString, LocalResourceVisibility.PRIVATE.name())
+      // SPARK-16080: Make sure to use the correct name for the destination when distributing the
+      // conf archive to executors.
+      val destUri = new URI(uri.getScheme(), uri.getRawSchemeSpecificPart(),
+        Client.LOCALIZED_CONF_DIR)
+      setupDistributedCache(destUri.toString(), LocalResourceType.ARCHIVE,
+        status.getModificationTime().toString, status.getLen.toString,
+        LocalResourceVisibility.PRIVATE.name())
     }
 
     // Clean up the configuration so it doesn't show up in the Web UI (since it's really noisy).

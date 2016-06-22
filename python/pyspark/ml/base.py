@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since
 from pyspark.ml.param import Params
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 
 @inherit_doc

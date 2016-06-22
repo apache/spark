@@ -130,8 +130,8 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 @Experimental
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("1.5.0") val pi: Vector,
-    @Since("1.5.0") val theta: Matrix)
+    @Since("2.0.0") val pi: Vector,
+    @Since("2.0.0") val theta: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
@@ -262,7 +262,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       // Save model data: pi, theta
       val data = Data(instance.pi, instance.theta)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -275,7 +275,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("pi", "theta").head()
+      val data = sparkSession.read.parquet(dataPath).select("pi", "theta").head()
       val pi = data.getAs[Vector](0)
       val theta = data.getAs[Matrix](1)
       val model = new NaiveBayesModel(metadata.uid, pi, theta)

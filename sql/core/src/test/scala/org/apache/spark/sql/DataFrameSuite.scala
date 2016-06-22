@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 import scala.language.postfixOps
 import scala.util.Random
@@ -35,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -906,6 +908,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.dropDuplicates(Seq("value2")),
       Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates("key", "value1"),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
   }
 
   test("SPARK-7150 range api") {
@@ -1491,18 +1497,43 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-13774: Check error message for non existent path without globbed paths") {
-    val e = intercept[AnalysisException] (spark.read.format("csv").
-      load("/xyz/file2", "/xyz/file21", "/abc/files555", "a")).getMessage()
-    assert(e.startsWith("Path does not exist"))
+    val uuid = UUID.randomUUID().toString
+    val baseDir = Utils.createTempDir()
+    try {
+      val e = intercept[AnalysisException] {
+        spark.read.format("csv").load(
+          new File(baseDir, "file").getAbsolutePath,
+          new File(baseDir, "file2").getAbsolutePath,
+          new File(uuid, "file3").getAbsolutePath,
+          uuid).rdd
+      }
+      assert(e.getMessage.startsWith("Path does not exist"))
+    } finally {
+
+    }
+
    }
 
   test("SPARK-13774: Check error message for not existent globbed paths") {
-    val e = intercept[AnalysisException] (spark.read.format("text").
-      load( "/xyz/*")).getMessage()
-    assert(e.startsWith("Path does not exist"))
+    // Non-existent initial path component:
+    val nonExistentBasePath = "/" + UUID.randomUUID().toString
+    assert(!new File(nonExistentBasePath).exists())
+    val e = intercept[AnalysisException] {
+      spark.read.format("text").load(s"$nonExistentBasePath/*")
+    }
+    assert(e.getMessage.startsWith("Path does not exist"))
 
-    val e1 = intercept[AnalysisException] (spark.read.json("/mnt/*/*-xyz.json").rdd).
-      getMessage()
-    assert(e1.startsWith("Path does not exist"))
+    // Existent initial path component, but no matching files:
+    val baseDir = Utils.createTempDir()
+    val childDir = Utils.createTempDir(baseDir.getAbsolutePath)
+    assert(childDir.exists())
+    try {
+      val e1 = intercept[AnalysisException] {
+        spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
+      }
+      assert(e1.getMessage.startsWith("Path does not exist"))
+    } finally {
+      Utils.deleteRecursively(baseDir)
+    }
   }
 }
