@@ -293,11 +293,7 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
-      def filter[T : Encoder](func: T => Boolean): LogicalPlan = {
-        val deserialized = logicalPlan.deserialize[T]
-        val condition = expressions.callFunction(func, BooleanType, deserialized.output.head)
-        Filter(condition, deserialized).serialize[T]
-      }
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
