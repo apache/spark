@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.clustering
 
-import javax.xml.transform.stream.StreamResult
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException

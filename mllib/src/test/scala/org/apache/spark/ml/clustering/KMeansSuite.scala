@@ -23,6 +23,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, PMMLUtils}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.util.Utils
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -122,7 +123,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val predictionColName = "kmeans_prediction"
     val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = kmeans.fit(dataset)
-    val pmmlStr = model.toPMML()
+    val tempDir = Utils.createTempDir()
+    val exportPath = tempDir.getPath() + "/pmml"
+    model.toPMML("file://" +  exportPath)
+    val pmmlStr = sc.textFile(exportPath).collect.mkString("\n")
+    Utils.deleteRecursively(tempDir)
     val pmmlModel = PMMLUtils.loadFromString(pmmlStr)
     assert(pmmlModel.getDataDictionary.getNumberOfFields === 3)
   }
