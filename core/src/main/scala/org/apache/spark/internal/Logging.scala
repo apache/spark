@@ -32,7 +32,7 @@ private[spark] trait Logging {
 
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
-  @transient lazy val log : Logger = {
+  @transient lazy val log: Logger = {
     initializeLogIfNecessary(false)
     LoggerFactory.getLogger(logName)
   }
