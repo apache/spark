@@ -112,28 +112,34 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
   test("duplicate columns in bucketBy") {
     import testImplicits._
     val df = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    val e = intercept[AnalysisException] {
-      df.write.format("json").bucketBy(8, "j", "j").saveAsTable("tab")
-    }.getMessage
-    assert(e.contains("Duplicate column(s): `j` found in Bucketing columns"))
+    withTable("tab123") {
+      val e = intercept[AnalysisException] {
+        df.write.format("json").bucketBy(8, "j", "j").saveAsTable("tab123")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s) in Bucketing: `j`"))
+    }
   }
 
   test("duplicate columns in sortBy") {
     import testImplicits._
     val df = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    val e = intercept[AnalysisException] {
-      df.write.format("json").bucketBy(8, "j", "k").sortBy("k", "k").saveAsTable("tab")
-    }.getMessage
-    assert(e.contains("Duplicate column(s): `k` found in Sorting columns"))
+    withTable("tab123") {
+      val e = intercept[AnalysisException] {
+        df.write.format("json").bucketBy(8, "j", "k").sortBy("k", "k").saveAsTable("tab123")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s) in Sorting: `k`"))
+    }
   }
 
   test("duplicate columns in partitionBy") {
     import testImplicits._
     val df = (0 until 5).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
-    val e = intercept[AnalysisException] {
-      df.write.format("json").partitionBy("i", "i").saveAsTable("tab")
-    }.getMessage
-    assert(e.contains("Duplicate column(s): `i` found in Partition columns"))
+    withTable("tab123") {
+      val e = intercept[AnalysisException] {
+        df.write.format("json").partitionBy("i", "i").saveAsTable("tab123")
+      }.getMessage
+      assert(e.contains("Found duplicate column(s) in Partition: `i`"))
+    }
   }
 
   test("resolve default source") {

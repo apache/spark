@@ -140,6 +140,73 @@ class HiveDDLSuite
     }
   }
 
+  test("duplicate columns in bucketBy, sortBy and partitionBy in CTAS") {
+    withTable("t") {
+      var e = intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE t USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |CLUSTERED BY (a, a) SORTED BY (b) INTO 2 BUCKETS
+            |AS SELECT 1 AS a, 2 AS b
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Bucketing: `a`"))
+
+      e = intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE t USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |CLUSTERED BY (a) SORTED BY (b, b) INTO 2 BUCKETS
+            |AS SELECT 1 AS a, 2 AS b
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Sorting: `b`"))
+
+      e = intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE t USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |PARTITIONED BY (ds, ds, hr, hr)
+            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
+            |AS SELECT 1 AS a, 2 AS b
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Partition: `hr`, `ds`"))
+    }
+  }
+
+  test("duplicate columns in bucketBy, sortBy and partitionBy in Create Data Source Tables") {
+    withTable("t") {
+      var e = intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE t (a String, b String) USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |CLUSTERED BY (a, a) SORTED BY (b) INTO 2 BUCKETS
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Bucketing: `a`"))
+
+      e = intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE t (a String, b String) USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |CLUSTERED BY (a) SORTED BY (b, b) INTO 2 BUCKETS
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Sorting: `b`"))
+
+      e = intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE t (a String, b String) USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |PARTITIONED BY (ds, ds, hr, hr)
+            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
+          """.stripMargin)
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Partition: `hr`, `ds`"))
+    }
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>

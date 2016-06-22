@@ -259,33 +259,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         ifNotExists = false)).toRdd
   }
 
-  /** Duplicates are not allowed in partitionBy/bucketBy/sortBy columns. */
-  private def checkDuplicates(columnNames: Seq[String], columnType: String): Unit = {
-    if (columnNames.length != columnNames.distinct.length) {
-      val duplicateColumns = columnNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "`" + x + "`"
-      }.mkString(", ")
-      throw new AnalysisException(
-        s"Duplicate column(s): $duplicateColumns found in $columnType columns")
-    }
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
+    cols.map(normalize(_, "Partition"))
   }
 
-  private def normalizedParCols: Option[Seq[String]] = {
-    val partitionByCols = partitioningColumns.map { cols => cols.map(normalize(_, "Partition")) }
-    partitionByCols.foreach(checkDuplicates(_, "Partition"))
-    partitionByCols
+  private def normalizedBucketColNames: Option[Seq[String]] = bucketColumnNames.map { cols =>
+    cols.map(normalize(_, "Bucketing"))
   }
 
-  private def normalizedBucketColNames: Option[Seq[String]] = {
-    val bucketByCols = bucketColumnNames.map { cols => cols.map(normalize(_, "Bucketing")) }
-    bucketByCols.foreach(checkDuplicates(_, "Bucketing"))
-    bucketByCols
-  }
-
-  private def normalizedSortColNames: Option[Seq[String]] = {
-    val sortByCols = sortColumnNames.map { cols => cols.map(normalize(_, "Sorting")) }
-    sortByCols.foreach(checkDuplicates(_, "Sorting"))
-    sortByCols
+  private def normalizedSortColNames: Option[Seq[String]] = sortColumnNames.map { cols =>
+    cols.map(normalize(_, "Sorting"))
   }
 
   private def getBucketSpec: Option[BucketSpec] = {

@@ -206,7 +206,22 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
+      case c: CreateTableUsing =>
+        // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.
+        checkDuplicates(c.partitionColumns, "Partition")
+        c.bucketSpec.foreach(b => {
+          checkDuplicates(b.bucketColumnNames, "Bucketing")
+          checkDuplicates(b.sortColumnNames, "Sorting")
+        })
+
       case c: CreateTableUsingAsSelect =>
+        // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.
+        checkDuplicates(c.partitionColumns, "Partition")
+        c.bucketSpec.foreach(b => {
+          checkDuplicates(b.bucketColumnNames, "Bucketing")
+          checkDuplicates(b.sortColumnNames, "Sorting")
+        })
+
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
@@ -246,6 +261,17 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
       case _ => // OK
+    }
+  }
+
+  private def checkDuplicates(columnNames: Seq[String], columnType: String): Unit = {
+    val duplicateColumns = columnNames.groupBy { name =>
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase }.collect {
+      case (x, ys) if ys.length > 1 => s"`$x`"
+    }
+    if (duplicateColumns.nonEmpty) {
+      throw new AnalysisException(
+        s"Found duplicate column(s) in $columnType: ${duplicateColumns.mkString(", ")}")
     }
   }
 }
