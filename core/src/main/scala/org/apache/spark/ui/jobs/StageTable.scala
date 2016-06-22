@@ -36,6 +36,7 @@ private[ui] class StageTableBase(
     stages: Seq[StageInfo],
     stageTag: String,
     basePath: String,
+    subPath: String,
     progressListener: JobProgressListener,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
@@ -78,6 +79,7 @@ private[ui] class StageTableBase(
       stages,
       stageTag,
       basePath,
+      subPath,
       progressListener,
       isFairScheduler,
       killEnabled,
@@ -131,6 +133,7 @@ private[ui] class StagePagedTable(
     stages: Seq[StageInfo],
     stageTag: String,
     basePath: String,
+    subPath: String,
     listener: JobProgressListener,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
@@ -152,12 +155,12 @@ private[ui] class StagePagedTable(
 
   override def pageNumberFormField: String = stageTag + ".page"
 
-  val parameterPath = basePath + "?" + parameterOtherTable.mkString("&")
+  val parameterPath = UIUtils.prependBaseUri(basePath) + s"/$subPath/?" +
+    parameterOtherTable.mkString("&")
 
   override val dataSource = new StageDataSource(
     stages,
     listener,
-    basePath,
     currentTime,
     pageSize,
     sortColumn,
@@ -391,7 +394,6 @@ private[ui] class StagePagedTable(
 private[ui] class StageDataSource(
     stages: Seq[StageInfo],
     listener: JobProgressListener,
-    basePath: String,
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,

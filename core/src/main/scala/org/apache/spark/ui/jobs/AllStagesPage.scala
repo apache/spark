@@ -38,18 +38,19 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val numCompletedStages = listener.numCompletedStages
       val failedStages = listener.failedStages.reverse.toSeq
       val numFailedStages = listener.numFailedStages
+      val subPath = "stages"
 
       val activeStagesTable =
-        new StageTableBase(request, activeStages, "activeStage", parent.basePath,
+        new StageTableBase(request, activeStages, "activeStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler, parent.killEnabled, false)
       val pendingStagesTable =
-        new StageTableBase(request, pendingStages, "pendingStage", parent.basePath,
+        new StageTableBase(request, pendingStages, "pendingStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler, false, false)
       val completedStagesTable =
-        new StageTableBase(request, completedStages, "completedStage", parent.basePath,
+        new StageTableBase(request, completedStages, "completedStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler, false, false)
       val failedStagesTable =
-        new StageTableBase(request, failedStages, "failedStage", parent.basePath,
+        new StageTableBase(request, failedStages, "failedStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler, false, true)
 
       // For now, pool information is only accessible in live UIs

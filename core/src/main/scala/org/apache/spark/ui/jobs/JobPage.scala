@@ -229,18 +229,20 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         }
       }
 
+      val basePath = "jobs/job"
+
       val activeStagesTable =
         new StageTableBase(request, activeStages, "activeStage", parent.basePath,
-          parent.jobProgresslistener, parent.isFairScheduler, parent.killEnabled, false)
+          basePath, parent.jobProgresslistener, parent.isFairScheduler, parent.killEnabled, false)
       val pendingOrSkippedStagesTable =
         new StageTableBase(request, pendingOrSkippedStages, "pendingStage", parent.basePath,
-          parent.jobProgresslistener, parent.isFairScheduler, false, false)
+          basePath, parent.jobProgresslistener, parent.isFairScheduler, false, false)
       val completedStagesTable =
         new StageTableBase(request, completedStages, "completedStage", parent.basePath,
-          parent.jobProgresslistener, parent.isFairScheduler, false, false)
+          basePath, parent.jobProgresslistener, parent.isFairScheduler, false, false)
       val failedStagesTable =
         new StageTableBase(request, failedStages, "failedStage", parent.basePath,
-          parent.jobProgresslistener, parent.isFairScheduler, false, true)
+          basePath, parent.jobProgresslistener, parent.isFairScheduler, false, true)
 
       val shouldShowActiveStages = activeStages.nonEmpty
       val shouldShowPendingStages = !isComplete && pendingOrSkippedStages.nonEmpty
