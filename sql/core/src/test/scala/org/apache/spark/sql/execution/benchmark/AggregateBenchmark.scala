@@ -132,14 +132,14 @@ class AggregateBenchmark extends BenchmarkBase {
   }
 
 
-  test("cache aggregate with randomized keys") {
-    val N = 20 << 19
+  test("cache with randomized keys") {
+    val N = 20 << 20
     val numIters = 10
     val benchmark = new Benchmark("Cache aggregate", N)
     sparkSession.range(N)
       .selectExpr("id", "floor(rand() * 10000) as k")
       .createOrReplaceTempView("test")
-    val expectedAnswer = sparkSession.sql("select k, sum(id) from test group by k").collect().toSeq
+    val expectedAnswer = sparkSession.sql("select count(k), count(id) from test").collect().toSeq
 
     /**
      * Call collect on the dataset after deleting all existing temporary files.
@@ -160,7 +160,7 @@ class AggregateBenchmark extends BenchmarkBase {
      * Actually run the benchmark, optionally specifying whether to cache the dataset.
      */
     def addBenchmark(name: String, cache: Boolean, params: Map[String, String] = Map()): Unit = {
-      val ds = sparkSession.sql("select k, sum(id) from test group by k")
+      val ds = sparkSession.sql("select count(k), count(id) from test")
       val defaults = params.keys.flatMap { k => sparkSession.conf.getOption(k).map((k, _)) }
       val prepare = () => {
         params.foreach { case (k, v) => sparkSession.conf.set(k, v) }
