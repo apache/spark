@@ -26,4 +26,6 @@ import org.apache.spark.annotation.AlphaComponent;
  *      JDK-4492654</a>
  */
 @AlphaComponent
-public class JavaPackage {}
+public class JavaPackage {
+  private JavaPackage() {}
+}

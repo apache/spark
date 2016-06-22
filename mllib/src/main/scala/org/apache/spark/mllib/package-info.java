@@ -19,7 +19,7 @@
  * RDD-based machine learning APIs (in maintenance mode).
  *
  * The <code>spark.mllib</code> package is in maintenance mode as of the Spark 2.0.0 release to
- * encourage migration to the DataFrame-based APIs under the <code>spark.mllib</code> package.
+ * encourage migration to the DataFrame-based APIs under the <code>spark.ml</code> package.
  * While in maintenance mode,
  * <ul>
  *   <li>
