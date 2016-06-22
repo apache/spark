@@ -52,6 +52,18 @@ class DataTypeSuite extends SparkFunSuite {
     assert(StructField("b", LongType, false) === struct("b"))
   }
 
+  test("construct with add from StructField with comments") {
+    // Test creation from StructField using three different ways
+    val struct = (new StructType)
+      .add("a", "int", true, "test1")
+      .add(StructField("b", LongType, false, "test2"))
+      .add("c", StringType, true, "test3")
+
+    assert(StructField("a", IntegerType, true, "test1") === struct("a"))
+    assert(StructField("b", LongType, false, "test2") === struct("b"))
+    assert(StructField("c", StringType, true, "test3") === struct("c"))
+  }
+
   test("construct with String DataType") {
     // Test creation with DataType as String
     val struct = (new StructType)
