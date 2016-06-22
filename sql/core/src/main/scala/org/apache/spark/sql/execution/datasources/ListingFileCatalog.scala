@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.hadoop.fs.{FileStatus, LocatedFileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
@@ -95,7 +96,8 @@ class ListingFileCatalog(
         logTrace(s"Listing $path on driver")
 
         val childStatuses = {
-          val stats = fs.listStatus(path)
+          // TODO: We need to avoid of using Try at here.
+          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
           if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
         }
 
