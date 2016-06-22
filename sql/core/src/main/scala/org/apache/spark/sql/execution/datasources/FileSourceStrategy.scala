@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -121,11 +122,11 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           hadoopConf =
             fsRelation.sparkSession.sessionState.newHadoopConfWithOptions(fsRelation.options))
 
-      val plannedPartitions: Seq[FilePartition] = fsRelation.bucketSpec match {
+      val rdd = fsRelation.bucketSpec match {
         case Some(bucketing) if fsRelation.sparkSession.sessionState.conf.bucketingEnabled =>
-          createBucketedPartitions(bucketing, selectedPartitions)
+          createBucketedReadRDD(bucketing, readFile, selectedPartitions, fsRelation)
         case _ =>
-          createNonBucketedPartitions(selectedPartitions, fsRelation)
+          createNonBucketedReadRDD(readFile, selectedPartitions, fsRelation)
       }
 
       val meta = Map(
@@ -137,10 +138,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val scan =
         DataSourceScanExec.create(
           readDataColumns ++ partitionColumns,
-          new FileScanRDD(
-            fsRelation.sparkSession,
-            readFile,
-            plannedPartitions),
+          rdd,
           fsRelation,
           meta,
           table)
@@ -160,16 +158,21 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
   /**
    * Create a list of RDD partitions ([[FilePartition]]) for bucketed reads.
-   * The non-bucketed variant of this function is [[createNonBucketedPartitions]].
+   * The non-bucketed variant of this function is [[createNonBucketedReadRDD]].
    *
    * The algorithm is pretty simple: each RDD partition being returned should include all the files
    * with the same bucket id from all the given Hive partitions.
    *
    * @param bucketSpec the bucketing spec.
+   * @param readFile a function to read each (part of a) file.
    * @param selectedPartitions Hive-style partition that are part of the read.
+   * @param fsRelation [[HadoopFsRelation]] associated with the read.
    */
-  private def createBucketedPartitions(
-      bucketSpec: BucketSpec, selectedPartitions: Seq[Partition]): Seq[FilePartition] = {
+  private def createBucketedReadRDD(
+      bucketSpec: BucketSpec,
+      readFile: (PartitionedFile) => Iterator[InternalRow],
+      selectedPartitions: Seq[Partition],
+      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
     val bucketed =
       selectedPartitions.flatMap { p =>
@@ -183,25 +186,29 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }
 
-    Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
+    val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
       FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
     }
+
+    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
   }
 
   /**
    * Create a list of RDD partitions ([[FilePartition]]) for non-bucketed reads.
-   * The bucketed variant of this function is [[createBucketedPartitions]].
+   * The bucketed variant of this function is [[createBucketedReadRDD]].
    *
+   * @param readFile a function to read each (part of a) file.
    * @param selectedPartitions Hive-style partition that are part of the read.
-   * @param hadoopFsRelation [[HadoopFsRelation]] associated with the read.
+   * @param fsRelation [[HadoopFsRelation]] associated with the read.
    */
-  private def createNonBucketedPartitions(
+  private def createNonBucketedReadRDD(
+      readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Seq[Partition],
-      hadoopFsRelation: HadoopFsRelation): Seq[FilePartition] = {
+      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val defaultMaxSplitBytes =
-      hadoopFsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = hadoopFsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
-    val defaultParallelism = hadoopFsRelation.sparkSession.sparkContext.defaultParallelism
+      fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
+    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
     val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     val bytesPerCore = totalBytes / defaultParallelism
 
@@ -212,8 +219,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
         val blockLocations = getBlockLocations(file)
-        if (hadoopFsRelation.fileFormat.isSplitable(
-            hadoopFsRelation.sparkSession, hadoopFsRelation.options, file.getPath)) {
+        if (fsRelation.fileFormat.isSplitable(
+            fsRelation.sparkSession, fsRelation.options, file.getPath)) {
           (0L until file.getLen by maxSplitBytes).map { offset =>
             val remaining = file.getLen - offset
             val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
@@ -257,7 +264,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       currentFiles.append(file)
     }
     closePartition()
-    partitions
+
+    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
