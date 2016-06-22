@@ -286,7 +286,7 @@ object AFTSurvivalRegression extends DefaultParamsReadable[AFTSurvivalRegression
 @Since("1.6.0")
 class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") override val uid: String,
-    @Since("1.6.0") val coefficients: Vector,
+    @Since("2.0.0") val coefficients: Vector,
     @Since("1.6.0") val intercept: Double,
     @Since("1.6.0") val scale: Double)
   extends Model[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams with MLWritable {
@@ -307,7 +307,7 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   def predictQuantiles(features: Vector): Vector = {
     // scale parameter for the Weibull distribution of lifetime
     val lambda = math.exp(BLAS.dot(coefficients, features) + intercept)
@@ -319,7 +319,7 @@ class AFTSurvivalRegressionModel private[ml] (
     Vectors.dense(quantiles)
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   def predict(features: Vector): Double = {
     math.exp(BLAS.dot(coefficients, features) + intercept)
   }
