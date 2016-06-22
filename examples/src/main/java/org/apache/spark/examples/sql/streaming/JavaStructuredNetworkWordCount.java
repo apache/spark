@@ -16,9 +16,7 @@
  */
 package org.apache.spark.examples.sql.streaming;
 
-
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.streaming.StreamingQuery;
 
 import java.util.regex.Pattern;
@@ -53,25 +51,25 @@ public final class JavaStructuredNetworkWordCount {
       .appName("JavaStructuredNetworkWordCount")
       .getOrCreate();
 
-    // input lines (may be multiple words on each line)
-    Dataset<String> lines = spark
+    // Create DataFrame representing the stream of input lines from connection to host:port
+    Dataset<Row> lines = spark
       .readStream()
       .format("socket")
       .option("host", host)
       .option("port", port)
-      .load()
-      .as(Encoders.STRING());
+      .load();
 
-    // input words
+    // Split the lines into words
     Dataset<String> words = lines.select(
         functions.explode(
           functions.split(lines.col("value"), " ")
         ).alias("word")
       ).as(Encoders.STRING());
 
-    // the count for each distinct word
+    // Generate running word count
     Dataset<Row> wordCounts = words.groupBy("word").count();
 
+    // Start running the query that prints the running counts to the console
     StreamingQuery query = wordCounts.writeStream()
       .outputMode("complete")
       .format("console")

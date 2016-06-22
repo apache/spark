@@ -48,7 +48,7 @@ if __name__ == "__main__":
         .appName("StructuredNetworkWordCount")\
         .getOrCreate()
 
-    # input lines (may be multiple words on each line)
+    # Create DataFrame representing the stream of input lines from connection to host:port
     lines = spark\
         .readStream\
         .format('socket')\
@@ -56,16 +56,17 @@ if __name__ == "__main__":
         .option('port', port)\
         .load()
 
-    # input words
+    # Split the lines into words
     words = lines.select(\
         explode(\
             split(lines.value, ' ')\
         ).alias('word')\
     )
 
-    # the count for each distinct word
+    # Generate running word count
     wordCounts = words.groupBy('word').count()
 
+    # Start running the query that prints the running counts to the console
     query = wordCounts\
         .writeStream\
         .outputMode('complete')\

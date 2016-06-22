@@ -18,9 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.streaming
 
-import org.apache.spark.sql.{functions, SparkSession}
-import org.apache.spark.sql.streaming.OutputMode
-
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
@@ -50,24 +49,23 @@ object StructuredNetworkWordCount {
       .appName("StructuredNetworkWordCount")
       .getOrCreate()
 
-    import spark.implicits._
-
-    // input lines (may be multiple words on each line)
+    // Create DataFrame representing the stream of input lines from connection to host:port
     val lines = spark.readStream
       .format("socket")
       .option("host", host)
       .option("port", port)
-      .load().as[String]
+      .load()
 
-    // input words
+    // Split the lines into words
     val words = lines.select(
-      functions.explode(
-        functions.split(lines.col("value"), " ")
+      explode(
+        split(lines.col("value"), " ")
       ).alias("word"))
 
-    // the count for each distinct word
+    // Generate running word count
     val wordCounts = words.groupBy("word").count()
 
+    // Start running the query that prints the running counts to the console
     val query = wordCounts.writeStream
       .outputMode("complete")
       .format("console")
