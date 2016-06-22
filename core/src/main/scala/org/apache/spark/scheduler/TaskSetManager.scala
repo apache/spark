@@ -83,7 +83,7 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
-  // key is taskId, value is a Map of executor id to when it failed
+  // key is taskId (aka TaskInfo.index), value is a Map of executor id to when it failed
   private val failedExecutors = new HashMap[Int, HashMap[String, Long]]()
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
@@ -595,11 +595,7 @@ private[spark] class TaskSetManager(
   private[scheduler] def abortIfTaskSetCompletelyBlacklisted(
       executorsByHost: HashMap[String, HashSet[String]]): Unit = {
 
-    /**
-     * Return the partitionId of some task which is pending, but do not remove it from the list of
-     * pending tasks.
-     */
-    def pollPendingTask: Option[Int] = {
+    def pendingTask: Option[Int] = {
       // usually this will just take the last pending task, but because of the lazy removal
       // from each list, we may need to go deeper in the list.  We poll from the end because
       // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
@@ -609,8 +605,7 @@ private[spark] class TaskSetManager(
         indexOffset -= 1
         val indexInTaskSet = allPendingTasks(indexOffset)
         if (copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)) {
-          val partitionId = taskSet.tasks(indexInTaskSet).partitionId
-          return Some(partitionId)
+          return Some(indexInTaskSet)
         }
       }
       None
@@ -624,16 +619,16 @@ private[spark] class TaskSetManager(
     if (numExecs > 0) {
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
-      pollPendingTask.foreach { partitionId =>
+      pendingTask.foreach { taskId =>
         executorsByHost.foreach { case (host, execs) =>
           execs.foreach { exec =>
-            if (!executorIsBlacklisted(exec, partitionId)) {
+            if (!executorIsBlacklisted(exec, taskId)) {
               return
             }
           }
         }
-        abort(s"Aborting ${taskSet} because Task $partitionId cannot be scheduled on any" +
-          s" executor due to blacklists.")
+        abort(s"Aborting ${taskSet} because Task $taskId (partition " +
+          s"${tasks(taskId).partitionId}) cannot be scheduled on any executor due to blacklists.")
       }
     }
   }

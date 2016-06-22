@@ -326,8 +326,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     sc.listenerBus.waitUntilEmpty(100000)
     assert(tsm.isZombie)
     assert(failedTaskSet)
-    assert(failedTaskSetReason.contains(s"Aborting TaskSet 0.0 because Task ${failedTask.index} " +
-      s"cannot be scheduled on any executor due to blacklists."))
+    val idx = failedTask.index
+    assert(failedTaskSetReason.contains(s"Aborting TaskSet 0.0 because Task $idx (partition $idx)" +
+      s" cannot be scheduled on any executor due to blacklists."))
   }
 
 }
