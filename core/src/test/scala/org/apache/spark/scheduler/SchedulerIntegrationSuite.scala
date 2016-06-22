@@ -279,12 +279,6 @@ private[spark] abstract class MockBackend(
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
   private val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "10ms")
 
-  reviveThread.scheduleAtFixedRate(new Runnable {
-    override def run(): Unit = Utils.tryLogNonFatalError {
-      reviveOffers()
-    }
-  }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
-
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
@@ -348,7 +342,13 @@ private[spark] abstract class MockBackend(
     assignedTasksWaitingToRun.nonEmpty
   }
 
-  override def start(): Unit = {}
+  override def start(): Unit = {
+    reviveThread.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = Utils.tryLogNonFatalError {
+        reviveOffers()
+      }
+    }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
+  }
 
   override def stop(): Unit = {
     reviveThread.shutdown()
