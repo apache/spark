@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
@@ -230,9 +232,14 @@ class HadoopTableReader(
       // Fill all partition keys to the given MutableRow object
       fillPartitionKeys(partValues, mutableRow)
 
+      val tableProperties = relation.tableDesc.getProperties.asScala
+
       createHadoopRdd(tableDesc, inputPathStr, ifc).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
+        tableProperties.foreach {
+          case (key, value) => partProps.setProperty(key, value)
+        }
         deserializer.initialize(hconf, partProps)
         // get the table deserializer
         val tableSerDe = tableDesc.getDeserializerClass.newInstance()
