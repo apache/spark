@@ -215,7 +215,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     def getCurrentLogFiles(logDirectory: File): Seq[String] = {
       try {
         if (logDirectory.exists()) {
-          logDirectory1.listFiles().filter { _.getName.startsWith("log") }.map { _.toString }
+          logDirectory.listFiles().filter { _.getName.startsWith("log") }.map { _.toString }
         } else {
           Seq.empty
         }
