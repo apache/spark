@@ -1536,4 +1536,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Utils.deleteRecursively(baseDir)
     }
   }
+
+  test("SPARK-15230: distinct() does not handle column name with dot properly") {
+    val df = Seq(1, 1, 2).toDF("column.with.dot")
+    checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
+  }
 }
