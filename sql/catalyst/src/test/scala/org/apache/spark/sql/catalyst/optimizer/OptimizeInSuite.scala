@@ -37,10 +37,29 @@ class OptimizeInSuite extends PlanTest {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
+        RemoveLiteralRepetitionFromIn,
         OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+  test("RemoveRepetitionFromIn test") {
+    val originalQuery =
+      testRelation
+        .where(In(UnresolvedAttribute("a"),
+          Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"), Seq(Literal(1), Literal(1), UnresolvedAttribute("b"))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
+        .where(In(UnresolvedAttribute("b"), Seq(Literal(1), UnresolvedAttribute("b"))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 
   test("OptimizedIn test: In clause not optimized to InSet when less than 10 items") {
     val originalQuery =

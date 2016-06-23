@@ -93,6 +93,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       // Constant folding and strength reduction
       NullPropagation,
       FoldablePropagation,
+      RemoveLiteralRepetitionFromIn,
       OptimizeIn(conf),
       ConstantFolding,
       ReorderAssociativeOperator,
@@ -815,6 +816,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+    }
+  }
+}
+
+/**
+ * Removes literal repetitions from IN predicate
+ */
+object RemoveLiteralRepetitionFromIn extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case i @ In(v, list) if list.exists(_.isInstanceOf[Literal]) =>
+        val (literals, others) = list.partition(_.isInstanceOf[Literal])
+        val newList = ExpressionSet(literals).toSeq ++ others
+        if (newList.length == list.length) i else i.copy(v, newList)
     }
   }
 }
