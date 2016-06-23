@@ -292,12 +292,10 @@ class DataFrame(object):
         |  5| Bob|
         +---+----+
         """
-        if truncate < 1:  # This includes testing for False, which is 0 in python.
-            print(self._jdf.showString(n, 0))
-        elif truncate == 1:  # The value 1 is same as True.
+        if truncate == 1:
             print(self._jdf.showString(n, 20))
         else:
-            print(self._jdf.showString(n, truncate))
+            print(self._jdf.showString(n, int(truncate)))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))

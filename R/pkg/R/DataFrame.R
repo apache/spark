@@ -194,12 +194,11 @@ setMethod("isLocal",
 setMethod("showDF",
           signature(x = "SparkDataFrame"),
           function(x, numRows = 20, truncate = TRUE) {
-            if (is.logical(truncate) && truncate) {
+            truncate2 <- as.numeric(truncate)
+            if (truncate2 == 1) {
                 s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
-            } else if (is.numeric(truncate) && truncate > 0) {
-                s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate))
             } else {
-                s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(0))
+                s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
             }
             cat(s)
           })
