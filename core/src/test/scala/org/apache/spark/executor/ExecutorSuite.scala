@@ -102,7 +102,7 @@ class ExecutorSuite extends SparkFunSuite {
         }
       })
 
-    var executor:Executor = null
+    var executor: Executor = null
     try {
       executor = new Executor("id", "localhost", mockEnv, userClassPath = Nil, isLocal = true)
       // the task will be launched in a dedicated worker thread
