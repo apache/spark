@@ -835,7 +835,7 @@ case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
           InSet(v, HashSet() ++ hSet)
         } else if (newList.length < l.length) {
           i.copy(v, newList)
-        } else { // netList.length == l.length
+        } else { // newList.length == l.length
           i
         }
     }

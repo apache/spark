@@ -42,7 +42,7 @@ class OptimizeInSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  test("RemoveRepetitionFromIn test") {
+  test("OptimizedIn test: Remove deterministic repetitions") {
     val originalQuery =
       testRelation
         .where(In(UnresolvedAttribute("a"),
