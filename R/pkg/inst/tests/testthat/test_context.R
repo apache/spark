@@ -24,7 +24,7 @@ test_that("Check masked functions", {
   namesOfMaskedCompletely <- c("cov", "filter", "sample")
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window", "as.data.frame")
+                     "summary", "transform", "drop", "window", "as.data.frame", "union")
   if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
     namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
   }
@@ -100,9 +100,13 @@ test_that("rdd GC across sparkR.stop", {
 
 test_that("job group functions can be called", {
   sc <- sparkR.sparkContext()
-  setJobGroup(sc, "groupId", "job description", TRUE)
-  cancelJobGroup(sc, "groupId")
-  clearJobGroup(sc)
+  setJobGroup("groupId", "job description", TRUE)
+  cancelJobGroup("groupId")
+  clearJobGroup()
+
+  suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
+  suppressWarnings(cancelJobGroup(sc, "groupId"))
+  suppressWarnings(clearJobGroup(sc))
   sparkR.session.stop()
 })
 

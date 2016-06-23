@@ -223,6 +223,7 @@ private[sql] class CsvOutputWriter(
 
   override def close(): Unit = {
     flush()
+    csvWriter.close()
     recordWriter.close(context)
   }
 }

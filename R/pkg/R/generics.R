@@ -662,7 +662,11 @@ setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
-#' @rdname rbind
+#' @rdname union
+#' @export
+setGeneric("union", function(x, y) { standardGeneric("union") })
+
+#' @rdname union
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
