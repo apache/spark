@@ -63,58 +63,32 @@ private[sql] case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    @transient private[sql] var _statistics: Statistics = null,
-    private[sql] var _batchStats: CollectionAccumulator[InternalRow] = null)
+    private[sql] val batchStats: CollectionAccumulator[InternalRow] =
+      child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
 
-  private[sql] val batchStats: CollectionAccumulator[InternalRow] =
-    if (_batchStats == null) {
-      child.sqlContext.sparkContext.collectionAccumulator[InternalRow]
-    } else {
-      _batchStats
-    }
-
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  private def computeSizeInBytes = {
-    val sizeOfRow: Expression =
-      BindReferences.bindReference(
-        output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
-        partitionStatistics.schema)
-
-    batchStats.value.asScala.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
-  }
-
-  // Statistics propagation contracts:
-  // 1. Non-null `_statistics` must reflect the actual statistics of the underlying data
-  // 2. Only propagate statistics when `_statistics` is non-null
-  private def statisticsToBePropagated = if (_statistics == null) {
-    val updatedStats = statistics
-    if (_statistics == null) null else updatedStats
-  } else {
-    _statistics
-  }
-
-  override def statistics: Statistics = {
-    if (_statistics == null) {
-      if (batchStats.value.isEmpty) {
-        // Underlying columnar RDD hasn't been materialized, no useful statistics information
-        // available, return the default statistics.
-        Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
-      } else {
-        // Underlying columnar RDD has been materialized, required information has also been
-        // collected via the `batchStats` accumulator, compute the final statistics,
-        // and update `_statistics`.
-        _statistics = Statistics(sizeInBytes = computeSizeInBytes)
-        _statistics
-      }
+  override lazy val statistics: Statistics = {
+    if (batchStats.value.isEmpty) {
+      // Underlying columnar RDD hasn't been materialized, no useful statistics information
+      // available, return the default statistics.
+      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
     } else {
-      // Pre-computed statistics
-      _statistics
+      // Underlying columnar RDD has been materialized, required information has also been
+      // collected via the `batchStats` accumulator.
+      val sizeOfRow: Expression =
+        BindReferences.bindReference(
+          output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
+          partitionStatistics.schema)
+
+      val sizeInBytes =
+        batchStats.value.asScala.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
+      Statistics(sizeInBytes = sizeInBytes)
     }
   }
 
@@ -187,7 +161,7 @@ private[sql] case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-        _cachedColumnBuffers, statisticsToBePropagated, batchStats)
+        _cachedColumnBuffers, batchStats)
   }
 
   override def newInstance(): this.type = {
@@ -199,12 +173,11 @@ private[sql] case class InMemoryRelation(
       child,
       tableName)(
         _cachedColumnBuffers,
-        statisticsToBePropagated,
         batchStats).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
+    Seq(_cachedColumnBuffers, batchStats)
 }
