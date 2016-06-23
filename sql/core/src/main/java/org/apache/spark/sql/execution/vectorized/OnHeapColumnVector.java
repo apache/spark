@@ -21,7 +21,6 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -393,23 +392,9 @@ public final class OnHeapColumnVector extends ColumnVector {
     return result;
   }
 
-  @Override
-  public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
-      if (requiredCapacity <= newCapacity) {
-        reserveInternal(newCapacity);
-      } else {
-        throw new RuntimeException("Cannot reserve more than " + newCapacity +
-            " bytes in the vectorized reader (requested = " + requiredCapacity + " bytes). As a " +
-            "workaround, you can disable the vectorized reader by setting "
-            + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " to false.");
-      }
-    }
-  }
-
   // Spilt this function out since it is the slow path.
-  private void reserveInternal(int newCapacity) {
+  @Override
+  protected void reserveInternal(int newCapacity) {
     if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
