@@ -20,6 +20,9 @@ package org.apache.spark.ml.api.python
 import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 
+import scala.reflect._
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 
@@ -167,7 +170,7 @@ class PythonEstimator(@transient private var proxy: PythonStageWrapper)
 
   override val uid: String = proxy.getUid
 
-  protected override def getProxy = this.proxy
+  private[python] override def getProxy = this.proxy
 
   override def fit(dataset: Dataset[_]): PythonModel = {
     val modelWrapper = callFromPython(proxy.fit(dataset))
@@ -213,7 +216,7 @@ class PythonModel(@transient private var proxy: PythonStageWrapper)
 
   override val uid: String = proxy.getUid
 
-  protected override def getProxy = this.proxy
+  private[python] override def getProxy = this.proxy
 
   override def copy(extra: ParamMap): PythonModel = {
     this.proxy = callFromPython(proxy.copy(extra))
@@ -258,7 +261,7 @@ class PythonTransformer(@transient private var proxy: PythonStageWrapper)
 
   override val uid: String = callFromPython(proxy.getUid)
 
-  protected override def getProxy = this.proxy
+  private[python] override def getProxy = this.proxy
 
   override def transformSchema(schema: StructType): StructType = {
     callFromPython(proxy.transformSchema(schema))
@@ -357,16 +360,17 @@ private[python] object PythonStage {
     }
   }
 
-  private[python] class Reader[S <: PipelineStage with PythonStageBase]
+  private[python] class Reader[S <: PipelineStage with PythonStageBase: ClassTag]
     extends MLReader[S] {
-    private val className = classOf[S].getName
+    private val className = classTag[S].runtimeClass.getName
     override def load(path: String): S = {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val pyClass = (metadata.metadata \ "pyClass").extract[String]
       val pyDir = new Path(path, "pyStage").toString
       val proxy = PythonStageWrapper.load(pyDir, pyClass)
-      classOf[S].getConstructor(classOf[PythonStageWrapper]).newInstance(proxy)
+      classTag[S].runtimeClass.getConstructor(classOf[PythonStageWrapper])
+        .newInstance(proxy).asInstanceOf[S]
     }
   }
 }
