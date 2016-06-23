@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrd
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 
@@ -205,6 +206,11 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
       case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
+
+      case c: CreateTableCommand =>
+        // Duplicates are not allowed in partitionBy
+        // Todo: when bucketBy and sortBy are supported, we also need to ban the duplication.
+        checkDuplicates(c.table.partitionColumnNames, "Partition")
 
       case c: CreateTableUsing =>
         // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.

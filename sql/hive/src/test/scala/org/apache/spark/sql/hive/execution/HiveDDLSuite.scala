@@ -207,6 +207,15 @@ class HiveDDLSuite
     }
   }
 
+  test("duplicate columns in partitionBy in CREATE TABLE") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE boxes (b INT, c INT) PARTITIONED BY (a INT, a INT)")
+      }
+      assert(e.getMessage.contains("Found duplicate column(s) in Partition: `a`"))
+    }
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
