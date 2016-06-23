@@ -237,6 +237,9 @@ class HadoopTableReader(
       createHadoopRdd(tableDesc, inputPathStr, ifc).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
+        // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
+        // information) may be defined in table properties. Here we should merge table properties
+        // and partition properties before initializing the deserializer.
         tableProperties.foreach {
           case (key, value) => partProps.setProperty(key, value)
         }
