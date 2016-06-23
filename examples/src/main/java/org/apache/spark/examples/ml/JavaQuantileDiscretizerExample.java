@@ -54,14 +54,15 @@ public class JavaQuantileDiscretizerExample {
     });
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
-
-    // Note that we compute exact quantiles here by setting `relativeError` to 0 for
-    // illustrative purposes, however in most cases the default parameter value should suffice
+    // $example off$
+    // Output of QuantileDiscretizer for such small datasets differ wrt underlying cores.
+    // Allocating single partition for the dataframe helps with consistent results.
+    df = df.repartition(1);
+    // $example on$
     QuantileDiscretizer discretizer = new QuantileDiscretizer()
       .setInputCol("hour")
       .setOutputCol("result")
-      .setNumBuckets(3)
-      .setRelativeError(0);
+      .setNumBuckets(3);
 
     Dataset<Row> result = discretizer.fit(df).transform(df);
     result.show();

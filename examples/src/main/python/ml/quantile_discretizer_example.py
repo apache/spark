@@ -29,11 +29,12 @@ if __name__ == "__main__":
     # $example on$
     data = [(0, 18.0,), (1, 19.0,), (2, 8.0,), (3, 5.0,), (4, 2.2,)]
     dataFrame = spark.createDataFrame(data, ["id", "hour"])
-
-    # Note that we compute exact quantiles here by setting `relativeError` to 0 for
-    # illustrative purposes, however in most cases the default parameter value should suffice
-    discretizer = QuantileDiscretizer(numBuckets=3, inputCol="hour", outputCol="result",
-                                      relativeError=0)
+    # $example off$
+    # Output of QuantileDiscretizer for such small datasets differ wrt underlying cores.
+    # Allocating single partition for the dataframe helps with consistent results.
+    .repartition(1)
+    # $example on$
+    discretizer = QuantileDiscretizer(numBuckets=3, inputCol="hour", outputCol="result")
 
     result = discretizer.fit(dataFrame).transform(dataFrame)
     result.show()

@@ -47,7 +47,7 @@ In MLlib, we separate TF and IDF to make them flexible.
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
 `HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
 A raw feature is mapped into an index (term) by applying a hash function. The hash function
-used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash).Then term frequencies
+used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash). sThen term frequencies
 are calculated based on the mapped indices. This approach avoids the need to compute a global 
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
@@ -1104,10 +1104,10 @@ for more details on the API.
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
 categorical features. The number of bins is set by the `numBuckets` parameter.
 The bin ranges are chosen using an approximate algorithm (see the documentation for
-[approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions.scala) for a
+[approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions) for a
 detailed description). The precision of the approximation can be controlled with the
 `relativeError` parameter. When set to zero, exact quantiles are calculated
-(**Note:** Computing exact quantiles is an expensive operation).The lower and upper bin bounds
+(**Note:** Computing exact quantiles is an expensive operation). The lower and upper bin bounds
 will be `-Infinity` and `+Infinity` covering all real values.
 
 **Examples**
@@ -1129,7 +1129,7 @@ Assume that we have a DataFrame with the columns `id`, `hour`:
 ~~~
 
 `hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
-a categorical one. Given `numBuckets = 3`, and computing exact quantiles (by setting `relativeError = 0`), we should get the following DataFrame:
+a categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
 
 ~~~
  id | hour | result

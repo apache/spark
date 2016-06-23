@@ -32,15 +32,16 @@ object QuantileDiscretizerExample {
 
     // $example on$
     val data = Array((0, 18.0), (1, 19.0), (2, 8.0), (3, 5.0), (4, 2.2))
-    val df = spark.createDataFrame(data).toDF("id", "hour")
-
-    // Note that we compute exact quantiles here by setting `relativeError` to 0 for
-    // illustrative purposes, however in most cases the default parameter value should suffice
+    var df = spark.createDataFrame(data).toDF("id", "hour")
+    // $example off$
+    // Output of QuantileDiscretizer for such small datasets differ wrt underlying cores.
+    // Allocating single partition for the dataframe helps with consistent results.
+        .repartition(1)
+    // $example on$
     val discretizer = new QuantileDiscretizer()
       .setInputCol("hour")
       .setOutputCol("result")
       .setNumBuckets(3)
-      .setRelativeError(0)
 
     val result = discretizer.fit(df).transform(df)
     result.show()
