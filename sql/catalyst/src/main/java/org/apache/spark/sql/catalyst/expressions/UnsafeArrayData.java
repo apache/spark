@@ -36,7 +36,7 @@ public abstract class UnsafeArrayData extends ArrayData {
 
   public final Format getFormat() { return format; }
 
-  protected static final int DenseID = 1;
+  public static final int DenseID = 1;
 
   public  static Format getFormat(Object baseObject, long baseOffset) {
     // Read the number of elements from the first 4 bytes.
