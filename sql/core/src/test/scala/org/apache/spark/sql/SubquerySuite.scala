@@ -789,5 +789,4 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       assert(e.message.contains("Correlated column in subquery cannot be resolved"))
     }
   }
->>>>>>> [SPARK-16161] Ambiguous error message for unsupported correlated predicate subqueries
 }
