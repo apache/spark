@@ -55,8 +55,9 @@ public class JavaQuantileDiscretizerExample {
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
     // $example off$
-    // Output of QuantileDiscretizer for such small datasets differ wrt underlying cores.
-    // Allocating single partition for the dataframe helps with consistent results.
+    // Output of QuantileDiscretizer for such small datasets can depend on the number of
+    // partitions. Here we force a single partition to ensure consistent results.
+    // Note this is not necessary for normal use cases
     df = df.repartition(1);
     // $example on$
     QuantileDiscretizer discretizer = new QuantileDiscretizer()
