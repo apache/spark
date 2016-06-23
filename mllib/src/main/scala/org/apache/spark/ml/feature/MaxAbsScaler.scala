@@ -27,7 +27,6 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -173,8 +172,9 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     override def load(path: String): MaxAbsScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("maxAbs")
-      val Row(maxAbs: Vector) = MLUtils.convertVectorColumnsToML(data, "maxAbs").head()
+      val Row(maxAbs: Vector) = sparkSession.read.parquet(dataPath)
+        .select("maxAbs")
+        .head()
       val model = new MaxAbsScalerModel(metadata.uid, maxAbs)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

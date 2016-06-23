@@ -180,9 +180,10 @@ object IDFModel extends MLReadable[IDFModel] {
     override def load(path: String): IDFModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("idf")
-      val row = MLUtils.convertVectorColumnsToML(data, "idf").head()
-      val idf = row.getAs[Vector](0)
+      val data = sparkSession.read.parquet(dataPath)
+      val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
+        .select("idf")
+        .head()
       val model = new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf)))
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
