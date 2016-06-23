@@ -592,6 +592,42 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       )
     }
   }
+
+  test("explain") {
+    withTempDirs { case (src, tmp) =>
+      src.mkdirs()
+
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      // Test `explain` not throwing errors
+      df.explain()
+
+      val q = df.writeStream.queryName("file_explain").format("memory").start()
+        .asInstanceOf[StreamExecution]
+      try {
+        assert("N/A" === q.explainInternal(false))
+        assert("N/A" === q.explainInternal(true))
+
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        require(stringToFile(tempFile, "foo").renameTo(finalFile))
+
+        q.processAllAvailable()
+
+        val explainWithoutExtended = q.explainInternal(false)
+        // `extended = false` only displays the physical plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
+
+        val explainWithExtended = q.explainInternal(true)
+        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+        // plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
+      } finally {
+        q.stop()
+      }
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
