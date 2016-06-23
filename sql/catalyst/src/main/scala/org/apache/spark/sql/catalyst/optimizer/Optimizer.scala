@@ -93,7 +93,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       // Constant folding and strength reduction
       NullPropagation,
       FoldablePropagation,
-      RemoveLiteralRepetitionFromIn,
       OptimizeIn(conf),
       ConstantFolding,
       ReorderAssociativeOperator,
@@ -821,30 +820,24 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes literal repetitions from IN predicate
- */
-object RemoveLiteralRepetitionFromIn extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsUp {
-      case i @ In(v, list) if list.exists(_.isInstanceOf[Literal]) =>
-        val (literals, others) = list.partition(_.isInstanceOf[Literal])
-        val newList = ExpressionSet(literals).toSeq ++ others
-        if (newList.length == list.length) i else i.copy(v, newList)
-    }
-  }
-}
-
-/**
- * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
- * which is much faster
+ * Removes literal repetitions from IN predicate and replaces [[In (value, seq[Literal])]]
+ * with optimized version[[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
-          list.size > conf.optimizerInSetConversionThreshold =>
-        val hSet = list.map(e => e.eval(EmptyRow))
-        InSet(v, HashSet() ++ hSet)
+      case i @ In(v, l) =>
+        val (deterministics, others) = l.partition(_.deterministic)
+        val newList = ExpressionSet(deterministics).toSeq ++ others
+        if (newList.forall(_.isInstanceOf[Literal]) &&
+            newList.size > conf.optimizerInSetConversionThreshold) {
+          val hSet = newList.map(e => e.eval(EmptyRow))
+          InSet(v, HashSet() ++ hSet)
+        } else if (newList.length < l.length) {
+          i.copy(v, newList)
+        } else { // netList.length == l.length
+          i
+        }
     }
   }
 }

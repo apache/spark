@@ -37,7 +37,6 @@ class OptimizeInSuite extends PlanTest {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        RemoveLiteralRepetitionFromIn,
         OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))) :: Nil
   }
 
@@ -48,14 +47,18 @@ class OptimizeInSuite extends PlanTest {
       testRelation
         .where(In(UnresolvedAttribute("a"),
           Seq(Literal(1), Literal(1), Literal(2), Literal(2), Literal(1), Literal(2))))
-        .where(In(UnresolvedAttribute("b"), Seq(Literal(1), Literal(1), UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
         .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
-        .where(In(UnresolvedAttribute("b"), Seq(Literal(1), UnresolvedAttribute("b"))))
+        .where(In(UnresolvedAttribute("b"),
+          Seq(UnresolvedAttribute("a"), Round(UnresolvedAttribute("a"), 0), Rand(0), Rand(0))))
         .analyze
 
     comparePlans(optimized, correctAnswer)
