@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
@@ -864,6 +865,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Upper limit for the maximum capacity for this column.
    */
+  @VisibleForTesting
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
 
   /**
