@@ -820,8 +820,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes literal repetitions from IN predicate and replaces [[In (value, seq[Literal])]]
- * with optimized version[[InSet (value, HashSet[Literal])]] which is much faster.
+ * Optimize IN predicates:
+ * 1. Removes deterministic repetitions.
+ * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
