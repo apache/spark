@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.{Estimator, Model, Transformer}
+import org.apache.spark.ml.{Estimator, Model, PipelineStage, Transformer}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
- * Wrapper of transformers written in pure Python. Its implementation is in PySpark.
- * See pyspark.ml.util.TransformerWrapper
+ * Wrapper of PipelineStage (Estimator/Model/Transformer) written in pure Python, which
+ * implementation is in PySpark. See pyspark.ml.util.StageWrapper
  */
 private[python] trait PythonStageWrapper {
 
@@ -55,27 +55,27 @@ private[python] trait PythonStageWrapper {
 
   /**
    * Get the failure in PySpark, if any.
- *
    * @return the failure message if there was a failure, or `null` if there was no failure.
    */
   def getLastFailure: String
 }
 
 /**
- * Loader for Python transformers.
+ * ML Reader for Python PipelineStages. The implementation of the reader is in Python, which is
+ * registered here the moment we creating a new PythonStageWrapper.
  */
 private[python] object PythonStageWrapper {
   private var reader: PythonStageReader = _
 
   /**
-   * Register Python transformer reader to load PySpark transformers.
+   * Register Python stage reader to load PySpark PipelineStages.
    */
   def registerReader(r: PythonStageReader): Unit = {
     reader = r
   }
 
   /**
-   * Load a Python transformer given path and its class name.
+   * Load a Python PipelineStage given its path and class name.
    */
   def load(path: String, clazz: String): PythonStageWrapper = {
     require(reader != null, "Python reader has not been registered.")
@@ -93,24 +93,19 @@ private[python] object PythonStageWrapper {
 }
 
 /**
- * Reader to load a Python transformer. Its implementation is in PySpark.
- * See pyspark.ml.util.TransformerWrapperReader
+ * Reader to load a pure Python PipelineStage. Its implementation is in PySpark.
+ * See pyspark.ml.util.StageReader
  */
 private[python] trait PythonStageReader {
 
-  /**
-   * Get the failure in PySpark, if any.
- *
-   * @return the failure message if there was a failure, or `null` if there was no failure.
-   */
   def getLastFailure: String
 
   def load(path: String, clazz: String): PythonStageWrapper
 }
 
 /**
- * Serializer for a Python transformer. Its implementation is in Pyspark.
- * See pyspark.ml.util.TransformerWrapperSerializer
+ * Serializer of a pure Python PipelineStage. Its implementation is in Pyspark.
+ * See pyspark.ml.util.StageSerializer
  */
 private[python] trait PythonStageSerializer {
 
@@ -118,21 +113,16 @@ private[python] trait PythonStageSerializer {
 
   def loads(bytes: Array[Byte]): PythonStageWrapper
 
-  /**
-   * Get the failure in PySpark, if any.
- *
-   * @return the failure message if there was a failure, or `null` if there was no failure.
-   */
   def getLastFailure: String
 }
 
 /**
- * Helpers for PythonTransformerWrapperSerializer.
+ * Helpers for PythonStageSerializer.
  */
 private[python] object PythonStageSerializer {
 
   /**
-   * A serializer in Python, used to serialize PythonTransformerWrapper.
+   * A serializer in Python, used to serialize PythonStageWrapper.
     */
   private var serializer: PythonStageSerializer = _
 
@@ -169,8 +159,11 @@ private[python] object PythonStageSerializer {
   }
 }
 
+/**
+ * A proxy estimator for all PySpark estimator written in pure Python.
+ */
 class PythonEstimator(@transient private var proxy: PythonStageWrapper)
-  extends Estimator[PythonModel] with PythonStageBase {
+  extends Estimator[PythonModel] with PythonStageBase with MLWritable {
 
   override val uid: String = proxy.getUid
 
@@ -189,10 +182,34 @@ class PythonEstimator(@transient private var proxy: PythonStageWrapper)
   override def transformSchema(schema: StructType): StructType = {
     callFromPython(proxy.transformSchema(schema))
   }
+
+  override def write: MLWriter = new PythonEstimator.PythonEstimatorWriter(this)
+
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    val length = in.readInt()
+    val bytes = new Array[Byte](length)
+    in.readFully(bytes)
+    proxy = PythonStageSerializer.deserialize(bytes)
+  }
 }
 
+object PythonEstimator extends MLReadable[PythonEstimator] {
+
+  override def read: MLReader[PythonEstimator] = new PythonEstimatorReader
+
+  override def load(path: String): PythonEstimator = super.load(path)
+
+  private[python] class PythonEstimatorWriter(instance: PythonEstimator)
+    extends PythonStage.Writer[PythonEstimator](instance)
+
+  private class PythonEstimatorReader extends PythonStage.Reader[PythonEstimator]
+}
+
+/**
+ * A proxy model of all PySpark Model written in pure Python.
+ */
 class PythonModel(@transient private var proxy: PythonStageWrapper)
-  extends Model[PythonModel] with PythonStageBase {
+  extends Model[PythonModel] with PythonStageBase with MLWritable {
 
   override val uid: String = proxy.getUid
 
@@ -210,12 +227,31 @@ class PythonModel(@transient private var proxy: PythonStageWrapper)
   override def transformSchema(schema: StructType): StructType = {
     callFromPython(proxy.transformSchema(schema))
   }
+
+  override def write: MLWriter = new PythonModel.PythonModelWriter(this)
+
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    val length = in.readInt()
+    val bytes = new Array[Byte](length)
+    in.readFully(bytes)
+    proxy = PythonStageSerializer.deserialize(bytes)
+  }
+}
+
+object PythonModel extends MLReadable[PythonModel] {
+
+  override def read: MLReader[PythonModel] = new PythonModelReader
+
+  override def load(path: String): PythonModel = super.load(path)
+
+  private[python] class PythonModelWriter(instance: PythonModel)
+    extends PythonStage.Writer[PythonModel](instance)
+
+  private class PythonModelReader extends PythonStage.Reader[PythonModel]
 }
 
 /**
- * A proxy transformer for all PySpark transformers implemented in pure Python.
- *
- * @param proxy A PythonTransformerWrapper which is implemented in PySpark.
+ * A proxy transformer for all PySpark transformers written in pure Python.
  */
 class PythonTransformer(@transient private var proxy: PythonStageWrapper)
   extends Transformer with PythonStageBase with MLWritable {
@@ -232,25 +268,12 @@ class PythonTransformer(@transient private var proxy: PythonStageWrapper)
     callFromPython(proxy.transform(dataset))
   }
 
-  /**
-   * Get transformer's fully qualified class name in PySpark.
-   */
-  private[python] def getPythonClassName: String = {
-    callFromPython(proxy.getClassName)
-  }
-
   override def copy(extra: ParamMap): PythonTransformer = {
     this.proxy = callFromPython(proxy.copy(extra))
     this
   }
 
   override def write: MLWriter = new PythonTransformer.PythonTransformerWriter(this)
-
-  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    val bytes = PythonStageSerializer.serialize(proxy)
-    out.writeInt(bytes.length)
-    out.write(bytes)
-  }
 
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val length = in.readInt()
@@ -260,46 +283,26 @@ class PythonTransformer(@transient private var proxy: PythonStageWrapper)
   }
 }
 
-/**
- * Implementations of save/load for PythonTransformer.
- */
 object PythonTransformer extends MLReadable[PythonTransformer] {
 
   override def read: MLReader[PythonTransformer] = new PythonTransformerReader
 
   override def load(path: String): PythonTransformer = super.load(path)
 
-  private[python] class PythonTransformerWriter(instance: PythonTransformer) extends MLWriter {
-    override def saveImpl(path: String): Unit = {
-      import org.json4s.JsonDSL._
-      val extraMetadata = "pyClass" -> instance.getPythonClassName
-      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
-      val pyDir = new Path(path, "pyTransformer").toString
-      instance.proxy.save(pyDir)
-      val failure = instance.proxy.getLastFailure
-      if (failure != null) {
-        throw new SparkException("An exception was raised by Python:\n" + failure)
-      }
-    }
-  }
+  private[python] class PythonTransformerWriter(instance: PythonTransformer)
+    extends PythonStage.Writer[PythonTransformer](instance)
 
-  private class PythonTransformerReader extends MLReader[PythonTransformer] {
-    private val className = classOf[PythonTransformer].getName
-    override def load(path: String): PythonTransformer = {
-      implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val pyClass = (metadata.metadata \ "pyClass").extract[String]
-      val pyDir = new Path(path, "pyTransformer").toString
-      val proxy = PythonStageWrapper.load(pyDir, pyClass)
-      new PythonTransformer(proxy)
-    }
-  }
+  private class PythonTransformerReader extends PythonStage.Reader[PythonTransformer]
 }
 
+/**
+ * Common functions for Python PipelineStage.
+ */
 trait PythonStageBase {
-  protected def getProxy: PythonStageWrapper
 
-  protected def callFromPython[R](result: R): R = {
+  private[python] def getProxy: PythonStageWrapper
+
+  private[python] def callFromPython[R](result: R): R = {
     val failure = getProxy.getLastFailure
     if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
@@ -308,21 +311,62 @@ trait PythonStageBase {
   }
 
   /**
-   * Get serialized Python transformer
+   * Get serialized Python PipelineStage.
    */
   private[python] def getPythonStage: Array[Byte] = {
     callFromPython(getProxy.getStage)
   }
+
+  /**
+   * Get the stage's fully qualified class name in PySpark.
+   */
+  private[python] def getPythonClassName: String = {
+    callFromPython(getProxy.getClassName)
+  }
+
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    val bytes = PythonStageSerializer.serialize(getProxy)
+    out.writeInt(bytes.length)
+    out.write(bytes)
+  }
 }
-/**
- * Helper function due to Py4J error of reader/serializer does not exist in the JVM.
- */
-private[python] object PythonPipelineStage {
+
+private[python] object PythonStage {
+  /**
+   * Helper functions due to Py4J error of reader/serializer does not exist in the JVM.
+   */
   def registerReader(r: PythonStageReader): Unit = {
     PythonStageWrapper.registerReader(r)
   }
 
   def registerSerializer(ser: PythonStageSerializer): Unit = {
     PythonStageSerializer.register(ser)
+  }
+
+  /**
+   * Helper functions for Reader/Writer in Python Stages.
+   */
+  private[python] class Writer[S <: PipelineStage with PythonStageBase](instance: S)
+    extends MLWriter {
+    override protected def saveImpl(path: String): Unit = {
+      import org.json4s.JsonDSL._
+      val extraMetadata = "pyClass" -> instance.getPythonClassName
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      val pyDir = new Path(path, "pyStage").toString
+      instance.callFromPython(instance.getProxy.save(pyDir))
+    }
+  }
+
+  private[python] class Reader[S <: PipelineStage with PythonStageBase]
+    extends MLReader[S] {
+    private val className = classOf[S].getName
+    override def load(path: String): S = {
+      implicit val format = DefaultFormats
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val pyClass = (metadata.metadata \ "pyClass").extract[String]
+      val pyDir = new Path(path, "pyStage").toString
+      val proxy = PythonStageWrapper.load(pyDir, pyClass)
+      classOf[S].getConstructor(classOf[PythonStageWrapper]).newInstance(proxy)
+    }
   }
 }
