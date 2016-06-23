@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
@@ -60,11 +61,15 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
+    setupScheduler(new SystemClock, confs: _*)
+  }
+
+  def setupScheduler(clock: Clock, confs: (String, String)*): TaskSchedulerImpl = {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     confs.foreach { case (k, v) =>
       sc.conf.set(k, v)
     }
-    taskScheduler = new TaskSchedulerImpl(sc)
+    taskScheduler = new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4), clock)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     dagScheduler = new DAGScheduler(sc, taskScheduler) {
@@ -329,6 +334,47 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val idx = failedTask.index
     assert(failedTaskSetReason.contains(s"Aborting TaskSet 0.0 because Task $idx (partition $idx)" +
       s" cannot be scheduled on any executor due to blacklists."))
+  }
+
+  test("don't abort if there is an executor available, though it hasn't had scheduled tasks yet") {
+    // interaction of SPARK-15865 & SPARK-16106
+    // if we have a small number of tasks, we might be able to schedule them all on the first
+    // executor.  But if those tasks fail, we should still realize there is another executor
+    // available and not bail on the job
+
+    val clock = new ManualClock()
+    val taskScheduler = setupScheduler(
+      clock,
+      // set this to something much longer than the test duration
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.locality.wait" -> "10ms"
+    )
+
+    val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
+
+    val offers = Seq(
+      // each offer has more than enough free cores for the entire task set, so we schedule
+      // all tasks on one executor
+      new WorkerOffer("executor0", "host0", 4),
+      new WorkerOffer("executor1", "host1", 4)
+    )
+    val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
+    assert(firstTaskAttempts.size == 2)
+    firstTaskAttempts.foreach { taskAttempt => assert("executor0" === taskAttempt.executorId) }
+
+    // fail all the tasks on the bad executor
+    firstTaskAttempts.foreach { taskAttempt =>
+      taskScheduler.handleFailedTask(tsm, taskAttempt.taskId, TaskState.FAILED, TaskResultLost)
+    }
+
+    // Here is the main check of this test -- we have the same offers again, but we don't
+    // schedule anything due to blacklist + locality wait.
+    val secondTaskAttempts = taskScheduler.resourceOffers(offers).flatten
+    assert(secondTaskAttempts.size == 2)
+    secondTaskAttempts.foreach { taskAttempt => assert("executor1" === taskAttempt.executorId) }
+    assert(!failedTaskSet)
   }
 
 }
