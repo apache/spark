@@ -18,10 +18,12 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Queue
+import org.apache.spark.rdd.BlockRDD
+
+import scala.collection.mutable.{ArrayBuffer, Queue}
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
@@ -323,6 +325,50 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         "Received records = " + TestReceiver.counter.get() + ", " +
           "processed records = " + runningCount
       )
+      Thread.sleep(100)
+    }
+  }
+
+  test("stop gracefully - clear all metadata") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.dummyTimeConfig", "3600s")
+    conf.set("spark.streaming.gracefulStopTimeout", "15s")
+    sc = new SparkContext(conf)
+    for (i <- 1 to 4) {
+      logInfo("==================================\n\n\n")
+      ssc = new StreamingContext(sc, Milliseconds(100))
+      val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
+      ssc.checkpoint(checkpointDirectory)
+      val rddsArray = new CopyOnWriteArrayList[BlockRDD[_]]()
+      TestReceiver.counter.set(1)
+      val input = ssc.receiverStream(new TestReceiver)
+      input.checkpoint(Seconds(1)).foreachRDD { rdd =>
+        rdd match {
+          case blockRDD: BlockRDD[_] =>
+            rddsArray.add(blockRDD)
+            blockRDD.count
+        }
+      }
+      ssc.start()
+      // wait for enough jobs to be generated
+      Thread.sleep(5000)
+      eventually(timeout(5.seconds), interval(10.millis)) {
+        assert(rddsArray.size > 0)
+      }
+      ssc.stop(stopSparkContext = false, stopGracefully = true)
+      Utils.deleteRecursively(new File(checkpointDirectory))
+      val rdds = rddsArray.toArray.map(_.asInstanceOf[BlockRDD[_]]).toSeq
+      def validRDDsCount = rdds.count(_.isValid)
+      def invalidRDDsCount = rdds.count(!_.isValid)
+      def validRDDs = s"[${rdds.filter(_.isValid).mkString(", ")}]"
+      logInfo(s"Number of generated rdds: ${rdds.length}")
+      logInfo(s"Number of valid rdds: $validRDDsCount")
+      logInfo(s"Number of invalid rdds: $invalidRDDsCount")
+      logInfo(s"Valid rdds: $validRDDs")
+      assert(validRDDsCount == 0, s"All rdds should be invalid, " +
+        s"number of valid rdds = $validRDDsCount, " +
+        s"number of invalid rdds = $invalidRDDsCount, " +
+        s"valid rdds: $validRDDs")
       Thread.sleep(100)
     }
   }
