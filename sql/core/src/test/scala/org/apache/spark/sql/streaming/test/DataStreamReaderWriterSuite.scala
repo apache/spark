@@ -84,6 +84,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 
         Seq[Int]().toDS().toDF()
       }
+
+      override def stop() {}
     }
   }
 

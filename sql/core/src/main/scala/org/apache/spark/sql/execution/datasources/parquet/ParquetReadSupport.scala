@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with Logging {
+private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
   /**
@@ -58,13 +58,13 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
   override def init(context: InitContext): ReadContext = {
     catalystRequestedSchema = {
       val conf = context.getConfiguration
-      val schemaString = conf.get(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
+      val schemaString = conf.get(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
       assert(schemaString != null, "Parquet requested schema not set.")
       StructType.fromString(schemaString)
     }
 
     val parquetRequestedSchema =
-      CatalystReadSupport.clipParquetSchema(context.getFileSchema, catalystRequestedSchema)
+      ParquetReadSupport.clipParquetSchema(context.getFileSchema, catalystRequestedSchema)
 
     new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
@@ -92,13 +92,13 @@ private[parquet] class CatalystReadSupport extends ReadSupport[InternalRow] with
        """.stripMargin
     }
 
-    new CatalystRecordMaterializer(
+    new ParquetRecordMaterializer(
       parquetRequestedSchema,
-      CatalystReadSupport.expandUDT(catalystRequestedSchema))
+      ParquetReadSupport.expandUDT(catalystRequestedSchema))
   }
 }
 
-private[parquet] object CatalystReadSupport {
+private[parquet] object ParquetReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
@@ -110,12 +110,12 @@ private[parquet] object CatalystReadSupport {
   def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(parquetSchema.asGroupType(), catalystSchema)
     if (clippedParquetFields.isEmpty) {
-      CatalystSchemaConverter.EMPTY_MESSAGE
+      ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
       Types
         .buildMessage()
         .addFields(clippedParquetFields: _*)
-        .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+        .named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
     }
   }
 
@@ -269,7 +269,7 @@ private[parquet] object CatalystReadSupport {
   private def clipParquetGroupFields(
       parquetRecord: GroupType, structType: StructType): Seq[Type] = {
     val parquetFieldMap = parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
-    val toParquet = new CatalystSchemaConverter(writeLegacyParquetFormat = false)
+    val toParquet = new ParquetSchemaConverter(writeLegacyParquetFormat = false)
     structType.map { f =>
       parquetFieldMap
         .get(f.name)

@@ -2363,6 +2363,11 @@ private[spark] object Utils extends Logging {
     allFiles.filter { _.nonEmpty }
   }
 
+  /**
+   * In YARN mode this method returns a union of the jar files pointed by "spark.jars" and the
+   * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
+   * only the "spark.jars" property.
+   */
   def getUserJars(conf: SparkConf): Seq[String] = {
     val sparkJars = conf.getOption("spark.jars")
     if (conf.get("spark.master") == "yarn") {

@@ -18,17 +18,17 @@
 .First <- function() {
   home <- Sys.getenv("SPARK_HOME")
   .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
-  Sys.setenv(NOAWT=1)
+  Sys.setenv(NOAWT = 1)
 
   # Make sure SparkR package is the last loaded one
   old <- getOption("defaultPackages")
   options(defaultPackages = c(old, "SparkR"))
 
-  sc <- SparkR::sparkR.init()
-  assign("sc", sc, envir=.GlobalEnv)
-  sqlContext <- SparkR::sparkRSQL.init(sc)
+  spark <- SparkR::sparkR.session()
+  assign("spark", spark, envir = .GlobalEnv)
+  sc <- SparkR:::callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", spark)
+  assign("sc", sc, envir = .GlobalEnv)
   sparkVer <- SparkR:::callJMethod(sc, "version")
-  assign("sqlContext", sqlContext, envir=.GlobalEnv)
   cat("\n Welcome to")
   cat("\n")
   cat("    ____              __", "\n")
@@ -43,5 +43,5 @@
   cat("    /_/", "\n")
   cat("\n")
 
-  cat("\n Spark context is available as sc, SQL context is available as sqlContext\n")
+  cat("\n SparkSession available as 'spark'.\n")
 }

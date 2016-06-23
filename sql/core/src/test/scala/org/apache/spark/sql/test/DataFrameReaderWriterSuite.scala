@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.test
 
+import java.io.File
+
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -79,10 +83,19 @@ class DefaultSource
 }
 
 
-class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
+class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
-  private def newMetadataDir =
-    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+
+  private val userSchema = new StructType().add("s", StringType)
+  private val textSchema = new StructType().add("value", StringType)
+  private val data = Seq("1", "2", "3")
+  private val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
+  private implicit var enc: Encoder[String] = _
+
+  before {
+    enc = spark.implicits.newStringEncoder
+    Utils.deleteRecursively(new File(dir))
+  }
 
   test("writeStream cannot be called on non-streaming datasets") {
     val e = intercept[AnalysisException] {
@@ -157,24 +170,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
     assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
   }
 
-  test("paths") {
-    val df = spark.read
-      .format("org.apache.spark.sql.test")
-      .option("checkpointLocation", newMetadataDir)
-      .load("/test")
-
-    assert(LastOptions.parameters("path") == "/test")
-
-    LastOptions.clear()
-
-    df.write
-      .format("org.apache.spark.sql.test")
-      .option("checkpointLocation", newMetadataDir)
-      .save("/test")
-
-    assert(LastOptions.parameters("path") == "/test")
-  }
-
   test("test different data types for options") {
     val df = spark.read
       .format("org.apache.spark.sql.test")
@@ -193,7 +188,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
-      .option("checkpointLocation", newMetadataDir)
       .save("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
@@ -227,5 +221,153 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
         spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
       }
     }
+  }
+
+  test("load API") {
+    spark.read.format("org.apache.spark.sql.test").load()
+    spark.read.format("org.apache.spark.sql.test").load(dir)
+    spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir)
+    spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*)
+    Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
+  }
+
+  test("text - API and behavior regarding schema") {
+    // Writer
+    spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
+    testRead(spark.read.text(dir), data, textSchema)
+
+    // Reader, without user specified schema
+    testRead(spark.read.text(), Seq.empty, textSchema)
+    testRead(spark.read.text(dir, dir, dir), data ++ data ++ data, textSchema)
+    testRead(spark.read.text(Seq(dir, dir): _*), data ++ data, textSchema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.text).get, data, textSchema)
+
+    // Reader, with user specified schema, should just apply user schema on the file data
+    testRead(spark.read.schema(userSchema).text(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchema).text(dir), data, userSchema)
+    testRead(spark.read.schema(userSchema).text(dir, dir), data ++ data, userSchema)
+    testRead(spark.read.schema(userSchema).text(Seq(dir, dir): _*), data ++ data, userSchema)
+  }
+
+  test("textFile - API and behavior regarding schema") {
+    spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
+
+    // Reader, without user specified schema
+    testRead(spark.read.textFile().toDF(), Seq.empty, textSchema)
+    testRead(spark.read.textFile(dir).toDF(), data, textSchema)
+    testRead(spark.read.textFile(dir, dir).toDF(), data ++ data, textSchema)
+    testRead(spark.read.textFile(Seq(dir, dir): _*).toDF(), data ++ data, textSchema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.text).get, data, textSchema)
+
+    // Reader, with user specified schema, should just apply user schema on the file data
+    val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
+    assert(e.getMessage.toLowerCase.contains("user specified schema not supported"))
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
+    intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
+  }
+
+  test("csv - API and behavior regarding schema") {
+    // Writer
+    spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).csv(dir)
+    val df = spark.read.csv(dir)
+    checkAnswer(df, spark.createDataset(data).toDF())
+    val schema = df.schema
+
+    // Reader, without user specified schema
+    intercept[IllegalArgumentException] {
+      testRead(spark.read.csv(), Seq.empty, schema)
+    }
+    testRead(spark.read.csv(dir), data, schema)
+    testRead(spark.read.csv(dir, dir), data ++ data, schema)
+    testRead(spark.read.csv(Seq(dir, dir): _*), data ++ data, schema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.csv).get, data, schema)
+
+    // Reader, with user specified schema, should just apply user schema on the file data
+    testRead(spark.read.schema(userSchema).csv(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchema).csv(dir), data, userSchema)
+    testRead(spark.read.schema(userSchema).csv(dir, dir), data ++ data, userSchema)
+    testRead(spark.read.schema(userSchema).csv(Seq(dir, dir): _*), data ++ data, userSchema)
+  }
+
+  test("json - API and behavior regarding schema") {
+    // Writer
+    spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).json(dir)
+    val df = spark.read.json(dir)
+    checkAnswer(df, spark.createDataset(data).toDF())
+    val schema = df.schema
+
+    // Reader, without user specified schema
+    intercept[AnalysisException] {
+      testRead(spark.read.json(), Seq.empty, schema)
+    }
+    testRead(spark.read.json(dir), data, schema)
+    testRead(spark.read.json(dir, dir), data ++ data, schema)
+    testRead(spark.read.json(Seq(dir, dir): _*), data ++ data, schema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.json).get, data, schema)
+
+    // Reader, with user specified schema, data should be nulls as schema in file different
+    // from user schema
+    val expData = Seq[String](null, null, null)
+    testRead(spark.read.schema(userSchema).json(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchema).json(dir), expData, userSchema)
+    testRead(spark.read.schema(userSchema).json(dir, dir), expData ++ expData, userSchema)
+    testRead(spark.read.schema(userSchema).json(Seq(dir, dir): _*), expData ++ expData, userSchema)
+  }
+
+  test("parquet - API and behavior regarding schema") {
+    // Writer
+    spark.createDataset(data).toDF("str").write.mode(SaveMode.Overwrite).parquet(dir)
+    val df = spark.read.parquet(dir)
+    checkAnswer(df, spark.createDataset(data).toDF())
+    val schema = df.schema
+
+    // Reader, without user specified schema
+    intercept[AnalysisException] {
+      testRead(spark.read.parquet(), Seq.empty, schema)
+    }
+    testRead(spark.read.parquet(dir), data, schema)
+    testRead(spark.read.parquet(dir, dir), data ++ data, schema)
+    testRead(spark.read.parquet(Seq(dir, dir): _*), data ++ data, schema)
+    // Test explicit calls to single arg method - SPARK-16009
+    testRead(Option(dir).map(spark.read.parquet).get, data, schema)
+
+    // Reader, with user specified schema, data should be nulls as schema in file different
+    // from user schema
+    val expData = Seq[String](null, null, null)
+    testRead(spark.read.schema(userSchema).parquet(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchema).parquet(dir), expData, userSchema)
+    testRead(spark.read.schema(userSchema).parquet(dir, dir), expData ++ expData, userSchema)
+    testRead(
+      spark.read.schema(userSchema).parquet(Seq(dir, dir): _*), expData ++ expData, userSchema)
+  }
+
+  /**
+   * This only tests whether API compiles, but does not run it as orc()
+   * cannot be run without Hive classes.
+   */
+  ignore("orc - API") {
+    // Reader, with user specified schema
+    // Refer to csv-specific test suites for behavior without user specified schema
+    spark.read.schema(userSchema).orc()
+    spark.read.schema(userSchema).orc(dir)
+    spark.read.schema(userSchema).orc(dir, dir, dir)
+    spark.read.schema(userSchema).orc(Seq(dir, dir): _*)
+    Option(dir).map(spark.read.schema(userSchema).orc)
+
+    // Writer
+    spark.range(10).write.orc(dir)
+  }
+
+  private def testRead(
+      df: => DataFrame,
+      expectedResult: Seq[String],
+      expectedSchema: StructType): Unit = {
+    checkAnswer(df, spark.createDataset(expectedResult).toDF())
+    assert(df.schema === expectedSchema)
   }
 }

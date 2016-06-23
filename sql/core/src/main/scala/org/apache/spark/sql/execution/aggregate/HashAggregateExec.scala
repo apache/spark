@@ -774,13 +774,13 @@ case class HashAggregateExec(
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
-        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
-        val outputString = Utils.truncatedString(output, "[", ",", "]")
+        val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
+        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
+        val outputString = Utils.truncatedString(output, "[", ", ", "]")
         if (verbose) {
-          s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+          s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
         } else {
-          s"HashAggregate(key=$keyString, functions=$functionString)"
+          s"HashAggregate(keys=$keyString, functions=$functionString)"
         }
       case Some(fallbackStartsAt) =>
         s"HashAggregateWithControlledFallback $groupingExpressions " +

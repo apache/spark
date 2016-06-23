@@ -115,12 +115,28 @@ Although there are two relevant configurations, the typical user should not need
 as the default values are applicable to most workloads:
 
 * `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MB)
-(default 0.75). The rest of the space (25%) is reserved for user data structures, internal
+(default 0.6). The rest of the space (25%) is reserved for user data structures, internal
 metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
 large records.
 * `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).
 `R` is the storage space within `M` where cached blocks immune to being evicted by execution.
 
+The value of `spark.memory.fraction` should be set in order to fit this amount of heap space
+comfortably within the JVM's old or "tenured" generation. Otherwise, when much of this space is
+used for caching and execution, the tenured generation will be full, which causes the JVM to
+significantly increase time spent in garbage collection. See
+<a href="https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/sizing.html">Java GC sizing documentation</a>
+for more information.
+
+The tenured generation size is controlled by the JVM's `NewRatio` parameter, which defaults to 2,
+meaning that the tenured generation is 2 times the size of the new generation (the rest of the heap).
+So, by default, the tenured generation occupies 2/3 or about 0.66 of the heap. A value of
+0.6 for `spark.memory.fraction` keeps storage and execution memory within the old generation with
+room to spare. If `spark.memory.fraction` is increased to, say, 0.8, then `NewRatio` may have to
+increase to 6 or more.
+
+`NewRatio` is set as a JVM flag for executors, which means adding
+`spark.executor.extraJavaOptions=-XX:NewRatio=x` to a Spark job's configuration.
 
 ## Determining Memory Consumption
 
