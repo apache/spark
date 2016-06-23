@@ -847,6 +847,11 @@ public abstract class ColumnVector implements AutoCloseable {
   protected int capacity;
 
   /**
+   * Upper limit for the maximum capacity for this column.
+   */
+  protected int MAX_CAPACITY = Integer.MAX_VALUE;
+
+  /**
    * Data type for this column.
    */
   protected final DataType type;
