@@ -47,7 +47,7 @@ In MLlib, we separate TF and IDF to make them flexible.
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
 `HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
 A raw feature is mapped into an index (term) by applying a hash function. The hash function
-used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash). sThen term frequencies
+used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash). Then term frequencies
 are calculated based on the mapped indices. This approach avoids the need to compute a global 
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
