@@ -63,7 +63,7 @@ class AssociationRules private[fpm] (
    *
    */
   @Since("1.5.0")
-  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
+  def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]], dataSize: Long): RDD[Rule[Item]] = {
     // For candidate rule X => Y, generate (X, (Y, freq(X union Y)))
     val candidates = freqItemsets.flatMap { itemset =>
       val items = itemset.items
@@ -79,15 +79,15 @@ class AssociationRules private[fpm] (
     // Join to get (X, ((Y, freq(X union Y)), freq(X))), generate rules, and filter by confidence
     candidates.join(freqItemsets.map(x => (x.items.toSeq, x.freq)))
       .map { case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
-      new Rule(antecendent.toArray, consequent.toArray, freqUnion, freqAntecedent)
+      new Rule(antecendent.toArray, consequent.toArray, freqUnion, freqAntecedent, dataSize)
     }.filter(_.confidence >= minConfidence)
   }
 
   /** Java-friendly version of [[run]]. */
   @Since("1.5.0")
-  def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
+  def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]], dataSize: Long): JavaRDD[Rule[Item]] = {
     val tag = fakeClassTag[Item]
-    run(freqItemsets.rdd)(tag)
+    run(freqItemsets.rdd, dataSize)(tag)
   }
 }
 
@@ -111,7 +111,8 @@ object AssociationRules {
       @Since("1.5.0") val antecedent: Array[Item],
       @Since("1.5.0") val consequent: Array[Item],
       freqUnion: Double,
-      freqAntecedent: Double) extends Serializable {
+      freqAntecedent: Double,
+      dataSize: Long) extends Serializable {
 
     /**
      * Returns the confidence of the rule.
@@ -125,7 +126,7 @@ object AssociationRules {
      * co-occurrence of antecedent and consequent.
      */
     @Since("2.1.0")
-    def support: Double = freqUnion.toDouble
+    def support: Double = freqUnion.toDouble / dataSize
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
       val sharedItems = antecedent.toSet.intersect(consequent.toSet)

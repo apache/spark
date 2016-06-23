@@ -39,7 +39,7 @@ object AssociationRulesExample {
 
     val ar = new AssociationRules()
       .setMinConfidence(0.8)
-    val results = ar.run(freqItemsets)
+    val results = ar.run(freqItemsets, 50L)
 
     results.collect().foreach { rule =>
       println("[" + rule.antecedent.mkString(",")

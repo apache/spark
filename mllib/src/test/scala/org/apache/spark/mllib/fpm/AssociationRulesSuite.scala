@@ -38,7 +38,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val results1 = ar
       .setMinConfidence(0.9)
-      .run(freqItemsets)
+      .run(freqItemsets, 10L)
       .collect()
 
     /* Verify results using the `R` code:
@@ -67,7 +67,7 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val results2 = ar
       .setMinConfidence(0)
-      .run(freqItemsets)
+      .run(freqItemsets, 10L)
       .collect()
 
     /* Verify results using the `R` code:
