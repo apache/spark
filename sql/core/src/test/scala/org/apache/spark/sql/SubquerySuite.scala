@@ -600,4 +600,194 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         Row(1) :: Nil)
      }
    }
+  test("SPARK-16161: Correlated subqueries with various levels of correlation.") {
+    withTempView("t1", "t2", "t3", "t4") {
+      Seq((1, 1), (2, 2), (3, 3)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t3")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t4")
+
+      // One level of correlation
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where c1 IN (select t2.c1 from t2
+            |              where t2.c2 = t1.c2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      // Deep correlation
+      var e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1 from t1
+            | where c2 IN (select t2.c1 from t2
+            |              where t2.c1 IN (select t3.c1 from t3
+            |                               where t3.c2 = t1.c2))
+            |
+          """.
+            stripMargin)
+      }
+      assert(e.message.contains("Correlated column in subquery cannot be resolved"))
+
+      // One level of correlation in a nested query. The correlated column is resolved,
+      // but its usage in the select list is unsupported.
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1 from t1
+            | where c2 IN (select max(v1.c1)
+            |              from (select t1.c1 as c1
+            |                    from t2) v1)
+            |
+          """.stripMargin)
+      }
+      assert(e.message.contains("Correlated predicates are not supported " +
+        "outside of WHERE/HAVING clauses"))
+
+      // Deep correlation in a nested query. The correlated column cannot be resolved.
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1 from t1
+            | where t1.c2 NOT IN (select t2.c1
+            |                     from t2
+            |                     where t2.c2 IN (select max(v1.c1)
+            |                                      from (select t1.c1 as c1
+            |                                            from t3) v1))
+            |
+          """.
+            stripMargin)
+      }
+      assert(e.message.contains("Correlated column in subquery cannot be resolved"))
+
+      // Another variation of correlated references.
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1 from t1, t2
+            | where t1.c1 = t2.c1 and
+            |       (t1.c2, t2.c2) NOT IN (select max(v1.c1), min(v1.c2)
+            |                               from (select t1.c1 as c1, t3.c2 as c2
+            |                                    from t3
+            |                                    where t1.c2 = t3.c2) v1)
+            |
+          """.stripMargin)
+      }
+      assert(e.message.contains("Correlated predicates are not supported " +
+        "outside of WHERE/HAVING clauses"))
+
+      // Correlation with unresolved and resolved correlated columns
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1 from t1, t2
+            | where t1.c1 = t2.c1 and
+            |       (t1.c2, t2.c2) IN (select t4.c1, t4.c2 from t4
+            |                          where t4.c1 IN (select max(v1.c1)
+            |                                          from (select t1.c1 as c1
+            |                                                from t3
+            |                                                where t4.c2 = t3.c2) v1))
+            |
+          """.stripMargin)
+      }
+      assert(e.message.contains("Correlated column in subquery cannot be resolved"))
+
+      // Supported correlation in subquery referenced in complex expression.
+      checkAnswer(
+        sql(
+          """
+            | select t1.c1 from t1, t2
+            | where t1.c1 = t2.c1 and
+            |   (case when t1.c2 IN (select t3.c1 as c1
+            |                        from t3
+            |                        where t2.c2 = t3.c2) then 1
+            |   else 2 end) = t2.c2
+            |
+          """.stripMargin),
+        Row(1) :: Nil)
+
+      // Deep correlation in subquery referenced in complex expression.
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1 from t1, t2
+            | where t1.c1 = t2.c1 and
+            |    (case when EXISTS (select t4.c1 from t4
+            |                       where t4.c2 IN (select t3.c1
+            |                                          from t3
+            |                                          where t1.c2 = t3.c2)) then 1
+            |     else 2 end) = t2.c2
+            |
+          """.stripMargin)
+      }
+      assert(e.message.contains("Correlated column in subquery cannot be resolved"))
+
+      // Supported correlation in HAVING clause
+      checkAnswer(
+        sql(
+          """
+            | select c1, max(t1.c1) as max
+            | from t1
+            | group by c1
+            | having max IN (select t2.c1 from t2 where t2.c2 = t1.c1)
+            |
+          """.stripMargin),
+        Row(1, 1) :: Row(2, 2) :: Nil)
+
+
+      // Supported correlation in HAVING clause with nested subquery
+      checkAnswer(
+        sql(
+          """
+            | select c1, max(t1.c1) as max
+            | from t1
+            | group by c1
+            | having max = (select min(t3.c1)
+            |               from t3
+            |               where t3.c2 IN (select t2.c1
+            |                               from t2
+            |                               where t2.c2 = t3.c1))
+            |
+          """.stripMargin),
+        Row(1, 1)  :: Nil)
+
+      // Unsupported correlation in HAVING clause
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1, max(t1.c1) as max
+            | from t1
+            | group by c1
+            | having max = (select min(t3.c111)
+            |               from t3
+            |               where t3.c2 IN (select t2.c1
+            |                               from t2
+            |                               where t2.c2 = t1.c1))
+            |
+          """.stripMargin)
+      }
+      assert(e.message.contains("Correlated column in subquery cannot be resolved"))
+
+      // Another variation of unsupported correlation in HAVING clause
+      e = intercept[AnalysisException] {
+        sql(
+          """
+            | select c1, max(t1.c1) as max
+            | from t1
+            | group by c1
+            | having max IN (select t3.c1
+            |               from t3
+            |               where t3.c2 = (select max(t2.c1)
+            |                              from t2
+            |                              where t2.c2 = t1.c1))
+            |
+          """.stripMargin).show()
+      }
+      assert(e.message.contains("Correlated column in subquery cannot be resolved"))
+    }
+  }
+>>>>>>> [SPARK-16161] Ambiguous error message for unsupported correlated predicate subqueries
 }

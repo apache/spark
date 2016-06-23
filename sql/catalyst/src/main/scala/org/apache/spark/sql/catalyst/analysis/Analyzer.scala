@@ -912,19 +912,30 @@ class Analyzer(
      * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
      * resolved outer references are wrapped in an [[OuterReference]]
      */
-    private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
+    private def resolveOuterReferences(
+        plan: LogicalPlan,
+        outers: Seq[LogicalPlan]): LogicalPlan = {
+      var throwError = false
       plan transformDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
             case u @ UnresolvedAttribute(nameParts) =>
               withPosition(u) {
                 try {
-                  outer.resolve(nameParts, resolver) match {
+                  val outer = outers.iterator
+                  var expr: Option[NamedExpression] = None
+                  while (expr.isEmpty && outer.hasNext) {
+                    expr = outer.next().resolve(nameParts, resolver)
+                  }
+                  expr match {
                     case Some(outerAttr) => OuterReference(outerAttr)
-                    case None => u
+                    case None =>
+                      throwError = true
+                      failAnalysis(s"Correlated column in subquery cannot be resolved:" +
+                        s" ${nameParts.mkString(".")}")
                   }
                 } catch {
-                  case _: AnalysisException => u
+                  case _: AnalysisException if !throwError => u
                 }
               }
           }
@@ -1100,10 +1111,8 @@ class Analyzer(
         current = execute(current)
 
         // Use the outer references to resolve the subquery plan if it isn't resolved yet.
-        val i = plans.iterator
-        val afterResolve = current
-        while (!current.resolved && current.fastEquals(afterResolve) && i.hasNext) {
-          current = resolveOuterReferences(current, i.next())
+        if (!current.resolved) {
+          current = resolveOuterReferences(current, plans)
         }
       } while (!current.resolved && !current.fastEquals(previous))
 
