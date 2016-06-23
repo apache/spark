@@ -203,39 +203,11 @@ createMethods()
 #' @name gapply
 #' @export
 #' @seealso \link{gapplyCollect}
-#' @examples
-#' \dontrun{
-#' Computes the arithmetic mean of the second column by grouping
-#' on the first and third columns. Output the grouping values and the average.
-#'
-#' df <- createDataFrame (
-#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
-#'   c("a", "b", "c", "d"))
-#' gdf <- group_by(df, "a", "c")
-#'
-#' Here our output contains three columns, the key which is a combination of two
-#' columns with data types integer and string and the mean which is a double.
-#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
-#'   structField("avg", "double"))
-#' df1 <- gapply(
-#'   gdf,
-#'   function(key, x) {
-#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
-#'   },
-#' schema)
-#' collect(df1)
-#'
-#' Result
-#' ------
-#' a c avg
-#' 3 3 3.0
-#' 1 1 1.5
-#' }
 #' @note gapply(GroupedData) since 2.0.0
 setMethod("gapply",
           signature(x = "GroupedData"),
           function(x, func, schema) {
-            try(if (is.null(schema)) stop("schema cannot be NULL"))
+            if (is.null(schema)) stop("schema cannot be NULL")
             gapplyInternal(x, func, schema)
           })
 
@@ -254,29 +226,7 @@ setMethod("gapply",
 #' @name gapplyCollect
 #' @export
 #' @seealso \link{gapply}
-#' @examples
-#' \dontrun{
-#' Computes the arithmetic mean of the second column by grouping
-#' on the first and third columns. Output the grouping values and the average.
-#'
-#' df <- createDataFrame (
-#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
-#'   c("a", "b", "c", "d"))
-#' gdf <- group_by(df, "a", "c")
-#' result <- gapplyCollect(
-#'   gdf,
-#'   function(key, x) {
-#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
-#'     colnames(y) <- c("key_a", "key_c", "mean_b")
-#'     y
-#'   })
-#'
-#' Result
-#' ------
-#' key_a key_c mean_b
-#' 3 3 3.0
-#' 1 1 1.5
-#' }
+#' @note gapplyCollect(GroupedData) since 2.0.0
 setMethod("gapplyCollect",
           signature(x = "GroupedData"),
           function(x, func) {

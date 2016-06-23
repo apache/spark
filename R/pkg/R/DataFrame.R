@@ -1370,14 +1370,22 @@ setMethod("dapplyCollect",
 #' columns with data types integer and string and the mean which is a double.
 #' schema <-  structType(structField("a", "integer"), structField("c", "string"),
 #'   structField("avg", "double"))
-#' df1 <- gapply(
+#' result <- gapply(
 #'   df,
 #'   c("a", "c"),
 #'   function(key, x) {
 #'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
-#'   },
-#' schema)
-#' collect(df1)
+#' }, schema)
+#'
+#' We can also group the data and afterwards call gapply on GroupedData.
+#' For Example:
+#' gdf <- group_by(df, "a", "c")
+#' result <- gapply(
+#'   gdf,
+#'   function(key, x) {
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#' }, schema)
+#' collect(result)
 #'
 #' Result
 #' ------
@@ -1403,8 +1411,8 @@ setMethod("dapplyCollect",
 #'   }, schema)
 #' collect(df1)
 #'
-#'Result
-#'---------
+#' Result
+#' ---------
 #' Model  (Intercept)  Sepal_Width  Petal_Length  Petal_Width
 #' 1        0.699883    0.3303370    0.9455356    -0.1697527
 #' 2        1.895540    0.3868576    0.9083370    -0.6792238
@@ -1434,6 +1442,10 @@ setMethod("gapply",
 #' Computes the arithmetic mean of the second column by grouping
 #' on the first and third columns. Output the grouping values and the average.
 #'
+#' df <- createDataFrame (
+#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
+#'   c("a", "b", "c", "d"))
+#'
 #' result <- gapplyCollect(
 #'   df,
 #'   c("a", "c"),
@@ -1441,6 +1453,16 @@ setMethod("gapply",
 #'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 #'     colnames(y) <- c("key_a", "key_c", "mean_b")
 #'     y
+#'   })
+#'
+#' We can also group the data and afterwards call gapply on GroupedData.
+#' For Example:
+#' gdf <- group_by(df, "a", "c")
+#' result <- gapplyCollect(
+#'   gdf,
+#'   function(key, x) {
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#'     colnames(y) <- c("key_a", "key_c", "mean_b")
 #'   })
 #'
 #' Result
@@ -1471,6 +1493,7 @@ setMethod("gapply",
 #' 3        2.351890    0.6548350    0.2375602     0.2521257
 #'
 #'}
+#' @note gapplyCollect(SparkDataFrame) since 2.0.0
 setMethod("gapplyCollect",
           signature(x = "SparkDataFrame"),
           function(x, cols, func) {
