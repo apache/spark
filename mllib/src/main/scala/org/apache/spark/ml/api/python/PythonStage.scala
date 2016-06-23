@@ -355,7 +355,7 @@ private[python] object PythonStage {
       import org.json4s.JsonDSL._
       val extraMetadata = "pyClass" -> instance.getPythonClassName
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
-      val pyDir = new Path(path, "pyStage").toString
+      val pyDir = new Path(path, s"pyStage-${instance.uid}").toString
       instance.callFromPython(instance.getProxy.save(pyDir))
     }
   }
@@ -367,7 +367,7 @@ private[python] object PythonStage {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val pyClass = (metadata.metadata \ "pyClass").extract[String]
-      val pyDir = new Path(path, "pyStage").toString
+      val pyDir = new Path(path, s"pyStage-${metadata.uid}").toString
       val proxy = PythonStageWrapper.load(pyDir, pyClass)
       classTag[S].runtimeClass.getConstructor(classOf[PythonStageWrapper])
         .newInstance(proxy).asInstanceOf[S]
