@@ -369,14 +369,15 @@ case class InsertIntoTable(
     if (table.output.isEmpty) {
       None
     } else {
-      val numDynamicPartitions = partition.values.count(_.isEmpty)
-      val (partitionColumns, dataColumns) = table.output
-          .partition(a => partition.keySet.contains(a.name))
-      Some(dataColumns ++ partitionColumns.takeRight(numDynamicPartitions))
+      // Note: The parser (visitPartitionSpec in AstBuilder) already turns
+      // keys in partition to their lowercase forms.
+      val staticPartCols = partition.filter(_._2.isDefined).keySet
+      Some(table.output.filterNot(a => staticPartCols.contains(a.name)))
     }
   }
 
   assert(overwrite || !ifNotExists)
+  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
   override lazy val resolved: Boolean =
     childrenResolved && table.resolved && expectedColumns.forall { expected =>
     child.output.size == expected.size && child.output.zip(expected).forall {

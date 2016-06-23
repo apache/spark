@@ -35,9 +35,11 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  * `Bucketizer` maps a column of continuous features to a column of feature buckets.
  */
 @Experimental
-final class Bucketizer(override val uid: String)
+@Since("1.4.0")
+final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Model[Bucketizer] with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
 
   /**
@@ -48,6 +50,7 @@ final class Bucketizer(override val uid: String)
    * otherwise, values outside the splits specified will be treated as errors.
    * @group param
    */
+  @Since("1.4.0")
   val splits: DoubleArrayParam = new DoubleArrayParam(this, "splits",
     "Split points for mapping continuous features into buckets. With n+1 splits, there are n " +
       "buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last " +
@@ -57,15 +60,19 @@ final class Bucketizer(override val uid: String)
     Bucketizer.checkSplits)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getSplits: Array[Double] = $(splits)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setSplits(value: Array[Double]): this.type = set(splits, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -86,16 +93,19 @@ final class Bucketizer(override val uid: String)
     attr.toStructField()
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
 }
 
+@Since("1.6.0")
 object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
   /** We require splits to be of length >= 3 and to be in strictly increasing order. */

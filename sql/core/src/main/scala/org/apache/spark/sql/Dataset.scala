@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.streaming.ContinuousQuery
+import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -179,7 +179,7 @@ class Dataset[T] private[sql](
       case _ => false
     }
 
-    queryExecution.logical match {
+    queryExecution.analyzed match {
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) =>
@@ -455,7 +455,7 @@ class Dataset[T] private[sql](
   /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
-   * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
+   * must be executed as a [[StreamingQuery]] using the `startStream()` method in
    * [[DataFrameWriter]]. Methods that return a single answer, e.g. `count()` or
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
@@ -1812,7 +1812,13 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
-    val groupCols = colNames.map(resolve)
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    val groupCols = colNames.map { colName =>
+      allColumns.find(col => resolver(col.name, colName)).getOrElse(
+        throw new AnalysisException(
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
+    }
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
       if (groupColExprIds.contains(attr.exprId)) {
@@ -2316,7 +2322,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.tryUncacheQuery(this, blocking)
+    sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
     this
   }
 
@@ -2407,13 +2413,36 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Interface for saving the content of the Dataset out into external storage or streams.
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
    *
    * @group basic
    * @since 1.6.0
    */
   @Experimental
-  def write: DataFrameWriter[T] = new DataFrameWriter[T](this)
+  def write: DataFrameWriter[T] = {
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        "'write' can not be called on streaming Dataset/DataFrame")
+    }
+    new DataFrameWriter[T](this)
+  }
+
+  /**
+   * :: Experimental ::
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @Experimental
+  def writeStream: DataStreamWriter[T] = {
+    if (!isStreaming) {
+      logicalPlan.failAnalysis(
+        "'writeStream' can be called only on streaming Dataset/DataFrame")
+    }
+    new DataStreamWriter[T](this)
+  }
+
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.

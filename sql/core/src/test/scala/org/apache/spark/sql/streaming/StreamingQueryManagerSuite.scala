@@ -32,7 +32,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
-class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
+class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._
@@ -215,7 +215,7 @@ class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
 
   /** Run a body of code by defining a query on each dataset */
-  private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
+  private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[StreamingQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
         datasets.zipWithIndex.map { case (ds, i) =>
@@ -225,12 +225,12 @@ class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
             val metadataRoot =
               Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
             query =
-              df.write
+              df.writeStream
                 .format("memory")
                 .queryName(s"query$i")
                 .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
-                .startStream()
+                .start()
                 .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
@@ -269,7 +269,7 @@ class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
   }
 
   /** Stop a random active query either with `stop()` or with an error */
-  private def stopRandomQueryAsync(stopAfter: Span, withError: Boolean): ContinuousQuery = {
+  private def stopRandomQueryAsync(stopAfter: Span, withError: Boolean): StreamingQuery = {
 
     import scala.concurrent.ExecutionContext.Implicits.global
 

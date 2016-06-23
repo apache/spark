@@ -42,9 +42,9 @@ import org.apache.spark.sql.types._
  * `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
  * with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
  */
-@Since("1.6.0")
 @Experimental
-class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
+@Since("1.6.0")
+class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
   with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
   @Since("1.6.0")

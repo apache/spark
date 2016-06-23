@@ -292,7 +292,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Unit = {
-    sparkSession.sharedState.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
     sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
@@ -323,7 +323,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(query = sparkSession.table(tableName))
   }
 
   /**
@@ -367,7 +367,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // TODO: Use uncacheTable once it supports database name.
       val df = Dataset.ofRows(sparkSession, logicalPlan)
       // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.tryUncacheQuery(df, blocking = true)
+      sparkSession.sharedState.cacheManager.uncacheQuery(df, blocking = true)
       // Cache it again.
       sparkSession.sharedState.cacheManager.cacheQuery(df, Some(tableIdent.table))
     }
