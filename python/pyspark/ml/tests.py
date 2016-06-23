@@ -268,7 +268,8 @@ class PipelineTests(SparkSessionTestCase):
         self.assertEqual(model.stages[2].uid, transformer1.uid)
 
         result = model.transform(data).select(transformer1.getOutputCol()).collect()
-        self.assertListEqual(result, [17, 18, 19, 20])
+        self.assertListEqual(
+            result, [Row(result2=8), Row(result2=9), Row(result2=10), Row(result2=11)])
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
