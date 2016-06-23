@@ -803,7 +803,7 @@ private[spark] class BlockManager(
       val putBlockStatus = getCurrentBlockStatus(blockId, info)
       val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
-        // Now that the block is in either the memory, externalBlockStore, or disk store,
+        // Now that the block is in either the memory or disk store,
         // tell the master about it.
         info.size = size
         if (tellMaster) {
