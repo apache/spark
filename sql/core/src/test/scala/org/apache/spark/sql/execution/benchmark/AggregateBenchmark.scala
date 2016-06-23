@@ -21,7 +21,6 @@ import java.util.HashMap
 
 import org.apache.spark.SparkConf
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
@@ -131,82 +130,44 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
+  ignore("aggregate with randomized keys") {
+    val N = 20 << 22
 
-  test("cache with randomized keys") {
-    val N = 20 << 20
-    val numIters = 10
-    val benchmark = new Benchmark("Cache random keys", N)
-    sparkSession.range(N)
-      .selectExpr("id", "floor(rand() * 10000) as k")
+    val benchmark = new Benchmark("Aggregate w keys", N)
+    sparkSession.range(N).selectExpr("id", "floor(rand() * 10000) as k")
       .createOrReplaceTempView("test")
-    val query = "select count(k), count(id) from test"
-    val expectedAnswer = sparkSession.sql(query).collect().toSeq
 
-    /**
-     * Call collect on the dataset after deleting all existing temporary files.
-     */
-    def doCollect(df: org.apache.spark.sql.DataFrame): Unit = {
-      df.sparkSession.sparkContext.parallelize(1 to 10, 10).foreach { _ =>
-        org.apache.spark.SparkEnv.get.blockManager.diskBlockManager.getAllFiles().foreach { dir =>
-          dir.delete()
-        }
-      }
-      QueryTest.checkAnswer(df, expectedAnswer) match {
-        case Some(errMessage) => throw new RuntimeException(errMessage)
-        case None => // all good
-      }
+    def f(): Unit = sparkSession.sql("select k, k, sum(id) from test group by k, k").collect()
+
+    benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
+      f()
     }
 
-    /**
-     * Add a benchmark case, optionally specifying whether to cache the dataset.
-     */
-    def addBenchmark(name: String, cache: Boolean, params: Map[String, String] = Map()): Unit = {
-      val ds = sparkSession.sql(query)
-      val defaults = params.keys.flatMap { k => sparkSession.conf.getOption(k).map((k, _)) }
-      val prepare = () => {
-        params.foreach { case (k, v) => sparkSession.conf.set(k, v) }
-        if (cache) { sparkSession.catalog.cacheTable("test") }
-        doCollect(ds)
-      }
-      val cleanup = () => {
-        defaults.foreach { case (k, v) => sparkSession.conf.set(k, v) }
-        sparkSession.catalog.clearCache()
-      }
-      benchmark.addCase(name, numIters, prepare, cleanup) { _ => doCollect(ds) }
+    benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 0)
+      f()
     }
 
-    // ALL OF THESE ARE codegen = T hashmap = T
-    sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "100")
-
-    addBenchmark("cache = F", cache = false)
-
-    addBenchmark("cache = T columnar = F compress = F", cache = true, Map(
-      "spark.sql.inMemoryColumnarScan" -> "false",
-      "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
-    ))
-
-    addBenchmark("cache = T columnar = T compress = F", cache = true, Map(
-      "spark.sql.inMemoryColumnarScan" -> "true",
-      "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
-    ))
-
-//    addBenchmark("cache = T columnar = F compress = T", cache = true, Map(
-//      "spark.sql.inMemoryColumnarScan" -> "false",
-//      "spark.sql.inMemoryColumnarStorage.compressed" -> "true"
-//    ))
-
-    /*
-     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.9.5
-     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-     Cache random keys:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-     --------------------------------------------------------------------------------------------
-     cache = F                                 906 / 1160         23.2          43.2       1.0X
-     cache = T columnar = F compress = F      1141 / 1234         18.4          54.4       0.8X
-     cache = T columnar = T compress = F       535 /  797         39.2          25.5       1.7X
-     */
+    benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 3)
+      f()
+    }
 
     benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+
+    Aggregate w keys:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    codegen = F                                   7445 / 7517         11.3          88.7       1.0X
+    codegen = T hashmap = F                       4672 / 4703         18.0          55.7       1.6X
+    codegen = T hashmap = T                       1764 / 1958         47.6          21.0       4.2X
+    */
   }
 
   ignore("aggregate with string key") {
