@@ -239,7 +239,8 @@ class PurePythonEstimator(Estimator, HasInputCol, HasOutputCol):
 
     def _fit(self, dataset):
         cnt = dataset.count()
-        return PurePythonModel()._set(factor=cnt)
+        model = PurePythonModel()._set(factor=cnt)._resetUid(self.uid)
+        return self._copyValues(model)
 
 
 class PipelineTests(SparkSessionTestCase):
