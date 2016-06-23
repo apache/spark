@@ -30,6 +30,7 @@ import org.mockito.stubbing.Answer
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.memory.MemoryManager
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{FakeTask, Task}
 import org.apache.spark.serializer.JavaSerializer
@@ -42,10 +43,12 @@ class ExecutorSuite extends SparkFunSuite {
     val serializer = new JavaSerializer(conf)
     val mockEnv = mock(classOf[SparkEnv])
     val mockRpcEnv = mock(classOf[RpcEnv])
+    val mockMetricsSystem = mock(classOf[MetricsSystem])
     val mockMemoryManager = mock(classOf[MemoryManager])
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
+    when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
     when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
     when(mockEnv.closureSerializer).thenReturn(serializer)
     val serializedTask =
@@ -55,23 +58,25 @@ class ExecutorSuite extends SparkFunSuite {
         HashMap[String, Long](),
         serializer.newInstance())
 
-    // the program should run in this order:
-    // +-----------------------------+----------------------------------------------+
-    // |      main test thread       |      worker thread                           |
-    // +-----------------------------+----------------------------------------------+
-    // |    executor.launchTask()    |                                              |
-    // |                             | TaskRunner.run() begins                      |
-    // |                             |          ...                                 |
-    // |                             | execBackend.statusUpdate  // 1st time, #L240 |
-    // | executor.killAllTasks(true) |                                              |
-    // |                             |          ...                                 |
-    // |                             |  task = ser.deserialize   // #L253           |
-    // |                             |          ...                                 |
-    // |                             | execBackend.statusUpdate  // 2nd time, #L365 |
-    // |                             |          ...                                 |
-    // |                             |   TaskRunner.run() ends                      |
-    // |       check results         |                                              |
-    // +-----------------------------+----------------------------------------------+
+    // we use latches to force the program to run in this order:
+    // +-----------------------------+---------------------------------------+
+    // |      main test thread       |      worker thread                    |
+    // +-----------------------------+---------------------------------------+
+    // |    executor.launchTask()    |                                       |
+    // |                             | TaskRunner.run() begins               |
+    // |                             |          ...                          |
+    // |                             | execBackend.statusUpdate  // 1st time |
+    // | executor.killAllTasks(true) |                                       |
+    // |                             |          ...                          |
+    // |                             |  task = ser.deserialize               |
+    // |                             |          ...                          |
+    // |                             | execBackend.statusUpdate  // 2nd time |
+    // |                             |          ...                          |
+    // |                             |   TaskRunner.run() ends               |
+    // |       check results         |                                       |
+    // +-----------------------------+---------------------------------------+
+
+    val executorSuiteHelper = new ExecutorSuiteHelper
 
     val mockExecutorBackend = mock(classOf[ExecutorBackend])
     when(mockExecutorBackend.statusUpdate(any(), any(), any()))
@@ -79,45 +84,56 @@ class ExecutorSuite extends SparkFunSuite {
         var firstTime = true
         override def answer(invocationOnMock: InvocationOnMock): Unit = {
           if (firstTime) {
-            TestHelper.latch1.countDown()
+            executorSuiteHelper.latch1.countDown()
             // here between latch1 and latch2, executor.killAllTasks() is called
-            TestHelper.latch2.await()
+            executorSuiteHelper.latch2.await()
             firstTime = false
           }
           else {
+            // save the returned `taskState` and `testFailedReason` into `executorSuiteHelper`
             val taskState = invocationOnMock.getArguments()(1).asInstanceOf[TaskState]
-            // save the returned `taskState` and `testFailedReason` into TestHelper
-            TestHelper.taskState = taskState
+            executorSuiteHelper.taskState = taskState
             val taskEndReason = invocationOnMock.getArguments()(2).asInstanceOf[ByteBuffer]
-            TestHelper.testFailedReason = serializer.newInstance().deserialize(taskEndReason)
-            // let the main test thread to check `taskState` and `testFailedReason`
-            TestHelper.latch3.countDown()
+            executorSuiteHelper.testFailedReason
+              = serializer.newInstance().deserialize(taskEndReason)
+            // let the main test thread check `taskState` and `testFailedReason`
+            executorSuiteHelper.latch3.countDown()
           }
         }
       })
 
-    val executor = new Executor("id", "localhost", mockEnv, userClassPath = Nil, isLocal = true)
-    // the task will be launched in a dedicated worker thread
-    executor.launchTask(mockExecutorBackend, 0, 0, "", serializedTask)
+    var executor:Executor = null
+    try {
+      executor = new Executor("id", "localhost", mockEnv, userClassPath = Nil, isLocal = true)
+      // the task will be launched in a dedicated worker thread
+      executor.launchTask(mockExecutorBackend, 0, 0, "", serializedTask)
 
-    TestHelper.latch1.await()
-    executor.killAllTasks(true)
-    TestHelper.latch2.countDown()
-    TestHelper.latch3.await()
+      executorSuiteHelper.latch1.await()
+      // we know the task will be started, but not yet deserialized, because of the latches we
+      // use in mockExecutorBackend.
+      executor.killAllTasks(true)
+      executorSuiteHelper.latch2.countDown()
+      executorSuiteHelper.latch3.await()
 
-    // `exception` should be `TaskKilled`; `taskState` should be `KILLED`
-    assert(TestHelper.testFailedReason === TaskKilled)
-    assert(TestHelper.taskState === TaskState.KILLED)
+      // `testFailedReason` should be `TaskKilled`; `taskState` should be `KILLED`
+      assert(executorSuiteHelper.testFailedReason === TaskKilled)
+      assert(executorSuiteHelper.taskState === TaskState.KILLED)
+    }
+    finally {
+      if (executor != null) {
+        executor.stop()
+      }
+    }
   }
 }
 
 // Helps to test("SPARK-15963")
-private object TestHelper {
+private class ExecutorSuiteHelper {
 
   val latch1 = new CountDownLatch(1)
   val latch2 = new CountDownLatch(1)
   val latch3 = new CountDownLatch(1)
 
-  var taskState: TaskState = _
-  var testFailedReason: TaskFailedReason = _
+  @volatile var taskState: TaskState = _
+  @volatile var testFailedReason: TaskFailedReason = _
 }
