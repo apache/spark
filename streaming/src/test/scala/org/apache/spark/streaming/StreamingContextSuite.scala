@@ -21,8 +21,7 @@ import java.io.{File, NotSerializableException}
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.rdd.BlockRDD
-
+import scala.collection.JavaConversions
 import scala.collection.mutable.{ArrayBuffer, Queue}
 
 import org.apache.commons.io.FileUtils
@@ -36,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
@@ -339,13 +339,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       ssc = new StreamingContext(sc, Milliseconds(100))
       val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
       ssc.checkpoint(checkpointDirectory)
-      val rddsArray = new CopyOnWriteArrayList[BlockRDD[_]]()
+      val generatedRDDs = new CopyOnWriteArrayList[BlockRDD[_]]()
       TestReceiver.counter.set(1)
-      val input = ssc.receiverStream(new TestReceiver)
+      val input = ssc.receiverStream(new TestReceiver())
       input.checkpoint(Seconds(1)).foreachRDD { rdd =>
         rdd match {
           case blockRDD: BlockRDD[_] =>
-            rddsArray.add(blockRDD)
+            generatedRDDs.add(blockRDD)
             blockRDD.count
         }
       }
@@ -353,15 +353,15 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       // wait for enough jobs to be generated
       Thread.sleep(5000)
       eventually(timeout(5.seconds), interval(10.millis)) {
-        assert(rddsArray.size > 0)
+        assert(!generatedRDDs.isEmpty)
       }
       ssc.stop(stopSparkContext = false, stopGracefully = true)
       Utils.deleteRecursively(new File(checkpointDirectory))
-      val rdds = rddsArray.toArray.map(_.asInstanceOf[BlockRDD[_]]).toSeq
-      def validRDDsCount = rdds.count(_.isValid)
-      def invalidRDDsCount = rdds.count(!_.isValid)
-      def validRDDs = s"[${rdds.filter(_.isValid).mkString(", ")}]"
-      logInfo(s"Number of generated rdds: ${rdds.length}")
+      val rdds = JavaConversions.collectionAsScalaIterable(generatedRDDs)
+      val validRDDsCount = rdds.count(_.isValid)
+      val invalidRDDsCount = rdds.count(!_.isValid)
+      val validRDDs = s"[${rdds.filter(_.isValid).mkString(", ")}]"
+      logInfo(s"Number of generated rdds: ${rdds.size}")
       logInfo(s"Number of valid rdds: $validRDDsCount")
       logInfo(s"Number of invalid rdds: $invalidRDDsCount")
       logInfo(s"Valid rdds: $validRDDs")
