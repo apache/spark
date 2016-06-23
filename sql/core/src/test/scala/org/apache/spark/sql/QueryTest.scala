@@ -324,7 +324,7 @@ abstract class QueryTest extends PlanTest {
           l.tableName)(
           origin.cachedColumnBuffers,
           l._statistics,
-          origin._batchStats)
+          origin.batchStats)
       case p =>
         p.transformExpressions {
           case s: SubqueryExpression =>
