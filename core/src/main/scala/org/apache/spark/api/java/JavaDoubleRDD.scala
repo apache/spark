@@ -22,6 +22,7 @@ import java.lang.{Double => JDouble}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.Partitioner
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
@@ -204,14 +205,14 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
 
   /**
    * Compute the population standard deviation of this RDD's elements.
-   * @since 2.1.0
    */
+  @Since("2.1.0")
   def popStdev(): JDouble = srdd.popStdev()
 
   /**
    * Compute the population variance of this RDD's elements.
-   * @since 2.1.0
    */
+  @Since("2.1.0")
   def popVariance(): JDouble = srdd.popVariance()
 
   /** Return the approximate mean of the elements in this RDD. */

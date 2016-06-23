@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.annotation.Since
+
 /**
  * A class for tracking the statistics of a set of numbers (count, mean and variance) in a
  * numerically robust way. Includes support for merging two StatCounters. Based on Welford
@@ -109,8 +111,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   /**
    * Return the population variance of the values.
-   * @since 2.1.0
    */
+  @Since("2.1.0")
   def popVariance: Double = {
     if (n == 0) {
       Double.NaN
@@ -136,8 +138,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   /**
    * Return the population standard deviation of the values.
-   * @since 2.1.0
    */
+  @Since("2.1.0")
   def popStdev: Double = math.sqrt(popVariance)
 
   /**
