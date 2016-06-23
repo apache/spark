@@ -224,7 +224,7 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def coefficients(self):
         """
         Model coefficients.
@@ -1051,7 +1051,7 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def pi(self):
         """
         log of class priors.
@@ -1059,7 +1059,7 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("pi")
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def theta(self):
         """
         log of class conditional probabilities.
@@ -1260,7 +1260,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLR
         return self._call_java("javaLayers")
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def weights(self):
         """
         vector of initial weights for the model that consists of the weights of layers.

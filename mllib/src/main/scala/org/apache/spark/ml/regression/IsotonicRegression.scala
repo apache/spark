@@ -221,14 +221,14 @@ class IsotonicRegressionModel private[ml] (
   def setFeatureIndex(value: Int): this.type = set(featureIndex, value)
 
   /** Boundaries in increasing order for which predictions are known. */
-  @Since("1.5.0")
+  @Since("2.0.0")
   def boundaries: Vector = Vectors.dense(oldModel.boundaries)
 
   /**
    * Predictions associated with the boundaries at the same index, monotone because of isotonic
    * regression.
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   def predictions: Vector = Vectors.dense(oldModel.predictions)
 
   @Since("1.5.0")

@@ -387,9 +387,9 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 @Since("1.3.0")
 @Experimental
 class LinearRegressionModel private[ml] (
-    override val uid: String,
-    val coefficients: Vector,
-    val intercept: Double)
+    @Since("1.4.0") override val uid: String,
+    @Since("2.0.0") val coefficients: Vector,
+    @Since("1.3.0") val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams with MLWritable {
 
