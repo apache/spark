@@ -392,45 +392,89 @@ sparkR.session <- function(
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
-#' @param sc existing spark context
 #' @param groupid the ID to be assigned to job groups
 #' @param description description for the job group ID
 #' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @rdname setJobGroup
+#' @name setJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
+#' sparkR.session()
+#' setJobGroup("myJobGroup", "My job group description", TRUE)
 #'}
 #' @note setJobGroup since 1.5.0
-setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
+#' @method setJobGroup default
+setJobGroup.default <- function(groupId, description, interruptOnCancel) {
+  sc <- getSparkContext()
   callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+}
+
+setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
+  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("setJobGroup(groupId, description, interruptOnCancel)",
+                old = "setJobGroup(sc, groupId, description, interruptOnCancel)")
+    setJobGroup.default(groupId, description, interruptOnCancel)
+  } else {
+    # Parameter order is shifted
+    groupIdToUse <- sc
+    descriptionToUse <- groupId
+    interruptOnCancelToUse <- description
+    setJobGroup.default(groupIdToUse, descriptionToUse, interruptOnCancelToUse)
+  }
 }
 
 #' Clear current job group ID and its description
 #'
-#' @param sc existing spark context
+#' @rdname clearJobGroup
+#' @name clearJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' clearJobGroup(sc)
+#' sparkR.session()
+#' clearJobGroup()
 #'}
 #' @note clearJobGroup since 1.5.0
-clearJobGroup <- function(sc) {
+#' @method clearJobGroup default
+clearJobGroup.default <- function() {
+  sc <- getSparkContext()
   callJMethod(sc, "clearJobGroup")
 }
 
+clearJobGroup <- function(sc) {
+  if (!missing(sc) &&
+      class(sc) == "jobj" &&
+      any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("clearJobGroup()", old = "clearJobGroup(sc)")
+  }
+  clearJobGroup.default()
+}
+
+
 #' Cancel active jobs for the specified group
 #'
-#' @param sc existing spark context
 #' @param groupId the ID of job group to be cancelled
+#' @rdname cancelJobGroup
+#' @name cancelJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' cancelJobGroup(sc, "myJobGroup")
+#' sparkR.session()
+#' cancelJobGroup("myJobGroup")
 #'}
 #' @note cancelJobGroup since 1.5.0
-cancelJobGroup <- function(sc, groupId) {
+#' @method cancelJobGroup default
+cancelJobGroup.default <- function(groupId) {
+  sc <- getSparkContext()
   callJMethod(sc, "cancelJobGroup", groupId)
+}
+
+cancelJobGroup <- function(sc, groupId) {
+  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("cancelJobGroup(groupId)", old = "cancelJobGroup(sc, groupId)")
+    cancelJobGroup.default(groupId)
+  } else {
+    # Parameter order is shifted
+    groupIdToUse <- sc
+    cancelJobGroup.default(groupIdToUse)
+  }
 }
 
 sparkConfToSubmitOps <- new.env()
