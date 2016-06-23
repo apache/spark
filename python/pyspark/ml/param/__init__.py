@@ -387,6 +387,16 @@ class Params(Identifiable):
         that._paramMap = {}
         return self._copyValues(that, extra)
 
+    @since("2.1.0")
+    def transformSchema(self, schema):
+        """
+        Transform input schema to output schema.
+
+        :param schema:
+        :return: schema
+        """
+        return schema
+
     def _shouldOwn(self, param):
         """
         Validates that the input param belongs to this Params instance.

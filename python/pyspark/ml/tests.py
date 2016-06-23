@@ -226,6 +226,13 @@ class PurePythonTransformer(Transformer, HasInputCol, HasOutputCol):
             ouc, split(concat(dataset[inc], lit(" "), lit(suf), lit(" "), lit(cnt)), ' '))
 
 
+class PurePythonEstimator(Estimator, HasInputCol, HasOutputCol):
+    def _fit(self, dataset):
+
+
+class PurePythonModel(Model):
+
+
 class PipelineTests(SparkSessionTestCase):
 
     def test_pipeline(self):
