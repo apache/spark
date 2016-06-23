@@ -678,8 +678,8 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       // We will need numClasses, numFeatures in the future for multinomial logreg support.
       val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
         MLUtils.convertVectorColumnsToML(data, "coefficients")
-        .select("numClasses", "numFeatures", "intercept", "coefficients")
-        .head()
+          .select("numClasses", "numFeatures", "intercept", "coefficients")
+          .head()
       val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
