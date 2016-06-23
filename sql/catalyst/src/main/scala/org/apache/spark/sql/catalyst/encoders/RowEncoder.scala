@@ -122,19 +122,10 @@ object RowEncoder {
     case t @ ArrayType(et, containsNull) => et match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
         // TODO: validate input type for primitive array.
-        val nonNullOutput = NewInstance(
+        NewInstance(
           classOf[GenericArrayData],
           inputObject :: Nil,
-          dataType = t,
-          propagateNull = false)
-
-        if (inputObject.nullable) {
-          If(IsNull(inputObject),
-            Literal.create(null, inputType),
-            nonNullOutput)
-        } else {
-          nonNullOutput
-        }
+          dataType = t)
 
       case _ => MapObjects(
         { element =>

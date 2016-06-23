@@ -213,7 +213,7 @@ case class NewInstance(
     outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
-  override def nullable: Boolean = propagateNull
+  override def nullable: Boolean = propagateNull && arguments.exists(_.nullable)
 
   override def children: Seq[Expression] = arguments
 
@@ -238,7 +238,7 @@ case class NewInstance(
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
-    val setIsNull = if (propagateNull && arguments.nonEmpty) {
+    val setIsNull = if (nullable) {
       s"final boolean $isNull = ${argGen.map(_.isNull).mkString(" || ")};"
     } else {
       isNull = "false"
