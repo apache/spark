@@ -102,7 +102,7 @@ case class ExplainCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val queryExecution =
       if (logicalPlan.isStreaming) {
-        new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "dummy", 0)
+        new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0)
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }
