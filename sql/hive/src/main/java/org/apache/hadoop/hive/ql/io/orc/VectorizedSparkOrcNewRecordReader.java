@@ -263,14 +263,11 @@ public class VectorizedSparkOrcNewRecordReader
     @Override
     public UTF8String getUTF8String(int ordinal) {
       BytesColumnVector bv = ((BytesColumnVector)columns[columnIDs.get(ordinal)]);
-      String str = null;
       if (bv.isRepeating) {
-        str = new String(bv.vector[0], bv.start[0], bv.length[0], StandardCharsets.UTF_8);
+        return UTF8String.fromBytes(bv.vector[0], bv.start[0], bv.length[0]);
       } else {
-        str = new String(bv.vector[rowId], bv.start[rowId], bv.length[rowId],
-          StandardCharsets.UTF_8);
+        return UTF8String.fromBytes(bv.vector[rowId], bv.start[rowId], bv.length[rowId]);
       }
-      return UTF8String.fromString(str);
     }
 
     @Override
