@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
+import org.apache.spark.dynamicallocation.DefaultAllocationStrategy.NOT_SET
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -34,7 +35,6 @@ class ExecutorAllocationManagerSuite
   with LocalSparkContext
   with BeforeAndAfter {
 
-  import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
 
   private val contexts = new mutable.ListBuffer[SparkContext]()
@@ -86,7 +86,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 1)
     assert(executorsPendingToRemove(manager).isEmpty)
     assert(executorIds(manager).isEmpty)
-    assert(addTime(manager) === ExecutorAllocationManager.NOT_SET)
+    assert(addTime(manager) === NOT_SET)
     assert(removeTimes(manager).isEmpty)
   }
 
@@ -963,16 +963,16 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _numExecutorsToAdd()
+    manager.allocationStrategy invokePrivate _numExecutorsToAdd()
   }
 
   private def numExecutorsTarget(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _numExecutorsTarget()
+    manager.allocationStrategy invokePrivate _numExecutorsTarget()
   }
 
   private def executorsPendingToRemove(
       manager: ExecutorAllocationManager): collection.Set[String] = {
-    manager invokePrivate _executorsPendingToRemove()
+    manager.allocationStrategy invokePrivate _executorsPendingToRemove()
   }
 
   private def executorIds(manager: ExecutorAllocationManager): collection.Set[String] = {
@@ -980,11 +980,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def addTime(manager: ExecutorAllocationManager): Long = {
-    manager invokePrivate _addTime()
+    manager.allocationStrategy invokePrivate _addTime()
   }
 
   private def removeTimes(manager: ExecutorAllocationManager): collection.Map[String, Long] = {
-    manager invokePrivate _removeTimes()
+    manager.allocationStrategy invokePrivate _removeTimes()
   }
 
   private def schedule(manager: ExecutorAllocationManager): Unit = {
@@ -992,20 +992,21 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def maxNumExecutorsNeeded(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _maxNumExecutorsNeeded()
+    manager.allocationStrategy invokePrivate _maxNumExecutorsNeeded()
   }
 
   private def addExecutors(manager: ExecutorAllocationManager): Int = {
-    val maxNumExecutorsNeeded = manager invokePrivate _maxNumExecutorsNeeded()
-    manager invokePrivate _addExecutors(maxNumExecutorsNeeded)
+    val maxNumExecutorsNeeded =
+      manager.allocationStrategy invokePrivate _maxNumExecutorsNeeded()
+    manager.allocationStrategy invokePrivate _addExecutors(maxNumExecutorsNeeded)
   }
 
   private def adjustRequestedExecutors(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _updateAndSyncNumExecutorsTarget(0L)
+    manager.allocationStrategy invokePrivate _updateAndSyncNumExecutorsTarget(0L)
   }
 
   private def removeExecutor(manager: ExecutorAllocationManager, id: String): Boolean = {
-    manager invokePrivate _removeExecutor(id)
+    manager.allocationStrategy invokePrivate _removeExecutor(id)
   }
 
   private def onExecutorAdded(manager: ExecutorAllocationManager, id: String): Unit = {
