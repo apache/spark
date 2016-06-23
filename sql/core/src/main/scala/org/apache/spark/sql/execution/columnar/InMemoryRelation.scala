@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.lang.StringUtils
 
-import org.apache.spark.memory.MemoryMode
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -70,6 +69,14 @@ private[sql] case class InMemoryRelation(
     @transient private[sql] var _statistics: Statistics = null,
     private[sql] var _batchStats: CollectionAccumulator[InternalRow] = null)
   extends logical.LeafNode with MultiInstanceRelation {
+
+  // Fallback to using ColumnBuilders if the schema has non-primitive types
+  private[columnar] val useColumnBatches = {
+    val enabled = child.sqlContext.conf.getConfString(
+      "spark.sql.inMemoryColumnarScan", "true").toBoolean
+    val supported = output.forall { a => GenerateColumnarBatch.isSupported(a.dataType) }
+    enabled && supported
+  }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
@@ -124,21 +131,32 @@ private[sql] case class InMemoryRelation(
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
-  if (_cachedColumnBuffers == null) {
+  if (useColumnBatches && _cachedColumnVectors == null) {
+    buildColumnarBuffers()
+  }
+
+  if (!useColumnBatches && _cachedColumnBuffers == null) {
     buildBuffers()
   }
 
-  if (_cachedColumnVectors == null) {
-    buildColumnarBuffers()
+  def unpersist(blocking: Boolean = true): Unit = {
+    if (_cachedColumnBuffers != null) {
+      _cachedColumnBuffers.unpersist(blocking)
+      _cachedColumnBuffers = null
+    }
+    if (_cachedColumnVectors != null) {
+      _cachedColumnVectors.unpersist(blocking)
+      _cachedColumnVectors = null
+    }
   }
 
   def recache(): Unit = {
-    _cachedColumnBuffers.unpersist()
-    _cachedColumnVectors.unpersist()
-    _cachedColumnBuffers = null
-    _cachedColumnVectors = null
-    buildBuffers()
-    buildColumnarBuffers()
+    unpersist()
+    if (useColumnBatches) {
+      buildColumnarBuffers()
+    } else {
+      buildBuffers()
+    }
   }
 
   /**
@@ -200,39 +218,13 @@ private[sql] case class InMemoryRelation(
 
   /**
    * Batch the input rows using [[ColumnarBatch]]es.
+   * This provides a faster implementation of in-memory scan.
    */
   private def buildColumnarBuffers(): Unit = {
     val schema = StructType.fromAttributes(child.output)
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
-      new Iterator[ColumnarBatch] {
-        def next(): ColumnarBatch = {
-          val columnarBatch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, batchSize)
-          var rowCount = 0
-          var totalSize = 0L
-          while (rowIterator.hasNext && rowCount < batchSize
-            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
-            val row = rowIterator.next()
-            assert(row.numFields == columnarBatch.numCols, "Row column number mismatch, " +
-              s"expected ${columnarBatch.numCols} columns, but got ${row.numFields}. \n" +
-              s"Row content: $row")
-            var i = 0
-            totalSize = 0
-            while (i < row.numFields) {
-              // HACK ALERT: This doesn't work for other data types! :)
-              columnarBatch.column(i).putLong(rowCount, row.getLong(i))
-              totalSize += 8
-              i += 1
-            }
-            rowCount += 1
-          }
-          columnarBatch.setNumRows(rowCount)
-          columnarBatch
-        }
-
-        def hasNext: Boolean = rowIterator.hasNext
-      }
+      new GenerateColumnarBatch(schema, batchSize).generate(rowIterator)
     }.persist(storageLevel)
-
     cached.setName(
       tableName.map(n => s"In-memory table $n")
         .getOrElse(StringUtils.abbreviate(child.toString, 1024)))

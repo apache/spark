@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{BatchedDataSourceScanExec, CodegenSupport, LeafExecNode}
+import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.{ColumnVector, ColumnarBatch}
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types.{DataType, UserDefinedType}
 
 
@@ -36,10 +36,7 @@ private[sql] case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode with CodegenSupport {
 
-  private val useColumnarScan = relation.child.sqlContext.conf.getConfString(
-    "spark.sql.inMemoryColumnarScan", "true").toBoolean
-
-  override val supportCodegen: Boolean = useColumnarScan
+  override val supportCodegen: Boolean = relation.useColumnBatches
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     // HACK ALERT: This is actually an RDD[ColumnarBatch].
@@ -122,7 +119,8 @@ private[sql] case class InMemoryTableScanExec(
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    assert(!useColumnarScan)
+    assert(!relation.useColumnBatches)
+    assert(relation.cachedColumnBuffers != null)
     val numOutputRows = longMetric("numOutputRows")
 
     if (enableAccumulators) {
