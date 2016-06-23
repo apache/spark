@@ -120,20 +120,4 @@ public final class UnsafeMapData extends MapData {
     mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return mapCopy;
   }
-
-  @Override
-  public boolean equals(Object other) {
-    if (other instanceof UnsafeMapData) {
-      UnsafeMapData o = (UnsafeMapData) other;
-      return sizeInBytes == o.sizeInBytes &&
-        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-                sizeInBytes);
-    }
-    return false;
-  }
-
-  @Override
-  public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
-  }
 }

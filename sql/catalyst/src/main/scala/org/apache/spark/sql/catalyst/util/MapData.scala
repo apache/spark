@@ -39,4 +39,7 @@ abstract class MapData extends Serializable {
       i += 1
     }
   }
+
+  // `MapData` should not implement `equals` and `hashCode` because the type cannot be used as  join
+  // keys, grouping keys, or in equality tests. See SPARK-9415 and PR#13847 for the discussions.
 }

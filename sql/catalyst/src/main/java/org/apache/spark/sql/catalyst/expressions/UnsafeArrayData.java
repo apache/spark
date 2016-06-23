@@ -301,7 +301,7 @@ public final class UnsafeArrayData extends ArrayData {
   // This `hashCode` computation could consume much processor time for large data.
   // If the computation becomes a bottleneck, we can use a light-weight logic; the first fixed bytes
   // are used to compute `hashCode` (See `Vector.hashCode`).
-  // The same issue exists in `UnsafeRow.hashCode` and `UnsafeMapData.hashCode`.
+  // The same issue exists in `UnsafeRow.hashCode`.
   @Override
   public int hashCode() {
     return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
