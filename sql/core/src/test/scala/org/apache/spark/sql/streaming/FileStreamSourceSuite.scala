@@ -614,10 +614,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         q.processAllAvailable()
 
         val explainWithoutExtended = q.explainInternal(false)
-        assert(explainWithoutExtended.contains("TextFileFormat"))
+        // `extended = false` only displays the physical plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
 
         val explainWithExtended = q.explainInternal(true)
-        assert(explainWithExtended.contains("TextFileFormat"))
+        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+        // plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
       } finally {
         q.stop()
       }

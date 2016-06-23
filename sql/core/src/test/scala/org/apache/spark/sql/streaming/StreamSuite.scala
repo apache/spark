@@ -258,10 +258,15 @@ class StreamSuite extends StreamTest {
       q.processAllAvailable()
 
       val explainWithoutExtended = q.explainInternal(false)
-      assert(explainWithoutExtended.contains("LocalTableScan"))
+      // `extended = false` only displays the physical plan.
+      assert("LocalRelation".r.findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("LocalTableScan".r.findAllMatchIn(explainWithoutExtended).size === 1)
 
       val explainWithExtended = q.explainInternal(true)
-      assert(explainWithExtended.contains("LocalTableScan"))
+      // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+      // plan.
+      assert("LocalRelation".r.findAllMatchIn(explainWithExtended).size === 3)
+      assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
     } finally {
       q.stop()
     }
