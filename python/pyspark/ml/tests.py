@@ -65,7 +65,7 @@ from pyspark.ml.common import _java2py
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand, concat, col, lit, split
-from pyspark.sql.types import StructField, StructType, StringType, ArrayType
+from pyspark.sql.types import StructField, StructType, StringType, ArrayType, DoubleType
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
@@ -205,31 +205,69 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
+class PurePythonTransformer(Transformer, HasInputCol, HasOutputCol):
+    factor = Param(Params._dummy(), "factor", "factor", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(PurePythonTransformer, self).__init__()
+        self._setDefault(factor=1)
+
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), DoubleType(), True)
+        return schema.add(outSchema)
+
+    def _transform(self, dataset):
+        inc = self.getInputCol()
+        ouc = self.getOutputCol()
+        factor = self.getOrDefault(self.factor)
+        return dataset.withColumn(ouc, dataset[inc] + factor)
+
+
+class PurePythonModel(PurePythonTransformer):
+    def __init__(self):
+        super(PurePythonModel, self).__init__()
+
+
+class PurePythonEstimator(Estimator, HasInputCol, HasOutputCol):
+
+    def __init__(self):
+        super(PurePythonEstimator, self).__init__()
+
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), DoubleType(), True)
+        return schema.add(outSchema)
+
+    def _fit(self, dataset):
+        cnt = dataset.count()
+        return PurePythonModel()._set(factor=cnt)
+
+
 class PipelineTests(SparkSessionTestCase):
 
     def test_pipeline(self):
-        dataset = MockDataset()
-        estimator0 = MockEstimator()
-        transformer1 = MockTransformer()
-        estimator2 = MockEstimator()
-        transformer3 = MockTransformer()
-        pipeline = Pipeline(stages=[estimator0, transformer1, estimator2, transformer3])
-        pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
-        model0, transformer1, model2, transformer3 = pipeline_model.stages
-        self.assertEqual(0, model0.dataset_index)
-        self.assertEqual(0, model0.getFake())
-        self.assertEqual(1, transformer1.dataset_index)
-        self.assertEqual(1, transformer1.getFake())
-        self.assertEqual(2, dataset.index)
-        self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
-        self.assertIsNone(transformer3.dataset_index,
-                          "The last transformer shouldn't be called in fit.")
-        dataset = pipeline_model.transform(dataset)
-        self.assertEqual(2, model0.dataset_index)
-        self.assertEqual(3, transformer1.dataset_index)
-        self.assertEqual(4, model2.dataset_index)
-        self.assertEqual(5, transformer3.dataset_index)
-        self.assertEqual(6, dataset.index)
+        data = self.spark.createDataFrame([(1,), (2,), (3,), (4,)], ["number"])
+
+        transformer0 = PurePythonTransformer()
+        transformer0.setInputCol("number").setOutputCol("result0")
+        estimator0 = PurePythonEstimator()
+        estimator0.setInputCol(transformer0.getOutputCol()).setOutputCol("result1")
+        transformer1 = PurePythonTransformer()
+        transformer1.setInputCol(estimator0.getOutputCol()).setOutputCol("result2")._set(factor=2)
+
+        pipeline = Pipeline(stages=[transformer0, estimator0, transformer1])
+
+        model = pipeline.fit(data)
+
+        self.assertEqual(len(model.stages), 3)
+        self.assertIsInstance(model.stages[0], PurePythonTransformer)
+        self.assertEqual(model.stages[0].uid, transformer0.uid)
+        self.assertIsInstance(model.stages[1], PurePythonModel)
+        self.assertEqual(model.stages[1].uid, estimator0.uid)
+        self.assertIsInstance(model.stages[2], PurePythonTransformer)
+        self.assertEqual(model.stages[2].uid, transformer1.uid)
+
+        result = model.transform(data).select(transformer1.getOutputCol()).collect()
+        self.assertListEqual(result, [17, 18, 19, 20])
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
