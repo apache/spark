@@ -147,9 +147,6 @@ private[sql] case class InMemoryTableScanExec(
               logInfo(s"Skipping partition based on stats $statsString")
               false
             } else {
-              if (enableAccumulators) {
-                readBatches.add(1)
-              }
               true
             }
           }
@@ -159,6 +156,9 @@ private[sql] case class InMemoryTableScanExec(
 
       // update SQL metrics
       val withMetrics = cachedBatchesToScan.map { batch =>
+        if (enableAccumulators) {
+          readBatches.add(1)
+        }
         numOutputRows += batch.numRows
         batch
       }
