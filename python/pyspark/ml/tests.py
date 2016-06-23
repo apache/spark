@@ -205,57 +205,31 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(TypeError, lambda: LogisticRegression(fitIntercept="false"))
 
 
-class PurePythonTransformer(Transformer, HasInputCol, HasOutputCol):
-    suffix = Param(Params._dummy(), "suffix", "Suffix adds to an Integer")
-    splat = Param(Params._dummy(), "splat", "Point to split a String")
-
-    def __init__(self):
-        super(PurePythonTransformer, self).__init__()
-        self._setDefault(suffix="", splat=" ")
-
-    def transformSchema(self, schema):
-        outSchema = StructField(self.getOutputCol(), ArrayType(StringType()), True)
-        return schema.add(outSchema)
-
-    def _transform(self, dataset):
-        inc = self.getInputCol()
-        ouc = self.getOutputCol()
-        cnt = dataset.count()
-        suf = self.getOrDefault(self.suffix)
-        return dataset.withColumn(
-            ouc, split(concat(dataset[inc], lit(" "), lit(suf), lit(" "), lit(cnt)), ' '))
-
-
-class PurePythonEstimator(Estimator, HasInputCol, HasOutputCol):
-    def _fit(self, dataset):
-
-
-class PurePythonModel(Model):
-
-
 class PipelineTests(SparkSessionTestCase):
 
     def test_pipeline(self):
-        training = self.spark.createDataFrame([(1,), (2,), (3,), (4,)], ["text"])
-
-        pt = PurePythonTransformer()
-        pt.setInputCol("text").setOutputCol("sentences")._set(suffix="suffix")
-        word2vec = Word2Vec(vectorSize=5, seed=42, inputCol=pt.getOutputCol(), outputCol="model")
-        pipeline = Pipeline(stages=[pt, word2vec])
-
-        model = pipeline.fit(training)
-
-        self.assertEqual(len(model.stages), 2)
-        self.assertIsInstance(model.stages[0], PurePythonTransformer)
-        self.assertEqual(model.stages[0].uid, pt.uid)
-        self.assertIsInstance(model.stages[1], Word2VecModel)
-        self.assertEqual(model.stages[1].uid, word2vec.uid)
-
-        model2 = word2vec.fit(pt.transform(training))
-
-        result = model.transform(training).select("model").collect()
-        result2 = model2.transform(pt.transform(training)).select("model").collect()
-        self.assertListEqual(result, result2)
+        dataset = MockDataset()
+        estimator0 = MockEstimator()
+        transformer1 = MockTransformer()
+        estimator2 = MockEstimator()
+        transformer3 = MockTransformer()
+        pipeline = Pipeline(stages=[estimator0, transformer1, estimator2, transformer3])
+        pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
+        model0, transformer1, model2, transformer3 = pipeline_model.stages
+        self.assertEqual(0, model0.dataset_index)
+        self.assertEqual(0, model0.getFake())
+        self.assertEqual(1, transformer1.dataset_index)
+        self.assertEqual(1, transformer1.getFake())
+        self.assertEqual(2, dataset.index)
+        self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
+        self.assertIsNone(transformer3.dataset_index,
+                          "The last transformer shouldn't be called in fit.")
+        dataset = pipeline_model.transform(dataset)
+        self.assertEqual(2, model0.dataset_index)
+        self.assertEqual(3, transformer1.dataset_index)
+        self.assertEqual(4, model2.dataset_index)
+        self.assertEqual(5, transformer3.dataset_index)
+        self.assertEqual(6, dataset.index)
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
