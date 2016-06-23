@@ -271,7 +271,7 @@ class StageWrapper(object):
         self.failure = None
         reader = StageReader(self.sc)
         self.sc._gateway.jvm.\
-            org.apache.spark.ml.api.python.PythonPipelineStage.registerReader(reader)
+            org.apache.spark.ml.api.python.PythonStage.registerReader(reader)
 
     def getUid(self):
         self.failure = None
