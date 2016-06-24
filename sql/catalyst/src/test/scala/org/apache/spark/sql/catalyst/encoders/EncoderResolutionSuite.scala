@@ -115,6 +115,12 @@ class EncoderResolutionSuite extends PlanTest {
     }
   }
 
+  test("nested case class can have different number of fields from the real schema") {
+    val encoder = ExpressionEncoder[(String, StringIntClass)]
+    val attrs = Seq('a.string, 'b.struct('a.string, 'b.int, 'c.int))
+    encoder.resolveAndBind(attrs)
+  }
+
   test("throw exception if real type is not compatible with encoder schema") {
     val msg1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass].resolveAndBind(Seq('a.string, 'b.long))

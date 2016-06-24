@@ -144,12 +144,10 @@ private[sql] class ParquetFileFormat
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val parquetOptions = new ParquetOptions(parameters, sparkSession.sessionState.conf)
+
     // Should we merge schemas from all Parquet part-files?
-    val shouldMergeSchemas =
-      parameters
-          .get(ParquetFileFormat.MERGE_SCHEMA)
-          .map(_.toBoolean)
-          .getOrElse(sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+    val shouldMergeSchemas = parquetOptions.mergeSchema
 
     val mergeRespectSummaries = sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
@@ -261,6 +259,13 @@ private[sql] class ParquetFileFormat
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    true
+  }
+
   override private[sql] def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -283,13 +288,13 @@ private[sql] class ParquetFileFormat
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
+    hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
-      CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      CatalystSchemaConverter.checkFieldNames(requiredSchema).json)
+      ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+      ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
     hadoopConf.set(
       CatalystWriteSupport.SPARK_ROW_SCHEMA,
-      CatalystSchemaConverter.checkFieldNames(requiredSchema).json)
+      ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
 
     // We want to clear this temporary metadata from saving into Parquet file.
     // This metadata is only useful for detecting optional columns when pushdowning filters.
@@ -364,10 +369,10 @@ private[sql] class ParquetFileFormat
         val reader = pushed match {
           case Some(filter) =>
             new ParquetRecordReader[InternalRow](
-              new CatalystReadSupport,
+              new ParquetReadSupport,
               FilterCompat.get(filter, null))
           case _ =>
-            new ParquetRecordReader[InternalRow](new CatalystReadSupport)
+            new ParquetRecordReader[InternalRow](new ParquetReadSupport)
         }
         reader.initialize(split, hadoopAttemptContext)
         reader
@@ -400,7 +405,7 @@ private[sql] class ParquetFileFormat
     new ParquetOutputWriterFactory(
       sqlContext.conf,
       dataSchema,
-      sqlContext.sparkContext.hadoopConfiguration,
+      sqlContext.sessionState.newHadoopConf(),
       options)
   }
 }
@@ -551,17 +556,6 @@ private[sql] class ParquetOutputWriter(
 }
 
 private[sql] object ParquetFileFormat extends Logging {
-  // Whether we should merge schemas collected from all Parquet part-files.
-  private[sql] val MERGE_SCHEMA = "mergeSchema"
-
-  // Hive Metastore schema, used when converting Metastore Parquet tables.  This option is only used
-  // internally.
-  private[sql] val METASTORE_SCHEMA = "metastoreSchema"
-
-  // If a ParquetRelation is converted from a Hive metastore table, this option is set to the
-  // original Hive table name.
-  private[sql] val METASTORE_TABLE_NAME = "metastoreTableName"
-
   /**
    * If parquet's block size (row group size) setting is larger than the min split size,
    * we use parquet's block size setting as the min split size. Otherwise, we will create
@@ -596,7 +590,7 @@ private[sql] object ParquetFileFormat extends Logging {
       assumeBinaryIsString: Boolean,
       assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
     val conf = job.getConfiguration
-    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
+    conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
     if (parquetFilterPushDown) {
@@ -609,14 +603,14 @@ private[sql] object ParquetFileFormat extends Logging {
         .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
     }
 
-    conf.set(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
+    conf.set(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
       val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
-      CatalystSchemaConverter.checkFieldNames(requestedSchema).json
+      ParquetSchemaConverter.checkFieldNames(requestedSchema).json
     })
 
     conf.set(
       CatalystWriteSupport.SPARK_ROW_SCHEMA,
-      CatalystSchemaConverter.checkFieldNames(dataSchema).json)
+      ParquetSchemaConverter.checkFieldNames(dataSchema).json)
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
     conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
@@ -645,7 +639,7 @@ private[sql] object ParquetFileFormat extends Logging {
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
     def parseParquetSchema(schema: MessageType): StructType = {
-      val converter = new CatalystSchemaConverter(
+      val converter = new ParquetSchemaConverter(
         sparkSession.sessionState.conf.isParquetBinaryAsString,
         sparkSession.sessionState.conf.isParquetBinaryAsString,
         sparkSession.sessionState.conf.writeLegacyParquetFormat)
@@ -659,7 +653,7 @@ private[sql] object ParquetFileFormat extends Logging {
       val serializedSchema = metadata
         .getKeyValueMetaData
         .asScala.toMap
-        .get(CatalystReadSupport.SPARK_METADATA_KEY)
+        .get(ParquetReadSupport.SPARK_METADATA_KEY)
       if (serializedSchema.isEmpty) {
         // Falls back to Parquet schema if no Spark SQL schema found.
         Some(parseParquetSchema(metadata.getSchema))
@@ -800,11 +794,16 @@ private[sql] object ParquetFileFormat extends Logging {
     // side, and resemble fake `FileStatus`es there.
     val partialFileStatusInfo = filesToTouch.map(f => (f.getPath.toString, f.getLen))
 
+    // Set the number of partitions to prevent following schema reads from generating many tasks
+    // in case of a small number of parquet files.
+    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
+      sparkSession.sparkContext.defaultParallelism)
+
     // Issues a Spark job to read Parquet schema in parallel.
     val partiallyMergedSchemas =
       sparkSession
         .sparkContext
-        .parallelize(partialFileStatusInfo)
+        .parallelize(partialFileStatusInfo, numParallelism)
         .mapPartitions { iterator =>
           // Resembles fake `FileStatus`es with serialized path and length information.
           val fakeFileStatuses = iterator.map { case (path, length) =>
@@ -821,7 +820,7 @@ private[sql] object ParquetFileFormat extends Logging {
 
           // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
           val converter =
-            new CatalystSchemaConverter(
+            new ParquetSchemaConverter(
               assumeBinaryIsString = assumeBinaryIsString,
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -865,12 +864,12 @@ private[sql] object ParquetFileFormat extends Logging {
    * a [[StructType]] converted from the [[MessageType]] stored in this footer.
    */
   def readSchemaFromFooter(
-      footer: Footer, converter: CatalystSchemaConverter): StructType = {
+      footer: Footer, converter: ParquetSchemaConverter): StructType = {
     val fileMetaData = footer.getParquetMetadata.getFileMetaData
     fileMetaData
       .getKeyValueMetaData
       .asScala.toMap
-      .get(CatalystReadSupport.SPARK_METADATA_KEY)
+      .get(ParquetReadSupport.SPARK_METADATA_KEY)
       .flatMap(deserializeSchemaString)
       .getOrElse(converter.convert(fileMetaData.getSchema))
   }

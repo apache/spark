@@ -267,6 +267,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
 
+    if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
+      featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
+      logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
+        "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
+        "columns. This behavior is the same as R glmnet but different from LIBSVM.")
+    }
+
     // Since we implicitly do the feature scaling when we compute the cost function
     // to improve the convergence, the effective regParam will be changed.
     val effectiveRegParam = $(regParam) / yStd
@@ -380,9 +387,9 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 @Since("1.3.0")
 @Experimental
 class LinearRegressionModel private[ml] (
-    override val uid: String,
-    val coefficients: Vector,
-    val intercept: Double)
+    @Since("1.4.0") override val uid: String,
+    @Since("2.0.0") val coefficients: Vector,
+    @Since("1.3.0") val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams with MLWritable {
 
@@ -479,7 +486,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -492,7 +499,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.format("parquet").load(dataPath)
+      val data = sparkSession.read.format("parquet").load(dataPath)
         .select("intercept", "coefficients").head()
       val intercept = data.getDouble(0)
       val coefficients = data.getAs[Vector](1)

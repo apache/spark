@@ -68,6 +68,34 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
+  test("SPARK-15678: not use cache on overwrite") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("overwrite").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("overwrite").parquet(path)
+      assert(df.count() == 1000)
+      spark.catalog.refreshByPath(path)
+      assert(df.count() == 10)
+      assert(spark.read.parquet(path).count() == 10)
+    }
+  }
+
+  test("SPARK-15678: not use cache on append") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("append").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("append").parquet(path)
+      assert(df.count() == 1000)
+      spark.catalog.refreshByPath(path)
+      assert(df.count() == 1010)
+      assert(spark.read.parquet(path).count() == 1010)
+    }
+  }
+
   test("self-join") {
     // 4 rows, cells of column 1 of row 2 and row 4 are null
     val data = (1 to 4).map { i =>
@@ -546,7 +574,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in ArrayType") {
@@ -564,7 +592,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         containsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in MapType") {
@@ -584,7 +612,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         valueContainsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("returning batch for wide table") {
@@ -622,6 +650,21 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       while (files.hasNext) {
         val file = files.next
         assert(!file.getPath.getName.contains("_metadata"))
+      }
+    }
+  }
+
+  test("SPARK-15804: write out the metadata to parquet file") {
+    val df = Seq((1, "abc"), (2, "hello")).toDF("a", "b")
+    val md = new MetadataBuilder().putString("key", "value").build()
+    val dfWithmeta = df.select('a, 'b.as("b", md))
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      dfWithmeta.write.parquet(path)
+
+      readParquetFile(path) { df =>
+        assert(df.schema.last.metadata.getString("key") == "value")
       }
     }
   }
