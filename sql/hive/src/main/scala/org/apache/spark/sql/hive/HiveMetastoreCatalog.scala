@@ -23,20 +23,21 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
-
 
 /**
  * Legacy catalog for interacting with the Hive metastore.
@@ -355,13 +356,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val fileFormatClass = classOf[ParquetFileFormat]
 
       val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
-      val options = Map(
-        ParquetFileFormat.MERGE_SCHEMA -> mergeSchema.toString,
-        ParquetFileFormat.METASTORE_TABLE_NAME -> TableIdentifier(
-          relation.tableName,
-          Some(relation.databaseName)
-        ).unquotedString
-      )
+      val options = Map(ParquetOptions.MERGE_SCHEMA -> mergeSchema.toString)
 
       convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "parquet")
     }
@@ -465,43 +460,119 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   /**
-   * Casts input data to correct data types according to table definition before inserting into
-   * that table.
+   * When scanning only partition columns, get results based on metadata without scanning files.
+   * It is used for distinct or distinct/Max/Min aggregations, example: max(partition).
    */
-  object PreInsertionCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-      // Wait until children are resolved.
-      case p: LogicalPlan if !p.childrenResolved => p
+  object MetadataOnlyOptimizer extends Rule[LogicalPlan] {
 
-      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _, _) =>
-        castChildOutput(p, table, child)
+    private def canSupportMetadataOnly(a: Aggregate): Boolean = {
+      val aggregateExpressions = a.aggregateExpressions.flatMap { expr =>
+        expr.collect {
+          case agg: AggregateExpression => agg
+        }
+      }.distinct
+      aggregateExpressions.forall { agg =>
+        if (agg.isDistinct) {
+          true
+        } else {
+          agg.aggregateFunction match {
+            case max: Max => true
+            case min: Min => true
+            case _ => false
+          }
+        }
+      }
     }
 
-    def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan)
-      : LogicalPlan = {
-      val childOutputDataTypes = child.output.map(_.dataType)
-      val numDynamicPartitions = p.partition.values.count(_.isEmpty)
-      val tableOutputDataTypes =
-        (table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions))
-          .take(child.output.length).map(_.dataType)
+    private def findRelation(plan: LogicalPlan): (Option[LogicalPlan], Seq[Expression]) = {
+      plan match {
+        case relation @ LogicalRelation(files: HadoopFsRelation, _, table)
+          if files.partitionSchema.nonEmpty =>
+          (Some(relation), Seq.empty[Expression])
 
-      if (childOutputDataTypes == tableOutputDataTypes) {
-        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
-      } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
-        childOutputDataTypes.zip(tableOutputDataTypes)
-          .forall { case (left, right) => left.sameType(right) }) {
-        // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
-        // use InsertIntoHiveTable instead of InsertIntoTable.
-        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
-      } else {
-        // Only do the casting when child output data types differ from table output data types.
-        val castedChildOutput = child.output.zip(table.output).map {
-          case (input, output) if input.dataType != output.dataType =>
-            Alias(Cast(input, output.dataType), input.name)()
-          case (input, _) => input
+        case relation: MetastoreRelation if relation.partitionKeys.nonEmpty =>
+          (Some(relation), Seq.empty[Expression])
+
+        case p @ Project(_, child) =>
+          findRelation(child)
+
+        case f @ Filter(filterCondition, child) =>
+          val (plan, conditions) = findRelation(child)
+          (plan, conditions ++ Seq(filterCondition))
+
+        case SubqueryAlias(_, child) =>
+          findRelation(child)
+
+        case _ => (None, Seq.empty[Expression])
+      }
+    }
+
+    private def convertToMetadataOnlyPlan(
+        parent: LogicalPlan,
+        project: Option[LogicalPlan],
+        filters: Seq[Expression],
+        relation: LogicalPlan): LogicalPlan = relation match {
+      case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
+        val attributeMap = l.output.map(attr => (attr.name, attr)).toMap
+        val partitionColumns = files.partitionSchema.map { field =>
+          attributeMap.getOrElse(field.name, throw new AnalysisException(
+            s"Unable to resolve ${field.name} given [${l.output.map(_.name).mkString(", ")}]"))
+        }
+        val filterColumns = filters.flatMap(_.references)
+        val projectSet = parent.references ++ AttributeSet(filterColumns)
+        if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
+          val selectedPartitions = files.location.listFiles(filters)
+          val partitionValues = selectedPartitions.map(_.values)
+          val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
+          val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
+          val scanPlan = project.map(_.withNewChildren(valuesPlan :: Nil)).getOrElse(valuesPlan)
+          parent.withNewChildren(scanPlan :: Nil)
+        } else {
+          parent
         }
 
-        p.copy(child = logical.Project(castedChildOutput, child))
+      case relation: MetastoreRelation =>
+        if (parent.references.subsetOf(AttributeSet(relation.partitionKeys))) {
+          val partitionColumnDataTypes = relation.partitionKeys.map(_.dataType)
+          val partitionValues = relation.getHiveQlPartitions(filters).map { p =>
+            InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
+              case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
+            })
+          }
+          val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
+          val valuesPlan = LogicalRDD(relation.partitionKeys, valuesRdd)(sparkSession)
+          val filterPlan =
+            filters.reduceLeftOption(And).map(Filter(_, valuesPlan)).getOrElse(valuesPlan)
+          val scanPlan = project.map(_.withNewChildren(filterPlan :: Nil)).getOrElse(filterPlan)
+          parent.withNewChildren(scanPlan :: Nil)
+        } else {
+          parent
+        }
+
+      case _ =>
+        parent
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!sparkSession.sessionState.conf.optimizerMetadataOnly) {
+        return plan
+      }
+      plan.transform {
+        case a @ Aggregate(_, _, child) if canSupportMetadataOnly(a) =>
+          val (plan, filters) = findRelation(child)
+          if (plan.isDefined) {
+            convertToMetadataOnlyPlan(a, None, filters, plan.get)
+          } else {
+            a
+          }
+
+        case d @ Distinct(p @ Project(_, _)) =>
+          val (plan, filters) = findRelation(p)
+          if (plan.isDefined) {
+            convertToMetadataOnlyPlan(d, Some(p), filters, plan.get)
+          } else {
+            d
+          }
       }
     }
   }
