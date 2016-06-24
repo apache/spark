@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Benchmark
 
 
@@ -75,8 +76,8 @@ class CacheBenchmark extends BenchmarkBase {
     }
 
     // All of these are codegen = T hashmap = T
-    sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "1024")
+    sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.VECTORIZED_AGG_MAP_MAX_COLUMNS.key, "1024")
 
     // Benchmark cases:
     //   (1) No caching
@@ -85,15 +86,15 @@ class CacheBenchmark extends BenchmarkBase {
     //   (4) Caching with column batches (without compression)
     addBenchmark("cache = F", cache = false)
     addBenchmark("cache = T columnar_batches = F compress = F", cache = true, Map(
-      "spark.sql.inMemoryColumnarScan" -> "false",
-      "spark.sql.inMemoryColumnarStorage.compressed" -> "false"
+      SQLConf.CACHE_CODEGEN.key -> "false",
+      SQLConf.COMPRESS_CACHED.key -> "false"
     ))
     addBenchmark("cache = T columnar_batches = F compress = T", cache = true, Map(
-      "spark.sql.inMemoryColumnarScan" -> "false",
-      "spark.sql.inMemoryColumnarStorage.compressed" -> "true"
+      SQLConf.CACHE_CODEGEN.key -> "false",
+      SQLConf.COMPRESS_CACHED.key -> "true"
     ))
     addBenchmark("cache = T columnar_batches = T", cache = true, Map(
-      "spark.sql.inMemoryColumnarScan" -> "true"
+      SQLConf.CACHE_CODEGEN.key -> "true"
     ))
     benchmark.run()
 
