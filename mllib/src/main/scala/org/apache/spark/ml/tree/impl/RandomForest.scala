@@ -215,7 +215,7 @@ private[spark] object RandomForest extends Logging {
     logInfo(s"Processed $numGroups groups of nodes")
     if (numGroups > 0) {
       logInfo(s"Max nodes per group: $maxNodesPerGroup")
-      logInfo(s"Min nodes per group: $minNodesPerGroup")      
+      logInfo(s"Min nodes per group: $minNodesPerGroup")
       logInfo(s"Average nodes per group: ${totalNodesProcessed / numGroups.toDouble}")
     }
 
