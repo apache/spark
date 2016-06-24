@@ -1270,6 +1270,37 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
+  test("Create Cataloged Table As Select") {
+    import testImplicits._
+    withTable("t", "t1") {
+      var e = intercept[AnalysisException] {
+        sql("CREATE TABLE t SELECT 1 as a, 1 as b")
+      }.getMessage
+      assert(e.contains("Hive support is required to use CREATE TABLE AS SELECT"))
+
+      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      e = intercept[AnalysisException] {
+        sql("CREATE TABLE t SELECT a, b from t1")
+      }.getMessage
+      assert(e.contains("Hive support is required to use CREATE TABLE AS SELECT"))
+
+      sql(s"CREATE TABLE t USING parquet SELECT a, b from t1")
+
+    }
+  }
+
+  test("Create Data Source Table As Select") {
+    import testImplicits._
+    withTable("t", "t1", "t2") {
+      sql("CREATE TABLE t USING parquet SELECT 1 as a, 1 as b")
+      checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
+
+      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      sql("CREATE TABLE t2 USING parquet SELECT a, b from t1")
+      checkAnswer(spark.table("t2"), spark.table("t1"))
+    }
+  }
+
   test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
