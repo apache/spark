@@ -92,9 +92,18 @@ private[spark] class BlacklistTracker(
   private[scheduler] def expireExecutorsInBlackList(): Unit = synchronized {
     // TODO do we need to re-introduce strategy here?
     val maxTime = clock.getTimeMillis() - EXECUTOR_RECOVERY_MILLIS
-    val toClear = executorIdToBlacklistTime.filter{ _._2 < maxTime}.keys
-    logInfo(s"Removing executors $toClear from blacklist during periodic recovery")
-    toClear.foreach { exec => executorIdToBlacklistTime.remove(exec) }
+    val execsToClear = executorIdToBlacklistTime.filter(_._2 < maxTime).keys
+    if (execsToClear.nonEmpty) {
+      logInfo(s"Removing executors $execsToClear from blacklist during periodic recovery")
+      execsToClear.foreach { exec => executorIdToBlacklistTime.remove(exec) }
+    }
+    val nodesToClear = nodeIdToBlacklistTime.filter(_._2 < maxTime).keys
+    if (nodesToClear.nonEmpty) {
+      logInfo(s"Removing nodes $nodesToClear from blacklist during periodic recovery")
+      nodesToClear.foreach { node => nodeIdToBlacklistTime.remove(node) }
+    }
+
+
   }
 
   def taskSetSucceeded(stageId: Int): Unit = synchronized {

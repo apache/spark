@@ -105,6 +105,11 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
     tracker.taskSetSucceeded(stage1)
     assert(tracker.nodeBlacklist() === Set("hostA"))
     assert(tracker.executorBlacklist() === Set("1", "2"))
+
+    clock.advance(tracker.EXECUTOR_RECOVERY_MILLIS + 1)
+    tracker.expireExecutorsInBlackList()
+    assert(tracker.nodeBlacklist() === Set())
+    assert(tracker.executorBlacklist() === Set())
   }
 
   def trackerFixture: BlacklistTracker = {
