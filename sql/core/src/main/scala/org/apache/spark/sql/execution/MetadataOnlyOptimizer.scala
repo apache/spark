@@ -31,9 +31,10 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
  * It is used for distinct, distinct aggregations or distinct-like aggregations(example: Max/Min).
  * Example: select Max(partition) from table.
  */
-case class MetadataOnlyOptimizer(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class MetadataOnlyOptimizer(
+    sparkSession: SparkSession,
+    catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
-  private val sparkSession: SparkSession = SparkSession.getActiveSession.get
   private def canSupportMetadataOnly(a: Aggregate): Boolean = {
     val aggregateExpressions = a.aggregateExpressions.flatMap { expr =>
       expr.collect {
