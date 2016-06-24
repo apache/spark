@@ -234,10 +234,10 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
-      val Row(originalMin: Vector, originalMax: Vector) = MLUtils.convertVectorColumnsToML(
-        data, "originalMin", "originalMax")
-        .select("originalMin", "originalMax")
-        .head()
+      val Row(originalMin: Vector, originalMax: Vector) =
+        MLUtils.convertVectorColumnsToML(data, "originalMin", "originalMax")
+          .select("originalMin", "originalMax")
+          .head()
       val model = new MinMaxScalerModel(metadata.uid, originalMin, originalMax)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
