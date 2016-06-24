@@ -24,6 +24,7 @@ class SparkJobInfo(namedtuple("SparkJobInfo", "jobId stageIds status")):
     """
     Exposes information about Spark Jobs.
     """
+    pass
 
 
 class SparkStageInfo(namedtuple("SparkStageInfo",
@@ -32,6 +33,7 @@ class SparkStageInfo(namedtuple("SparkStageInfo",
     """
     Exposes information about Spark Stages.
     """
+    pass
 
 
 class StatusTracker(object):
@@ -83,6 +85,8 @@ class StatusTracker(object):
         job = self._jtracker.getJobInfo(jobId)
         if job is not None:
             return SparkJobInfo(jobId, job.stageIds(), str(job.status()))
+        else:
+            return None
 
     def getStageInfo(self, stageId):
         """
@@ -94,3 +98,5 @@ class StatusTracker(object):
             # TODO: fetch them in batch for better performance
             attrs = [getattr(stage, f)() for f in SparkStageInfo._fields[1:]]
             return SparkStageInfo(stageId, *attrs)
+        else:
+            return None
