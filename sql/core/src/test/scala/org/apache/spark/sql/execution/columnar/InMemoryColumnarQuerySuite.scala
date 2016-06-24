@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
+import org.apache.spark.storage.StorageLevel.{MEMORY_ONLY, NONE}
 
 class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -271,6 +272,20 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         assert(inMemoryRelation.cachedColumnBatches == null)
         assert(inMemoryRelation.cachedColumnBuffers != null)
       }
+      // Test unpersist and recaching
+      def rdd: RDD[_] =
+        if (useColumnBatches && !useComplexSchema) {
+          inMemoryRelation.cachedColumnBatches
+        } else {
+          inMemoryRelation.cachedColumnBuffers
+        }
+      assert(rdd != null)
+      assert(rdd.getStorageLevel == MEMORY_ONLY)
+      inMemoryRelation.recache()
+      assert(rdd.getStorageLevel == MEMORY_ONLY)
+      inMemoryRelation.unpersist(blocking = true)
+      assert(inMemoryRelation.cachedColumnBatches == null)
+      assert(inMemoryRelation.cachedColumnBuffers == null)
     }
   }
 
