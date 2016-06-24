@@ -22,6 +22,7 @@ import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Paths
 import java.util.Arrays
+import java.util.concurrent.CountDownLatch
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConverters._
@@ -190,8 +191,12 @@ private[spark] object TestUtils {
 private class SpillListener extends SparkListener {
   private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]
   private val spilledStageIds = new mutable.HashSet[Int]
+  private val stagesDone = new CountDownLatch(1)
 
-  def numSpilledStages: Int = spilledStageIds.size
+  def numSpilledStages: Int = {
+    stagesDone.await()
+    spilledStageIds.size
+  }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
     stageIdToTaskMetrics.getOrElseUpdate(
@@ -205,5 +210,9 @@ private class SpillListener extends SparkListener {
     if (spilled) {
       spilledStageIds += stageId
     }
+  }
+
+  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+    stagesDone.countDown()
   }
 }
