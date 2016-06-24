@@ -586,7 +586,7 @@ class SessionCatalog(
   }
 
   /**
-   * Returns partitions filtered by predicates for the given table, It just work for Hive.
+   * Returns partitions filtered by predicates for the given table, Filters only work for Hive.
    *
    * The filters Expressions may optionally be provided to filter the partitions returned.
    * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),

@@ -455,7 +455,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           allowExisting)
     }
   }
-
 }
 
 /**
