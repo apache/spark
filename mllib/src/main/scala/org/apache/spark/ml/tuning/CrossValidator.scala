@@ -55,7 +55,10 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 }
 
 /**
- * K-fold cross validation.
+ * CrossValidator begins by splitting the dataset into a set of folds which are
+ * used as separate training and test datasets e.g., with k=3 folds, CrossValidator
+ * will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data
+ * for training and 1/3 for testing.
  */
 @Since("1.2.0")
 class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
@@ -188,7 +191,8 @@ object CrossValidator extends MLReadable[CrossValidator] {
 }
 
 /**
- * Model from k-fold cross validation.
+ * Pipelines facilitate model selection by making it easy to tune an entire
+ * Pipeline at once, rather than tuning each element in the Pipeline separately.
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in

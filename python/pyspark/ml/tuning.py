@@ -143,7 +143,12 @@ class ValidatorParams(HasSeed):
 
 class CrossValidator(Estimator, ValidatorParams):
     """
-    K-fold cross validation.
+
+    CrossValidator begins by splitting the dataset into a set of folds which are 
+    used as separate training and test datasets e.g., with k=3 folds, CrossValidator 
+    will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data 
+    for training and 1/3 for testing.
+
 
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
@@ -260,7 +265,9 @@ class CrossValidator(Estimator, ValidatorParams):
 
 class CrossValidatorModel(Model, ValidatorParams):
     """
-    Model from k-fold cross validation.
+
+    Pipelines facilitate model selection by making it easy to tune an entire 
+    Pipeline at once, rather than tuning each element in the Pipeline separately.
 
     .. versionadded:: 1.4.0
     """
