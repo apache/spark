@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.execution.SparkPlanner
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SessionState
@@ -72,6 +73,18 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
+  }
+
+  /**
+   * Logical query plan optimizer for Hive.
+   */
+  override lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods) {
+    val extendedHiveOptimizerRules: Seq[Batch] = Seq(
+      Batch("MetadataOnly Optimization", Once,
+        catalog.metadataOnlyOptimizer)
+    )
+
+    override def batches: Seq[Batch] = extendedHiveOptimizerRules ++ super.batches
   }
 
   /**

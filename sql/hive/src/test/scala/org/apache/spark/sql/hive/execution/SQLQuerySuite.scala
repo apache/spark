@@ -1640,4 +1640,44 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       )
     }
   }
+
+  test("spark-15752 metadata only optimizer") {
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
+      spark.range(0, 5, 1, 2).selectExpr("id as key", "id as value").registerTempTable("tempTable")
+      sql(
+        """
+          |CREATE TABLE srcpart_15752 (key INT, value STRING)
+          |PARTITIONED BY (ds STRING, hr INT) STORED AS parquet
+        """.stripMargin)
+      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq(11, 12)) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE srcpart_15752 PARTITION (ds='$ds',hr='$hr')
+             |select key, value from tempTable
+        """.stripMargin)
+      }
+      checkAnswer(sql("select max(hr) from srcpart_15752"), Row(12))
+      checkAnswer(sql("select max(hr) from srcpart_15752 where hr = 11"), Row(11))
+      checkAnswer(sql("select max(hr) from (select hr from srcpart_15752) t"), Row(12))
+      checkAnswer(sql("select distinct hr from srcpart_15752 where hr = 11"), Row(11))
+
+      sql(
+        """
+          |CREATE TABLE srctext_15752 (key INT, value STRING)
+          |PARTITIONED BY (ds STRING, hr INT) STORED AS textfile
+        """.stripMargin)
+      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq(11, 12)) {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE srctext_15752 PARTITION (ds='$ds',hr='$hr')
+             |select key, value from tempTable
+        """.stripMargin)
+      }
+
+      checkAnswer(sql("select max(hr) from srctext_15752"), Row(12))
+      checkAnswer(sql("select max(hr) from srctext_15752 where hr = 11"), Row(11))
+      checkAnswer(sql("select max(hr) from (select hr from srctext_15752) t"), Row(12))
+      checkAnswer(sql("select distinct hr from srctext_15752 where hr = 11"), Row(11))
+    }
+  }
 }
