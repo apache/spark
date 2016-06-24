@@ -134,6 +134,11 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
         // Adds generated Avro data as a new partition to the testing table.
         sql(s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
 
+        // The following query fails before SPARK-13709 is fixed. This is because when reading data
+        // from table partitions, Avro deserializer needs the Avro schema, which is defined in
+        // table property "avro.schema.literal". However, we only initializes the deserializer using
+        // partition properties, which doesn't include the wanted property entry. Merging two sets
+        // of properties solves the problem.
         checkAnswer(
           sql(s"SELECT * FROM $tableName"),
           Row(1, Row(2, 2.5D), "foo")
