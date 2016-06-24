@@ -151,6 +151,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
+    Batch("Field Extraction Pushdown", fixedPoint,
+      AggregateFieldExtractionPushdown,
+      JoinFieldExtractionPushdown) :+
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       ColumnPruning,

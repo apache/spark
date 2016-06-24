@@ -21,6 +21,7 @@ import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaPruning
 import org.apache.spark.sql.execution.datasources.v2.PushDownOperatorsToDataSource
 import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
 
@@ -33,6 +34,7 @@ class SparkOptimizer(
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
+    Batch("Parquet Schema Pruning", Once, ParquetSchemaPruning) :+
     Batch("Push down operators to data source scan", Once, PushDownOperatorsToDataSource)) ++
     postHocOptimizationBatches :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
