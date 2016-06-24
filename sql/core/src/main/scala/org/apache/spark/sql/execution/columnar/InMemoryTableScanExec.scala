@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
-import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 
 
@@ -37,9 +36,13 @@ private[sql] case class InMemoryTableScanExec(
   override val supportCodegen: Boolean = relation.useColumnBatches
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    // HACK ALERT: This is actually an RDD[ColumnarBatch].
-    // We're taking advantage of Scala's type erasure here to pass these batches along.
-    Seq(relation.cachedColumnBatches.asInstanceOf[RDD[InternalRow]])
+    if (relation.useColumnBatches) {
+      // HACK ALERT: This is actually an RDD[ColumnarBatch].
+      // We're taking advantage of Scala's type erasure here to pass these batches along.
+      Seq(relation.cachedColumnBatches.asInstanceOf[RDD[InternalRow]])
+    } else {
+      Seq()
+    }
   }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren

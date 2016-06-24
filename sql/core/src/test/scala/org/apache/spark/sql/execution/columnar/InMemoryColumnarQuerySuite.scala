@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
@@ -231,4 +232,46 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val columnTypes2 = List.fill(length2)(IntegerType)
     val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
   }
+
+  test("InMemoryRelation builds the correct buffers") {
+    testColumnBatches(useColumnBatches = true, useComplexSchema = false)
+    testColumnBatches(useColumnBatches = false, useComplexSchema = false)
+  }
+
+  test("InMemoryRelation falls back on non-codegen path with complex schemas") {
+    testColumnBatches(useColumnBatches = true, useComplexSchema = true)
+    testColumnBatches(useColumnBatches = false, useComplexSchema = true)
+  }
+
+  private def testColumnBatches(useColumnBatches: Boolean, useComplexSchema: Boolean = false) {
+    withSQLConf(SQLConf.CACHE_CODEGEN.key -> useColumnBatches.toString) {
+      val logicalPlan = org.apache.spark.sql.catalyst.plans.logical.Range(1, 10, 1, 10)
+      val sparkPlan = new org.apache.spark.sql.execution.RangeExec(logicalPlan) {
+        override val output: Seq[Attribute] = {
+          if (useComplexSchema) {
+            Seq(AttributeReference("complex", ArrayType(LongType))())
+          } else {
+            logicalPlan.output
+          }
+        }
+      }
+      val inMemoryRelation = InMemoryRelation(
+        useCompression = false,
+        batchSize = 100,
+        storageLevel = MEMORY_ONLY,
+        child = sparkPlan,
+        tableName = None)
+      if (!useComplexSchema) {
+        assert(inMemoryRelation.useColumnBatches == useColumnBatches)
+        assert((inMemoryRelation.cachedColumnBatches != null) == useColumnBatches)
+        assert((inMemoryRelation.cachedColumnBuffers == null) == useColumnBatches)
+      } else {
+        // Fallback on using non-code-gen'ed column builders if schema is complex
+        assert(!inMemoryRelation.useColumnBatches)
+        assert(inMemoryRelation.cachedColumnBatches == null)
+        assert(inMemoryRelation.cachedColumnBuffers != null)
+      }
+    }
+  }
+
 }
