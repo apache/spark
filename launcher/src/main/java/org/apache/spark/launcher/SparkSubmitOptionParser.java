@@ -57,6 +57,7 @@ class SparkSubmitOptionParser {
   protected final String PY_FILES = "--py-files";
   protected final String REPOSITORIES = "--repositories";
   protected final String STATUS = "--status";
+  protected final String EXECUTOR_CORES = "--executor-cores";
   protected final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
 
   // Options that do not take arguments.
@@ -70,11 +71,12 @@ class SparkSubmitOptionParser {
 
   // YARN-only options.
   protected final String ARCHIVES = "--archives";
-  protected final String EXECUTOR_CORES = "--executor-cores";
   protected final String KEYTAB = "--keytab";
-  protected final String NUM_EXECUTORS = "--num-executors";
   protected final String PRINCIPAL = "--principal";
   protected final String QUEUE = "--queue";
+
+  // Standalone and YARN options.
+  protected final String NUM_EXECUTORS = "--num-executors";
 
   /**
    * This is the canonical list of spark-submit options. Each entry in the array contains the

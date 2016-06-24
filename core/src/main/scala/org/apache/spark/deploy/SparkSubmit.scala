@@ -456,8 +456,6 @@ object SparkSubmit {
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
-      OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.instances"),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
@@ -469,6 +467,8 @@ object SparkSubmit {
         sysProp = "spark.executor.cores"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
+      OptionAssigner(args.numExecutors, STANDALONE | YARN, ALL_DEPLOY_MODES,
+        sysProp = "spark.executor.instances"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
