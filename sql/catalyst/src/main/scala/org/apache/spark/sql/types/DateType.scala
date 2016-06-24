@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
  *
  * Please use the singleton [[DataTypes.DateType]].
  *
- * Internally, this is represented as the number of days from epoch (1970-01-01 00:00:00 UTC).
+ * Internally, this is represented as the number of days from 1970-01-01.
  */
 @DeveloperApi
 class DateType private() extends AtomicType {

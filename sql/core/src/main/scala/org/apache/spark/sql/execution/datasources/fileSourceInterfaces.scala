@@ -26,7 +26,6 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompres
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -185,15 +184,6 @@ trait FileFormat {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType]
-
-  /**
-   * Prepares a read job and returns a potentially updated data source option [[Map]]. This method
-   * can be useful for collecting necessary global information for scanning input data.
-   */
-  def prepareRead(
-      sparkSession: SparkSession,
-      options: Map[String, String],
-      files: Seq[FileStatus]): Map[String, String] = options
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
@@ -399,16 +389,17 @@ private[sql] object HadoopFsRelation extends Logging {
   // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
   // start with "." are also ignored.
   def listLeafFiles(fs: FileSystem, status: FileStatus, filter: PathFilter): Array[FileStatus] = {
-    logInfo(s"Listing ${status.getPath}")
+    logTrace(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
     if (shouldFilterOut(name)) {
-      Array.empty
+      Array.empty[FileStatus]
     } else {
       val statuses = {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
         val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir, filter))
         if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
       }
+      // statuses do not have any dirs.
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus => f
 
@@ -454,7 +445,6 @@ private[sql] object HadoopFsRelation extends Logging {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
     val sparkContext = sparkSession.sparkContext
-    val sqlConf = sparkSession.sessionState.conf
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
 
@@ -471,7 +461,9 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
-        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter)).getOrElse(Array.empty)
+        // TODO: We need to avoid of using Try at here.
+        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter))
+          .getOrElse(Array.empty[FileStatus])
       }
     }.map { status =>
       val blockLocations = status match {

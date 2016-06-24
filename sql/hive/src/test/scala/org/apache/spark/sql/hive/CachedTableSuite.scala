@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -128,29 +129,33 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
-    sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
-    assertCached(table("testCacheTable"))
+    withTempTable("testCacheTable") {
+      sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
+      assertCached(table("testCacheTable"))
 
-    val rddId = rddIdOf("testCacheTable")
-    assert(
-      isMaterialized(rddId),
-      "Eagerly cached in-memory table should have already been materialized")
+      val rddId = rddIdOf("testCacheTable")
+      assert(
+        isMaterialized(rddId),
+        "Eagerly cached in-memory table should have already been materialized")
 
-    uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      uncacheTable("testCacheTable")
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
-    sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
-    assertCached(table("testCacheTable"))
+    withTempTable("testCacheTable") {
+      sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
+      assertCached(table("testCacheTable"))
 
-    val rddId = rddIdOf("testCacheTable")
-    assert(
-      isMaterialized(rddId),
-      "Eagerly cached in-memory table should have already been materialized")
+      val rddId = rddIdOf("testCacheTable")
+      assert(
+        isMaterialized(rddId),
+        "Eagerly cached in-memory table should have already been materialized")
 
-    uncacheTable("testCacheTable")
-    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+      uncacheTable("testCacheTable")
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+    }
   }
 
   test("CACHE LAZY TABLE tableName") {
@@ -172,9 +177,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE with Hive UDF") {
-    sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
-    assertCached(table("udfTest"))
-    uncacheTable("udfTest")
+    withTempTable("udfTest") {
+      sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
+      assertCached(table("udfTest"))
+      uncacheTable("udfTest")
+    }
   }
 
   test("REFRESH TABLE also needs to recache the data (data source tables)") {
@@ -265,6 +272,40 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     sql("DROP TABLE refreshTable")
     Utils.deleteRecursively(tempPath)
+  }
+
+  test("Cache/Uncache Qualified Tables") {
+    withTempDatabase { db =>
+      withTempTable("cachedTable") {
+        sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
+        sql(s"CACHE TABLE $db.cachedTable")
+        assertCached(spark.table(s"$db.cachedTable"))
+
+        activateDatabase(db) {
+          assertCached(spark.table("cachedTable"))
+          sql("UNCACHE TABLE cachedTable")
+          assert(!spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should not be cached")
+          sql(s"CACHE TABLE cachedTable")
+          assert(spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should be cached")
+        }
+
+        sql(s"UNCACHE TABLE $db.cachedTable")
+        assert(!spark.catalog.isCached(s"$db.cachedTable"),
+          "Table 'cachedTable' should not be cached")
+      }
+    }
+  }
+
+  test("Cache Table As Select - having database name") {
+    withTempDatabase { db =>
+      withTempTable("cachedTable") {
+        val e = intercept[ParseException] {
+          sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
+        }.getMessage
+        assert(e.contains("It is not allowed to add database prefix ") &&
+          e.contains("to the table name in CACHE TABLE AS SELECT"))
+      }
+    }
   }
 
   test("SPARK-11246 cache parquet table") {
