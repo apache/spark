@@ -35,8 +35,6 @@ class PartitionBatchPruningSuite
   private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE)
   private lazy val originalInMemoryPartitionPruning =
     spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING)
-  private lazy val originalInMemoryPartitionPruningMaxInSize =
-    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -44,8 +42,6 @@ class PartitionBatchPruningSuite
     spark.conf.set(SQLConf.COLUMN_BATCH_SIZE.key, 10)
     // Enable in-memory partition pruning
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
-    // Use 5 as the maximum number of literals inside IN predicate used by partition pruning
-    spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE.key, 5)
     // Enable in-memory table scan accumulators
     spark.conf.set("spark.sql.inMemoryTableScanStatistics.enable", "true")
   }
@@ -54,8 +50,6 @@ class PartitionBatchPruningSuite
     try {
       spark.conf.set(SQLConf.COLUMN_BATCH_SIZE.key, originalColumnBatchSize)
       spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, originalInMemoryPartitionPruning)
-      spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE.key,
-        originalInMemoryPartitionPruningMaxInSize)
     } finally {
       super.afterAll()
     }
@@ -136,12 +130,10 @@ class PartitionBatchPruningSuite
     "SELECT CAST(s AS INT) FROM pruningStringData WHERE s IN ('99', '150', '201')", 1, 1)(
       Seq(150))
 
-  // Unsupported large `In` predicate
-  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 2, 3, 4, 5, 6)", 5, 10)(1 to 6)
-
   // With unsupported `InSet` predicate
   {
     val seq = (1 to 30).mkString(", ")
+    checkBatchPruning(s"SELECT key FROM pruningData WHERE key IN ($seq)", 5, 10)(1 to 30)
     checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq))", 5, 10)(31 to 100)
     checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq)) AND key > 88", 1, 2) {
       89 to 100

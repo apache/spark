@@ -51,7 +51,7 @@ private[sql] case class InMemoryTableScanExec(
 
   // Returned filter predicate should return false iff it is impossible for the input expression
   // to evaluate to `true' based on statistics collected about this partition batch.
-  @transient lazy val buildFilter: PartialFunction[Expression, Expression] = {
+  @transient val buildFilter: PartialFunction[Expression, Expression] = {
     case And(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
       (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduce(_ && _)
@@ -80,8 +80,7 @@ private[sql] case class InMemoryTableScanExec(
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
 
-    case In(a: AttributeReference, list: Seq[Expression])
-      if list.length <= inMemoryPartitionPruningMaxInSize && list.forall(_.isInstanceOf[Literal]) =>
+    case In(a: AttributeReference, list: Seq[Expression]) if list.forall(_.isInstanceOf[Literal]) =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
@@ -112,8 +111,6 @@ private[sql] case class InMemoryTableScanExec(
   lazy val readBatches = sparkContext.longAccumulator
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
-  private lazy val inMemoryPartitionPruningMaxInSize =
-    sqlContext.conf.inMemoryPartitionPruningMaxInSize
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
