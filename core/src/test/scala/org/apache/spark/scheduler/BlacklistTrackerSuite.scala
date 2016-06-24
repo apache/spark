@@ -21,20 +21,11 @@ import org.mockito.Mockito.when
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.ExceptionFailure
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.TaskEndReason
 import org.apache.spark.util.ManualClock
 
 class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with MockitoSugar {
-
-  val FAILURE: TaskEndReason = new ExceptionFailure(
-      "Fake",
-      "fake failure",
-      Array.empty[StackTraceElement],
-      "fake stack trace",
-      None)
 
   val stage1 = 1
   val stage2 = 2
@@ -53,97 +44,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
 
   val clock = new ManualClock(0)
 
-  test ("expireExecutorsInBlacklist works") {
-    // expire time is set to 6s
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.ui.enabled", "false")
-      .set("spark.scheduler.executorTaskBlacklistTime", "6000")
-
-    val scheduler = mock[TaskSchedulerImpl]
-
-    val tracker = new BlacklistTracker(conf, scheduler, clock)
-    // Executor 1 into blacklist at Time 00:00:00
-    tracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1"))
-
-    clock.setTime(2000)
-    tracker.expireExecutorsInBlackList()
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1"))
-    // Executor 1 failed again at Time 00::00:02
-    tracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
-
-    clock.setTime(3000)
-    // Executor 2 failed at Time 00:00:03
-    tracker.taskFailed(stage1, partition1, taskInfo_2_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1", "2"))
-
-    clock.setTime(6000)
-    tracker.expireExecutorsInBlackList()
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1", "2"))
-
-    clock.setTime(8000)
-    tracker.expireExecutorsInBlackList()
-    assert(tracker.executorBlacklist(stage1, 1) === Set("2"))
-
-    clock.setTime(10000)
-    tracker.expireExecutorsInBlackList()
-    assert(tracker.executorBlacklist(stage1, 1) === Set())
-  }
-
-  test("blacklist feature is off by default") {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.ui.enabled", "false")
-    val scheduler = mock[TaskSchedulerImpl]
-
-    val tracker = new BlacklistTracker(conf, scheduler, clock)
-    tracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
-    tracker.taskFailed(stage1, partition1, taskInfo_2_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set())
-    assert(tracker.executorBlacklist(stage1, 1) === Set())
-
-    tracker.taskFailed(stage1, partition3, taskInfo_3_hostB)
-    assert(tracker.executorBlacklist(stage1, 3) === Set())
-    assert(tracker.nodeBlacklist() === Set())
-  }
-
-  test("SingleTask strategy works") {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.ui.enabled", "false")
-      .set("spark.scheduler.executorTaskBlacklistTime", "1000")
-    val scheduler = mock[TaskSchedulerImpl]
-
-    // Task 1 failed on both executor 1 and executor 2
-    val tracker = new BlacklistTracker(conf, scheduler, clock)
-    tracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
-    tracker.taskFailed(stage1, partition1, taskInfo_2_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1", "2"))
-    assert(tracker.executorBlacklist(stage1, 2) === Set())
-
-    // Task 1 succeeded on executor 1, so we remove executor 1 from blacklist
-    tracker.taskSucceeded(stage1, partition1, taskInfo_1_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("2"))
-    assert(tracker.nodeBlacklist() === Set())
-
-    // Task 2 succeed on executor 3, no effect on blacklist for Task 1
-    tracker.taskSucceeded(stage1, partition3, taskInfo_3_hostB)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("2"))
-
-    tracker.taskFailed(stage1, partition3, taskInfo_3_hostB)
-    assert(tracker.executorBlacklist(stage1, 3) === Set("3"))
-    assert(tracker.nodeBlacklist() === Set())
-
-    tracker.taskSucceeded(stage1, partition1, taskInfo_2_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set())
-
-    // Task 2 on Stage 2 failed on Executor 2
-    tracker.taskFailed(stage2, partition2, taskInfo_2_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set())
-    assert(tracker.executorBlacklist(stage2, 1) === Set())
-    assert(tracker.executorBlacklist(stage1, 2) === Set())
-    assert(tracker.executorBlacklist(stage2, 2) === Set("2"))
-  }
-
-  test("AdvencedSingleTask strategy works") {
+  test("Blacklisting individual tasks") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.ui.enabled", "false")
       .set("spark.scheduler.blacklist.advancedStrategy", "true")
@@ -157,29 +58,53 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
     // Task 1 failed on executor 1
     val tracker = new BlacklistTracker(conf, scheduler, clock)
     tracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1"))
-    assert(tracker.executorBlacklist(stage1, 2) === Set())
+    for {
+      executor <- (1 to 4).map(_.toString)
+      partition <- 0 until 10
+      stage <- (1 to 2)
+    } {
+      val exp = (executor == "1" && stage == stage1 && partition == 1)
+      assert(tracker.isExecutorBlacklisted(executor, stage, partition) === exp)
+    }
     assert(tracker.nodeBlacklist() === Set())
+    assert(tracker.nodeBlacklistForStage(stage1) === Set())
+    assert(tracker.nodeBlacklistForStage(stage2) === Set())
 
-    // Task 1 failed on both executor 1 & 2, so we blacklist all executors on that host,
+    // Task 1 & 2 failed on both executor 1 & 2, so we blacklist all executors on that host,
     // for all tasks for the stage.  Note the api expects multiple checks for each type of
     // blacklist -- this actually fits naturally with its use in the scheduler
-    tracker.taskFailed(stage1, partition1, taskInfo_2_hostA)
+    tracker.taskFailed(stage1, partition1,
+      new TaskInfo(2L, 1, 1, 0L, "2", "hostA", TaskLocality.ANY, false))
+    tracker.taskFailed(stage1, partition2,
+      new TaskInfo(3L, 2, 1, 0L, "2", "hostA", TaskLocality.ANY, false))
+    tracker.taskFailed(stage1, partition2,
+      new TaskInfo(4L, 2, 1, 0L, "1", "hostA", TaskLocality.ANY, false))
     // we don't explicitly return the executors in hostA here, but that is OK
-    assert(tracker.executorBlacklist(stage1, 1) === Set("1", "2"))
-    assert(tracker.executorBlacklist(stage2, 1) === Set())
+    for {
+      executor <- (1 to 4).map(_.toString)
+      stage <- (1 to 2)
+      partition <- 0 until 10
+    } {
+      withClue(s"exec = $executor; stage = $stage; part = $partition") {
+        val badExec = (executor == "1" || executor == "2")
+        val badPart = (partition == 1 || partition == 2)
+        val taskExp = (badExec && stage == stage1 && badPart)
+        assert(tracker.isExecutorBlacklisted(executor, stage, partition) === taskExp)
+        val executorExp = badExec && stage == stage1
+        assert(tracker.isExecutorBlacklisted(stage, executor) === executorExp)
+      }
+    }
     assert(tracker.nodeBlacklistForStage(stage1) === Set("hostA"))
     assert(tracker.nodeBlacklistForStage(stage2) === Set())
-    assert(tracker.nodeBlacklist() === Set("hostA"))
-
-    // Task 1 succeeded on executor 1, so we remove executor 1 from blacklist
-    tracker.taskSucceeded(stage1, partition1, taskInfo_1_hostA)
-    assert(tracker.executorBlacklist(stage1, 1) === Set("2"))
-    assert(tracker.nodeBlacklistForStage(stage1) === Set())
+    // we dont' blacklist the nodes or executors till the stages complete
     assert(tracker.nodeBlacklist() === Set())
+    assert(tracker.executorBlacklist() === Set())
 
-    // TODO clarify the semantics around executors with some successes
-    pending
+    // when the stage completes successfully, now there is sufficient evidence we've got
+    // bad executors and node
+    tracker.taskSetSucceeded(stage1)
+    assert(tracker.nodeBlacklist() === Set("hostA"))
+    assert(tracker.executorBlacklist() === Set("1", "2"))
   }
 
   def trackerFixture: BlacklistTracker = {
@@ -225,15 +150,51 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
     assert(tracker.executorBlacklist() === Set())
   }
 
+  // within one taskset, an executor fails a few times, so its blacklisted for the taskset.
+  // but if the taskset fails, we don't blacklist the executor after the stage.
+  Seq(true, false).foreach { succeedTaskSet =>
+    test(s"stage blacklist updates correctly on stage completion ($succeedTaskSet)") {
+      val tracker = trackerFixture
+      val stageId = 1 + (if (succeedTaskSet) 1 else 0)
+      (0 until 4).foreach { partition =>
+        tracker.taskFailed(stageId, partition, new TaskInfo(stageId * 4 + partition, partition, 0,
+          clock.getTimeMillis(), "1", "hostA", TaskLocality.ANY, false))
+      }
+      assert(tracker.isExecutorBlacklisted(stageId, "1"))
+      assert(tracker.executorBlacklist() === Set())
+      if (succeedTaskSet) {
+        // the task set succeeded elsewhere, so we count those failures against our executor,
+        // and blacklist it across stages
+        tracker.taskSetSucceeded(stageId)
+        assert(tracker.executorBlacklist() === Set("1"))
+      } else {
+        // the task set failed, so we don't count these failures against the executor for other
+        // stages
+        tracker.taskSetFailed(stageId)
+        assert(tracker.executorBlacklist() === Set())
+      }
+    }
+  }
+
   test("blacklisted executors and nodes get recovered with time") {
     val tracker = trackerFixture
     (0 until 4).foreach { partition =>
       tracker.taskFailed(0, partition, new TaskInfo(partition, partition, 0, clock.getTimeMillis(),
         "1", "hostA", TaskLocality.ANY, false))
     }
+    tracker.taskSetSucceeded(0)
     assert(tracker.executorBlacklist() === Set("1"))
 
-    clock.advance(1001)
+    clock.advance(tracker.EXECUTOR_RECOVERY_MILLIS + 1)
+    // TODO might want to change this to avoid the need for expiry thread, if that eliminates the
+    // need for the locks.  In which case, expiry would happen automatically.
+    tracker.expireExecutorsInBlackList()
+    assert(tracker.executorBlacklist() === Set())
+    // TODO after recovery, count is reset to 0
+    // fail one more task, but executor isn't put back into blacklist since count reset to 0
+    tracker.taskFailed(1, 0, new TaskInfo(5, 0, 0, clock.getTimeMillis(),
+      "1", "hostA", TaskLocality.ANY, false))
+    tracker.taskSetSucceeded(1)
     assert(tracker.executorBlacklist() === Set())
   }
 

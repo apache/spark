@@ -22,9 +22,8 @@ import java.util.{Timer, TimerTask}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
+import scala.collection.Set
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.language.postfixOps
 import scala.util.Random
 
@@ -258,7 +257,6 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    // TODO add executor-stage filtering as well
     // This is an optimization -- the taskSet might contain a very long list of pending tasks.
     // Rather than wasting time checking the offer against each task, and then realizing the
     // executor is blacklisted, just filter out the bad executor immediately.

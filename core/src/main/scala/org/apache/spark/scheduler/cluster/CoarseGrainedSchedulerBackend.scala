@@ -300,7 +300,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
 
       // Remove disconnected executor from blacklistTracker to keep consistency
-      scheduler.sc.blacklistTracker.removeFailedExecutors(executorId)
+      scheduler.sc.blacklistTracker.removeExecutor(executorId)
     }
 
     /**
