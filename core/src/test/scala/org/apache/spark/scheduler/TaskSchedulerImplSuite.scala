@@ -334,6 +334,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
 
     val tasks0 = taskScheduler.resourceOffers(offers).flatten
+    // these verifications are *really* tricky b/c we reference them multiple times, when we check
+    // if we need to abort any stages from unschedulability.
     verify(blacklist, atLeast(1)).nodeBlacklist()
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(0)
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(1)
@@ -390,6 +392,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     verify(blacklist, atLeast(1)).taskSetSucceeded(0)
     verify(blacklist, atLeast(1)).taskSetSucceeded(1)
     verify(blacklist, atLeast(1)).taskSetSucceeded(2)
+
+
+    // TODO another case with full node & executor blacklist, which should prevent *everything*
+    // else from being called.
+    pending
   }
 
 }

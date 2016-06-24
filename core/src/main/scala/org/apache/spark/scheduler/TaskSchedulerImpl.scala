@@ -68,7 +68,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   }
 
   val conf = sc.conf
-  // can't be a val b/c of initialization order
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
