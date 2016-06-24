@@ -21,8 +21,6 @@ import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.

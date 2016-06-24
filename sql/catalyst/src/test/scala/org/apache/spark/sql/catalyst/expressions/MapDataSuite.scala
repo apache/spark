@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class MapDataSuite extends SparkFunSuite {
 
-  test("equality tests") {
+  test("inequality tests") {
     def u(str: String): UTF8String = UTF8String.fromString(str)
 
     // test data
@@ -40,8 +40,8 @@ class MapDataSuite extends SparkFunSuite {
     val testArrayMap2 = ArrayBasedMapData(testMap2.toMap)
     val testArrayMap3 = ArrayBasedMapData(testMap3.toMap)
     val testArrayMap4 = ArrayBasedMapData(testMap4.toMap)
-    assert(testArrayMap1 === testArrayMap3)
-    assert(testArrayMap2 === testArrayMap4)
+    assert(testArrayMap1 !== testArrayMap3)
+    assert(testArrayMap2 !== testArrayMap4)
 
     // UnsafeMapData
     val unsafeConverter = UnsafeProjection.create(Array[DataType](MapType(StringType, IntegerType)))
@@ -51,7 +51,7 @@ class MapDataSuite extends SparkFunSuite {
       val unsafeRow = unsafeConverter.apply(row)
       unsafeRow.getMap(0).copy
     }
-    assert(toUnsafeMap(testArrayMap1) === toUnsafeMap(testArrayMap3))
-    assert(toUnsafeMap(testArrayMap2) === toUnsafeMap(testArrayMap4))
+    assert(toUnsafeMap(testArrayMap1) !== toUnsafeMap(testArrayMap3))
+    assert(toUnsafeMap(testArrayMap2) !== toUnsafeMap(testArrayMap4))
   }
 }

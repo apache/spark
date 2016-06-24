@@ -115,7 +115,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       new GenericArrayData(0 until length),
       new GenericArrayData(Seq.fill(length)(true))))
 
-    if (!checkResult(actual, expected)) {
+    if (!actual.zip(expected).forall { case (data, answer) => checkResult(data, answer)}) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
