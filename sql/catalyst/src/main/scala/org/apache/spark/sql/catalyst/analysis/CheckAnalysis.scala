@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet}
 import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
@@ -73,9 +73,12 @@ trait CheckAnalysis extends PredicateHelper {
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
           case g: Grouping =>
-            failAnalysis(s"grouping() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
           case g: GroupingID =>
-            failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
+
+          case c: CollectSet if c.child.dataType.isInstanceOf[MapType] =>
+            failAnalysis("collect_set() cannot have map type data")
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")

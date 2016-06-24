@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -433,6 +433,19 @@ class AnalysisErrorSuite extends AnalysisTest {
       plan,
       "It is not allowed to use an aggregate function in the argument of " +
         "another aggregate function." :: Nil)
+  }
+
+  test("we should fail analysis when we find map type data in collect_set") {
+    val dataType = MapType(StringType, IntegerType)
+    val plan =
+        Aggregate(
+          AttributeReference("a", IntegerType)(exprId = ExprId(2)) :: Nil,
+          Alias(CollectSet(AttributeReference("b", dataType)(exprId = ExprId(1)))
+            .toAggregateExpression(), "c")() :: Nil,
+          LocalRelation(
+            AttributeReference("a", IntegerType)(exprId = ExprId(2)),
+            AttributeReference("b", dataType)(exprId = ExprId(1))))
+    assertAnalysisError(plan, "collect_set() cannot have map type data" :: Nil)
   }
 
   test("Join can't work on binary and map types") {
