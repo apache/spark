@@ -523,7 +523,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      append(buffer, column.name, column.dataType.toLowerCase, column.comment.getOrElse(""))
+      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
   }
 

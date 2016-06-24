@@ -41,13 +41,13 @@ class HiveOperatorQueryableSuite extends QueryTest with TestHiveSingleton {
     checkAnswer(
       sql("select * from mydesc"),
       Seq(
-        Row("key", "int", ""),
-        Row("value", "string", "")))
+        Row("key", "int", null  ),
+        Row("value", "string", null)))
 
     checkAnswer(
       sql("select col_name, data_type, comment from mydesc"),
       Seq(
-        Row("key", "int", ""),
-        Row("value", "string", "")))
+        Row("key", "int", null),
+        Row("value", "string", null)))
   }
 }
