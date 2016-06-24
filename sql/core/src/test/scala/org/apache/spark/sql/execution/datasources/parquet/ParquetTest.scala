@@ -59,17 +59,34 @@ private[sql] trait ParquetTest extends SQLTestUtils {
   }
 
   /**
+   * Writes `df` to a Parquet file, which is then passed to `f` and will be deleted after `f`
+   * returns.
+   */
+  protected def asParquetFile
+      (df: DataFrame)
+      (f: String => Unit): Unit = {
+    withTempPath { file =>
+      df.write.parquet(file.getCanonicalPath)
+      f(file.getCanonicalPath)
+    }
+  }
+
+  /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
    * returns.
    */
   protected def withParquetFile[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
-      (f: String => Unit): Unit = {
-    withTempPath { file =>
-      spark.createDataFrame(data).write.parquet(file.getCanonicalPath)
-      f(file.getCanonicalPath)
-    }
-  }
+      (f: String => Unit): Unit = asParquetFile(spark.createDataFrame(data))(f)
+
+  /**
+   * Writes `df` to a Parquet file and reads it back as a [[DataFrame]],
+   * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
+   */
+  protected def asParquetDataFrame
+      (df: DataFrame, testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit =
+    asParquetFile(df)(path => readParquetFile(path.toString, testVectorized)(f))
 
   /**
    * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
@@ -77,8 +94,21 @@ private[sql] trait ParquetTest extends SQLTestUtils {
    */
   protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => readParquetFile(path.toString, testVectorized)(f))
+      (f: DataFrame => Unit): Unit =
+    asParquetDataFrame(spark.createDataFrame(data), testVectorized)(f)
+
+  /**
+   * Writes `df` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a
+   * temporary table named `tableName`, then call `f`. The temporary table together with the
+   * Parquet file will be dropped/deleted after `f` returns.
+   */
+  protected def asParquetTable
+      (df: DataFrame, tableName: String, testVectorized: Boolean = true)
+      (f: => Unit): Unit = {
+    asParquetDataFrame(df, testVectorized) { df =>
+      df.createOrReplaceTempView(tableName)
+      withTempView(tableName)(f)
+    }
   }
 
   /**
@@ -88,12 +118,8 @@ private[sql] trait ParquetTest extends SQLTestUtils {
    */
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], tableName: String, testVectorized: Boolean = true)
-      (f: => Unit): Unit = {
-    withParquetDataFrame(data, testVectorized) { df =>
-      df.createOrReplaceTempView(tableName)
-      withTempView(tableName)(f)
-    }
-  }
+      (f: => Unit): Unit =
+    asParquetTable(spark.createDataFrame(data), tableName, testVectorized)(f)
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {

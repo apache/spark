@@ -108,7 +108,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
-      assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
+      assertResult(2, s"Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }
 
@@ -117,7 +117,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - struct with array field") {
-    val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
+    val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1._2[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
@@ -126,7 +126,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   }
 
   test("nested data - array of struct") {
-    val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
+    val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withParquetTable(data, "t") {
       checkAnswer(sql("SELECT _1[0]._2 FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
@@ -877,6 +877,15 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         val withShortField = new StructType().add("f", ShortType)
         checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
       }
+    }
+  }
+
+  test("select function over nested data") {
+    val data = (1 to 10).map(i => Tuple1((i, s"val_$i")))
+    withParquetTable(data, "t") {
+      checkAnswer(sql("SELECT isnotnull(_1._2) FROM t"), data.map {
+        case _ => Row(true)
+      })
     }
   }
 
