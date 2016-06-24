@@ -210,24 +210,22 @@ private[spark] object GradientBoostedTrees extends Logging {
     val treesIndices = trees.indices
 
     val dataCount = remappedData.count()
-    val evaluation = remappedData
-      .map { (point: LabeledPoint) =>
-        treesIndices
-          .map(idx => {
-              val prediction = broadcastTrees.value(idx)
-                .rootNode
-                .predictImpl(point.features)
-                .prediction
-              prediction * localTreeWeights(idx)
-            }
-          )
-          .scanLeft(0.0)(_ + _).drop(1)
-          .map(prediction => loss.computeError(prediction, point.label))
+    val evaluation = remappedData.map { point =>
+      treesIndices.map { idx => {
+        val prediction = broadcastTrees.value(idx)
+          .rootNode
+          .predictImpl(point.features)
+          .prediction
+        prediction * localTreeWeights(idx)
       }
+      }
+        .scanLeft(0.0)(_ + _).drop(1)
+        .map(prediction => loss.computeError(prediction, point.label))
+    }
       .aggregate(treesIndices.map(_ => 0.0))(
         (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
         (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
-      .map(d => d / dataCount)
+      .map(_ / dataCount)
     broadcastTrees.destroy()
     evaluation.toArray
   }
