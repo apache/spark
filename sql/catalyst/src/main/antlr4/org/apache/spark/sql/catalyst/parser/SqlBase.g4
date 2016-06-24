@@ -113,8 +113,9 @@ statement
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
-    | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
-    | UNCACHE TABLE identifier                                         #uncacheTable
+    | REFRESH .*?                                                      #refreshResource
+    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
@@ -202,7 +203,7 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
+    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
     ;
 

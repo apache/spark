@@ -129,7 +129,7 @@ case class ShuffleExchange(
 
 object ShuffleExchange {
   def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchange = {
-    ShuffleExchange(newPartitioning, child, coordinator = None: Option[ExchangeCoordinator])
+    ShuffleExchange(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
   }
 
   /**

@@ -21,12 +21,12 @@ import warnings
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
-from pyspark.ml.regression import (
-    RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
+from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
+    RandomForestParams, TreeEnsembleModels, TreeEnsembleParams
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -49,6 +49,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
                          HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Logistic regression.
     Currently, this class only supports binary classification.
 
@@ -96,7 +98,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
-                      " If threshold and thresholds are both set, they must match.",
+                      " If threshold and thresholds are both set, they must match." +
+                      "e.g. if threshold is p, then thresholds must be equal to [1-p, p].",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -154,7 +157,12 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @since("1.4.0")
     def getThreshold(self):
         """
-        Gets the value of threshold or its default value.
+        Get threshold for binary classification.
+
+        If :py:attr:`thresholds` is set with length 2 (i.e., binary classification),
+        this returns the equivalent threshold:
+        :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
+        Otherwise, returns :py:attr:`threshold` if set or its default value if unset.
         """
         self._checkThresholdConsistency()
         if self.isSet(self.thresholds):
@@ -208,13 +216,15 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
 class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by LogisticRegression.
 
     .. versionadded:: 1.3.0
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def coefficients(self):
         """
         Model coefficients.
@@ -491,6 +501,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                              JavaMLReadable):
     """
+    .. note:: Experimental
+
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -587,6 +599,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 @inherit_doc
 class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by DecisionTreeClassifier.
 
     .. versionadded:: 1.4.0
@@ -620,6 +634,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              RandomForestParams, TreeClassifierParams, HasCheckpointInterval,
                              JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -685,7 +701,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
+                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="gini", numTrees=20, featureSubsetStrategy="auto")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -714,6 +730,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by RandomForestClassifier.
 
     .. versionadded:: 1.4.0
@@ -746,6 +764,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                     GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
+    .. note:: Experimental
+
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
     It supports binary labels, as well as both continuous and categorical features.
@@ -798,6 +818,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     True
     >>> model.treeWeights == model2.treeWeights
     True
+    >>> model.trees
+    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
 
     .. versionadded:: 1.4.0
     """
@@ -823,7 +845,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
+                         lossType="logistic", maxIter=20, stepSize=0.1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -863,6 +885,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by GBTClassifier.
 
     .. versionadded:: 1.4.0
@@ -894,6 +918,8 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
                  HasRawPredictionCol, HasThresholds, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. `Multinomial NB
     <http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html>`_
@@ -1017,13 +1043,15 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
 
 class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by NaiveBayes.
 
     .. versionadded:: 1.5.0
     """
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def pi(self):
         """
         log of class priors.
@@ -1031,7 +1059,7 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("pi")
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def theta(self):
         """
         log of class conditional probabilities.
@@ -1044,6 +1072,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                                      HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
                                      JavaMLReadable):
     """
+    .. note:: Experimental
+
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
     Number of inputs has to be equal to the size of feature vectors.
@@ -1214,6 +1244,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
 class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by MultilayerPerceptronClassifier.
 
     .. versionadded:: 1.6.0
@@ -1228,7 +1260,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLR
         return self._call_java("javaLayers")
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def weights(self):
         """
         vector of initial weights for the model that consists of the weights of layers.
@@ -1263,6 +1295,8 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 @inherit_doc
 class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     """
+    .. note:: Experimental
+
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
     For a multiclass classification with k classes, train k models (one per class).
@@ -1417,6 +1451,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
 class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """
+    .. note:: Experimental
+
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
     Each example is scored against all k models, and the model with the highest score
