@@ -146,7 +146,7 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 }
 
 /**
- * A rule to do various checks before inserting into or writing to a data source table.
+ * A rule to do various checks before inserting into or writing to a table.
  */
 private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   extends (LogicalPlan => Unit) {
@@ -208,9 +208,21 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         failAnalysis(s"$l does not allow insertion.")
 
       case c: CreateTableCommand =>
+        val allColNamesInSchema = c.table.schema.map(_.name)
+        val colNames = allColNamesInSchema.diff(c.table.partitionColumnNames)
+        val partitionColumnNames = c.table.partitionColumnNames
         // Duplicates are not allowed in partitionBy
         // Todo: when bucketBy and sortBy are supported, we also need to ban the duplication.
-        checkDuplicates(c.table.partitionColumnNames, "Partition")
+        checkDuplicates(partitionColumnNames, "Partition")
+        // Ensuring whether no duplicate name is used in table definition
+        checkDuplicates(colNames, s"table definition of ${c.table.identifier}")
+        // For non-data-source tables, partition columns must not be part of the schema
+        val badPartCols = partitionColumnNames.toSet.intersect(colNames.toSet)
+        if (badPartCols.nonEmpty) {
+          failAnalysis(s"Operation not allowed: Partition columns may not be specified in the " +
+            "schema: " + badPartCols.map("`" + _ + "`").mkString(","))
+        }
+
 
       case c: CreateTableUsing =>
         // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.

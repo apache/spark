@@ -441,6 +441,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if p.resolved => p
 
       case p @ CreateHiveTableAsSelectLogicalPlan(table, child, allowExisting) =>
+        // Ensuring whether no duplicate name is used in table definition
+        checkDuplicates(child.output.map(_.name), s"table definition of ${table.identifier}")
+
         val desc = if (table.storage.serde.isEmpty) {
           // add default serde
           table.withNewStorage(
@@ -455,6 +458,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
           child,
           allowExisting)
+    }
+
+    private def checkDuplicates(columnNames: Seq[String], columnType: String): Unit = {
+      val duplicateColumns = columnNames.groupBy(_.toLowerCase).collect {
+        case (x, ys) if ys.length > 1 => s"`$x`"
+      }
+      if (duplicateColumns.nonEmpty) {
+        throw new AnalysisException(
+          s"Found duplicate column(s) in $columnType: ${duplicateColumns.mkString(", ")}")
+      }
     }
   }
 }
