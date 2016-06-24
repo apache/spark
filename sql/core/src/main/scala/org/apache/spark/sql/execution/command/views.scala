@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
 
@@ -41,16 +42,16 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
  *                 at the end of current Spark session. Existing permanent relations with the same
  *                 name are not visible to the current session while the temporary view exists,
  *                 unless they are specified with full qualified table name with database prefix.
- * @param sql the original sql
  */
 case class CreateViewCommand(
     tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    isTemporary: Boolean,
-    sql: String)
+    isTemporary: Boolean)
   extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
   // TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is
   // different from Hive and may not work for some cases like create view on self join.
@@ -78,7 +79,7 @@ case class CreateViewCommand(
   if (isTemporary && tableDesc.identifier.database.isDefined) {
     val database = tableDesc.identifier.database.get
     throw new AnalysisException(
-      s"It is not allowed to add database prefix ${database} for the TEMPORARY view name.")
+      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

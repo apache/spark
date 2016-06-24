@@ -96,6 +96,13 @@
                 <include>com.fasterxml.jackson.**</include>
               </includes>
             </relocation>
+            <relocation>
+              <pattern>io.netty</pattern>
+              <shadedPattern>${spark.shade.packageName}.io.netty</shadedPattern>
+              <includes>
+                <include>io.netty.**</include>
+              </includes>
+            </relocation>
           </relocations>
         </configuration>
         <executions>

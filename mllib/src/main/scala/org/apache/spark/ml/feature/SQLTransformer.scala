@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Experimental
 @Since("1.6.0")
-class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transformer
+class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
   with DefaultParamsWritable {
 
   @Since("1.6.0")

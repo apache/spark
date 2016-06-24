@@ -591,6 +591,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         val spark = SparkSession.builder
           .master("local[2]")
           .appName("ALSCleanerSuite")
+          .sparkContext(sc)
           .getOrCreate()
         import spark.implicits._
         val als = new ALS()
@@ -606,7 +607,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         val pattern = "shuffle_(\\d+)_.+\\.data".r
         val rddIds = resultingFiles.flatMap { f =>
           pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
-        assert(rddIds.toSet.size === 4)
+        assert(rddIds.size === 4)
       } finally {
         sc.stop()
       }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util
 
 import scala.util.control.NonFatal
 
@@ -37,7 +38,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * Allows the creations of tests that execute the same query against both hive
  * and catalyst, comparing the results.
  *
- * The "golden" results from Hive are cached in an retrieved both from the classpath and
+ * The "golden" results from Hive are cached in and retrieved both from the classpath and
  * [[answerCache]] to speed up testing.
  *
  * See the documentation of public vals in this class for information on how test execution can be
@@ -347,6 +348,7 @@ abstract class HiveComparisonTest
                 queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
+                case _: InsertIntoTable => ()
                 case _: LogicalInsertIntoHiveTable => ()
               }.nonEmpty
 
@@ -497,6 +499,8 @@ abstract class HiveComparisonTest
         }
       }
 
+      val savedSettings = new util.HashMap[String, String]
+      savedSettings.putAll(TestHive.conf.settings)
       try {
         try {
           if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
@@ -515,6 +519,9 @@ abstract class HiveComparisonTest
         }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
+      } finally {
+        TestHive.conf.settings.clear()
+        TestHive.conf.settings.putAll(savedSettings)
       }
     }
   }

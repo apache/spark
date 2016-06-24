@@ -36,7 +36,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A data source for reading text files.
  */
-class TextFileFormat extends FileFormat with DataSourceRegister {
+class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 
@@ -92,20 +92,31 @@ class TextFileFormat extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    assert(
+      requiredSchema.length <= 1,
+      "Text data source only produces a single data column named \"value\".")
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val unsafeRow = new UnsafeRow(1)
-      val bufferHolder = new BufferHolder(unsafeRow)
-      val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+      val reader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
 
-      new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
-        // Writes to an UnsafeRow directly
-        bufferHolder.reset()
-        unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-        unsafeRow.setTotalSize(bufferHolder.totalSize())
-        unsafeRow
+      if (requiredSchema.isEmpty) {
+        val emptyUnsafeRow = new UnsafeRow(0)
+        reader.map(_ => emptyUnsafeRow)
+      } else {
+        val unsafeRow = new UnsafeRow(1)
+        val bufferHolder = new BufferHolder(unsafeRow)
+        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+
+        reader.map { line =>
+          // Writes to an UnsafeRow directly
+          bufferHolder.reset()
+          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+          unsafeRow.setTotalSize(bufferHolder.totalSize())
+          unsafeRow
+        }
       }
     }
   }

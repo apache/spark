@@ -309,16 +309,35 @@ trait CheckAnalysis extends PredicateHelper {
           case s: SimpleCatalogRelation =>
             failAnalysis(
               s"""
-                 |Please enable Hive support when selecting the regular tables:
+                 |Hive support is required to select over the following tables:
                  |${s.catalogTable.identifier}
                """.stripMargin)
 
+          // TODO: We need to consolidate this kind of checks for InsertIntoTable
+          // with the rule of PreWriteCheck defined in extendedCheckRules.
           case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
             failAnalysis(
               s"""
-                 |Please enable Hive support when inserting the regular tables:
+                 |Hive support is required to insert into the following tables:
                  |${s.catalogTable.identifier}
                """.stripMargin)
+
+          case InsertIntoTable(t, _, _, _, _)
+            if !t.isInstanceOf[LeafNode] ||
+              t == OneRowRelation ||
+              t.isInstanceOf[LocalRelation] =>
+            failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+
+          case i @ InsertIntoTable(table, partitions, query, _, _) =>
+            val numStaticPartitions = partitions.values.count(_.isDefined)
+            if (table.output.size != (query.output.size + numStaticPartitions)) {
+              failAnalysis(
+                s"$table requires that the data to be inserted have the same number of " +
+                  s"columns as the target table: target table has ${table.output.size} " +
+                  s"column(s) but the inserted data has " +
+                  s"${query.output.size + numStaticPartitions} column(s), including " +
+                  s"$numStaticPartitions partition column(s) having constant value(s).")
+            }
 
           case o if !o.resolved =>
             failAnalysis(

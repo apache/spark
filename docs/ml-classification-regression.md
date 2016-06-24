@@ -62,6 +62,8 @@ For more background and more details about the implementation, refer to the docu
 
   > The current implementation of logistic regression in `spark.ml` only supports binary classes. Support for multiclass regression will be added in the future.
 
+  > When fitting LogisticRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
+
 **Example**
 
 The following example shows how to train a logistic regression model
@@ -350,6 +352,8 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 The interface for working with linear regression models and model
 summaries is similar to the logistic regression case.
+
+  > When fitting LinearRegressionModel without intercept on dataset with constant nonzero column by "l-bfgs" solver, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
 
 **Example**
 
@@ -666,6 +670,8 @@ The optimization algorithm underlying the implementation is L-BFGS.
 The implementation matches the result from R's survival function 
 [survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)
 
+  > When fitting AFTSurvivalRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is different from R survival::survreg.
+
 **Example**
 
 <div class="codetabs">
@@ -682,6 +688,76 @@ The implementation matches the result from R's survival function
 {% include_example python/ml/aft_survival_regression.py %}
 </div>
 
+</div>
+
+
+## Isotonic regression
+[Isotonic regression](http://en.wikipedia.org/wiki/Isotonic_regression)
+belongs to the family of regression algorithms. Formally isotonic regression is a problem where
+given a finite set of real numbers `$Y = {y_1, y_2, ..., y_n}$` representing observed responses
+and `$X = {x_1, x_2, ..., x_n}$` the unknown response values to be fitted
+finding a function that minimises
+
+`\begin{equation}
+  f(x) = \sum_{i=1}^n w_i (y_i - x_i)^2
+\end{equation}`
+
+with respect to complete order subject to
+`$x_1\le x_2\le ...\le x_n$` where `$w_i$` are positive weights.
+The resulting function is called isotonic regression and it is unique.
+It can be viewed as least squares problem under order restriction.
+Essentially isotonic regression is a
+[monotonic function](http://en.wikipedia.org/wiki/Monotonic_function)
+best fitting the original data points.
+
+We implement a
+[pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
+which uses an approach to
+[parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
+The training input is a DataFrame which contains three columns
+label, features and weight. Additionally IsotonicRegression algorithm has one
+optional parameter called $isotonic$ defaulting to true.
+This argument specifies if the isotonic regression is
+isotonic (monotonically increasing) or antitonic (monotonically decreasing).
+
+Training returns an IsotonicRegressionModel that can be used to predict
+labels for both known and unknown features. The result of isotonic regression
+is treated as piecewise linear function. The rules for prediction therefore are:
+
+* If the prediction input exactly matches a training feature
+  then associated prediction is returned. In case there are multiple predictions with the same
+  feature then one of them is returned. Which one is undefined
+  (same as java.util.Arrays.binarySearch).
+* If the prediction input is lower or higher than all training features
+  then prediction with lowest or highest feature is returned respectively.
+  In case there are multiple predictions with the same feature
+  then the lowest or highest is returned respectively.
+* If the prediction input falls between two training features then prediction is treated
+  as piecewise linear function and interpolated value is calculated from the
+  predictions of the two closest features. In case there are multiple values
+  with the same feature then the same rules as in previous point are used.
+
+### Examples
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.ml.regression.IsotonicRegression) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/IsotonicRegressionExample.scala %}
+</div>
+<div data-lang="java" markdown="1">
+
+Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/ml/regression/IsotonicRegression.html) for details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaIsotonicRegressionExample.java %}
+</div>
+<div data-lang="python" markdown="1">
+
+Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspark.ml.regression.IsotonicRegression) for more details on the API.
+
+{% include_example python/ml/isotonic_regression_example.py %}
+</div>
 </div>
 
 
@@ -809,7 +885,7 @@ The main differences between this API and the [original MLlib ensembles API](mll
 ## Random Forests
 
 [Random forests](http://en.wikipedia.org/wiki/Random_forest)
-are ensembles of [decision trees](ml-decision-tree.html).
+are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 Random forests combine many decision trees in order to reduce the risk of overfitting.
 The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
@@ -890,7 +966,7 @@ All output columns are optional; to exclude an output column, set its correspond
 ## Gradient-Boosted Trees (GBTs)
 
 [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
-are ensembles of [decision trees](ml-decision-tree.html).
+are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 GBTs iteratively train decision trees in order to minimize a loss function.
 The `spark.ml` implementation supports GBTs for binary classification and for regression,
 using both continuous and categorical features.

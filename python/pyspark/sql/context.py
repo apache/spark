@@ -430,12 +430,27 @@ class SQLContext(object):
 
     @property
     @since(2.0)
-    def streams(self):
-        """Returns a :class:`ContinuousQueryManager` that allows managing all the
-        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
+    def readStream(self):
         """
-        from pyspark.sql.streaming import ContinuousQueryManager
-        return ContinuousQueryManager(self._ssql_ctx.streams())
+        Returns a :class:`DataStreamReader` that can be used to read data streams
+        as a streaming :class:`DataFrame`.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamReader`
+        """
+        return DataStreamReader(self._wrapped)
+
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`StreamingQueryManager` that allows managing all the
+        :class:`StreamingQuery` StreamingQueries active on `this` context.
+
+        .. note:: Experimental.
+        """
+        from pyspark.sql.streaming import StreamingQueryManager
+        return StreamingQueryManager(self._ssql_ctx.streams())
 
 
 class HiveContext(SQLContext):

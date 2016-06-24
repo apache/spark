@@ -91,7 +91,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an positive even number of arguments.")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
     } else if (keys.map(_.dataType).distinct.length > 1) {
       TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
         "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))

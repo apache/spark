@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreprocessTableInsertion, ResolveDataSource}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -110,9 +111,9 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        PreInsertCastAndRename ::
+        PreprocessTableInsertion(conf) ::
         new FindDataSourceTable(sparkSession) ::
-        DataSourceAnalysis ::
+        DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
@@ -142,10 +143,10 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
-   * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
+   * Interface to start and stop [[StreamingQuery]]s.
    */
-  lazy val continuousQueryManager: ContinuousQueryManager = {
-    new ContinuousQueryManager(sparkSession)
+  lazy val streamingQueryManager: StreamingQueryManager = {
+    new StreamingQueryManager(sparkSession)
   }
 
   private val jarClassLoader: NonClosableMutableURLClassLoader =

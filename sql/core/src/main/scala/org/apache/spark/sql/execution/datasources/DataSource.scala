@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.datasources
 
@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
 
@@ -131,28 +132,20 @@ case class DataSource(
               // Found the data source using fully qualified path
               dataSource
             case Failure(error) =>
-              if (error.isInstanceOf[ClassNotFoundException]) {
-                val className = error.getMessage
-                if (spark2RemovedClasses.contains(className)) {
-                  throw new ClassNotFoundException(s"$className is removed in Spark 2.0. " +
-                    "Please check if your library is compatible with Spark 2.0")
-                }
-              }
-              if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-                throw new ClassNotFoundException(
-                  "The ORC data source must be used with Hive support enabled.", error)
+              if (provider.toLowerCase == "orc" ||
+                  provider.startsWith("org.apache.spark.sql.hive.orc")) {
+                throw new AnalysisException(
+                  "The ORC data source must be used with Hive support enabled")
+              } else if (provider.toLowerCase == "avro" ||
+                  provider == "com.databricks.spark.avro") {
+                throw new AnalysisException(
+                  s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
+                    "package http://spark-packages.org/package/databricks/spark-avro")
               } else {
-                if (provider == "avro" || provider == "com.databricks.spark.avro") {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please use Spark package " +
-                      "http://spark-packages.org/package/databricks/spark-avro",
-                    error)
-                } else {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
-                    error)
-                }
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please find packages at " +
+                    "http://spark-packages.org",
+                  error)
               }
           }
         } catch {
@@ -248,15 +241,20 @@ case class DataSource(
   }
 
   /** Returns a sink that can be used to continually write data. */
-  def createSink(): Sink = {
+  def createSink(outputMode: OutputMode): Sink = {
     providingClass.newInstance() match {
-      case s: StreamSinkProvider => s.createSink(sparkSession.sqlContext, options, partitionColumns)
+      case s: StreamSinkProvider =>
+        s.createSink(sparkSession.sqlContext, options, partitionColumns, outputMode)
 
       case parquet: parquet.ParquetFileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        if (outputMode != OutputMode.Append) {
+          throw new IllegalArgumentException(
+            s"Data source $className does not support $outputMode output mode")
+        }
         new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
 
       case _ =>
@@ -388,9 +386,6 @@ case class DataSource(
               "It must be specified manually")
         }
 
-        val enrichedOptions =
-          format.prepareRead(sparkSession, caseInsensitiveOptions, fileCatalog.allFiles())
-
         HadoopFsRelation(
           sparkSession,
           fileCatalog,
@@ -398,7 +393,7 @@ case class DataSource(
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          enrichedOptions)
+          caseInsensitiveOptions)
 
       case _ =>
         throw new AnalysisException(
@@ -434,32 +429,32 @@ case class DataSource(
         }
 
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-        PartitioningUtils.validatePartitionColumnDataTypes(
+        PartitioningUtils.validatePartitionColumn(
           data.schema, partitionColumns, caseSensitive)
 
         // If we are appending to a table that already exists, make sure the partitioning matches
         // up.  If we fail to load the table for whatever reason, ignore the check.
         if (mode == SaveMode.Append) {
-          val existingPartitionColumnSet = try {
-            Some(
-              resolveRelation()
-                .asInstanceOf[HadoopFsRelation]
-                .location
-                .partitionSpec()
-                .partitionColumns
-                .fieldNames
-                .toSet)
-          } catch {
-            case e: Exception =>
-              None
-          }
-
-          existingPartitionColumnSet.foreach { ex =>
-            if (ex.map(_.toLowerCase) != partitionColumns.map(_.toLowerCase()).toSet) {
-              throw new AnalysisException(
-                s"Requested partitioning does not equal existing partitioning: " +
-                s"$ex != ${partitionColumns.toSet}.")
-            }
+          val existingPartitionColumns = Try {
+            resolveRelation()
+              .asInstanceOf[HadoopFsRelation]
+              .location
+              .partitionSpec()
+              .partitionColumns
+              .fieldNames
+              .toSeq
+          }.getOrElse(Seq.empty[String])
+          // TODO: Case sensitivity.
+          val sameColumns =
+            existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
+          if (existingPartitionColumns.size > 0 && !sameColumns) {
+            throw new AnalysisException(
+              s"""Requested partitioning does not match existing partitioning.
+                 |Existing partitioning columns:
+                 |  ${existingPartitionColumns.mkString(", ")}
+                 |Requested partitioning columns:
+                 |  ${partitionColumns.mkString(", ")}
+                 |""".stripMargin)
           }
         }
 
