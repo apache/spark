@@ -363,6 +363,13 @@ class SQLTests(ReusedPySparkTestCase):
             .select(my_add(col("k"), col("s")).alias("t"))
         self.assertEqual(sel.collect(), [Row(t=4), Row(t=3)])
 
+    def test_udf_in_generate(self):
+        from pyspark.sql.functions import udf, explode
+        df = self.spark.range(5)
+        f = udf(lambda x: list(range(x)), ArrayType(LongType()))
+        row = df.select(explode(f(*df))).groupBy().sum().first()
+        self.assertEqual(row[0], 10)
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
