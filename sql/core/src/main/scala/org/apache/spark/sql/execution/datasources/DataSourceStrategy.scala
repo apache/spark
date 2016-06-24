@@ -514,9 +514,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Catalyst predicate expressions that cannot be converted to data source filters.
     val nonconvertiblePredicates = predicates.filterNot(translatedMap.contains)
 
-    // Data source filters that cannot be handled by `relation`. The semantic of a unhandled filter
-    // at here is that a data source may not be able to apply this filter to every row
-    // of the underlying dataset.
+    // Data source filters that cannot be handled by `relation`. An unhandled filter means
+    // the data source cannot guarantee the rows returned can pass the filter.
+    // As a result we must return it so Spark can plan an extra filter operator.
     val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
     val unhandledPredicates = translatedMap.filter { case (p, f) =>
       unhandledFilters.contains(f)
