@@ -162,7 +162,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
-        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        val idx = notNullPreds.indexWhere { n =>
+          n.asInstanceOf[IsNotNull].child.references.contains(r)
+        }
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
