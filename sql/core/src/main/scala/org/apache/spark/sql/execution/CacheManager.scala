@@ -114,7 +114,7 @@ class CacheManager extends Logging {
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     val found = dataIndex >= 0
     if (found) {
-      cachedData(dataIndex).cachedRepresentation.unpersist(blocking)
+      cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
       cachedData.remove(dataIndex)
     }
     found
@@ -172,7 +172,7 @@ class CacheManager extends Logging {
       case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
         val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
         if (dataIndex >= 0) {
-          data.cachedRepresentation.unpersist()
+          data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
           cachedData.remove(dataIndex)
         }
         sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
