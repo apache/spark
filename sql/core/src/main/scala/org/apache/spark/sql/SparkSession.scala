@@ -326,8 +326,14 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    val encoder = Encoders.bean(beanClass).asInstanceOf[Encoder[AnyRef]]
-    Dataset.ofRows(self, ExistingRDD(rdd.asInstanceOf[RDD[AnyRef]])(self)(encoder))
+    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
+    val className = beanClass.getName
+    val rowRdd = rdd.mapPartitions { iter =>
+    // BeanInfo is not serializable so we must rediscover it remotely for each partition.
+      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
+      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
+    }
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
   }
 
   /**
