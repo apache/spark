@@ -10,7 +10,7 @@ export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
 export("sparkR.session.stop")
-export("conf")
+export("sparkR.conf")
 export("print.jobj")
 
 export("sparkRSQL.init",

@@ -113,23 +113,24 @@ infer_type <- function(x) {
 #' Get Runtime Config from the current active SparkSession
 #'
 #' Get Runtime Config from the current active SparkSession.
+#' To change SparkSession Runtime Config, please see `sparkR.session()`.
 #'
 #' @param key (optional) The key of the config to get, if omitted, all config is returned
 #' @param defaultValue (optional) The default value of the config to return if they config is not
 #' set, if omitted, the call fails if the config key is not set
 #' @return a list of config values with keys as their names
-#' @rdname conf
-#' @name conf
+#' @rdname sparkR.conf
+#' @name sparkR.conf
 #' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
-#' allConfigs <- conf()
-#' masterValue <- unlist(conf("spark.master"))
-#' namedConfig <- conf("spark.executor.memory", "0g")
+#' allConfigs <- sparkR.conf()
+#' masterValue <- unlist(sparkR.conf("spark.master"))
+#' namedConfig <- sparkR.conf("spark.executor.memory", "0g")
 #' }
-#' @note conf since 2.0.0
-conf <- function(key, defaultValue) {
+#' @note sparkR.conf since 2.0.0
+sparkR.conf <- function(key, defaultValue) {
   sparkSession <- getSparkSession()
   if (missing(key)) {
     m <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSessionConf", sparkSession)

@@ -2378,12 +2378,12 @@ test_that("Setting and getting config on SparkSession", {
   names(l) <- property
   sparkR.session(sparkConfig = l)
 
-  newValue <- unlist(conf(property, ""), use.names = FALSE)
+  newValue <- unlist(sparkR.conf(property, ""), use.names = FALSE)
   expect_equal(value2, newValue)
 
   value <- as.character(runif(1))
   sparkR.session(spark.app.name = "sparkSession test", spark.testing.r.session.r = value)
-  allconf <- conf()
+  allconf <- sparkR.conf()
   appNameValue <- allconf[["spark.app.name"]]
   testValue <- allconf[["spark.testing.r.session.r"]]
   expect_equal(appNameValue, "sparkSession test")
