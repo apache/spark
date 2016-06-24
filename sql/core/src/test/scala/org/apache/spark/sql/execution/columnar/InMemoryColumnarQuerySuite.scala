@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.internal.SQLConf
@@ -429,6 +430,20 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         assert(inMemoryRelation.cachedColumnBatches == null)
         assert(inMemoryRelation.cachedColumnBuffers != null)
       }
+      // Test unpersist and recaching
+      def rdd: RDD[_] =
+        if (useColumnBatches && !useComplexSchema) {
+          inMemoryRelation.cachedColumnBatches
+        } else {
+          inMemoryRelation.cachedColumnBuffers
+        }
+      assert(rdd != null)
+      assert(rdd.getStorageLevel == MEMORY_ONLY)
+      inMemoryRelation.recache()
+      assert(rdd.getStorageLevel == MEMORY_ONLY)
+      inMemoryRelation.unpersist(blocking = true)
+      assert(inMemoryRelation.cachedColumnBatches == null)
+      assert(inMemoryRelation.cachedColumnBuffers == null)
     }
   }
 
