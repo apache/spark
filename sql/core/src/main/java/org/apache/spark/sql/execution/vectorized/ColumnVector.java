@@ -20,7 +20,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
 
@@ -100,7 +99,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public ArrayData copy() {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     // TODO: this is extremely expensive.
@@ -171,7 +170,7 @@ public abstract class ColumnVector implements AutoCloseable {
           }
         }
       } else {
-        throw new NotImplementedException("Type " + dt);
+        throw new UnsupportedOperationException("Type " + dt);
       }
       return list;
     }
@@ -181,7 +180,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -189,7 +188,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public short getShort(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -200,7 +199,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public float getFloat(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -240,12 +239,12 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
@@ -562,7 +561,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public MapData getMap(int ordinal) {
-    throw new NotImplementedException();
+    throw new UnsupportedOperationException();
   }
 
   /**
