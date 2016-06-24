@@ -196,9 +196,9 @@ setMethod("showDF",
           function(x, numRows = 20, truncate = TRUE) {
             truncate2 <- as.numeric(truncate)
             if (truncate2 == 1) {
-                s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
             } else {
-                s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
             }
             cat(s)
           })

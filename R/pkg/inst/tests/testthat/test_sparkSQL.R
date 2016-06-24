@@ -1582,7 +1582,15 @@ test_that("showDF()", {
                     "|  30|   Andy|\n",
                     "|  19| Justin|\n",
                     "+----+-------+\n", sep = "")
+  expected2 <- paste("+---+----+\n",
+                     "|age|name|\n",
+                     "+---+----+\n",
+                     "|nul| Mic|\n",
+                     "| 30| And|\n",
+                     "| 19| Jus|\n",
+                     "+---+----+\n", sep = "")
   expect_output(showDF(df), expected)
+  expect_output(showDF(df, truncate = 3), expected2)
 })
 
 test_that("isLocal()", {
