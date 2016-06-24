@@ -15,8 +15,17 @@
  * limitations under the License.
  */
 
+package org.apache.spark.mllib;
+
+import org.apache.spark.annotation.AlphaComponent;
+
 /**
- * DataFrame-based machine learning APIs to let users quickly assemble and configure practical
- * machine learning pipelines.
+ * A dummy class as a workaround to show the package doc of <code>spark.mllib</code> in generated
+ * Java API docs.
+ * @see <a href="http://bugs.java.com/bugdatabase/view_bug.do?bug_id=4492654" target="_blank">
+ *      JDK-4492654</a>
  */
-package org.apache.spark.ml;
+@AlphaComponent
+public class JavaPackage {
+  private JavaPackage() {}
+}

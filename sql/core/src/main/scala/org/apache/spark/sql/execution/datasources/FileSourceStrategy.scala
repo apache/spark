@@ -22,8 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -57,7 +58,7 @@ import org.apache.spark.sql.execution.SparkPlan
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
-      l @ LogicalRelation(files: HadoopFsRelation, _, table)) =>
+      l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -77,14 +78,15 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       }
 
       val partitionColumns =
-        l.resolve(files.partitionSchema, files.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(
+          fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       val dataColumns =
-        l.resolve(files.dataSchema, files.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
@@ -93,7 +95,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val afterScanFilters = filterSet -- partitionKeyFilters
       logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
 
-      val selectedPartitions = files.location.listFiles(partitionKeyFilters.toSeq)
+      val selectedPartitions = fsRelation.location.listFiles(partitionKeyFilters.toSeq)
 
       val filterAttributes = AttributeSet(afterScanFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
@@ -109,113 +111,35 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
       logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
-      val readFile = files.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = files.sparkSession,
-        dataSchema = files.dataSchema,
-        partitionSchema = files.partitionSchema,
-        requiredSchema = prunedDataSchema,
-        filters = pushedDownFilters,
-        options = files.options,
-        hadoopConf = files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))
+      val readFile: (PartitionedFile) => Iterator[InternalRow] =
+        fsRelation.fileFormat.buildReaderWithPartitionValues(
+          sparkSession = fsRelation.sparkSession,
+          dataSchema = fsRelation.dataSchema,
+          partitionSchema = fsRelation.partitionSchema,
+          requiredSchema = prunedDataSchema,
+          filters = pushedDownFilters,
+          options = fsRelation.options,
+          hadoopConf =
+            fsRelation.sparkSession.sessionState.newHadoopConfWithOptions(fsRelation.options))
 
-      val plannedPartitions = files.bucketSpec match {
-        case Some(bucketing) if files.sparkSession.sessionState.conf.bucketingEnabled =>
-          logInfo(s"Planning with ${bucketing.numBuckets} buckets")
-          val bucketed =
-            selectedPartitions.flatMap { p =>
-              p.files.map { f =>
-                val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-                PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
-              }
-            }.groupBy { f =>
-              BucketingUtils
-                .getBucketId(new Path(f.filePath).getName)
-                .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
-            }
-
-          (0 until bucketing.numBuckets).map { bucketId =>
-            FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
-          }
-
+      val rdd = fsRelation.bucketSpec match {
+        case Some(bucketing) if fsRelation.sparkSession.sessionState.conf.bucketingEnabled =>
+          createBucketedReadRDD(bucketing, readFile, selectedPartitions, fsRelation)
         case _ =>
-          val defaultMaxSplitBytes = files.sparkSession.sessionState.conf.filesMaxPartitionBytes
-          val openCostInBytes = files.sparkSession.sessionState.conf.filesOpenCostInBytes
-          val defaultParallelism = files.sparkSession.sparkContext.defaultParallelism
-          val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-          val bytesPerCore = totalBytes / defaultParallelism
-          val maxSplitBytes = Math.min(defaultMaxSplitBytes,
-            Math.max(openCostInBytes, bytesPerCore))
-          logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
-            s"open cost is considered as scanning $openCostInBytes bytes.")
-
-          val splitFiles = selectedPartitions.flatMap { partition =>
-            partition.files.flatMap { file =>
-              val blockLocations = getBlockLocations(file)
-              if (files.fileFormat.isSplitable(files.sparkSession, files.options, file.getPath)) {
-                (0L until file.getLen by maxSplitBytes).map { offset =>
-                  val remaining = file.getLen - offset
-                  val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                  val hosts = getBlockHosts(blockLocations, offset, size)
-                  PartitionedFile(
-                    partition.values, file.getPath.toUri.toString, offset, size, hosts)
-                }
-              } else {
-                val hosts = getBlockHosts(blockLocations, 0, file.getLen)
-                Seq(PartitionedFile(
-                  partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
-              }
-            }
-          }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
-
-          val partitions = new ArrayBuffer[FilePartition]
-          val currentFiles = new ArrayBuffer[PartitionedFile]
-          var currentSize = 0L
-
-          /** Add the given file to the current partition. */
-          def addFile(file: PartitionedFile): Unit = {
-            currentSize += file.length + openCostInBytes
-            currentFiles.append(file)
-          }
-
-          /** Close the current partition and move to the next. */
-          def closePartition(): Unit = {
-            if (currentFiles.nonEmpty) {
-              val newPartition =
-                FilePartition(
-                  partitions.size,
-                  currentFiles.toArray.toSeq) // Copy to a new Array.
-              partitions.append(newPartition)
-            }
-            currentFiles.clear()
-            currentSize = 0
-          }
-
-          // Assign files to partitions using "First Fit Decreasing" (FFD)
-          // TODO: consider adding a slop factor here?
-          splitFiles.foreach { file =>
-            if (currentSize + file.length > maxSplitBytes) {
-              closePartition()
-            }
-            addFile(file)
-          }
-          closePartition()
-          partitions
+          createNonBucketedReadRDD(readFile, selectedPartitions, fsRelation)
       }
 
       val meta = Map(
-        "Format" -> files.fileFormat.toString,
+        "Format" -> fsRelation.fileFormat.toString,
         "ReadSchema" -> prunedDataSchema.simpleString,
         PUSHED_FILTERS -> pushedDownFilters.mkString("[", ", ", "]"),
-        INPUT_PATHS -> files.location.paths.mkString(", "))
+        INPUT_PATHS -> fsRelation.location.paths.mkString(", "))
 
       val scan =
         DataSourceScanExec.create(
           readDataColumns ++ partitionColumns,
-          new FileScanRDD(
-            files.sparkSession,
-            readFile,
-            plannedPartitions),
-          files,
+          rdd,
+          fsRelation,
           meta,
           table)
 
@@ -230,6 +154,118 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       withProjections :: Nil
 
     case _ => Nil
+  }
+
+  /**
+   * Create an RDD for bucketed reads.
+   * The non-bucketed variant of this function is [[createNonBucketedReadRDD]].
+   *
+   * The algorithm is pretty simple: each RDD partition being returned should include all the files
+   * with the same bucket id from all the given Hive partitions.
+   *
+   * @param bucketSpec the bucketing spec.
+   * @param readFile a function to read each (part of a) file.
+   * @param selectedPartitions Hive-style partition that are part of the read.
+   * @param fsRelation [[HadoopFsRelation]] associated with the read.
+   */
+  private def createBucketedReadRDD(
+      bucketSpec: BucketSpec,
+      readFile: (PartitionedFile) => Iterator[InternalRow],
+      selectedPartitions: Seq[Partition],
+      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
+    logInfo(s"Planning with ${bucketSpec.numBuckets} buckets")
+    val bucketed =
+      selectedPartitions.flatMap { p =>
+        p.files.map { f =>
+          val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
+          PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
+        }
+      }.groupBy { f =>
+        BucketingUtils
+          .getBucketId(new Path(f.filePath).getName)
+          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+      }
+
+    val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
+      FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
+    }
+
+    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+  }
+
+  /**
+   * Create an RDD for non-bucketed reads.
+   * The bucketed variant of this function is [[createBucketedReadRDD]].
+   *
+   * @param readFile a function to read each (part of a) file.
+   * @param selectedPartitions Hive-style partition that are part of the read.
+   * @param fsRelation [[HadoopFsRelation]] associated with the read.
+   */
+  private def createNonBucketedReadRDD(
+      readFile: (PartitionedFile) => Iterator[InternalRow],
+      selectedPartitions: Seq[Partition],
+      fsRelation: HadoopFsRelation): RDD[InternalRow] = {
+    val defaultMaxSplitBytes =
+      fsRelation.sparkSession.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
+    val defaultParallelism = fsRelation.sparkSession.sparkContext.defaultParallelism
+    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+    val bytesPerCore = totalBytes / defaultParallelism
+
+    val maxSplitBytes = Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+    logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
+      s"open cost is considered as scanning $openCostInBytes bytes.")
+
+    val splitFiles = selectedPartitions.flatMap { partition =>
+      partition.files.flatMap { file =>
+        val blockLocations = getBlockLocations(file)
+        if (fsRelation.fileFormat.isSplitable(
+            fsRelation.sparkSession, fsRelation.options, file.getPath)) {
+          (0L until file.getLen by maxSplitBytes).map { offset =>
+            val remaining = file.getLen - offset
+            val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
+            val hosts = getBlockHosts(blockLocations, offset, size)
+            PartitionedFile(
+              partition.values, file.getPath.toUri.toString, offset, size, hosts)
+          }
+        } else {
+          val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+          Seq(PartitionedFile(
+            partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
+        }
+      }
+    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+
+    val partitions = new ArrayBuffer[FilePartition]
+    val currentFiles = new ArrayBuffer[PartitionedFile]
+    var currentSize = 0L
+
+    /** Close the current partition and move to the next. */
+    def closePartition(): Unit = {
+      if (currentFiles.nonEmpty) {
+        val newPartition =
+          FilePartition(
+            partitions.size,
+            currentFiles.toArray.toSeq) // Copy to a new Array.
+        partitions.append(newPartition)
+      }
+      currentFiles.clear()
+      currentSize = 0
+    }
+
+    // Assign files to partitions using "First Fit Decreasing" (FFD)
+    // TODO: consider adding a slop factor here?
+    splitFiles.foreach { file =>
+      if (currentSize + file.length > maxSplitBytes) {
+        closePartition()
+      }
+      // Add the given file to the current partition.
+      currentSize += file.length + openCostInBytes
+      currentFiles.append(file)
+    }
+    closePartition()
+
+    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {

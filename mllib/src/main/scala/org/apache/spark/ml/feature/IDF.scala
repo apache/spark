@@ -27,6 +27,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -168,7 +169,7 @@ object IDFModel extends MLReadable[IDFModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.idf)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -179,10 +180,10 @@ object IDFModel extends MLReadable[IDFModel] {
     override def load(path: String): IDFModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
+      val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
         .select("idf")
         .head()
-      val idf = data.getAs[Vector](0)
       val model = new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf)))
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

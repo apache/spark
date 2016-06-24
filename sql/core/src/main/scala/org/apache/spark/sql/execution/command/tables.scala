@@ -831,7 +831,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (", ",\n  ", "\n)\n")
+      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -865,7 +865,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       }
 
       if (props.nonEmpty) {
-        builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
+        builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
       }
     }
   }
