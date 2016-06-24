@@ -323,7 +323,6 @@ abstract class QueryTest extends PlanTest {
           origin.child,
           l.tableName)(
           origin.cachedColumnBuffers,
-          origin.cachedColumnBatches,
           origin.batchStats)
       case p =>
         p.transformExpressions {

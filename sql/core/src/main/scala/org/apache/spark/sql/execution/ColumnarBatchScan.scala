@@ -64,6 +64,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
    * Produce code to process the input iterator as [[ColumnarBatch]]es.
    * This produces an [[UnsafeRow]] for each row in each batch.
    */
+  // TODO: return ColumnarBatch.Rows instead
   override protected def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
     // PhysicalRDD always just has one input

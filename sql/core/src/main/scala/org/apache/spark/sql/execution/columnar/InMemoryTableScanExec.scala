@@ -33,13 +33,16 @@ private[sql] case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode with ColumnarBatchScan {
 
-  override val supportCodegen: Boolean = relation.useColumnBatches
+  override val supportCodegen: Boolean = relation.useColumnarBatches
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    if (relation.useColumnBatches) {
-      // HACK ALERT: This is actually an RDD[ColumnarBatch].
+    if (relation.useColumnarBatches) {
+      // HACK ALERT: This is actually an RDD[CachedColumnarBatch].
       // We're taking advantage of Scala's type erasure here to pass these batches along.
-      Seq(relation.cachedColumnBatches.asInstanceOf[RDD[InternalRow]])
+      Seq(relation.cachedColumnBuffers
+        .asInstanceOf[RDD[CachedColumnarBatch]]
+        .map(_.columnarBatch)
+        .asInstanceOf[RDD[InternalRow]])
     } else {
       Seq()
     }
@@ -117,7 +120,7 @@ private[sql] case class InMemoryTableScanExec(
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
-    assert(!relation.useColumnBatches)
+    assert(!relation.useColumnarBatches)
     assert(relation.cachedColumnBuffers != null)
     val numOutputRows = longMetric("numOutputRows")
 
@@ -131,7 +134,7 @@ private[sql] case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
-    val buffers = relation.cachedColumnBuffers
+    val buffers = relation.cachedColumnBuffers.asInstanceOf[RDD[CachedBatchBytes]]
 
     buffers.mapPartitionsInternal { cachedBatchIterator =>
       val partitionFilter = newPredicate(

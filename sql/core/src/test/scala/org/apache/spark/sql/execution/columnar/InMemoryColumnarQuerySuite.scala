@@ -262,30 +262,13 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         storageLevel = MEMORY_ONLY,
         child = sparkPlan,
         tableName = None)
-      if (!useComplexSchema) {
-        assert(inMemoryRelation.useColumnBatches == useColumnBatches)
-        assert((inMemoryRelation.cachedColumnBatches != null) == useColumnBatches)
-        assert((inMemoryRelation.cachedColumnBuffers == null) == useColumnBatches)
-      } else {
-        // Fallback on using non-code-gen'ed column builders if schema is complex
-        assert(!inMemoryRelation.useColumnBatches)
-        assert(inMemoryRelation.cachedColumnBatches == null)
-        assert(inMemoryRelation.cachedColumnBuffers != null)
+      assert(inMemoryRelation.useColumnarBatches == useColumnBatches && !useComplexSchema)
+      assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == MEMORY_ONLY)
+      inMemoryRelation.cachedColumnBuffers.collect().head match {
+        case _: CachedColumnarBatch => assert(useColumnBatches && !useComplexSchema)
+        case _: CachedBatchBytes => assert(!useColumnBatches || useComplexSchema)
+        case other => fail(s"Unexpected cached batch type: ${other.getClass.getName}")
       }
-      // Test unpersist and recaching
-      def rdd: RDD[_] =
-        if (useColumnBatches && !useComplexSchema) {
-          inMemoryRelation.cachedColumnBatches
-        } else {
-          inMemoryRelation.cachedColumnBuffers
-        }
-      assert(rdd != null)
-      assert(rdd.getStorageLevel == MEMORY_ONLY)
-      inMemoryRelation.recache()
-      assert(rdd.getStorageLevel == MEMORY_ONLY)
-      inMemoryRelation.unpersist(blocking = true)
-      assert(inMemoryRelation.cachedColumnBatches == null)
-      assert(inMemoryRelation.cachedColumnBuffers == null)
     }
   }
 
