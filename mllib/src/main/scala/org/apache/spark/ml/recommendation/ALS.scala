@@ -619,14 +619,13 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
     /** Number of entries in the upper triangular part of a k-by-k matrix. */
     val triK = k * (k + 1) / 2
-    /** The upper triangular of A^T^ * A */
-    val ata = new Array[Double](triK)
     /** A^T^ * A */
-    val ata2 = new Array[Double](k * k)
+    val ata = new Array[Double](triK)
     /** A^T^ * b */
     val atb = new Array[Double](k)
 
     private val da = new Array[Double](k)
+    private val ata2 = new Array[Double](k * k)
     private val upper = "U"
 
     private def copyToDouble(a: Array[Float]): Unit = {
@@ -637,7 +636,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       }
     }
 
-    private def copyToTri(a: Array[Double]): Unit = {
+    private def copyToTri(): Unit = {
       var ii = 0
       for(i <- 0 until k)
         for(j <- 0 to i) {
@@ -662,7 +661,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     def addStack(a: Array[Double], b: Array[Double], n: Int): this.type = {
       require(a.length == n * k)
       blas.dsyrk(upper, "N", k, n, 1.0, a, k, 1.0, ata2, k)
-      copyToTri(ata2)
+      copyToTri()
       blas.dgemv("N", k, n, 1.0, a, k, b, 1, 1.0, atb, 1)
       this
     }
@@ -1334,17 +1333,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
               // for rating > 0. Because YtY is already added, we need to adjust the scaling here.
               if (rating > 0) {
                 numExplicits += 1
-                if (doStack) {
-                  var ii = 0
-                  while(ii < srcFactor.length) {
-                    srcFactorBuffer += srcFactor(ii) * c1
-                    ii += 1
-                  }
-                  bBuffer += (c1 + 1.0) / c1
-                }
-                else {
-                  ls.add(srcFactor, (c1 + 1.0) / c1, c1)
-                }
+                ls.add(srcFactor, (c1 + 1.0) / c1, c1)
               }
             } else {
               numExplicits += 1
@@ -1355,14 +1344,13 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
                   srcFactorBuffer += srcFactor(ii)
                   ii += 1
                 }
-              }
-              else {
+              } else {
                 ls.add(srcFactor, rating)
               }
             }
             i += 1
           }
-          if(numExplicits > 0 && doStack) {
+          if (!implicitPrefs && doStack) {
             ls.addStack(srcFactorBuffer.result(), bBuffer.result(), numExplicits)
           }
           // Weight lambda by the number of explicit ratings based on the ALS-WR paper.
