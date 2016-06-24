@@ -226,6 +226,23 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
   }
 
   test("blacklisted executors and nodes get recovered with time") {
+    val tracker = trackerFixture
+    (0 until 4).foreach { partition =>
+      tracker.taskFailed(0, partition, new TaskInfo(partition, partition, 0, clock.getTimeMillis(),
+        "1", "hostA", TaskLocality.ANY, false))
+    }
+    assert(tracker.executorBlacklist() === Set("1"))
+
+    clock.advance(1001)
+    assert(tracker.executorBlacklist() === Set())
+  }
+
+  test("node blacklisting") {
+    // include recovery
+    pending
+  }
+
+  test("node blacklisting within a stage") {
     pending
   }
 }
