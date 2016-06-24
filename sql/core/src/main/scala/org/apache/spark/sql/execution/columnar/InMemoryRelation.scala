@@ -213,5 +213,5 @@ case class InMemoryRelation(
   def cachedColumnBatches: RDD[ColumnarBatch] = _cachedColumnBatches
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, batchStats)
+    Seq(_cachedColumnBuffers, _cachedColumnBatches, batchStats)
 }
