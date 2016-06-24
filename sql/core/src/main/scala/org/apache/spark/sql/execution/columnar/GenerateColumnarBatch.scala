@@ -57,6 +57,7 @@ class GenerateColumnarBatch(
       "rowIterator", rowIterator.asJava, classOf[java.util.Iterator[_]].getName)
     val schemaVar = ctx.addReferenceObj("schema", schema, classOf[StructType].getName)
     val maxNumBytes = ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE
+    // Code to populate column vectors with the values of the input rows
     val populateColumnVectorsCode = schema.fields.zipWithIndex.map { case (field, i) =>
       val typeName = GenerateColumnarBatch.typeToName(field.dataType)
       val put = "put" + typeName.capitalize

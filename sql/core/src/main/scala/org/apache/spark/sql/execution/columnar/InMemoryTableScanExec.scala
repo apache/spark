@@ -39,7 +39,7 @@ private[sql] case class InMemoryTableScanExec(
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     // HACK ALERT: This is actually an RDD[ColumnarBatch].
     // We're taking advantage of Scala's type erasure here to pass these batches along.
-    Seq(relation.cachedColumnVectors.asInstanceOf[RDD[InternalRow]])
+    Seq(relation.cachedColumnBatches.asInstanceOf[RDD[InternalRow]])
   }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
