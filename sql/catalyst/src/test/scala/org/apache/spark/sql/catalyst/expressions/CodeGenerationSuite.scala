@@ -110,12 +110,12 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         case (expr, i) => Seq(Literal(i), expr)
       }))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq(new ArrayBasedMapData(
-      new GenericArrayData(0 until length),
-      new GenericArrayData(Seq.fill(length)(true))))
+    val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType)).map {
+      case m: ArrayBasedMapData => ArrayBasedMapData.toScalaMap(m)
+    }
+    val expected = (0 until length).map((_, true)).toMap :: Nil
 
-    if (!actual.zip(expected).forall { case (data, answer) => checkResult(data, answer)}) {
+    if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
