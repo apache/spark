@@ -17,10 +17,10 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.internal.Logging
-
 import scala.annotation.tailrec
 import scala.util.Random
+
+import org.apache.spark.internal.Logging
 
 trait BlockReplicationObjective {
   val weight = 1
