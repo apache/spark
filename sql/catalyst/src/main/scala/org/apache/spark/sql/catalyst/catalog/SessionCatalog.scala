@@ -71,7 +71,7 @@ class SessionCatalog(
   @GuardedBy("this")
   protected val tempTables = new mutable.HashMap[String, LogicalPlan]
 
-  protected[this] val validName = "([\\w_]+)".r
+  private val validName = "([\\w_]+)".r
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -88,8 +88,8 @@ class SessionCatalog(
   }
 
   /**
-   * Format table name, taking into account case sensitivity.
-   * Verify the name validity if nameCheck is true.
+   * Format table name, taking into account case sensitivity, and verify the name validity
+   * unless nameCheck is false. Returns its database name and table name.
    */
   protected[this] def formatTableName(
       name: TableIdentifier,
@@ -221,7 +221,7 @@ class SessionCatalog(
   def databaseExists(db: String): Boolean = {
    // We do not validate if names are following the naming rules when checking if database exists.
    // Running SQL on files directly could break the rules. For example,
-   //   select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
+   // select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
     val dbName = formatDatabaseName(db, nameCheck = false)
     externalCatalog.databaseExists(dbName)
   }
@@ -237,7 +237,7 @@ class SessionCatalog(
   def getCurrentDatabase: String = synchronized { currentDb }
 
   def setCurrentDatabase(db: String): Unit = {
-    val dbName = formatDatabaseName(db, nameCheck = false)
+    val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
     synchronized { currentDb = dbName }
   }
@@ -247,7 +247,7 @@ class SessionCatalog(
    * by users.
    */
   def getDefaultDBPath(db: String): String = {
-    val database = formatDatabaseName(db, nameCheck = false)
+    val database = formatDatabaseName(db)
     new Path(new Path(conf.warehousePath), database + ".db").toString
   }
 
@@ -353,7 +353,7 @@ class SessionCatalog(
   }
 
   def defaultTablePath(tableIdent: TableIdentifier): String = {
-    val (db, table) = formatTableName(tableIdent, nameCheck = false)
+    val (db, table) = formatTableName(tableIdent)
     val dbLocation = getDatabaseMetadata(db).locationUri
 
     new Path(new Path(dbLocation), table).toString
@@ -488,7 +488,7 @@ class SessionCatalog(
    * explicitly specified.
    */
   def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
-    val table = formatTempTableName(name.table, nameCheck = false)
+    val table = formatTempTableName(name.table)
     name.database.isEmpty && tempTables.contains(table)
   }
 
@@ -804,7 +804,7 @@ class SessionCatalog(
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
-    throw new NoSuchFunctionException(db = getCurrentDatabase, func = name)
+    throw new NoSuchFunctionException(db = currentDb, func = name)
   }
 
   /**
@@ -812,7 +812,7 @@ class SessionCatalog(
    */
   private[spark] def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
     // TODO: just make function registry take in FunctionIdentifier instead of duplicating this
-    val database = name.database.orElse(Some(getCurrentDatabase)).map(formatDatabaseName(_))
+    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName(_))
     val qualifiedName = name.copy(database = database)
     functionRegistry.lookupFunction(name.funcName)
       .orElse(functionRegistry.lookupFunction(qualifiedName.unquotedString))
@@ -853,7 +853,7 @@ class SessionCatalog(
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val database = name.database.orElse(Some(getCurrentDatabase)).map(formatDatabaseName(_))
+    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName(_))
     val qualifiedName = name.copy(database = database)
 
     if (functionRegistry.functionExists(qualifiedName.unquotedString)) {
@@ -867,7 +867,7 @@ class SessionCatalog(
     // in the metastore). We need to first put the function in the FunctionRegistry.
     // TODO: why not just check whether the function exists first?
     val catalogFunction = try {
-      externalCatalog.getFunction(getCurrentDatabase, name.funcName)
+      externalCatalog.getFunction(currentDb, name.funcName)
     } catch {
       case e: AnalysisException => failFunctionLookup(name.funcName)
       case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
@@ -894,7 +894,7 @@ class SessionCatalog(
    * List all matching functions in the specified database, including temporary functions.
    */
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
-    val dbName = formatDatabaseName(db, nameCheck = false)
+    val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
       .map { f => FunctionIdentifier(f, Some(dbName)) }
