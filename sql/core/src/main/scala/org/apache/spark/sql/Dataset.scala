@@ -1908,6 +1908,7 @@ class Dataset[T] private[sql](
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
+    // `toArray` forces materialization to make the seq serializable
     LocalRelation.fromExternalRows(schema, ret.toArray.toSeq)
   }
 
