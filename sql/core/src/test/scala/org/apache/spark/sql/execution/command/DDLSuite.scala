@@ -1276,7 +1276,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var e = intercept[AnalysisException] {
         sql("CREATE TABLE t SELECT 1 as a, 1 as b")
       }.getMessage
-      assert(e.contains("Hive support is required to use CREATE TABLE AS SELECT"))
+      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
 
       spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
