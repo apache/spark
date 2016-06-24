@@ -334,7 +334,6 @@ class CloudPickler(Pickler):
             try:
                 # whichmodule() could fail, see
                 # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
-
                 modname = pickle.whichmodule(obj, name)
             except Exception:
                 modname = '__main__'
