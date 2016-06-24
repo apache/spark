@@ -212,11 +212,11 @@ private[spark] object RandomForest extends Logging {
     logInfo(s"$timer")
 
     // Print out runtime statistics
-    logInfo(s"Max nodes per group $maxNodesPerGroup")
-    logInfo(s"Min nodes per group $minNodesPerGroup")
     logInfo(s"Processed $numGroups groups of nodes")
+    logInfo(s"Max nodes per group: $maxNodesPerGroup")
+    logInfo(s"Min nodes per group: $minNodesPerGroup")
     if (numGroups > 0) {
-      logInfo(s"Avg nodes per group ${totalNodesProcessed / numGroups.toDouble}")
+      logInfo(s"Average nodes per group: ${totalNodesProcessed / numGroups.toDouble}")
     }
 
     // Delete any remaining checkpoints used for node Id cache.
