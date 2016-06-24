@@ -170,6 +170,8 @@ class CloudPickler(Pickler):
         if name is None:
             name = obj.__name__
         try:
+            # whichmodule() could fail, see
+            # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
             modname = pickle.whichmodule(obj, name)
         except Exception:
             modname = None
@@ -330,6 +332,9 @@ class CloudPickler(Pickler):
         modname = getattr(obj, "__module__", None)
         if modname is None:
             try:
+                # whichmodule() could fail, see
+                # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
+
                 modname = pickle.whichmodule(obj, name)
             except Exception:
                 modname = '__main__'
