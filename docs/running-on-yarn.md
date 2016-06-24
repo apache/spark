@@ -244,7 +244,7 @@ To use a custom metrics.properties for the application master and executors, upd
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
-    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
+    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
   </td>
 </tr>
 <tr>

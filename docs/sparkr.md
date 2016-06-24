@@ -428,3 +428,5 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - The `sqlContext` parameter is no longer required for these functions: `createDataFrame`, `as.DataFrame`, `read.json`, `jsonFile`, `read.parquet`, `parquetFile`, `read.text`, `sql`, `tables`, `tableNames`, `cacheTable`, `uncacheTable`, `clearCache`, `dropTempTable`, `read.df`, `loadDF`, `createExternalTable`.
  - The method `registerTempTable` has been deprecated to be replaced by `createOrReplaceTempView`.
  - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
+ - The `sc` SparkContext parameter is no longer required for these functions: `setJobGroup`, `clearJobGroup`, `cancelJobGroup`
+ 
