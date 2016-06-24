@@ -388,12 +388,8 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
        |)
        """.stripMargin)
 
-       val planned = sql("SELECT * FROM student").queryExecution.executedPlan
-       val comments = planned.schema.fields.map { field =>
-         if (field.metadata.contains("comment")) field.metadata.getString("comment")
-         else "NO_COMMENT"
-       }.mkString(",")
-
+    val planned = sql("SELECT * FROM student").queryExecution.executedPlan
+    val comments = planned.schema.fields.map(_.getComment().getOrElse("NO_COMMENT")).mkString(",")
     assert(comments === "SN,SA,NO_COMMENT")
   }
 }
