@@ -1685,7 +1685,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("spark-15752 metadata only optimizer") {
+  test("spark-15752 metadata only optimizer for hive table") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
       val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
       df.createOrReplaceTempView("data_15752")

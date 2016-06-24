@@ -2870,4 +2870,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
   }
+
+  test("spark-15752 metadata only optimizer for datasource table") {
+    val data = (1 to 10).map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "even" else "odd"))
+      .toDF("id", "data", "partId", "part")
+    data.write.partitionBy("partId", "part").mode("append").saveAsTable("srcpart_15752")
+    checkAnswer(sql("select max(part) from srcpart_15752"), Row("odd"))
+    checkAnswer(sql("select max(part) from srcpart_15752 where partId = 0"), Row("even"))
+    checkAnswer(sql("select max(part) from (select part from srcpart_15752) t"), Row("odd"))
+    checkAnswer(sql("select distinct part from srcpart_15752"), Row("even") :: Row("odd") :: Nil)
+    checkAnswer(sql("select distinct part from srcpart_15752 where partId = 0"), Row("even"))
+  }
 }
