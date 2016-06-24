@@ -39,6 +39,7 @@ import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -387,9 +388,9 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 @Since("1.3.0")
 @Experimental
 class LinearRegressionModel private[ml] (
-    override val uid: String,
-    val coefficients: Vector,
-    val intercept: Double)
+    @Since("1.4.0") override val uid: String,
+    @Since("2.0.0") val coefficients: Vector,
+    @Since("1.3.0") val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams with MLWritable {
 
@@ -500,9 +501,10 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
-        .select("intercept", "coefficients").head()
-      val intercept = data.getDouble(0)
-      val coefficients = data.getAs[Vector](1)
+      val Row(intercept: Double, coefficients: Vector) =
+        MLUtils.convertVectorColumnsToML(data, "coefficients")
+          .select("intercept", "coefficients")
+          .head()
       val model = new LinearRegressionModel(metadata.uid, coefficients, intercept)
 
       DefaultParamsReader.getAndSetParams(model, metadata)

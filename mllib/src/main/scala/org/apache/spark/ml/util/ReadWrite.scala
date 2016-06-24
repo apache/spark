@@ -26,7 +26,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -161,7 +161,7 @@ trait MLWritable {
 }
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * Helper trait for making simple [[Params]] types writable.  If a [[Params]] class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
@@ -171,8 +171,7 @@ trait MLWritable {
  *
  * @see  [[DefaultParamsReadable]], the counterpart to this trait
  */
-@Experimental
-@Since("2.0.0")
+@DeveloperApi
 trait DefaultParamsWritable extends MLWritable { self: Params =>
 
   override def write: MLWriter = new DefaultParamsWriter(this)
@@ -230,7 +229,7 @@ trait MLReadable[T] {
 
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * Helper trait for making simple [[Params]] types readable.  If a [[Params]] class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
@@ -239,11 +238,9 @@ trait MLReadable[T] {
  * [[org.apache.spark.sql.Dataset]].
  *
  * @tparam T ML instance type
- *
  * @see  [[DefaultParamsWritable]], the counterpart to this trait
  */
-@Experimental
-@Since("2.0.0")
+@DeveloperApi
 trait DefaultParamsReadable[T] extends MLReadable[T] {
 
   override def read: MLReader[T] = new DefaultParamsReader[T]

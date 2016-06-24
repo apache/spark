@@ -1002,7 +1002,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
-          Filter(And(ac, nc), grandChild)
+          Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }

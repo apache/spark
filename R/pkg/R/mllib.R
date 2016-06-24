@@ -53,9 +53,10 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
-#' Fits a generalized linear model
+#' Generalized Linear Models
 #'
-#' Fits a generalized linear model against a Spark DataFrame.
+#' Fits generalized linear model against a Spark DataFrame. Users can print, make predictions on the
+#' produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -66,8 +67,9 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param tol Positive convergence tolerance of iterations.
 #' @param maxIter Integer giving the maximal number of IRLS iterations.
-#' @return a fitted generalized linear model
+#' @return \code{spark.glm} returns a fitted generalized linear model
 #' @rdname spark.glm
+#' @name spark.glm
 #' @export
 #' @examples
 #' \dontrun{
@@ -76,8 +78,21 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' df <- createDataFrame(iris)
 #' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family = "gaussian")
 #' summary(model)
+#'
+#' # fitted values on training data
+#' fitted <- predict(model, df)
+#' head(select(fitted, "Sepal_Length", "prediction"))
+#'
+#' # save fitted model to input path
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#'
+#' # can also read back the saved model and print
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
 #' }
 #' @note spark.glm since 2.0.0
+#' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25) {
             if (is.character(family)) {
@@ -99,10 +114,9 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
-#' Fits a generalized linear model (R-compliant).
+#' Generalized Linear Models (R-compliant)
 #'
 #' Fits a generalized linear model, similarly to R's glm().
-#'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data SparkDataFrame for training.
@@ -112,7 +126,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
-#' @return a fitted generalized linear model
+#' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
 #' @examples
@@ -124,24 +138,21 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' summary(model)
 #' }
 #' @note glm since 1.5.0
+#' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25) {
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
           })
 
-#' Get the summary of a generalized linear model
-#'
-#' Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
+#  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #'
 #' @param object A fitted generalized linear model
-#' @return coefficients the model's coefficients, intercept
-#' @rdname summary
+#' @return \code{summary} returns a summary object of the fitted model, a list of components
+#'         including at least the coefficients, null/residual deviance, null/residual degrees
+#'         of freedom, AIC and number of iterations IRLS takes.
+#'
+#' @rdname spark.glm
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- glm(y ~ x, trainingData)
-#' summary(model)
-#' }
 #' @note summary(GeneralizedLinearRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, ...) {
@@ -173,10 +184,10 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             return(ans)
           })
 
-#' Print the summary of GeneralizedLinearRegressionModel
+#  Prints the summary of GeneralizedLinearRegressionModel
 #'
-#' @rdname print
-#' @name print.summary.GeneralizedLinearRegressionModel
+#' @rdname spark.glm
+#' @param x Summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
 #' @note print.summary.GeneralizedLinearRegressionModel since 2.0.0
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
@@ -205,63 +216,40 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#' Predicted values based on model
-#'
-#' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
-#' similarly to R's predict().
-#'
-#' @param object A fitted generalized linear model
+#  Makes predictions from a generalized linear model produced by glm() or spark.glm(),
+#  similarly to R's predict().
+
 #' @param newData SparkDataFrame for testing
-#' @return SparkDataFrame containing predicted labels in a column named "prediction"
-#' @rdname predict
+#' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
+#'         "prediction"
+#' @rdname spark.glm
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- glm(y ~ x, trainingData)
-#' predicted <- predict(model, testData)
-#' showDF(predicted)
-#' }
 #' @note predict(GeneralizedLinearRegressionModel) since 1.5.0
 setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Predicted values based on model
-#'
-#' Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
-#' similarly to R package e1071's predict.
-#'
-#' @param object A fitted naive Bayes model
-#' @rdname predict
+# Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
+# similarly to R package e1071's predict.
+
+#' @rdname spark.naiveBayes
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.naiveBayes(trainingData, y ~ x)
-#' predicted <- predict(model, testData)
-#' showDF(predicted)
-#'}
 #' @note predict(NaiveBayesModel) since 2.0.0
 setMethod("predict", signature(object = "NaiveBayesModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Get the summary of a naive Bayes model
-#'
-#' Returns the summary of a naive Bayes model produced by spark.naiveBayes(),
-#' similarly to R's summary().
-#'
-#' @param object A fitted MLlib model
-#' @return a list containing 'apriori', the label distribution, and 'tables', conditional
-#          probabilities given the target label
-#' @rdname summary
+# Returns the summary of a naive Bayes model produced by \code{spark.naiveBayes}
+
+#' @param object A naive Bayes model fitted by \code{spark.naiveBayes}
+#' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
+#'         \code{tables}, conditional probabilities given the target label
+#' @rdname spark.naiveBayes
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.naiveBayes(trainingData, y ~ x)
-#' summary(model)
-#'}
 #' @note summary(NaiveBayesModel) since 2.0.0
 setMethod("summary", signature(object = "NaiveBayesModel"),
           function(object, ...) {
@@ -388,23 +376,41 @@ setMethod("predict", signature(object = "KMeansModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Fit a Bernoulli naive Bayes model
+#' Naive Bayes Models
 #'
-#' Fit a Bernoulli naive Bayes model on a Spark DataFrame (only categorical data is supported).
+#' \code{spark.naiveBayes} fits a Bernoulli naive Bayes model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Only categorical data is supported.
 #'
-#' @param data SparkDataFrame for training
+#' @param data A \code{SparkDataFrame} of observations and labels for model fitting
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param smoothing Smoothing parameter
-#' @return a fitted naive Bayes model
+#' @return \code{spark.naiveBayes} returns a fitted naive Bayes model
 #' @rdname spark.naiveBayes
+#' @name spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
 #' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(infert)
+#'
+#' # fit a Bernoulli naive Bayes model
 #' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
-#'}
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, smoothing = 1.0, ...) {
@@ -414,25 +420,15 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
             return(new("NaiveBayesModel", jobj = jobj))
           })
 
-#' Save fitted MLlib model to the input path
-#'
-#' Save the Bernoulli naive Bayes model to the input path.
-#'
-#' @param object A fitted Bernoulli naive Bayes model
+# Saves the Bernoulli naive Bayes model to the input path.
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname write.ml
-#' @name write.ml
+#' @rdname spark.naiveBayes
 #' @export
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(infert)
-#' model <- spark.naiveBayes(df, education ~ ., smoothing = 0)
-#' path <- "path/to/model"
-#' write.ml(model, path)
-#' }
+#' @seealso \link{read.ml}
 #' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -471,24 +467,14 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
-#' Save fitted MLlib model to the input path
+#  Saves the generalized linear model to the input path.
 #'
-#' Save the generalized linear model to the input path.
-#'
-#' @param object A fitted generalized linear model
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname write.ml
-#' @name write.ml
+#' @rdname spark.glm
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- glm(y ~ x, trainingData)
-#' path <- "path/to/model"
-#' write.ml(model, path)
-#' }
 #' @note write.ml(GeneralizedLinearRegressionModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {

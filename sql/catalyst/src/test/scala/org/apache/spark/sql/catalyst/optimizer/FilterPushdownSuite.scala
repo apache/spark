@@ -94,6 +94,24 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
+    val originalQuery =
+      testRelation
+        .where('a === 1)
+        .select('a, 'b)
+        .where('b === 1)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 1 && 'b === 1)
+        .select('a, 'b)
+        .analyze
+
+    // We can not use comparePlans here because it normalized the plan.
+    assert(optimized == correctAnswer)
+  }
+
   test("can't push without rewrite") {
     val originalQuery =
       testRelation

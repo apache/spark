@@ -296,7 +296,7 @@ object MultilayerPerceptronClassifier
 class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val layers: Array[Int],
-    @Since("1.5.0") val weights: Vector)
+    @Since("2.0.0") val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable with MLWritable {
 
