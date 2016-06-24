@@ -1282,7 +1282,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       e = intercept[AnalysisException] {
         sql("CREATE TABLE t SELECT a, b from t1")
       }.getMessage
-      assert(e.contains("Hive support is required to use CREATE TABLE AS SELECT"))
+      assert(e.contains("Hive support is required to use CREATE Hive TABLE AS SELECT"))
     }
   }
 

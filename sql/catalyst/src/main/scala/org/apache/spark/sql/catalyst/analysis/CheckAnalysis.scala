@@ -341,7 +341,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case c if c.getClass.getName ==
               "org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan" =>
-            failAnalysis("Hive support is required to use CREATE TABLE AS SELECT")
+            failAnalysis("Hive support is required to use CREATE Hive TABLE AS SELECT")
 
           case o if !o.resolved =>
             failAnalysis(
