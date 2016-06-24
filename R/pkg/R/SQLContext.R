@@ -148,7 +148,7 @@ sparkR.conf <- function(key, defaultValue) {
 }
 
 getDefaultSqlSource <- function() {
-  l <- conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
+  l <- sparkR.conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
   l[["spark.sql.sources.default"]]
 }
 
