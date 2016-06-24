@@ -233,7 +233,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
 
     // attempt 1 finished (this can happen even if it was marked zombie earlier -- all tasks were
     // already submitted, and then they finish)
-    taskScheduler.taskSetFinished(mgr1)
+    taskScheduler.taskSetFinished(mgr1, true)
 
     // now with another resource offer, we should still schedule all the tasks in attempt2
     val taskDescriptions3 = taskScheduler.resourceOffers(workerOffers).flatten
@@ -283,7 +283,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
 
   test("scheduled tasks obey all blacklists") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
-    val taskScheduler = new TaskSchedulerImpl(sc, 4)
+    val blacklist = mock[BlacklistTracker]
+    val taskScheduler = new TaskSchedulerImpl(sc, 4, blacklist)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     new DAGScheduler(sc, taskScheduler) {
@@ -304,7 +305,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
       new WorkerOffer("executor3", "host3", 10)
     )
 
-    val blacklist = mock[BlacklistTracker]
+    when(blacklist.nodeBlacklist()).thenReturn(Set[String]())
     when(blacklist.nodeBlacklistForStage(0)).thenReturn(Set("host1"))
     when(blacklist.nodeBlacklistForStage(1)).thenReturn(Set[String]())
     when(blacklist.nodeBlacklistForStage(2)).thenReturn(Set[String]())
@@ -333,6 +334,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
 
     val tasks0 = taskScheduler.resourceOffers(offers).flatten
+    verify(blacklist, atLeast(1)).nodeBlacklist()
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(0)
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(1)
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(2)
@@ -341,14 +343,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
       part <- 0 to 1
     } {
       // the node blacklist should ensure we never check the task blacklist.  This is important
-      // for performance, otherwise we end up changing an O(1) opteration into a
+      // for performance, otherwise we end up changing an O(1) operation into a
       // O(numPendingTasks) one
       verify(blacklist, never).isExecutorBlacklisted(exec, 0, part)
     }
 
     // similarly, the executor blacklist for an entire stage should prevent us from ever checking
     // the blacklist for specific parts in a stage.
-    (0 to 1).foreach { part => verify(blacklist, never).isExecutorBlacklisted("executor3", 1, part)}
+    (0 to 1).foreach { part =>
+      verify(blacklist, never).isExecutorBlacklisted("executor3", 1, part)
+    }
 
     // we should schedule all tasks.
     assert(tasks0.size == 6)
@@ -370,8 +374,22 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
     // no restrictions on stage 2
 
-    // TODO call blacklist.taskSetCompleted() for each stage
-    pending
+    // have all tasks finish successfully
+    (0 to 2).foreach{ stageId =>
+      val tasks = tasksForStage(stageId)
+      val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
+      val valueSer = SparkEnv.get.serializer.newInstance()
+      tasks.foreach { task =>
+        val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq())
+        tsm.handleSuccessfulTask(task.taskId, result)
+      }
+    }
+
+    // the tasksSets complete successfully, so the tracker should be notified
+    // TODO have one task set fail
+    verify(blacklist, atLeast(1)).taskSetSucceeded(0)
+    verify(blacklist, atLeast(1)).taskSetSucceeded(1)
+    verify(blacklist, atLeast(1)).taskSetSucceeded(2)
   }
 
 }

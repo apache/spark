@@ -155,10 +155,10 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
     assert(tracker.executorBlacklist() === Set())
   }
 
-  // within one taskset, an executor fails a few times, so its blacklisted for the taskset.
-  // but if the taskset fails, we don't blacklist the executor after the stage.
   Seq(true, false).foreach { succeedTaskSet =>
     test(s"stage blacklist updates correctly on stage completion ($succeedTaskSet)") {
+      // within one taskset, an executor fails a few times, so its blacklisted for the taskset.
+      // but if the taskset fails, we don't blacklist the executor after the stage.
       val tracker = trackerFixture
       val stageId = 1 + (if (succeedTaskSet) 1 else 0)
       (0 until 4).foreach { partition =>
@@ -201,14 +201,5 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
       "1", "hostA", TaskLocality.ANY, false))
     tracker.taskSetSucceeded(1)
     assert(tracker.executorBlacklist() === Set())
-  }
-
-  test("node blacklisting") {
-    // include recovery
-    pending
-  }
-
-  test("node blacklisting within a stage") {
-    pending
   }
 }

@@ -255,6 +255,7 @@ private[spark] class TaskSetManager(
     taskAttempts(taskIndex).exists(_.host == host)
   }
 
+  // TODO make a val, part of constructor
   var blacklistTracker = sched.sc.blacklistTracker
 
   /** VisibleForTesting */
@@ -482,9 +483,9 @@ private[spark] class TaskSetManager(
     None
   }
 
-  private def maybeFinishTaskSet() {
+  private def maybeFinishTaskSet(success: Boolean) {
     if (isZombie && runningTasks == 0) {
-      sched.taskSetFinished(this)
+      sched.taskSetFinished(this, success)
     }
   }
 
@@ -633,7 +634,7 @@ private[spark] class TaskSetManager(
     }
 
     blacklistTracker.taskSucceeded(stageId, tasks(index).partitionId, info)
-    maybeFinishTaskSet()
+    maybeFinishTaskSet(true)
   }
 
   /**
@@ -742,14 +743,14 @@ private[spark] class TaskSetManager(
         return
       }
     }
-    maybeFinishTaskSet()
+    maybeFinishTaskSet(true)
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message, exception)
     isZombie = true
-    maybeFinishTaskSet()
+    maybeFinishTaskSet(false)
   }
 
   /** If the given task ID is not in the set of running tasks, adds it.

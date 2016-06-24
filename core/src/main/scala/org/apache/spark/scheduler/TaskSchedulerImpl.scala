@@ -34,7 +34,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
+import org.apache.spark.util._
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -51,17 +51,24 @@ import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class TaskSchedulerImpl(
+private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
+    private val blacklistTracker: BlacklistTracker,
+    private val clock: Clock = new SystemClock,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
-  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
+  def this(sc: SparkContext) = {
+    this(sc, sc.conf.getInt("spark.task.maxFailures", 4), sc.blacklistTracker)
+  }
+
+  def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
+    this(sc, maxTaskFailures, sc.blacklistTracker, clock = new SystemClock, isLocal)
+  }
 
   val conf = sc.conf
   // can't be a val b/c of initialization order
-  private def blacklistTracker = sc.blacklistTracker
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
@@ -209,7 +216,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures)
+    new TaskSetManager(this, taskSet, maxTaskFailures, clock)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -237,7 +244,7 @@ private[spark] class TaskSchedulerImpl(
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
    * cleaned up.
    */
-  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+  def taskSetFinished(manager: TaskSetManager, success: Boolean): Unit = synchronized {
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
       taskSetsForStage -= manager.taskSet.stageAttemptId
       if (taskSetsForStage.isEmpty) {
@@ -245,9 +252,15 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     manager.parent.removeSchedulable(manager)
-    logInfo("Removed TaskSet %s, whose tasks have all completed, from pool %s"
-      .format(manager.taskSet.id, manager.parent.name))
-    // TODO update blacklistTracker to discard taskSet info
+    if (success) {
+      blacklistTracker.taskSetSucceeded(manager.taskSet.stageId)
+      logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
+        s" ${manager.parent.name}")
+    } else {
+      blacklistTracker.taskSetFailed(manager.taskSet.stageId)
+      logInfo(s"Removed TaskSet ${manager.taskSet.id}, since it failed, from pool" +
+        s" ${manager.parent.name}")
+    }
   }
 
   private def resourceOfferSingleTaskSet(
@@ -287,7 +300,7 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    if (!launchedTask && isTaskSetCompletelyBlacklisted(taskSet, nodeBlacklist)) {
+    if (!launchedTask && isTaskSetCompletelyBlacklisted(taskSet)) {
       taskSet.abort(s"Aborting ${taskSet.taskSet} because it has a task which cannot be scheduled" +
         s" on any executor due to blacklists.")
     }
@@ -307,18 +320,21 @@ private[spark] class TaskSchedulerImpl(
    * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
    * really be fast unless you've got a bunch of things blacklisted.
    */
-  private[scheduler] def isTaskSetCompletelyBlacklisted(
-      taskSet: TaskSetManager,
-      nodeBlacklist: Set[String]): Boolean = {
+  private[scheduler] def isTaskSetCompletelyBlacklisted(taskSet: TaskSetManager): Boolean = {
     taskSet.pollPendingTask.map { task =>
+      val stage = taskSet.stageId
+      val nodeBlacklist = blacklistTracker.nodeBlacklist()
+      logInfo(s"checking if task $task in stage $stage can run anywhere")
       executorsByHost.foreach { case (host, execs) =>
-        if (!nodeBlacklist.contains(host)) {
+        logInfo(s"checking against $host, $execs")
+        logInfo(s"nodeBlacklist = ${nodeBlacklist}; forStage =" +
+          s" ${blacklistTracker.nodeBlacklistForStage(stage)}")
+        if (!nodeBlacklist.contains(host) &&
+            !blacklistTracker.nodeBlacklistForStage(stage).contains(host)) {
           execs.foreach { exec =>
-            val stage = taskSet.stageId
             if (
               !blacklistTracker.isExecutorBlacklisted(stage, exec) &&
-                // TODO exec-stage level blacklisting
-                !blacklistTracker.isExecutorBlacklisted(exec, task, stage)
+                !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = task)
             ) {
               // we've found some executor this task can run on.  Its possible that some *other*
               // task isn't schedulable anywhere, but we will discover that in some later call,
@@ -354,9 +370,16 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+//    val nodeBlacklist = blacklistTracker.nodeBlacklist()
+//    val execBlacklist = blacklistTracker.executorBlacklist()
+//    val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
+//      !nodeBlacklist.contains(offer.host) && !execBlacklist.contains(offer.executorId)
+//    }.toIndexedSeq
+    val filteredOffers = offers
+
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.  We will
     // index into this list by position later, so we want an IndexedSeq so its efficient.
-    val shuffledOffers: IndexedSeq[WorkerOffer] = Random.shuffle(offers).toIndexedSeq
+    val shuffledOffers: IndexedSeq[WorkerOffer] = Random.shuffle(filteredOffers).toIndexedSeq
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -373,6 +396,7 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
+    logInfo(s"about to make offers to ${sortedTaskSets}")
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
         launchedTask = resourceOfferSingleTaskSet(
