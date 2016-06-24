@@ -110,11 +110,45 @@ infer_type <- function(x) {
   }
 }
 
-getDefaultSqlSource <- function() {
+#' Get Runtime Config from the current active SparkSession
+#'
+#' Get Runtime Config from the current active SparkSession.
+#'
+#' @param key (optional) The key of the config to get, if omitted, all config is returned
+#' @param defaultValue (optional) The default value of the config to return if they config is not
+#' set, if omitted, the call fails if the config key is not set
+#' @return a list of config values with keys as their names
+#' @rdname conf
+#' @name conf
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' allConfigs <- conf()
+#' masterValue <- unlist(conf("spark.master"))
+#' namedConfig <- conf("spark.executor.memory", "0g")
+#' }
+#' @note conf since 2.0.0
+conf <- function(key, defaultValue) {
   sparkSession <- getSparkSession()
-  conf <- callJMethod(sparkSession, "conf")
-  source <- callJMethod(conf, "get", "spark.sql.sources.default", "org.apache.spark.sql.parquet")
-  source
+  if (missing(key)) {
+    m <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSessionConf", sparkSession)
+    as.list(m, all.names = TRUE, sorted = TRUE)
+  } else {
+    conf <- callJMethod(sparkSession, "conf")
+    value <- if (missing(defaultValue)) {
+      callJMethod(conf, "get", key) # throws if key not found
+    } else {
+      callJMethod(conf, "get", key, defaultValue)
+    }
+    l <- setNames(list(value), key)
+    l
+  }
+}
+
+getDefaultSqlSource <- function() {
+  l <- conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
+  l[["spark.sql.sources.default"]]
 }
 
 #' Create a SparkDataFrame
