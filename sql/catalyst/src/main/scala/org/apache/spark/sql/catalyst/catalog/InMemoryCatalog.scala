@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
@@ -445,6 +446,13 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       spec: TablePartitionSpec): CatalogTablePartition = synchronized {
     requirePartitionsExist(db, table, Seq(spec))
     catalog(db).tables(table).partitions(spec)
+  }
+
+  override def getPartitionsByFilter(
+      catalogTable: CatalogTable,
+      filters: Seq[Expression] = Nil): Seq[CatalogTablePartition] = synchronized {
+    requireTableExists(catalogTable.database, catalogTable.identifier.table)
+    catalog(catalogTable.database).tables(catalogTable.identifier.table).partitions.values.toSeq
   }
 
   override def listPartitions(

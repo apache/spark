@@ -1687,8 +1687,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("spark-15752 metadata only optimizer") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      val df = Seq((1, 2), (3, 4)).toDF("key", "value")
-      df.createOrReplaceTempView("data")
+      val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
+      df.createOrReplaceTempView("data_15752")
       sql(
         """
           |CREATE TABLE srcpart_15752 (key INT, value STRING)
@@ -1698,7 +1698,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql(
           s"""
              |INSERT OVERWRITE TABLE srcpart_15752 PARTITION (ds='$ds',hr='$hr')
-             |select key, value from data
+             |select key, value from data_15752
         """.stripMargin)
       }
       checkAnswer(sql("select max(hr) from srcpart_15752"), Row(12))
@@ -1716,7 +1716,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql(
           s"""
              |INSERT OVERWRITE TABLE srctext_15752 PARTITION (ds='$ds',hr='$hr')
-             |select key, value from data
+             |select key, value from data_15752
         """.stripMargin)
       }
 

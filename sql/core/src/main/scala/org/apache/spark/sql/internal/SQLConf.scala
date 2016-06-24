@@ -261,7 +261,7 @@ object SQLConf {
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
     .doc("When true, enable the metadata-only query optimization.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView")
     .internal()

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 
 /**
@@ -150,6 +151,19 @@ abstract class ExternalCatalog {
       parts: Seq[CatalogTablePartition]): Unit
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
+
+  /**
+   * Returns partitions filtered by predicates for the given table, It just work for Hive.
+   *
+   * The filters Expressions may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then the filters (a='1') will return the first two only.
+   * @param catalogTable table
+   * @param filters The filters used to prune which partitions are returned.
+   */
+  def getPartitionsByFilter(
+      catalogTable: CatalogTable,
+      filters: Seq[Expression] = Nil): Seq[CatalogTablePartition]
 
   /**
    * List the metadata of all partitions that belong to the specified table, assuming it exists.

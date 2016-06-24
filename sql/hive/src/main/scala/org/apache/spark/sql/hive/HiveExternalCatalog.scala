@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.hive.client.HiveClient
 
 
@@ -320,6 +321,15 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = withClient {
     client.getPartition(db, table, spec)
+  }
+
+  /**
+   * Returns partitions filtered by predicates for the given table.
+   */
+  override def getPartitionsByFilter(
+      catalogTable: CatalogTable,
+      filters: Seq[Expression] = Nil): Seq[CatalogTablePartition] = withClient {
+    client.getPartitionsByFilter(catalogTable, filters)
   }
 
   /**

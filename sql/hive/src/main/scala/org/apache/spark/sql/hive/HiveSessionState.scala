@@ -75,18 +75,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   }
 
   /**
-   * Logical query plan optimizer for Hive.
-   */
-  override lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods) {
-    val extendedHiveOptimizerRules: Seq[Batch] = Seq(
-      Batch("MetadataOnly Optimization", Once,
-        catalog.metadataOnlyOptimizer)
-    )
-
-    override def batches: Seq[Batch] = extendedHiveOptimizerRules ++ super.batches
-  }
-
-  /**
    * Planner that takes into account Hive-specific strategies.
    */
   override def planner: SparkPlanner = {
