@@ -64,10 +64,12 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) if condition.deterministic =>
+      case Filter(condition, child) =>
+        val (deterministicFilters, nondeterministicFilters) = splitConjunctivePredicates(condition)
+          .partition(_.deterministic)
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedCondition = substitute(aliases)(condition)
-        (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+        val substitutedFilters = deterministicFilters.map(substitute(aliases)(_))
+        (fields, filters ++ deterministicFilters, other, aliases)
 
       case BroadcastHint(child) =>
         collectProjectsAndFilters(child)

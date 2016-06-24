@@ -141,6 +141,14 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       Seq("2008-04-08", "11"),
       Seq("2008-04-09", "11")))
 
+  createPruningTest("Partition pruning - with nondeterministic fields",
+    "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND rand(7) < 1",
+    Seq("value", "hr"),
+    Seq("value", "hr"),
+    Seq(
+      Seq("2008-04-08", "11"),
+      Seq("2008-04-08", "12")))
+
   def createPruningTest(
       testCaseName: String,
       sql: String,
