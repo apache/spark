@@ -17,13 +17,8 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-<<<<<<< HEAD
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-=======
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
->>>>>>> master
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.{Await, Future}
