@@ -91,6 +91,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE =
+    SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.partitionPruningMaxInSize")
+      .internal()
+      .doc("The maximum number of literals inside IN predicate used by partition pruning of " +
+        "in-memory columnar tables")
+      .intConf
+      .createWithDefault(10)
+
   val PREFER_SORTMERGEJOIN = SQLConfigBuilder("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
@@ -649,6 +657,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+
+  def inMemoryPartitionPruningMaxInSize: Int = getConf(IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 

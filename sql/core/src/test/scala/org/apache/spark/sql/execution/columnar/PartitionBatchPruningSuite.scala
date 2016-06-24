@@ -35,6 +35,8 @@ class PartitionBatchPruningSuite
   private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE)
   private lazy val originalInMemoryPartitionPruning =
     spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING)
+  private lazy val originalInMemoryPartitionPruningMaxInSize =
+    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -42,6 +44,8 @@ class PartitionBatchPruningSuite
     spark.conf.set(SQLConf.COLUMN_BATCH_SIZE.key, 10)
     // Enable in-memory partition pruning
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
+    // Use 5 as the maximum number of literals inside IN predicate used by partition pruning
+    spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE.key, 5)
     // Enable in-memory table scan accumulators
     spark.conf.set("spark.sql.inMemoryTableScanStatistics.enable", "true")
   }
@@ -50,6 +54,8 @@ class PartitionBatchPruningSuite
     try {
       spark.conf.set(SQLConf.COLUMN_BATCH_SIZE.key, originalColumnBatchSize)
       spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, originalInMemoryPartitionPruning)
+      spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING_MAX_IN_SIZE.key,
+        originalInMemoryPartitionPruningMaxInSize)
     } finally {
       super.afterAll()
     }
@@ -65,11 +71,18 @@ class PartitionBatchPruningSuite
     }, 5).toDF()
     pruningData.createOrReplaceTempView("pruningData")
     spark.catalog.cacheTable("pruningData")
+
+    val pruningStringData = sparkContext.makeRDD((100 to 200).map { key =>
+      StringData(key.toString)
+    }, 5).toDF()
+    pruningStringData.createOrReplaceTempView("pruningStringData")
+    spark.catalog.cacheTable("pruningStringData")
   }
 
   override protected def afterEach(): Unit = {
     try {
       spark.catalog.uncacheTable("pruningData")
+      spark.catalog.uncacheTable("pruningStringData")
     } finally {
       super.afterEach()
     }
@@ -110,7 +123,23 @@ class PartitionBatchPruningSuite
     88 to 100
   }
 
-  // With unsupported predicate
+  // Support `IN` predicate
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1)", 1, 1)(Seq(1))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 2)", 1, 1)(Seq(1, 2))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 11)", 1, 2)(Seq(1, 11))
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 21, 41, 61, 81)", 5, 5)(
+    Seq(1, 21, 41, 61, 81))
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s = '100'", 1, 1)(Seq(100))
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s < '102'", 1, 1)(
+    Seq(100, 101))
+  checkBatchPruning(
+    "SELECT CAST(s AS INT) FROM pruningStringData WHERE s IN ('99', '150', '201')", 1, 1)(
+      Seq(150))
+
+  // Unsupported large `In` predicate
+  checkBatchPruning("SELECT key FROM pruningData WHERE key IN (1, 2, 3, 4, 5, 6)", 5, 10)(1 to 6)
+
+  // With unsupported `InSet` predicate
   {
     val seq = (1 to 30).mkString(", ")
     checkBatchPruning(s"SELECT key FROM pruningData WHERE NOT (key IN ($seq))", 5, 10)(31 to 100)
