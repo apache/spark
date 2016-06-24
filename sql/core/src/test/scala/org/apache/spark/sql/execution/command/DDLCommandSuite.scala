@@ -349,10 +349,13 @@ class DDLCommandSuite extends PlanTest {
   }
 
   test("create table using - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
+    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
+      "USING parquet PARTITIONED BY (a)"
     val expected = CreateTableUsing(
       TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType)),
       "parquet",
       false,
       Map.empty,
