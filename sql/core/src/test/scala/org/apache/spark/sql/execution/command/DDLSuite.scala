@@ -1283,9 +1283,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("CREATE TABLE t SELECT a, b from t1")
       }.getMessage
       assert(e.contains("Hive support is required to use CREATE TABLE AS SELECT"))
-
-      sql(s"CREATE TABLE t USING parquet SELECT a, b from t1")
-
     }
   }
 
