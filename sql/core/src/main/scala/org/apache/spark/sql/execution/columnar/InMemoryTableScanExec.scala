@@ -81,7 +81,7 @@ private[sql] case class InMemoryTableScanExec(
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
 
     case In(a: AttributeReference, list: Seq[Expression])
-      if list.length <= inMemoryPartitionPruningMaxInSize =>
+      if list.length <= inMemoryPartitionPruningMaxInSize && list.forall(_.isInstanceOf[Literal]) =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
