@@ -107,7 +107,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     // est. size of this model, given the formula:
     // (floatSize * vectorSize + 15) * numWords
     // (4 * 10 + 15) * 10 = 550
-    // therefore it should generate 12 partitions
+    // therefore it should generate multiple partitions
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
@@ -118,13 +118,13 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     catch {
       case t: Throwable => fail("exception thrown persisting a model " +
-        "that spans over 12 partitions", t)
-    }
-    finally {
+        "that spans over multiple partitions", t)
+    } finally {
       Utils.deleteRecursively(tempDir)
       spark.conf.set("spark.kryoserializer.buffer", oldBufferConfValue)
       spark.conf.set("spark.kryoserializer.buffer.max", oldBufferMaxConfValue)
     }
+
   }
 
   test("test similarity for word vectors with large values is not Infinity or NaN") {
