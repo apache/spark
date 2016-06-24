@@ -1908,7 +1908,7 @@ class Dataset[T] private[sql](
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    LocalRelation.fromExternalRows(schema, ret)
+    LocalRelation.fromExternalRows(schema, ret.toArray.toSeq)
   }
 
   /**
