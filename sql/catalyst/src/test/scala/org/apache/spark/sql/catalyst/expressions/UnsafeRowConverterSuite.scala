@@ -340,7 +340,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val nestedArray = unsafeArray2.getArray(0)
     testArrayInt(nestedArray, Seq(3, 4))
 
-    assert(unsafeArray2.getSizeInBytes == 4 + 8 + 8+ nestedArray.getSizeInBytes)
+    assert(unsafeArray2.getSizeInBytes == 4 + 8 + 8 + nestedArray.getSizeInBytes)
 
     val array1Size = roundedSize(unsafeArray1.getSizeInBytes)
     val array2Size = roundedSize(unsafeArray2.getSizeInBytes)
