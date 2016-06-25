@@ -69,7 +69,7 @@ object PhysicalOperation extends PredicateHelper {
           .partition(_.deterministic)
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedFilters = deterministicFilters.map(substitute(aliases)(_))
-        (fields, filters ++ deterministicFilters, other, aliases)
+        (fields, filters ++ substitutedFilters, other, aliases)
 
       case BroadcastHint(child) =>
         collectProjectsAndFilters(child)
