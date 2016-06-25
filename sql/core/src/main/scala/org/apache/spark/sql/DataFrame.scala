@@ -1363,7 +1363,8 @@ class DataFrame private[sql](
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    LocalRelation.fromExternalRows(schema, ret)
+    // `toArray` forces materialization to make the seq serializable
+    LocalRelation.fromExternalRows(schema, ret.toArray.toSeq)
   }
 
   /**
