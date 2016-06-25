@@ -228,10 +228,6 @@ class GenericArrayData(val array: Array[Any],
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericArrayData]) {
       return false
     }
@@ -349,10 +345,6 @@ final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericA
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericIntArrayData]) {
       return false
     }
@@ -382,10 +374,6 @@ final class GenericLongArrayData(val primitiveArray: Array[Long])
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericLongArrayData]) {
       return false
     }
@@ -418,10 +406,6 @@ final class GenericFloatArrayData(val primitiveArray: Array[Float])
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericFloatArrayData]) {
       return false
     }
@@ -454,10 +438,6 @@ final class GenericDoubleArrayData(val primitiveArray: Array[Double])
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericDoubleArrayData]) {
       return false
     }
@@ -490,10 +470,6 @@ final class GenericShortArrayData(val primitiveArray: Array[Short])
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericShortArrayData]) {
       return false
     }
@@ -526,10 +502,6 @@ final class GenericByteArrayData(val primitiveArray: Array[Byte])
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericByteArrayData]) {
       return false
     }
@@ -562,10 +534,6 @@ final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
   }
 
   override def equals(o: Any): Boolean = {
-    if (o == this) {
-      return true
-    }
-
     if (o == null || !o.isInstanceOf[GenericBooleanArrayData]) {
       return false
     }
