@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark [[GenericArrayData]] for Dense and Sparse with primitive type
+ * Benchmark [[GenericArrayData]] for specialized representation with primitive type
  * To run this:
  *  build/sbt "sql/test-only *benchmark.GenericArrayDataBenchmark"
  *
@@ -36,14 +36,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     var array: GenericArrayData = null
 
     val primitiveIntArray = new Array[Int](count)
-    val denseIntArray = { i: Int =>
+    val specializedIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
         array = GenericArrayData.allocate(primitiveIntArray)
         n += 1
       }
     }
-    val sparseIntArray = { i: Int =>
+    val genericIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
         array = new GenericRefArrayData(primitiveIntArray)
@@ -53,16 +53,16 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
 
     val benchmark = new Benchmark("Allocate GenericArrayData for int", count * iters,
       minNumIters = 10, minTime = 1.milliseconds)
-    benchmark.addCase("Sparse")(sparseIntArray)
-    benchmark.addCase("Dense ")(denseIntArray)
+    benchmark.addCase("Generic    ")(genericIntArray)
+    benchmark.addCase("Specialized")(specializedIntArray)
     benchmark.run
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Allocate GenericArrayData for int:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Sparse                                          40 /   43        522.2           1.9       1.0X
-    Dense                                            0 /    0  209715200.0           0.0  401598.7X
+    Generic                                         40 /   43        522.2           1.9       1.0X
+    Specialized                                      0 /    0  209715200.0           0.0  401598.7X
     */
   }
 
@@ -71,14 +71,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     var array: GenericArrayData = null
 
     val primitiveDoubleArray = new Array[Int](count)
-    val denseDoubleArray = { i: Int =>
+    val specializedDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         array = GenericArrayData.allocate(primitiveDoubleArray)
         n += 1
       }
     }
-    val sparseDoubleArray = { i: Int =>
+    val genericDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         array = new GenericRefArrayData(primitiveDoubleArray)
@@ -88,16 +88,16 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
 
     val benchmark = new Benchmark("Allocate GenericArrayData for double", count * iters,
       minNumIters = 10, minTime = 1.milliseconds)
-    benchmark.addCase("Sparse")(sparseDoubleArray)
-    benchmark.addCase("Dense ")(denseDoubleArray)
+    benchmark.addCase("Generic    ")(genericDoubleArray)
+    benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Allocate GenericArrayData for double:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Sparse                                          40 /   44        523.2           1.9       1.0X
-    Dense                                            0 /    0  225500215.1           0.0  431013.0X
+    Generic                                         40 /   44        523.2           1.9       1.0X
+    Specialized                                      0 /    0  225500215.1           0.0  431013.0X
     */
   }
 
@@ -107,7 +107,7 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     val intSparseArray: GenericArrayData = new GenericRefArrayData(new Array[Int](count))
     val intDenseArray: GenericArrayData = GenericArrayData.allocate(new Array[Int](count))
     var primitiveIntArray: Array[Int] = null
-    val sparseIntArray = { i: Int =>
+    val genericIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
         primitiveIntArray = intSparseArray.toIntArray
@@ -123,16 +123,16 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     val benchmark = new Benchmark("Get int primitive array", count * iters)
-    benchmark.addCase("Sparse int")(sparseIntArray)
-    benchmark.addCase("Dense  int")(denseIntArray)
+    benchmark.addCase("Generic    ")(genericIntArray)
+    benchmark.addCase("Specialized")(denseIntArray)
     benchmark.run
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Get int primitive array:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Sparse int                                      67 /   70        783.9           1.3       1.0X
-    Dense  int                                      41 /   43       1263.8           0.8       1.6X
+    Generic                                         67 /   70        783.9           1.3       1.0X
+    Specialized                                     41 /   43       1263.8           0.8       1.6X
     */
   }
 
@@ -142,14 +142,14 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     val doubleSparseArray: GenericArrayData = new GenericRefArrayData(new Array[Double](count))
     val doubleDenseArray: GenericArrayData = GenericArrayData.allocate(new Array[Double](count))
     var primitiveDoubleArray: Array[Double] = null
-    val sparseDoubleArray = { i: Int =>
+    val genericDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         primitiveDoubleArray = doubleSparseArray.toDoubleArray
         n += 1
       }
     }
-    val denseDoubleArray = { i: Int =>
+    val specializedDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         primitiveDoubleArray = doubleDenseArray.toDoubleArray
@@ -158,16 +158,16 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     val benchmark = new Benchmark("Get double primitive array", count * iters)
-    benchmark.addCase("Sparse double")(sparseDoubleArray)
-    benchmark.addCase("Dense  double")(denseDoubleArray)
+    benchmark.addCase("Generic    ")(genericDoubleArray)
+    benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Get double primitive array:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Sparse double                                  211 /  217        248.6           4.0       1.0X
-    Dense  double                                   95 /  100        554.1           1.8       2.2X
+    Generic                                        211 /  217        248.6           4.0       1.0X
+    Specialized                                     95 /  100        554.1           1.8       2.2X
     */
   }
 
@@ -176,7 +176,7 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     var result: Int = 0
 
     val sparseArray = new GenericRefArrayData(new Array[Int](count))
-    val sparseIntArray = { i: Int =>
+    val genericIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
         val len = sparseArray.numElements
@@ -208,7 +208,7 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     val benchmark = new Benchmark("Read GenericArrayData Int", count * iters)
-    benchmark.addCase("Sparse")(sparseIntArray)
+    benchmark.addCase("Sparse")(genericIntArray)
     benchmark.addCase("Dense ")(denseIntArray)
     benchmark.run
     /*
@@ -216,8 +216,8 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Read GenericArrayData Int:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Sparse                                         160 /  163       1314.5           0.8       1.0X
-    Dense                                           68 /   69       3080.0           0.3       2.3X
+    Generic                                        160 /  163       1314.5           0.8       1.0X
+    Specialized                                     68 /   69       3080.0           0.3       2.3X
     */
   }
 
@@ -226,7 +226,7 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     var result: Double = 0
 
     val sparseArray = new GenericRefArrayData(new Array[Double](count))
-    val sparseDoubleArray = { i: Int =>
+    val genericDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         val len = sparseArray.numElements
@@ -242,7 +242,7 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     val denseArray = GenericArrayData.allocate(new Array[Double](count))
-    val denseDoubleArray = { i: Int =>
+    val specializedDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         val len = denseArray.numElements
@@ -258,16 +258,16 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     }
 
     val benchmark = new Benchmark("Read GenericArrayData Double", count * iters)
-    benchmark.addCase("Sparse")(sparseDoubleArray)
-    benchmark.addCase("Dense ")(denseDoubleArray)
+    benchmark.addCase("Generic")(genericDoubleArray)
+    benchmark.addCase("Specialized")(specializedDoubleArray)
     benchmark.run
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Read GenericArrayData Double:            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Sparse                                         611 /  613        343.3           2.9       1.0X
-    Dense                                          199 /  202       1051.5           1.0       3.1X
+    Generic                                        611 /  613        343.3           2.9       1.0X
+    Specialized                                    199 /  202       1051.5           1.0       3.1X
     */
   }
 
