@@ -55,11 +55,13 @@ public class UnsafeArrayWriter {
     this.holder = holder;
     this.startingOffset = holder.cursor;
 
-    // Grows the global buffer ahead for fixed size data.
+    // Grows the global buffer ahead for header and fixed size data.
     holder.grow(headerInBytes + fixedElementSize * numElements);
 
+    // Initialize information in header
     Platform.putInt(holder.buffer, startingOffset, numElements);
-    Arrays.fill(holder.buffer, startingOffset + 4, startingOffset + headerInBytes, (byte)0);
+    Arrays.fill(holder.buffer, startingOffset + 4 - Platform.BYTE_ARRAY_OFFSET,
+      startingOffset + headerInBytes - Platform.BYTE_ARRAY_OFFSET, (byte)0);
 
     holder.cursor += (headerInBytes + fixedElementSize * numElements);
   }
