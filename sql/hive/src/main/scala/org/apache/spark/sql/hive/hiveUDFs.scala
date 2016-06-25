@@ -336,7 +336,7 @@ private[hive] case class HiveUDAFFunction(
 
   override def nullable: Boolean = true
 
-  override def supportsPartial: Boolean = false
+  override def forceSortAggregate: Boolean = true
 
   override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 

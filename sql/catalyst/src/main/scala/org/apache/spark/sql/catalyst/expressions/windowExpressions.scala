@@ -431,7 +431,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
-  override def supportsPartial: Boolean = false
+  override def forceSortAggregate: Boolean = true
   override lazy val mergeExpressions =
     throw new UnsupportedOperationException("Window Functions do not support merging.")
 }

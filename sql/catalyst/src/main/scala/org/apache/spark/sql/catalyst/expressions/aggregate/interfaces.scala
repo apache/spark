@@ -175,9 +175,9 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
 
   /**
    * Indicates if this function needs to aggregate values group-by-group in a single step.
-   * If false, we must always use a `SortAggregateExec` operator without partial aggregates.
+   * If true, we must always use a `SortAggregateExec` operator without partial aggregates.
    */
-  def supportsPartial: Boolean = true
+  def forceSortAggregate: Boolean = false
 
   /**
    * Result of the aggregate function when the input is empty. This is currently only used for the
