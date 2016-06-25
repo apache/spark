@@ -262,15 +262,15 @@ private[orc] object OrcRelation extends HiveInspectors {
   // The references of Hive's classes will be minimized.
   val ORC_COMPRESSION = "orc.compress"
 
+  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
+  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
+
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
     "NONE" -> "",
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
     "LZO" -> ".lzo")
-
-  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
-  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
   def unwrapOrcStructs(
       conf: Configuration,
