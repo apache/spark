@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -216,7 +216,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
       assert(spark.sessionState.conf.warehousePath
-        === new File(s"${System.getProperty("user.dir")}/spark-warehouse").toURI.toString)
+        === new Path(s"${System.getProperty("user.dir")}/spark-warehouse").toUri.toString)
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
