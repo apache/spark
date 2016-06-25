@@ -40,7 +40,7 @@ object GenericArrayData {
     new GenericShortArrayData(primitiveArray)
   def allocate(primitiveArray: Array[Byte]): GenericByteArrayData =
     new GenericByteArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Boolean]): GenericArrayData =
+  def allocate(primitiveArray: Array[Boolean]): GenericBooleanArrayData =
     new GenericBooleanArrayData(primitiveArray)
 }
 
