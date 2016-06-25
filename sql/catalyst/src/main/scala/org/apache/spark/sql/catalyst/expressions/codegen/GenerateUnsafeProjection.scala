@@ -192,26 +192,30 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val fixedElementSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
       case _ if ctx.isPrimitiveType(jt) => et.defaultSize
-      case _ => 0
+      case _ => 8
     }
 
+    val tmpCursor = ctx.freshName("tmpCursor")
     val writeElement = et match {
       case t: StructType =>
         s"""
-          $arrayWriter.setOffset($index);
+          final int $tmpCursor = $bufferHolder.cursor;
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
+          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          $arrayWriter.setOffset($index);
+          final int $tmpCursor = $bufferHolder.cursor;
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
+          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          $arrayWriter.setOffset($index);
+          final int $tmpCursor = $bufferHolder.cursor;
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
+          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case t: DecimalType =>
@@ -222,6 +226,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
+    val dataType = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
     s"""
       if ($input instanceof UnsafeArrayData) {
         ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
@@ -231,7 +236,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         for (int $index = 0; $index < $numElements; $index++) {
           if ($input.isNullAt($index)) {
-            $arrayWriter.setNullAt($index);
+            $arrayWriter.setNull$dataType($index);
           } else {
             final $jt $element = ${ctx.getValue(input, et, index)};
             $writeElement
