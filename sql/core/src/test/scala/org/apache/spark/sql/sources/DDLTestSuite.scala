@@ -45,7 +45,7 @@ case class SimpleDDLScan(
 
   override def schema: StructType =
     StructType(Seq(
-      StructField("intType", IntegerType, nullable = false, s"test comment $table"),
+      StructField("intType", IntegerType, nullable = false).withComment(s"test comment $table"),
       StructField("stringType", StringType, nullable = false),
       StructField("dateType", DateType, nullable = false),
       StructField("timestampType", TimestampType, nullable = false),

@@ -70,16 +70,3 @@ case class StructField(
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
   }
 }
-
-object StructField {
-  def apply(
-      name: String,
-      dataType: DataType,
-      nullable: Boolean,
-      comment: String): StructField =
-  new StructField(
-    name,
-    dataType,
-    nullable,
-    metadata = new MetadataBuilder().putString("comment", comment).build())
-}

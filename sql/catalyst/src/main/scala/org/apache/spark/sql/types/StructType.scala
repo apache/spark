@@ -184,7 +184,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: DataType,
       nullable: Boolean,
       comment: String): StructType = {
-    StructType(fields :+ StructField(name, dataType, nullable, comment))
+    StructType(fields :+ StructField(name, dataType, nullable).withComment(comment))
   }
 
   /**

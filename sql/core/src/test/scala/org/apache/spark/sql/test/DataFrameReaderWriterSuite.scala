@@ -368,7 +368,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     Seq("json", "parquet", "csv").foreach { format =>
       val schema = StructType(
-        StructField("cl1", IntegerType, nullable = false, comment = "test") ::
+        StructField("cl1", IntegerType, nullable = false).withComment("test") ::
           StructField("cl2", IntegerType, nullable = true) ::
           StructField("cl3", IntegerType, nullable = true) :: Nil)
       val row = Row(3, null, 4)
