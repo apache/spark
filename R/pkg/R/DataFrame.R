@@ -194,10 +194,10 @@ setMethod("isLocal",
 setMethod("showDF",
           signature(x = "SparkDataFrame"),
           function(x, numRows = 20, truncate = TRUE) {
-            truncate2 <- as.numeric(truncate)
-            if (truncate2 == 1) {
+            if (is.logical(truncate) && truncate) {
               s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
             } else {
+              truncate2 <- as.numeric(truncate)
               s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
             }
             cat(s)

@@ -292,7 +292,7 @@ class DataFrame(object):
         |  5| Bob|
         +---+----+
         """
-        if truncate == 1:
+        if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20))
         else:
             print(self._jdf.showString(n, int(truncate)))
