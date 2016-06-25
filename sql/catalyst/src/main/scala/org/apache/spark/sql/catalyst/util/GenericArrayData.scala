@@ -228,14 +228,15 @@ class GenericArrayData(val array: Array[Any],
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericArrayData]) {
       return false
     }
 
     val other = o.asInstanceOf[GenericArrayData]
-    if (other eq null) {
-      return false
-    }
 
     val len = numElements()
     if (len != other.numElements()) {
@@ -335,7 +336,7 @@ class GenericArrayData(val array: Array[Any],
 final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericIntArrayData = new GenericIntArrayData(primitiveArray.clone())
+  override def copy(): GenericIntArrayData = new GenericIntArrayData(toIntArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -348,14 +349,15 @@ final class GenericIntArrayData(val primitiveArray: Array[Int]) extends GenericA
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericIntArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericIntArrayData]) {
       return false
     }
 
     val other = o.asInstanceOf[GenericIntArrayData]
-    if (other eq null) {
-      return false
-    }
 
     java.util.Arrays.equals(primitiveArray, other.primitiveArray)
   }
@@ -367,7 +369,7 @@ final class GenericLongArrayData(val primitiveArray: Array[Long])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericLongArrayData = new GenericLongArrayData(primitiveArray.clone())
+  override def copy(): GenericLongArrayData = new GenericLongArrayData(toLongArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -380,7 +382,11 @@ final class GenericLongArrayData(val primitiveArray: Array[Long])
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericLongArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericLongArrayData]) {
       return false
     }
 
@@ -399,7 +405,7 @@ final class GenericFloatArrayData(val primitiveArray: Array[Float])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericFloatArrayData = new GenericFloatArrayData(primitiveArray.clone())
+  override def copy(): GenericFloatArrayData = new GenericFloatArrayData(toFloatArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -412,7 +418,11 @@ final class GenericFloatArrayData(val primitiveArray: Array[Float])
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericFloatArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericFloatArrayData]) {
       return false
     }
 
@@ -431,7 +441,7 @@ final class GenericDoubleArrayData(val primitiveArray: Array[Double])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericDoubleArrayData = new GenericDoubleArrayData(primitiveArray.clone())
+  override def copy(): GenericDoubleArrayData = new GenericDoubleArrayData(toDoubleArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -444,7 +454,11 @@ final class GenericDoubleArrayData(val primitiveArray: Array[Double])
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericDoubleArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericDoubleArrayData]) {
       return false
     }
 
@@ -463,7 +477,7 @@ final class GenericShortArrayData(val primitiveArray: Array[Short])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericShortArrayData = new GenericShortArrayData(primitiveArray.clone())
+  override def copy(): GenericShortArrayData = new GenericShortArrayData(toShortArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -476,7 +490,11 @@ final class GenericShortArrayData(val primitiveArray: Array[Short])
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericShortArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericShortArrayData]) {
       return false
     }
 
@@ -495,7 +513,7 @@ final class GenericByteArrayData(val primitiveArray: Array[Byte])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericByteArrayData = new GenericByteArrayData(primitiveArray.clone())
+  override def copy(): GenericByteArrayData = new GenericByteArrayData(toByteArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -508,7 +526,11 @@ final class GenericByteArrayData(val primitiveArray: Array[Byte])
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericByteArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericByteArrayData]) {
       return false
     }
 
@@ -527,7 +549,7 @@ final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
   extends GenericArrayData {
   override def array(): Array[Any] = primitiveArray.toArray
 
-  override def copy(): GenericBooleanArrayData = new GenericBooleanArrayData(primitiveArray.clone())
+  override def copy(): GenericBooleanArrayData = new GenericBooleanArrayData(toBooleanArray)
 
   override def numElements(): Int = primitiveArray.length
 
@@ -540,7 +562,11 @@ final class GenericBooleanArrayData(val primitiveArray: Array[Boolean])
   }
 
   override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericBooleanArrayData]) {
+    if (o == this) {
+      return true
+    }
+
+    if (o == null || !o.isInstanceOf[GenericBooleanArrayData]) {
       return false
     }
 
