@@ -828,16 +828,16 @@ object ConstantFolding extends Rule[LogicalPlan] {
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case i @ In(v, l) =>
-        val (deterministics, others) = l.partition(_.deterministic)
+      case i @ In(v, list) =>
+        val (deterministics, others) = list.partition(_.deterministic)
         val newList = ExpressionSet(deterministics).toSeq ++ others
         if (newList.forall(_.isInstanceOf[Literal]) &&
             newList.size > conf.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
-        } else if (newList.length < l.length) {
+        } else if (newList.length < list.length) {
           i.copy(v, newList)
-        } else { // newList.length == l.length
+        } else { // newList.length == list.length
           i
         }
     }
