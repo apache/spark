@@ -22,7 +22,7 @@ import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Paths
 import java.util.Arrays
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.JavaConverters._
@@ -194,7 +194,9 @@ private class SpillListener extends SparkListener {
   private val stagesDone = new CountDownLatch(1)
 
   def numSpilledStages: Int = {
-    stagesDone.await()
+    // Long timeout, just in case somehow the job end isn't notified.
+    // Fails if a timeout occurs
+    assert(stagesDone.await(10, TimeUnit.SECONDS))
     spilledStageIds.size
   }
 
