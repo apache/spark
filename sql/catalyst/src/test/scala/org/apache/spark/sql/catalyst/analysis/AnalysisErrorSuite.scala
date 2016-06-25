@@ -436,8 +436,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("we should fail analysis when we find map type data in collect_set") {
-    val dataType = MapType(StringType, IntegerType)
-    val plan =
+    def errorTest(dataType: DataType): Unit = {
+      val plan =
         Aggregate(
           AttributeReference("a", IntegerType)(exprId = ExprId(2)) :: Nil,
           Alias(CollectSet(AttributeReference("b", dataType)(exprId = ExprId(1)))
@@ -445,7 +445,11 @@ class AnalysisErrorSuite extends AnalysisTest {
           LocalRelation(
             AttributeReference("a", IntegerType)(exprId = ExprId(2)),
             AttributeReference("b", dataType)(exprId = ExprId(1))))
-    assertAnalysisError(plan, "collect_set() cannot have map type data" :: Nil)
+      assertAnalysisError(plan, "collect_set() cannot have map type data" :: Nil)
+    }
+
+    val mapType = MapType(StringType, IntegerType)
+    (mapType :: ArrayType(mapType) :: StructType(StructField("x", mapType) :: Nil) :: Nil)
   }
 
   test("Join can't work on binary and map types") {

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import scala.collection.generic.Growable
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
@@ -106,6 +107,14 @@ case class CollectSet(
     inputAggBufferOffset: Int = 0) extends Collect {
 
   def this(child: Expression) = this(child, 0, 0)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure("collect_set() cannot have map type data")
+    }
+  }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
