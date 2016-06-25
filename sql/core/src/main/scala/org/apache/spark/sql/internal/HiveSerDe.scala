@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.hadoop.mapred.InputFormat
-
 case class HiveSerDe(
   inputFormat: Option[String] = None,
   outputFormat: Option[String] = None,
