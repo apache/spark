@@ -245,6 +245,18 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
       Seq(Row("a", 6, 9), Row("b", 9, 6)))
   }
 
+  test("SPARK-16195 empty over spec") {
+    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
+      toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
+      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    checkAnswer(
+      sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
+      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+  }
+
   test("window function with udaf") {
     val udaf = new UserDefinedAggregateFunction {
       def inputSchema: StructType = new StructType()
