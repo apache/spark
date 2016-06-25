@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.File
 import java.nio.charset.StandardCharsets
 
 import org.scalatest.BeforeAndAfterAll
@@ -25,7 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -147,11 +146,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("save and load case class RDD with `None`s as orc") {
     val data = (
-      None: Option[Int],
-      None: Option[Long],
-      None: Option[Float],
-      None: Option[Double],
-      None: Option[Boolean]
+      Option.empty[Int],
+      Option.empty[Long],
+      Option.empty[Float],
+      Option.empty[Double],
+      Option.empty[Boolean]
     ) :: Nil
 
     withOrcFile(data) { file =>
@@ -401,36 +400,48 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-14070 Use ORC data source for SQL queries on ORC tables") {
-    withTempPath { dir =>
-      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
-        HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
-        val path = dir.getCanonicalPath
+  test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
+    withTempTable("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
 
-        withTable("dummy_orc") {
-          withTempTable("single") {
-            spark.sql(
-              s"""CREATE TABLE dummy_orc(key INT, value STRING)
-                  |STORED AS ORC
-                  |LOCATION '$path'
-               """.stripMargin)
+      Seq("true", "false").foreach { orcConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
+          withTable("dummy_orc") {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.sql(
+                s"""
+                   |CREATE TABLE dummy_orc(key INT, value STRING)
+                   |STORED AS ORC
+                   |LOCATION '$path'
+                 """.stripMargin)
 
-            val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-            singleRowDF.createOrReplaceTempView("single")
+              spark.sql(
+                s"""
+                   |INSERT INTO TABLE dummy_orc
+                   |SELECT key, value FROM single
+                 """.stripMargin)
 
-            spark.sql(
-              s"""INSERT INTO TABLE dummy_orc
-                  |SELECT key, value FROM single
-               """.stripMargin)
+              val df = spark.sql("SELECT * FROM dummy_orc WHERE key=0")
+              checkAnswer(df, singleRowDF)
 
-            val df = spark.sql("SELECT * FROM dummy_orc WHERE key=0")
-            checkAnswer(df, singleRowDF)
-
-            val queryExecution = df.queryExecution
-            queryExecution.analyzed.collectFirst {
-              case _: LogicalRelation => ()
-            }.getOrElse {
-              fail(s"Expecting the query plan to have LogicalRelation, but got:\n$queryExecution")
+              val queryExecution = df.queryExecution
+              if (orcConversion == "true") {
+                queryExecution.analyzed.collectFirst {
+                  case _: LogicalRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting the query plan to convert orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              } else {
+                queryExecution.analyzed.collectFirst {
+                  case _: MetastoreRelation => ()
+                }.getOrElse {
+                  fail(s"Expecting no conversion from orc to data sources, " +
+                    s"but got:\n$queryExecution")
+                }
+              }
             }
           }
         }

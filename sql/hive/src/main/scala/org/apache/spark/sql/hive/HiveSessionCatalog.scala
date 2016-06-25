@@ -87,7 +87,6 @@ private[sql] class HiveSessionCatalog(
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
   val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
-  val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
 
   override def refreshTable(name: TableIdentifier): Unit = {
     metastoreCatalog.refreshTable(name)

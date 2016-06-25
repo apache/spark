@@ -30,25 +30,12 @@ object CatalystSerde {
     DeserializeToObject(deserializer, generateObjAttr[T], child)
   }
 
-  def deserialize(child: LogicalPlan, encoder: ExpressionEncoder[Row]): DeserializeToObject = {
-    val deserializer = UnresolvedDeserializer(encoder.deserializer)
-    DeserializeToObject(deserializer, generateObjAttrForRow(encoder), child)
-  }
-
   def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
     SerializeFromObject(encoderFor[T].namedExpressions, child)
   }
 
-  def serialize(child: LogicalPlan, encoder: ExpressionEncoder[Row]): SerializeFromObject = {
-    SerializeFromObject(encoder.namedExpressions, child)
-  }
-
   def generateObjAttr[T : Encoder]: Attribute = {
     AttributeReference("obj", encoderFor[T].deserializer.dataType, nullable = false)()
-  }
-
-  def generateObjAttrForRow(encoder: ExpressionEncoder[Row]): Attribute = {
-    AttributeReference("obj", encoder.deserializer.dataType, nullable = false)()
   }
 }
 
@@ -128,16 +115,16 @@ object MapPartitionsInR {
       schema: StructType,
       encoder: ExpressionEncoder[Row],
       child: LogicalPlan): LogicalPlan = {
-    val deserialized = CatalystSerde.deserialize(child, encoder)
+    val deserialized = CatalystSerde.deserialize(child)(encoder)
     val mapped = MapPartitionsInR(
       func,
       packageNames,
       broadcastVars,
       encoder.schema,
       schema,
-      CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
+      CatalystSerde.generateObjAttr(RowEncoder(schema)),
       deserialized)
-    CatalystSerde.serialize(mapped, RowEncoder(schema))
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
   }
 }
 
@@ -154,6 +141,9 @@ case class MapPartitionsInR(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
   override lazy val schema = outputSchema
+
+  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
+    outputObjAttr, child)
 }
 
 object MapElements {
@@ -255,6 +245,55 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
+
+/** Factory for constructing new `FlatMapGroupsInR` nodes. */
+object FlatMapGroupsInR {
+  def apply(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType,
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      inputSchema: StructType,
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      child: LogicalPlan): LogicalPlan = {
+    val mapped = FlatMapGroupsInR(
+      func,
+      packageNames,
+      broadcastVars,
+      inputSchema,
+      schema,
+      UnresolvedDeserializer(keyDeserializer, groupingAttributes),
+      UnresolvedDeserializer(valueDeserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      CatalystSerde.generateObjAttr(RowEncoder(schema)),
+      child)
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
+  }
+}
+
+case class FlatMapGroupsInR(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    outputSchema: StructType,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
+    child: LogicalPlan) extends UnaryNode with ObjectProducer{
+
+  override lazy val schema = outputSchema
+
+  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
+    keyDeserializer, valueDeserializer, groupingAttributes, dataAttributes, outputObjAttr,
+    child)
+}
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {

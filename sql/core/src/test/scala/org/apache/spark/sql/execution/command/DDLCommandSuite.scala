@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsing}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
 
 
 // TODO: merge this with DDLSuite (SPARK-14441)
@@ -237,6 +237,21 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
+  test("create table - table file format") {
+    val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
+      "sequencefile", "rcfile", "textfile")
+
+    allSources.foreach { s =>
+      val query = s"CREATE TABLE my_tab STORED AS $s"
+      val ct = parseAs[CreateTableCommand](query)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      assert(hiveSerde.isDefined)
+      assert(ct.table.storage.serde == hiveSerde.get.serde)
+      assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+      assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+    }
+  }
+
   test("create table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
@@ -319,11 +334,29 @@ class DDLCommandSuite extends PlanTest {
     assert(ct.table.storage.locationUri == Some("/something/anything"))
   }
 
+  test("create table - column repeated in partitioning columns") {
+    val query = "CREATE TABLE tab1 (key INT, value STRING) PARTITIONED BY (key INT, hr STRING)"
+    val e = intercept[ParseException] { parser.parsePlan(query) }
+    assert(e.getMessage.contains(
+      "Operation not allowed: Partition columns may not be specified in the schema: [\"key\"]"))
+  }
+
+  test("create table - duplicate column names in the table definition") {
+    val query = "CREATE TABLE default.tab1 (key INT, key STRING)"
+    val e = intercept[ParseException] { parser.parsePlan(query) }
+    assert(e.getMessage.contains("Operation not allowed: Duplicated column names found in " +
+      "table definition of `default`.`tab1`: [\"key\"]"))
+  }
+
   test("create table using - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
+    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
+      "USING parquet PARTITIONED BY (a)"
     val expected = CreateTableUsing(
       TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(new StructType()
+        .add("a", IntegerType, nullable = true,
+          new MetadataBuilder().putString("comment", s"test").build())
+        .add("b", StringType)),
       "parquet",
       false,
       Map.empty,

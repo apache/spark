@@ -137,7 +137,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test inferring decimals") {
-    val result = sqlContext.read
+    val result = spark.read
       .format("csv")
       .option("comment", "~")
       .option("header", "true")
@@ -654,5 +654,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
     }
+  }
+
+  test("SPARK-15585 turn off quotations") {
+    val cars = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("quote", "")
+      .load(testFile(carsUnbalancedQuotesFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
   }
 }

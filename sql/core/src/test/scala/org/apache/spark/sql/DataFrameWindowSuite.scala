@@ -110,6 +110,14 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
       Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
   }
 
+  test("window function should fail if order by clause is not specified") {
+    val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
+    val e = intercept[AnalysisException](
+      // Here we missed .orderBy("key")!
+      df.select(row_number().over(Window.partitionBy("value"))).collect())
+    assert(e.message.contains("requires window to be ordered"))
+  }
+
   test("aggregation and rows between") {
     val df = Seq((1, "1"), (2, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.createOrReplaceTempView("window_table")
@@ -235,6 +243,18 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
           sum($"value"),
           sum(sum($"value")).over(window) - sum($"value")),
       Seq(Row("a", 6, 9), Row("b", 9, 6)))
+  }
+
+  test("SPARK-16195 empty over spec") {
+    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
+      toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
+      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    checkAnswer(
+      sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
+      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
   }
 
   test("window function with udaf") {

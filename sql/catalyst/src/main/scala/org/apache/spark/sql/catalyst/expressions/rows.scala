@@ -214,7 +214,7 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
 }
 
 /**
- * A internal row implementation that uses an array of objects as the underlying storage.
+ * An internal row implementation that uses an array of objects as the underlying storage.
  * Note that, while the array is not copied, and thus could technically be mutated after creation,
  * this is not allowed.
  */

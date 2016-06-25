@@ -491,7 +491,7 @@ private[spark] object RandomForest extends Logging {
     timer.start("chooseSplits")
 
     // In each partition, iterate all instances and compute aggregate stats for each node,
-    // yield an (nodeIndex, nodeAggregateStats) pair for each node.
+    // yield a (nodeIndex, nodeAggregateStats) pair for each node.
     // After a `reduceByKey` operation,
     // stats of a node will be shuffled to a particular partition and be combined together,
     // then best splits for nodes are found there.

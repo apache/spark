@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.DataType
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
  */
 case class ScalarSubquery(
-    @transient executedPlan: SparkPlan,
+    executedPlan: SparkPlan,
     exprId: ExprId)
   extends SubqueryExpression {
 

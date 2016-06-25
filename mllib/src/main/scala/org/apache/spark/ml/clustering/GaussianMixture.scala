@@ -20,7 +20,6 @@ package org.apache.spark.ml.clustering
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
@@ -33,7 +32,7 @@ import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM}
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -114,7 +113,7 @@ class GaussianMixtureModel private[ml] (
 
   private[clustering] def predictProbability(features: Vector): Vector = {
     val probs: Array[Double] =
-      GaussianMixtureModel.computeProbabilities(features.toBreeze.toDenseVector, gaussians, weights)
+      GaussianMixtureModel.computeProbabilities(features.asBreeze.toDenseVector, gaussians, weights)
     Vectors.dense(probs)
   }
 
@@ -134,9 +133,7 @@ class GaussianMixtureModel private[ml] (
     val modelGaussians = gaussians.map { gaussian =>
       (OldVectors.fromML(gaussian.mean), OldMatrices.fromML(gaussian.cov))
     }
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    sqlContext.createDataFrame(modelGaussians).toDF("mean", "cov")
+    SparkSession.builder().getOrCreate().createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
   /**
@@ -198,7 +195,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -211,7 +208,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val row = sqlContext.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+      val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
       val weights = row.getSeq[Double](0).toArray
       val mus = row.getSeq[OldVector](1).toArray
       val sigmas = row.getSeq[OldMatrix](2).toArray

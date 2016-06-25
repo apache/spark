@@ -320,9 +320,9 @@ object ALSModel extends MLReadable[ALSModel] {
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
-      val userFactors = sqlContext.read.format("parquet").load(userPath)
+      val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      val itemFactors = sqlContext.read.format("parquet").load(itemPath)
+      val itemFactors = sparkSession.read.format("parquet").load(itemPath)
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
@@ -430,15 +430,11 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setIntermediateStorageLevel(value: String): this.type = {
-    set(intermediateStorageLevel, value)
-  }
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setFinalStorageLevel(value: String): this.type = {
-    set(finalStorageLevel, value)
-  }
+  def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.

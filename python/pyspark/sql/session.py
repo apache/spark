@@ -31,7 +31,7 @@ from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.sql.catalog import Catalog
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.readwriter import DataFrameReader, DataStreamReader
 from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -144,7 +144,7 @@ class SparkSession(object):
             default.
 
             >>> s1 = SparkSession.builder.config("k1", "v1").getOrCreate()
-            >>> s1.conf.get("k1") == "v1"
+            >>> s1.conf.get("k1") == s1.sparkContext.getConf().get("k1") == "v1"
             True
 
             In case an existing SparkSession is returned, the config options specified
@@ -168,6 +168,8 @@ class SparkSession(object):
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session.conf.set(key, value)
+                for key, value in self._options.items():
+                    session.sparkContext._conf.set(key, value)
                 return session
 
     builder = Builder()
@@ -358,7 +360,7 @@ class SparkSession(object):
 
     def _createFromLocal(self, data, schema):
         """
-        Create an RDD for DataFrame from an list or pandas.DataFrame, returns
+        Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
         """
         # make sure data could consumed multiple times
@@ -547,11 +549,53 @@ class SparkSession(object):
         """
         return DataFrameReader(self._wrapped)
 
+    @property
+    @since(2.0)
+    def readStream(self):
+        """
+        Returns a :class:`DataStreamReader` that can be used to read data streams
+        as a streaming :class:`DataFrame`.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamReader`
+        """
+        return DataStreamReader(self._wrapped)
+
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`StreamingQueryManager` that allows managing all the
+        :class:`StreamingQuery` StreamingQueries active on `this` context.
+
+        .. note:: Experimental.
+
+        :return: :class:`StreamingQueryManager`
+        """
+        from pyspark.sql.streaming import StreamingQueryManager
+        return StreamingQueryManager(self._jsparkSession.streams())
+
     @since(2.0)
     def stop(self):
         """Stop the underlying :class:`SparkContext`.
         """
         self._sc.stop()
+
+    @since(2.0)
+    def __enter__(self):
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+        """
+        return self
+
+    @since(2.0)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        Specifically stop the SparkSession on exit of the with block.
+        """
+        self.stop()
 
 
 def _test():

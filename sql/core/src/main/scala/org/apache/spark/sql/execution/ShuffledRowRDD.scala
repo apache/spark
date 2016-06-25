@@ -95,7 +95,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
  * interfaces / internals.
  *
  * This RDD takes a [[ShuffleDependency]] (`dependency`),
- * and a optional array of partition start indices as input arguments
+ * and an optional array of partition start indices as input arguments
  * (`specifiedPartitionStartIndices`).
  *
  * The `dependency` has the parent RDD of this RDD, which represents the dataset before shuffle

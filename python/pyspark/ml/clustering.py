@@ -19,7 +19,7 @@ from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'KMeans', 'KMeansModel',
@@ -64,6 +64,21 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. note:: Experimental
 
     GaussianMixture clustering.
+    This class performs expectation maximization for multivariate Gaussian
+    Mixture Models (GMMs).  A GMM represents a composite distribution of
+    independent Gaussian distributions with associated "mixing" weights
+    specifying each's contribution to the composite.
+
+    Given a set of sample points, this class will maximize the log-likelihood
+    for a mixture of k Gaussians, iterating until the log-likelihood changes by
+    less than convergenceTol, or until it has reached the max number of iterations.
+    While this process is generally guaranteed to converge, it is not guaranteed
+    to find a global optimum.
+
+    Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+          This is due to high-dimensional data (a) making it difficult to cluster at all
+          (based on statistical/theoretical arguments) and (b) numerical issues with
+          Gaussian distributions.
 
     >>> from pyspark.ml.linalg import Vectors
 
@@ -118,8 +133,8 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create",
-              typeConverter=TypeConverters.toInt)
+    k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
+              "Must be > 1.", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -227,15 +242,15 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create",
+    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1.",
               typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
-                     "the initialization algorithm. This can be either \"random\" to " +
+                     "The initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
                      "to use a parallel variant of k-means++",
                      typeConverter=TypeConverters.toString)
-    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
-                      typeConverter=TypeConverters.toInt)
+    initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
+                      "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -380,11 +395,11 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create",
+    k = Param(Params._dummy(), "k", "The desired number of leaf clusters. Must be > 1.",
               typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
-                                    "the minimum number of points (if >= 1.0) " +
-                                    "or the minimum proportion",
+                                    "The minimum number of points (if >= 1.0) or the minimum " +
+                                    "proportion of points (if < 1.0) of a divisible cluster.",
                                     typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -661,7 +676,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of topics (clusters) to infer",
+    k = Param(Params._dummy(), "k", "The number of topics (clusters) to infer. Must be > 1.",
               typeConverter=TypeConverters.toInt)
     optimizer = Param(Params._dummy(), "optimizer",
                       "Optimizer or inference algorithm used to estimate the LDA model.  "
