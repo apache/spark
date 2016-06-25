@@ -17,12 +17,22 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.hadoop.mapred.InputFormat
+
 case class HiveSerDe(
   inputFormat: Option[String] = None,
   outputFormat: Option[String] = None,
   serde: Option[String] = None)
 
 object HiveSerDe {
+  val parquetInputFormat = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+  val parquetOutputFormat = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+  val parquetSerde = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+
+  val orcInputFormat = "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"
+  val orcOutputFormat = "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"
+  val orcSerde = "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+
   /**
    * Get the Hive SerDe information from the data source abbreviation string or classname.
    *
@@ -47,15 +57,15 @@ object HiveSerDe {
 
       "orc" ->
         HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
-          serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde")),
+          inputFormat = Option(orcInputFormat),
+          outputFormat = Option(orcOutputFormat),
+          serde = Option(orcSerde)),
 
       "parquet" ->
         HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
-          serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")),
+          inputFormat = Option(parquetInputFormat),
+          outputFormat = Option(parquetOutputFormat),
+          serde = Option(parquetSerde)),
 
       "textfile" ->
         HiveSerDe(
@@ -78,5 +88,23 @@ object HiveSerDe {
     }
 
     serdeMap.get(key)
+  }
+
+  def isParquet(
+      inputFormat: Option[String],
+      outputFormat: Option[String],
+      serde: Option[String]): Boolean = {
+    inputFormat == Option(parquetInputFormat) &&
+      outputFormat == Option(parquetOutputFormat) &&
+      serde == Option(parquetSerde)
+  }
+
+  def isOrc(
+      inputFormat: Option[String],
+      outputFormat: Option[String],
+      serde: Option[String]): Boolean = {
+    inputFormat == Option(orcInputFormat) &&
+      outputFormat == Option(orcOutputFormat) &&
+      serde == Option(orcSerde)
   }
 }

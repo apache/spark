@@ -999,8 +999,24 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           operationNotAllowed(errorMessage, ctx)
         }
 
-        val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
-        if (conf.convertCTAS && !hasStorageProperties) {
+        val convertableFormat: Option[String] =
+          if (ctx.createFileFormat == null && ctx.rowFormat == null) {
+            // When no storage properties, use the default data source format
+            Option(conf.defaultDataSourceName)
+          } else {
+            val inputFormat = tableDesc.storage.inputFormat
+            val outputFormat = tableDesc.storage.outputFormat
+            val serde = tableDesc.storage.serde
+
+            if (HiveSerDe.isParquet(inputFormat, outputFormat, serde)) {
+              Option("parquet")
+            } else if (HiveSerDe.isOrc(inputFormat, outputFormat, serde)) {
+              Option("orc")
+            } else {
+              None
+            }
+          }
+        if (conf.convertCTAS && convertableFormat.nonEmpty) {
           val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
@@ -1011,7 +1027,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           }
           CreateTableUsingAsSelect(
             tableIdent = tableDesc.identifier,
-            provider = conf.defaultDataSourceName,
+            provider = convertableFormat.get,
             partitionColumns = tableDesc.partitionColumnNames.toArray,
             bucketSpec = None,
             mode = mode,
