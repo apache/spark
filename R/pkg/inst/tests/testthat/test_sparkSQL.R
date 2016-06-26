@@ -2388,6 +2388,7 @@ test_that("Setting and getting config on SparkSession", {
   testValue <- allconf[["spark.testing.r.session.r"]]
   expect_equal(appNameValue, "sparkSession test")
   expect_equal(testValue, value)
+  expect_error(sparkR.conf("completely.dummy"), "Config 'completely.dummy' is not set")
 })
 
 test_that("enableHiveSupport on SparkSession", {
