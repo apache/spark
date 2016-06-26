@@ -45,9 +45,8 @@ object KafkaUtils extends Logging {
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
-   * In most cases, use [[KafkaUtils.preferConsistent]]
-   * Use [[KafkaUtils.preferBrokers]] if your executors are on same nodes as brokers.
+   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+   *   see [[LocationStrategy]] for more details.
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -56,18 +55,21 @@ object KafkaUtils extends Logging {
       sc: SparkContext,
       kafkaParams: ju.Map[String, Object],
       offsetRanges: Array[OffsetRange],
-      preferredHosts: ju.Map[TopicPartition, String]
+      locationStrategy: LocationStrategy
     ): RDD[ConsumerRecord[K, V]] = {
-    assert(preferredHosts != KafkaUtils.preferBrokers,
-      "If you want to prefer brokers, you must provide a mapping for preferredHosts. " +
-        "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you. ")
-
+    val preferredHosts = locationStrategy match {
+      case PreferBrokers =>
+        throw new AssertionError(
+          "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
+          "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
+      case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
+      case PreferFixed(hostMap) => hostMap
+    }
     val kp = new ju.HashMap[String, Object](kafkaParams)
     fixKafkaParams(kp)
     val osr = offsetRanges.clone()
-    val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
 
-    new KafkaRDD[K, V](sc, kp, osr, ph, true)
+    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
   }
 
   /**
@@ -81,9 +83,8 @@ object KafkaUtils extends Logging {
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
-   * In most cases, use [[KafkaUtils.preferConsistent]]
-   * Use [[KafkaUtils.preferBrokers]] if your executors are on same nodes as brokers.
+   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+   *   see [[LocationStrategy]] for more details.
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -94,18 +95,13 @@ object KafkaUtils extends Logging {
       valueClass: Class[V],
       kafkaParams: ju.Map[String, Object],
       offsetRanges: Array[OffsetRange],
-      preferredHosts: ju.Map[TopicPartition, String]
+      locationStrategy: LocationStrategy
     ): JavaRDD[ConsumerRecord[K, V]] = {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
 
-    new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, preferredHosts))
+    new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
   }
-
-  /** Prefer to run on kafka brokers, if they are on same hosts as executors */
-  val preferBrokers: ju.Map[TopicPartition, String] = null
-  /** Prefer a consistent executor per TopicPartition, evenly from all executors */
-  val preferConsistent: ju.Map[TopicPartition, String] = ju.Collections.emptyMap()
 
   /**
    * Scala constructor for a DStream where
@@ -113,9 +109,8 @@ object KafkaUtils extends Logging {
    * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
    *  of messages
    * per second that each '''partition''' will accept.
-   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
-   * In most cases, use [[KafkaUtils.preferConsistent]]
-   * Use [[KafkaUtils.preferBrokers]] if your executors are on same nodes as brokers.
+   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+   *   see [[LocationStrategy]] for more details.
    * @param executorKafkaParams Kafka
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>.
@@ -131,20 +126,15 @@ object KafkaUtils extends Logging {
   @Experimental
   def createDirectStream[K: ClassTag, V: ClassTag](
       ssc: StreamingContext,
-      preferredHosts: ju.Map[TopicPartition, String],
+      locationStrategy: LocationStrategy,
       executorKafkaParams: ju.Map[String, Object],
       driverConsumer: () => Consumer[K, V]
     ): InputDStream[ConsumerRecord[K, V]] = {
-    val ph = if (preferredHosts == preferBrokers) {
-      preferredHosts
-    } else {
-      new ju.HashMap[TopicPartition, String](preferredHosts)
-    }
     val ekp = new ju.HashMap[String, Object](executorKafkaParams)
     fixKafkaParams(ekp)
     val cleaned = ssc.sparkContext.clean(driverConsumer)
 
-    new DirectKafkaInputDStream[K, V](ssc, ph, ekp, cleaned)
+    new DirectKafkaInputDStream[K, V](ssc, locationStrategy, ekp, cleaned)
   }
 
   /**
@@ -152,10 +142,8 @@ object KafkaUtils extends Logging {
    * each given Kafka topic/partition corresponds to an RDD partition.
    * @param keyClass Class of the keys in the Kafka records
    * @param valueClass Class of the values in the Kafka records
-   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
-   * In most cases, use [[KafkaUtils.preferConsistent]]
-   * Use [[KafkaUtils.preferBrokers]] if your executors are on same nodes as brokers.
-   * @param executorKafkaParams Kafka
+   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+   *   see [[LocationStrategy]] for more details.
    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>.
    *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
@@ -172,7 +160,7 @@ object KafkaUtils extends Logging {
       jssc: JavaStreamingContext,
       keyClass: Class[K],
       valueClass: Class[V],
-      preferredHosts: ju.Map[TopicPartition, String],
+      locationStrategy: LocationStrategy,
       executorKafkaParams: ju.Map[String, Object],
       driverConsumer: JFunction0[Consumer[K, V]]
     ): JavaInputDStream[ConsumerRecord[K, V]] = {
@@ -182,7 +170,7 @@ object KafkaUtils extends Logging {
 
     new JavaInputDStream(
       createDirectStream[K, V](
-        jssc.ssc, preferredHosts, executorKafkaParams, driverConsumer.call _))
+        jssc.ssc, locationStrategy, executorKafkaParams, driverConsumer.call _))
   }
 
 

@@ -44,9 +44,8 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
  * per second that each '''partition''' will accept.
- * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
- * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
- * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+ * @param locationStrategy In most cases, pass in [[PreferConsistent]],
+ *   see [[LocationStrategy]] for more details.
  * @param executorKafkaParams Kafka
  * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
  * configuration parameters</a>.
@@ -62,7 +61,7 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
 @Experimental
 private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
     _ssc: StreamingContext,
-    preferredHosts: ju.Map[TopicPartition, String],
+    locationStrategy: LocationStrategy,
     executorKafkaParams: ju.Map[String, Object],
     driverConsumer: () => Consumer[K, V]
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
@@ -102,10 +101,10 @@ private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
   }
 
   protected def getPreferredHosts: ju.Map[TopicPartition, String] = {
-    if (preferredHosts == KafkaUtils.preferBrokers) {
-      getBrokers
-    } else {
-      preferredHosts
+    locationStrategy match {
+      case PreferBrokers => getBrokers
+      case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
+      case PreferFixed(hostMap) => hostMap
     }
   }
 

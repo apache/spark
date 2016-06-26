@@ -78,7 +78,6 @@ public class JavaKafkaRDDSuite implements Serializable {
       OffsetRange.create(topic2, 0, 0, 1)
     };
 
-    Map<TopicPartition, String> emptyLeaders = new HashMap<>();
     Map<TopicPartition, String> leaders = new HashMap<>();
     String[] hostAndPort = kafkaTestUtils.brokerAddress().split(":");
     String broker = hostAndPort[0];
@@ -99,7 +98,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         String.class,
         kafkaParams,
         offsetRanges,
-        leaders
+        PreferFixed.apply(leaders)
     ).map(handler);
 
     JavaRDD<String> rdd2 = KafkaUtils.createRDD(
@@ -108,7 +107,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         String.class,
         kafkaParams,
         offsetRanges,
-        emptyLeaders
+        PreferConsistent.instance()
     ).map(handler);
 
     // just making sure the java user apis work; the scala tests handle logic corner cases

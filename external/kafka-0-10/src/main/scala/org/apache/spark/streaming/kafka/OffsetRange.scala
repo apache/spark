@@ -17,8 +17,9 @@
 
 package org.apache.spark.streaming.kafka
 
-import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.clients.consumer.OffsetCommitCallback
+import org.apache.kafka.common.TopicPartition
+
 
 /**
  * Represents any object that has a collection of [[OffsetRange]]s. This can be used to access the
