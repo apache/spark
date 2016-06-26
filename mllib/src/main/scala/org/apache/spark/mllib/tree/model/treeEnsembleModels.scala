@@ -156,13 +156,12 @@ class GradientBoostedTreesModel @Since("1.2.0") (
     val treesIndices = trees.indices
 
     val dataCount = remappedData.count()
-    val evaluation = remappedData
-      .map { (point: LabeledPoint) =>
-        treesIndices
-          .map(idx => broadcastTrees.value(idx).predict(point.features) * localTreeWeights(idx))
-          .scanLeft(0.0)(_ + _).drop(1)
-          .map(prediction => loss.computeError(prediction, point.label))
-      }
+    val evaluation = remappedData.map { point =>
+      treesIndices
+        .map(idx => broadcastTrees.value(idx).predict(point.features) * localTreeWeights(idx))
+        .scanLeft(0.0)(_ + _).drop(1)
+        .map(prediction => loss.computeError(prediction, point.label))
+    }
       .aggregate(treesIndices.map(_ => 0.0))(
         (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
         (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
