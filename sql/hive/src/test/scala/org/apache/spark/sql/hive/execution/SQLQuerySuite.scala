@@ -1723,8 +1723,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(sql("select max(hr) from srctext_15752"), Row(12))
       checkAnswer(sql("select max(hr) from srctext_15752 where hr = 11"), Row(11))
       checkAnswer(sql("select max(hr) from (select hr from srctext_15752) t"), Row(12))
+      checkAnswer(
+        sql("select max(x) from (select hr + 1 as x from srctext_15752 where hr = 12) t"),
+        Row(13))
       checkAnswer(sql("select distinct hr from srctext_15752"), Row(11) :: Row(12) :: Nil)
       checkAnswer(sql("select distinct hr from srctext_15752 where hr = 11"), Row(11))
+      checkAnswer(
+        sql("select distinct x from (select hr + 1 as x from srctext_15752 where hr = 12) t"),
+        Row(13))
     }
   }
 }

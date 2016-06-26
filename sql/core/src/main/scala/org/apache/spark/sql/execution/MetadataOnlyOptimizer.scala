@@ -63,29 +63,50 @@ case class MetadataOnlyOptimizer(
     }
   }
 
-  private def findRelation(plan: LogicalPlan): (Option[LogicalPlan], Seq[Expression]) = {
+  private def collectAliases(fields: Seq[Expression]): Map[ExprId, Expression] = fields.collect {
+    case a @ Alias(child, _) => a.toAttribute.exprId -> child
+  }.toMap
+
+  private def substitute(aliases: Map[ExprId, Expression])(expr: Expression): Expression = {
+    expr.transform {
+      case a @ Alias(ref: AttributeReference, name) =>
+        aliases.get(ref.exprId)
+          .map(Alias(_, name)(a.exprId, a.qualifier, isGenerated = a.isGenerated))
+          .getOrElse(a)
+
+      case a: AttributeReference =>
+        aliases.get(a.exprId)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
+    }
+  }
+
+  private def findRelation(plan: LogicalPlan)
+      : (Option[LogicalPlan], Seq[NamedExpression], Seq[Expression], Map[ExprId, Expression]) = {
     plan match {
       case relation @ LogicalRelation(files: HadoopFsRelation, _, table)
         if files.partitionSchema.nonEmpty =>
-        (Some(relation), Seq.empty[Expression])
+        (Some(relation), Seq.empty[NamedExpression], Seq.empty[Expression], Map.empty)
 
       case relation: CatalogRelation if relation.catalogTable.partitionColumnNames.nonEmpty =>
-        (Some(relation), Seq.empty[Expression])
+        (Some(relation), Seq.empty[NamedExpression], Seq.empty[Expression], Map.empty)
 
-      case p @ Project(_, child) =>
-        findRelation(child)
+      case p @ Project(fields, child) if fields.forall(_.deterministic) =>
+        val (plan, _, filters, aliases) = findRelation(child)
+        val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+        (plan, substitutedFields, filters, collectAliases(substitutedFields))
 
-      case f @ Filter(filterCondition, child) =>
-        val (plan, conditions) = findRelation(child)
-        (plan, conditions ++ Seq(filterCondition))
+      case f @ Filter(condition, child) if condition.deterministic =>
+        val (plan, fields, filters, aliases) = findRelation(child)
+        val substitutedCondition = substitute(aliases)(condition)
+        (plan, fields, filters ++ Seq(substitutedCondition), aliases)
 
-      case _ => (None, Seq.empty[Expression])
+      case _ => (None, Seq.empty[NamedExpression], Seq.empty[Expression], Map.empty)
     }
   }
 
   private def convertToMetadataOnlyPlan(
       parent: LogicalPlan,
-      project: Option[LogicalPlan],
+      projectList: Seq[NamedExpression],
       filters: Seq[Expression],
       relation: LogicalPlan): LogicalPlan = relation match {
     case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
@@ -101,8 +122,11 @@ case class MetadataOnlyOptimizer(
         val partitionValues = selectedPartitions.map(_.values)
         val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
         val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-        val scanPlan = project.map(_.withNewChildren(valuesPlan :: Nil)).getOrElse(valuesPlan)
-        parent.withNewChildren(scanPlan :: Nil)
+        if (projectList.nonEmpty) {
+          parent.withNewChildren(Project(projectList, valuesPlan) :: Nil)
+        } else {
+          parent.withNewChildren(valuesPlan :: Nil)
+        }
       } else {
         parent
       }
@@ -128,8 +152,11 @@ case class MetadataOnlyOptimizer(
         val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
         val filterPlan =
           filters.reduceLeftOption(And).map(Filter(_, valuesPlan)).getOrElse(valuesPlan)
-        val scanPlan = project.map(_.withNewChildren(filterPlan :: Nil)).getOrElse(filterPlan)
-        parent.withNewChildren(scanPlan :: Nil)
+        if (projectList.nonEmpty) {
+          parent.withNewChildren(Project(projectList, filterPlan) :: Nil)
+        } else {
+          parent.withNewChildren(filterPlan :: Nil)
+        }
       } else {
         parent
       }
@@ -144,17 +171,17 @@ case class MetadataOnlyOptimizer(
     }
     plan.transform {
       case a @ Aggregate(_, _, child) if canSupportMetadataOnly(a) =>
-        val (plan, filters) = findRelation(child)
+        val (plan, projectList, filters, _) = findRelation(child)
         if (plan.isDefined) {
-          convertToMetadataOnlyPlan(a, None, filters, plan.get)
+          convertToMetadataOnlyPlan(a, projectList, filters, plan.get)
         } else {
           a
         }
 
       case d @ Distinct(p @ Project(_, _)) =>
-        val (plan, filters) = findRelation(p)
+        val (plan, projectList, filters, _) = findRelation(p)
         if (plan.isDefined) {
-          convertToMetadataOnlyPlan(d, Some(p), filters, plan.get)
+          convertToMetadataOnlyPlan(d, projectList, filters, plan.get)
         } else {
           d
         }
