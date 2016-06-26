@@ -261,7 +261,7 @@ public class UnsafeArrayWriter {
     holder.cursor += 16;
   }
 
-  public void writePrimiviveBooleanArray(ArrayData arrayData) {
+  public void writePrimitiveBooleanArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // boolean[] intput = ((GenericBooleanArrayData)arrayData).primitiveArray();
     boolean[] input = arrayData.toBooleanArray();
