@@ -129,7 +129,7 @@ class KafkaRDD[
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
-      log.info(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
+      logInfo(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
@@ -143,7 +143,7 @@ class KafkaRDD[
 
     context.addTaskCompletionListener{ context => closeIfNeeded() }
 
-    log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
+    logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
       s"offsets ${part.fromOffset} -> ${part.untilOffset}")
 
     val kc = new KafkaCluster(kafkaParams)
@@ -177,7 +177,7 @@ class KafkaRDD[
         val err = resp.errorCode(part.topic, part.partition)
         if (err == ErrorMapping.LeaderNotAvailableCode ||
           err == ErrorMapping.NotLeaderForPartitionCode) {
-          log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
+          logError(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
             s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
           Thread.sleep(kc.config.refreshLeaderBackoffMs)
         }
