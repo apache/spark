@@ -39,7 +39,7 @@ import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 /**
- *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
+ *  A stream of [[KafkaRDD]] where
  * each given Kafka topic/partition corresponds to an RDD partition.
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
@@ -77,7 +77,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
   consumer()
 
   override def persist(newLevel: StorageLevel): DStream[ConsumerRecord[K, V]] = {
-    log.error("Kafka ConsumerRecord is not serializable. " +
+    logError("Kafka ConsumerRecord is not serializable. " +
       "Use .map to extract fields before calling .persist or .window")
     super.persist(newLevel)
   }
@@ -279,7 +279,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
       data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
     }
 
-    override def update(time: Time) {
+    override def update(time: Time): Unit = {
       batchForTime.clear()
       generatedRDDs.foreach { kv =>
         val a = kv._2.asInstanceOf[KafkaRDD[K, V]].offsetRanges.map(_.toTuple).toArray
@@ -287,9 +287,9 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
       }
     }
 
-    override def cleanup(time: Time) { }
+    override def cleanup(time: Time): Unit = { }
 
-    override def restore() {
+    override def restore(): Unit = {
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
          generatedRDDs += t -> new KafkaRDD[K, V](

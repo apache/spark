@@ -80,7 +80,7 @@ class KafkaRDD[
     conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
 
   override def persist(newLevel: StorageLevel): this.type = {
-    log.error("Kafka ConsumerRecord is not serializable. " +
+    logError("Kafka ConsumerRecord is not serializable. " +
       "Use .map to extract fields before calling .persist or .window")
     super.persist(newLevel)
   }
@@ -108,7 +108,7 @@ class KafkaRDD[
       .map(_.asInstanceOf[KafkaRDDPartition])
       .filter(_.count > 0)
 
-    if (num < 1 || nonEmptyPartitions.size < 1) {
+    if (num < 1 || nonEmptyPartitions.isEmpty) {
       return new Array[ConsumerRecord[K, V]](0)
     }
 
@@ -140,7 +140,9 @@ class KafkaRDD[
       .sortWith((a, b) => a.host > b.host || a.executorId > b.executorId)
   }
 
-  // non-negative modulus, from java 8 math
+  /**
+   * Non-negative modulus, from java 8 math
+   */
   private def floorMod(a: Int, b: Int): Int = ((a % b) + b) % b
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
@@ -156,7 +158,6 @@ class KafkaRDD[
     } else {
       val index = this.floorMod(tp.hashCode, execs.length)
       val chosen = execs(index)
-
       Seq(chosen.toString)
     }
   }
@@ -170,7 +171,7 @@ class KafkaRDD[
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
-      log.info(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
+      logInfo(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
@@ -178,11 +179,15 @@ class KafkaRDD[
     }
   }
 
+  /**
+   * An iterator that fetches messages directly from Kafka for the offsets in partition.
+   * Uses a cached consumer where possible to take advantage of prefetching
+   */
   private class KafkaRDDIterator(
       part: KafkaRDDPartition,
       context: TaskContext) extends Iterator[ConsumerRecord[K, V]] {
 
-    log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
+    logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
       s"offsets ${part.fromOffset} -> ${part.untilOffset}")
 
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
@@ -227,21 +232,21 @@ object KafkaRDD extends Logging {
   import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
 
   private[kafka] def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
-    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
+    logWarn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
     kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
 
-    log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
+    logWarn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
     // driver and executor should be in different consumer groups
     val groupId = "spark-executor-" + kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
-    log.warn(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
+    logWarn(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
 
     // possible workaround for KAFKA-3135
     val rbb = kafkaParams.get(ConsumerConfig.RECEIVE_BUFFER_CONFIG)
     if (null == rbb || rbb.asInstanceOf[java.lang.Integer] < 65536) {
-      log.warn(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 see KAFKA-3135")
+      logWarn(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 see KAFKA-3135")
       kafkaParams.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
     }
   }

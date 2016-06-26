@@ -114,9 +114,9 @@ object CachedKafkaConsumer extends Logging {
 
   /** Must be called before get, once per JVM, to configure the cache. Further calls are ignored */
   def init(
-    initialCapacity: Int,
-    maxCapacity: Int,
-    loadFactor: Float): Unit = CachedKafkaConsumer.synchronized {
+      initialCapacity: Int,
+      maxCapacity: Int,
+      loadFactor: Float): Unit = CachedKafkaConsumer.synchronized {
     if (null == cache) {
       log.info(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
       cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]](
@@ -139,10 +139,10 @@ object CachedKafkaConsumer extends Logging {
    * If matching consumer doesn't already exist, will be created using kafkaParams.
    */
   def get[K, V](
-    groupId: String,
-    topic: String,
-    partition: Int,
-    kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
+      groupId: String,
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
     CachedKafkaConsumer.synchronized {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
@@ -163,10 +163,10 @@ object CachedKafkaConsumer extends Logging {
    * Caller is responsible for closing
    */
   def getUncached[K, V](
-    groupId: String,
-    topic: String,
-    partition: Int,
-    kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
+      groupId: String,
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
     new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
 
   /** remove consumer for given groupId, topic, and partition, if it exists */
