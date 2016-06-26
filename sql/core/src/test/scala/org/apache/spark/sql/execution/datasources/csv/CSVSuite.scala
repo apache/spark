@@ -665,4 +665,119 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = true, checkValues = false)
   }
+
+  test("Write timestamps correctly with/without dateFormat option") {
+    withTempDir { dir =>
+      // Without dateFormat option.
+      val datesPath = s"${dir.getCanonicalPath}/dates.csv"
+      val dates = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      dates.write
+        .format("csv")
+        .option("header", "true")
+        .save(datesPath)
+
+      // This will load back the dates as string.
+      val stringDates = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(datesPath)
+      val expectedStringDates = Seq(
+        Row("2015-08-26 18:00:00.0"),
+        Row("2014-10-27 18:30:00.0"),
+        Row("2016-01-28 20:00:00.0"))
+
+      checkAnswer(stringDates, expectedStringDates)
+
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.csv"
+      val datesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("dateFormat", "yyyy/MM/dd HH:mm")
+        .save(datesWithFormatPath)
+
+      // This will load back the dates as string.
+      val stringDatesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26 18:00"),
+        Row("2014/10/27 18:30"),
+        Row("2016/01/28 20:00"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+    }
+  }
+
+  test("Write dates correctly with/without dateFormat option") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    withTempDir { dir =>
+      // Without dateFormat option.
+      val datesPath = s"${dir.getCanonicalPath}/dates.csv"
+      val dates = spark.read
+        .format("csv")
+        .schema(customSchema)
+        .option("header", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      dates.write
+        .format("csv")
+        .option("header", "true")
+        .save(datesPath)
+
+      // This will load back the dates as string.
+      val stringDates = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(datesPath)
+      val expectedStringDates = Seq(
+        Row("2015-08-26"),
+        Row("2014-10-27"),
+        Row("2016-01-28"))
+
+      checkAnswer(stringDates, expectedStringDates)
+
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.csv"
+      val datesWithFormat = spark.read
+        .format("csv")
+        .schema(customSchema)
+        .option("header", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("dateFormat", "yyyy/MM/dd")
+        .save(datesWithFormatPath)
+
+      // This will load back the dates as string.
+      val stringDatesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26"),
+        Row("2014/10/27"),
+        Row("2016/01/28"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+    }
+  }
 }
