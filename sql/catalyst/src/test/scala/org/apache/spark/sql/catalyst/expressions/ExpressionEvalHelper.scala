@@ -188,8 +188,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   def checkConsistencyBetweenInterpretedAndCodegen(
       c: Expression => Expression,
       dataType: DataType): Unit = {
-    forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
-      cmpInterpretWithCodegen(EmptyRow, c(l))
+    forAll (LiteralGenerator.randomGen(dataType)) { (literal: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(literal))
     }
   }
 

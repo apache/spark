@@ -210,9 +210,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   /////////////////////////////////////////////////////////////////////////////
 
   test("extract categories from a number for multiclass classification") {
-    val l = RandomForest.extractMultiClassCategories(13, 10)
-    assert(l.length === 3)
-    assert(Seq(3.0, 2.0, 0.0) === l)
+    val categories = RandomForest.extractMultiClassCategories(13, 10)
+    assert(categories.length === 3)
+    assert(Seq(3.0, 2.0, 0.0) === categories)
   }
 
   test("Avoid aggregation on the last level") {

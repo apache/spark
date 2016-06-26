@@ -40,7 +40,7 @@ case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
 case class IntegerCaseClass(i: Int)
 case class ListListIntCaseClass(lli: Seq[(Int, Int, Int)])
 case class StringCaseClass(s: String)
-case class ListStringCaseClass(l: Seq[String])
+case class ListStringCaseClass(ls: Seq[String])
 
 /**
  * A test suite for Hive custom UDFs.

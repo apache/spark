@@ -1121,13 +1121,13 @@ class Analyzer(
           resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, exprId) =>
           resolveSubQuery(e, plans)(PredicateSubquery(_, _, nullAware = false, exprId))
-        case In(e, Seq(l @ ListQuery(_, exprId))) if e.resolved =>
+        case In(e, Seq(lq @ ListQuery(_, exprId))) if e.resolved =>
           // Get the left hand side expressions.
           val expressions = e match {
             case CreateStruct(exprs) => exprs
             case expr => Seq(expr)
           }
-          resolveSubQuery(l, plans, expressions.size) { (rewrite, conditions) =>
+          resolveSubQuery(lq, plans, expressions.size) { (rewrite, conditions) =>
             // Construct the IN conditions.
             val inConditions = expressions.zip(rewrite.output).map(EqualTo.tupled)
             PredicateSubquery(rewrite, inConditions ++ conditions, nullAware = true, exprId)
@@ -1861,7 +1861,9 @@ class Analyzer(
         rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
       case FullOuter =>
         // in full outer join, joinCols should be non-null if there is.
-        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        val joinedCols = joinPairs.map {
+          case (left, right) => Alias(Coalesce(Seq(left, right)), left.name)()
+        }
         joinedCols ++
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true))

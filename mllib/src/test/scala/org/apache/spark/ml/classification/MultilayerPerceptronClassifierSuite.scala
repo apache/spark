@@ -74,8 +74,8 @@ class MultilayerPerceptronClassifierSuite
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
     val predictionAndLabels = result.select("prediction", "label").collect()
-    predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
-      assert(p == l)
+    predictionAndLabels.foreach { case Row(p: Double, label: Double) =>
+      assert(p == label)
     }
   }
 
@@ -129,7 +129,7 @@ class MultilayerPerceptronClassifierSuite
     val numFeatures = dataFrame.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
     val mlpPredictionAndLabels = model.transform(dataFrame).select("prediction", "label").rdd.map {
-      case Row(p: Double, l: Double) => (p, l)
+      case Row(p: Double, label: Double) => (p, label)
     }
     // train multinomial logistic regression
     val lr = new LogisticRegressionWithLBFGS()

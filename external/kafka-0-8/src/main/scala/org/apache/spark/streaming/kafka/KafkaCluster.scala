@@ -94,8 +94,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
         tm.partitionsMetadata.flatMap { pm: PartitionMetadata =>
           val tp = TopicAndPartition(tm.topic, pm.partitionId)
           if (topicAndPartitions(tp)) {
-            pm.leader.map { l =>
-              tp -> (l.host -> l.port)
+            pm.leader.map { leader =>
+              tp -> (leader.host -> leader.port)
             }
           } else {
             None

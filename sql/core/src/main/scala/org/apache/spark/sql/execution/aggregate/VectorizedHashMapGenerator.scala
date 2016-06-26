@@ -309,8 +309,8 @@ class VectorizedHashMapGenerator(
       input: String,
       dataType: DataType,
       result: String): String = {
-    def hashInt(i: String): String = s"int $result = $i;"
-    def hashLong(l: String): String = s"long $result = $l;"
+    def hashInt(value: String): String = s"int $result = $value;"
+    def hashLong(value: String): String = s"long $result = $value;"
     def hashBytes(b: String): String = {
       val hash = ctx.freshName("hash")
       s"""

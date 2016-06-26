@@ -29,16 +29,16 @@ import org.apache.spark.util.Benchmark
  */
 object DatasetBenchmark {
 
-  case class Data(l: Long, s: String)
+  case class Data(v: Long, s: String)
 
   def backToBackMap(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
-    val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val df = spark.range(1, numRows).select($"id".as("v"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back map", numRows)
-    val func = (d: Data) => Data(d.l + 1, d.s)
+    val func = (d: Data) => Data(d.v + 1, d.s)
 
-    val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    val rdd = spark.sparkContext.range(1, numRows).map(v => Data(v, v.toString))
     benchmark.addCase("RDD") { iter =>
       var res = rdd
       var i = 0
@@ -53,7 +53,7 @@ object DatasetBenchmark {
       var res = df
       var i = 0
       while (i < numChains) {
-        res = res.select($"l" + 1 as "l")
+        res = res.select($"v" + 1 as "v")
         i += 1
       }
       res.queryExecution.toRdd.foreach(_ => Unit)
@@ -75,14 +75,14 @@ object DatasetBenchmark {
   def backToBackFilter(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
-    val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val df = spark.range(1, numRows).select($"id".as("v"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back filter", numRows)
-    val func = (d: Data, i: Int) => d.l % (100L + i) == 0L
+    val func = (d: Data, i: Int) => d.v % (100L + i) == 0L
     val funcs = 0.until(numChains).map { i =>
       (d: Data) => func(d, i)
     }
 
-    val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    val rdd = spark.sparkContext.range(1, numRows).map(v => Data(v, v.toString))
     benchmark.addCase("RDD") { iter =>
       var res = rdd
       var i = 0
@@ -97,7 +97,7 @@ object DatasetBenchmark {
       var res = df
       var i = 0
       while (i < numChains) {
-        res = res.filter($"l" % (100L + i) === 0L)
+        res = res.filter($"v" % (100L + i) === 0L)
         i += 1
       }
       res.queryExecution.toRdd.foreach(_ => Unit)
@@ -119,11 +119,11 @@ object DatasetBenchmark {
   object ComplexAggregator extends Aggregator[Data, Data, Long] {
     override def zero: Data = Data(0, "")
 
-    override def reduce(b: Data, a: Data): Data = Data(b.l + a.l, "")
+    override def reduce(b: Data, a: Data): Data = Data(b.v + a.v, "")
 
-    override def finish(reduction: Data): Long = reduction.l
+    override def finish(reduction: Data): Long = reduction.v
 
-    override def merge(b1: Data, b2: Data): Data = Data(b1.l + b2.l, "")
+    override def merge(b1: Data, b2: Data): Data = Data(b1.v + b2.v, "")
 
     override def bufferEncoder: Encoder[Data] = Encoders.product[Data]
 
@@ -133,20 +133,20 @@ object DatasetBenchmark {
   def aggregate(spark: SparkSession, numRows: Long): Benchmark = {
     import spark.implicits._
 
-    val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val df = spark.range(1, numRows).select($"id".as("v"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("aggregate", numRows)
 
-    val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    val rdd = spark.sparkContext.range(1, numRows).map(v => Data(v, v.toString))
     benchmark.addCase("RDD sum") { iter =>
-      rdd.aggregate(0L)(_ + _.l, _ + _)
+      rdd.aggregate(0L)(_ + _.v, _ + _)
     }
 
     benchmark.addCase("DataFrame sum") { iter =>
-      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => Unit)
+      df.select(sum($"v")).queryExecution.toRdd.foreach(_ => Unit)
     }
 
     benchmark.addCase("Dataset sum using Aggregator") { iter =>
-      df.as[Data].select(typed.sumLong((d: Data) => d.l)).queryExecution.toRdd.foreach(_ => Unit)
+      df.as[Data].select(typed.sumLong((d: Data) => d.v)).queryExecution.toRdd.foreach(_ => Unit)
     }
 
     benchmark.addCase("Dataset complex Aggregator") { iter =>

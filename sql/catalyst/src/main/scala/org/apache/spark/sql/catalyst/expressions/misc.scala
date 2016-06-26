@@ -284,7 +284,7 @@ abstract class HashExpression[E] extends Expression {
     val hasher = hasherClassName
 
     def hashInt(i: String): String = s"$result = $hasher.hashInt($i, $result);"
-    def hashLong(l: String): String = s"$result = $hasher.hashLong($l, $result);"
+    def hashLong(v: String): String = s"$result = $hasher.hashLong($v, $result);"
     def hashBytes(b: String): String =
       s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, $result);"
 
@@ -354,7 +354,7 @@ abstract class HashExpression[E] extends Expression {
 abstract class InterpretedHashFunction {
   protected def hashInt(i: Int, seed: Long): Long
 
-  protected def hashLong(l: Long, seed: Long): Long
+  protected def hashLong(v: Long, seed: Long): Long
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
@@ -365,7 +365,7 @@ abstract class InterpretedHashFunction {
       case b: Byte => hashInt(b, seed)
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
-      case l: Long => hashLong(l, seed)
+      case v: Long => hashLong(v, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case d: Decimal =>
@@ -458,8 +458,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
     Murmur3_x86_32.hashInt(i, seed.toInt)
   }
 
-  override protected def hashLong(l: Long, seed: Long): Long = {
-    Murmur3_x86_32.hashLong(l, seed.toInt)
+  override protected def hashLong(v: Long, seed: Long): Long = {
+    Murmur3_x86_32.hashLong(v, seed.toInt)
   }
 
   override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
@@ -540,7 +540,7 @@ case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpressio
 object XxHash64Function extends InterpretedHashFunction {
   override protected def hashInt(i: Int, seed: Long): Long = XXH64.hashInt(i, seed)
 
-  override protected def hashLong(l: Long, seed: Long): Long = XXH64.hashLong(l, seed)
+  override protected def hashLong(v: Long, seed: Long): Long = XXH64.hashLong(v, seed)
 
   override protected def hashUnsafeBytes(base: AnyRef, offset: Long, len: Int, seed: Long): Long = {
     XXH64.hashUnsafeBytes(base, offset, len, seed)

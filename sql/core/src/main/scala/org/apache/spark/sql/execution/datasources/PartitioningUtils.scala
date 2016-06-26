@@ -387,8 +387,8 @@ private[sql] object PartitioningUtils {
       if (topType == NullType) StringType else topType
     }
 
-    literals.map { case l @ Literal(_, dataType) =>
-      Literal.create(Cast(l, desiredType).eval(), desiredType)
+    literals.map { case literal @ Literal(_, dataType) =>
+      Literal.create(Cast(literal, desiredType).eval(), desiredType)
     }
   }
 

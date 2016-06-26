@@ -677,11 +677,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("runtime null check for RowEncoder") {
     val schema = new StructType().add("i", IntegerType, nullable = false)
-    val df = spark.range(10).map(l => {
-      if (l % 5 == 0) {
+    val df = spark.range(10).map(v => {
+      if (v % 5 == 0) {
         Row(null)
       } else {
-        Row(l)
+        Row(v)
       }
     })(RowEncoder(schema))
 

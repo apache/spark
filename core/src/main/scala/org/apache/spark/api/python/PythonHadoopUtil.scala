@@ -122,7 +122,7 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
     obj match {
       case i: java.lang.Integer => new IntWritable(i)
       case d: java.lang.Double => new DoubleWritable(d)
-      case l: java.lang.Long => new LongWritable(l)
+      case v: java.lang.Long => new LongWritable(v)
       case f: java.lang.Float => new FloatWritable(f)
       case s: java.lang.String => new Text(s)
       case b: java.lang.Boolean => new BooleanWritable(b)

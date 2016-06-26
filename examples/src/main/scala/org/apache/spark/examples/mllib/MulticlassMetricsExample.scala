@@ -65,23 +65,23 @@ object MulticlassMetricsExample {
 
     // Precision by label
     val labels = metrics.labels
-    labels.foreach { l =>
-      println(s"Precision($l) = " + metrics.precision(l))
+    labels.foreach { label =>
+      println(s"Precision($label) = " + metrics.precision(label))
     }
 
     // Recall by label
-    labels.foreach { l =>
-      println(s"Recall($l) = " + metrics.recall(l))
+    labels.foreach { label =>
+      println(s"Recall($label) = " + metrics.recall(label))
     }
 
     // False positive rate by label
-    labels.foreach { l =>
-      println(s"FPR($l) = " + metrics.falsePositiveRate(l))
+    labels.foreach { label =>
+      println(s"FPR($label) = " + metrics.falsePositiveRate(label))
     }
 
     // F-measure by label
-    labels.foreach { l =>
-      println(s"F1-Score($l) = " + metrics.fMeasure(l))
+    labels.foreach { label =>
+      println(s"F1-Score($label) = " + metrics.fMeasure(label))
     }
 
     // Weighted stats

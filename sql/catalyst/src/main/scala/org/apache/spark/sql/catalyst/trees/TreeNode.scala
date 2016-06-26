@@ -105,7 +105,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def find(f: BaseType => Boolean): Option[BaseType] = f(this) match {
     case true => Some(this)
-    case false => children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
+    case false => children.foldLeft(Option.empty[BaseType]) {
+      (left, right) => left.orElse(right.find(f))
+    }
   }
 
   /**
@@ -165,7 +167,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def collectFirst[B](pf: PartialFunction[BaseType, B]): Option[B] = {
     val lifted = pf.lift
     lifted(this).orElse {
-      children.foldLeft(Option.empty[B]) { (l, r) => l.orElse(r.collectFirst(pf)) }
+      children.foldLeft(Option.empty[B]) { (left, right) => left.orElse(right.collectFirst(pf)) }
     }
   }
 
@@ -605,7 +607,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case b: Byte => JInt(b.toInt)
     case s: Short => JInt(s.toInt)
     case i: Int => JInt(i)
-    case l: Long => JInt(l)
+    case v: Long => JInt(v)
     case f: Float => JDouble(f)
     case d: Double => JDouble(d)
     case b: BigInt => JInt(b)

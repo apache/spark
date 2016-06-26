@@ -78,7 +78,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     def generateCase(n: Int): (Expression, Expression) = {
       val condition = (1 to clauses)
         .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
-        .reduceLeft[Expression]((l, r) => Or(l, r))
+        .reduceLeft[Expression]((left, right) => Or(left, right))
       (condition, Literal(n))
     }
 

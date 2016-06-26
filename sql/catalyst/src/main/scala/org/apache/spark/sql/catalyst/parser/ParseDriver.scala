@@ -176,10 +176,10 @@ class ParseException(
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     start match {
-      case Origin(Some(l), Some(p)) =>
-        builder ++= s"(line $l, pos $p)\n"
+      case Origin(Some(line), Some(p)) =>
+        builder ++= s"(line $line, pos $p)\n"
         command.foreach { cmd =>
-          val (above, below) = cmd.split("\n").splitAt(l)
+          val (above, below) = cmd.split("\n").splitAt(line)
           builder ++= "\n== SQL ==\n"
           above.foreach(builder ++= _ += '\n')
           builder ++= (0 until p).map(_ => "-").mkString("") ++= "^^^\n"

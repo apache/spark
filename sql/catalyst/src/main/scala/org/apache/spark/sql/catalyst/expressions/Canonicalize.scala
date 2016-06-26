@@ -59,26 +59,26 @@ object Canonicalize extends {
 
   /** Rearrange expressions that are commutative or associative. */
   private def expressionReorder(e: Expression): Expression = e match {
-    case a: Add => orderCommutative(a, { case Add(l, r) => Seq(l, r) }).reduce(Add)
-    case m: Multiply => orderCommutative(m, { case Multiply(l, r) => Seq(l, r) }).reduce(Multiply)
+    case a: Add => orderCommutative(a, { case Add(a, b) => Seq(a, b) }).reduce(Add)
+    case m: Multiply => orderCommutative(m, { case Multiply(a, b) => Seq(a, b) }).reduce(Multiply)
 
-    case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
-    case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
+    case EqualTo(a, b) if a.hashCode() > b.hashCode() => EqualTo(b, a)
+    case EqualNullSafe(a, b) if a.hashCode() > b.hashCode() => EqualNullSafe(b, a)
 
-    case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
-    case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+    case GreaterThan(a, b) if a.hashCode() > b.hashCode() => LessThan(b, a)
+    case LessThan(a, b) if a.hashCode() > b.hashCode() => GreaterThan(b, a)
 
-    case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
-    case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+    case GreaterThanOrEqual(a, b) if a.hashCode() > b.hashCode() => LessThanOrEqual(b, a)
+    case LessThanOrEqual(a, b) if a.hashCode() > b.hashCode() => GreaterThanOrEqual(b, a)
 
-    case Not(GreaterThan(l, r)) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
-    case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
-    case Not(LessThan(l, r)) if l.hashCode() > r.hashCode() => LessThan(r, l)
-    case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
-    case Not(GreaterThanOrEqual(l, r)) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
-    case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
-    case Not(LessThanOrEqual(l, r)) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
-    case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+    case Not(GreaterThan(a, b)) if a.hashCode() > b.hashCode() => GreaterThan(b, a)
+    case Not(GreaterThan(a, b)) => LessThanOrEqual(a, b)
+    case Not(LessThan(a, b)) if a.hashCode() > b.hashCode() => LessThan(b, a)
+    case Not(LessThan(a, b)) => GreaterThanOrEqual(a, b)
+    case Not(GreaterThanOrEqual(a, b)) if a.hashCode() > b.hashCode() => GreaterThanOrEqual(b, a)
+    case Not(GreaterThanOrEqual(a, b)) => LessThan(a, b)
+    case Not(LessThanOrEqual(a, b)) if a.hashCode() > b.hashCode() => LessThanOrEqual(b, a)
+    case Not(LessThanOrEqual(a, b)) => GreaterThan(a, b)
 
     case _ => e
   }

@@ -616,14 +616,14 @@ class RowMatrix @Since("1.0.0") (
               val i = indices(k)
               val iVal = scaled(k)
               if (iVal != 0 && rand.nextDouble() < p(i)) {
-                var l = k + 1
-                while (l < nnz) {
-                  val j = indices(l)
-                  val jVal = scaled(l)
+                var index = k + 1
+                while (index < nnz) {
+                  val j = indices(index)
+                  val jVal = scaled(index)
                   if (jVal != 0 && rand.nextDouble() < p(j)) {
                     buf += (((i, j), iVal * jVal))
                   }
-                  l += 1
+                  index += 1
                 }
               }
               buf

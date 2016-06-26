@@ -148,7 +148,7 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
   override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      left.output.zip(right.output).forall { case (le, ri) => le.dataType == ri.dataType } &&
       duplicateResolved
 
   override def maxRows: Option[Long] = {
@@ -181,7 +181,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      left.output.zip(right.output).forall { case (le, ri) => le.dataType == ri.dataType } &&
       duplicateResolved
 
   override lazy val statistics: Statistics = {
@@ -218,7 +218,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
         child.output.length == children.head.output.length &&
         // compare the data types with the first child
         child.output.zip(children.head.output).forall {
-          case (l, r) => l.dataType == r.dataType }
+          case (left, right) => left.dataType == right.dataType }
       )
 
     children.length > 1 && childrenResolved && allChildrenCompatible

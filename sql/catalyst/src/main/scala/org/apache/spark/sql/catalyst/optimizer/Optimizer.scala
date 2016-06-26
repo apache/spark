@@ -606,8 +606,8 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ GetStructField(Literal(null, _), _, _) => Literal.create(null, e.dataType)
       case e @ GetArrayStructFields(Literal(null, _), _, _, _, _) =>
         Literal.create(null, e.dataType)
-      case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
-      case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
+      case e @ EqualNullSafe(Literal(null, _), right) => IsNull(right)
+      case e @ EqualNullSafe(left, Literal(null, _)) => IsNull(left)
       case ae @ AggregateExpression(Count(exprs), _, false, _) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         ae.copy(aggregateFunction = Count(Literal(1)))
@@ -741,12 +741,12 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def flattenAdd(e: Expression): Seq[Expression] = e match {
-    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
+    case Add(left, right) => flattenAdd(left) ++ flattenAdd(right)
     case other => other :: Nil
   }
 
   private def flattenMultiply(e: Expression): Seq[Expression] = e match {
-    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+    case Multiply(left, right) => flattenMultiply(left) ++ flattenMultiply(right)
     case other => other :: Nil
   }
 
@@ -784,7 +784,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
-      case l: Literal => l
+      case literal: Literal => literal
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
@@ -1548,7 +1548,7 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      val joinCond = left.output.zip(right.output).map { case (a, b) => EqualNullSafe(a, b) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
   }
 }
@@ -1569,7 +1569,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Except(left, right) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      val joinCond = left.output.zip(right.output).map { case (a, b) => EqualNullSafe(a, b) }
       Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
   }
 }

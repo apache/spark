@@ -184,7 +184,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
-      buildCast[Long](_, l => longToTimestamp(l))
+      buildCast[Long](_, v => longToTimestamp(v))
     case IntegerType =>
       buildCast[Int](_, i => longToTimestamp(i.toLong))
     case ShortType =>
@@ -664,7 +664,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   private[this] def decimalToTimestampCode(d: String): String =
     s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
-  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000000L"
+  private[this] def longToTimeStampCode(v: String): String = s"$v * 1000000L"
   private[this] def timestampToIntegerCode(ts: String): String =
     s"java.lang.Math.floor((double) $ts / 1000000L)"
   private[this] def timestampToDoubleCode(ts: String): String = s"$ts / 1000000.0"

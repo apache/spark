@@ -71,7 +71,7 @@ class TreeNodeSuite extends SparkFunSuite {
 
   test("collect") {
     val tree = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
-    val literals = tree collect {case l: Literal => l}
+    val literals = tree collect {case literal: Literal => literal}
 
     assert(literals.size === 4)
     (1 to 4).foreach(i => assert(literals contains Literal(i)))
@@ -83,7 +83,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformDown {
       case b: BinaryOperator => actual.append(b.symbol); b
-      case l: Literal => actual.append(l.toString); l
+      case literal: Literal => actual.append(literal.toString); literal
     }
 
     assert(expected === actual)
@@ -95,7 +95,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformUp {
       case b: BinaryOperator => actual.append(b.symbol); b
-      case l: Literal => actual.append(l.toString); l
+      case literal: Literal => actual.append(literal.toString); literal
     }
 
     assert(expected === actual)
@@ -135,7 +135,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression foreachUp {
       case b: BinaryOperator => actual.append(b.symbol);
-      case l: Literal => actual.append(l.toString);
+      case literal: Literal => actual.append(literal.toString);
     }
 
     assert(expected === actual)
@@ -201,7 +201,7 @@ class TreeNodeSuite extends SparkFunSuite {
     // Collect the first children.
     {
       val actual = expression.collectFirst {
-        case l @ Literal(1, IntegerType) => l
+        case literal @ Literal(1, IntegerType) => literal
       }
       val expected = Some(Literal(1))
       assert(expected === actual)
@@ -219,7 +219,7 @@ class TreeNodeSuite extends SparkFunSuite {
     // Collect a leaf node.
     {
       val actual = expression.collectFirst {
-        case l @ Literal(3, IntegerType) => l
+        case literal @ Literal(3, IntegerType) => literal
       }
       val expected = Some(Literal(3))
       assert(expected === actual)
@@ -228,7 +228,7 @@ class TreeNodeSuite extends SparkFunSuite {
     // Collect nothing.
     {
       val actual = expression.collectFirst {
-        case l @ Literal(100, IntegerType) => l
+        case literal @ Literal(100, IntegerType) => literal
       }
       val expected = None
       assert(expected === actual)

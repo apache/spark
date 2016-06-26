@@ -200,7 +200,7 @@ private[ml] object WeightedLeastSquares {
      * Adds an instance.
      */
     def add(instance: Instance): this.type = {
-      val Instance(l, w, f) = instance
+      val Instance(label, w, f) = instance
       val ak = f.size
       if (!initialized) {
         init(ak)
@@ -209,10 +209,10 @@ private[ml] object WeightedLeastSquares {
       count += 1L
       wSum += w
       wwSum += w * w
-      bSum += w * l
-      bbSum += w * l * l
+      bSum += w * label
+      bbSum += w * label * label
       BLAS.axpy(w, f, aSum)
-      BLAS.axpy(w * l, f, abSum)
+      BLAS.axpy(w * label, f, abSum)
       BLAS.spr(w, f, aaSum)
       this
     }
@@ -294,9 +294,9 @@ private[ml] object WeightedLeastSquares {
       var j = 2
       val aaValues = aaSum.values
       while (i < triK) {
-        val l = j - 2
-        val aw = aSum(l) / wSum
-        variance(l) = aaValues(i) / wSum - aw * aw
+        val k = j - 2
+        val aw = aSum(k) / wSum
+        variance(k) = aaValues(i) / wSum - aw * aw
         i += j
         j += 1
       }

@@ -75,12 +75,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
     constraints.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+      case eq @ EqualTo(left: Attribute, right: Attribute) =>
         inferredConstraints ++= (constraints - eq).map(_ transform {
-          case a: Attribute if a.semanticEquals(l) => r
+          case a: Attribute if a.semanticEquals(left) => right
         })
         inferredConstraints ++= (constraints - eq).map(_ transform {
-          case a: Attribute if a.semanticEquals(r) => l
+          case a: Attribute if a.semanticEquals(right) => left
         })
       case _ => // No inference
     }

@@ -415,9 +415,9 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
         (1 to x).map { y => y + localValue } // 2 levels
       }
     }
-    val closure3 = (k: Int, l: Int, m: Int) => {
+    val closure3 = (k: Int, v: Int, m: Int) => {
       (1 to k).flatMap(closure2) ++ // 4 levels
-      (1 to l).flatMap(closure1) ++ // 3 levels
+      (1 to v).flatMap(closure1) ++ // 3 levels
       (1 to m).map { x => x + 1 } // 2 levels
     }
     val closure1r = closure1(1)
@@ -443,7 +443,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     val closure2 = (j: Int) => { (1 to j).map { x => x + someSerializableMethod() } }
     val closure4 = (k: Int) => { (1 to k).map { x => x + localSerializableMethod() } }
     // This closure references a local non-serializable value
-    val closure3 = (l: Int) => { (1 to l).map { x => localNonSerializableValue } }
+    val closure3 = (i: Int) => { (1 to i).map { x => localNonSerializableValue } }
     // This is non-serializable no matter how many levels we nest it
     val closure5 = (m: Int) => {
       (1 to m).foreach { x =>

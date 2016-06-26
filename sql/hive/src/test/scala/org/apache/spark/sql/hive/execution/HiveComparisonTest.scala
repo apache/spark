@@ -259,7 +259,7 @@ abstract class HiveComparisonTest
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
       val sqlWithoutComment =
-        sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
+        sql.split("\n").filterNot(line => line.matches("--.*(?<=[^\\\\]);")).mkString("\n")
       val allQueries =
         sqlWithoutComment.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 

@@ -49,8 +49,8 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input)(0), label(0))
     }.collect()
-    predictionAndLabels.foreach { case (p, l) =>
-      assert(math.round(p) === l)
+    predictionAndLabels.foreach { case (p, label) =>
+      assert(math.round(p) === label)
     }
   }
 
@@ -84,8 +84,8 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input), label)
     }.collect()
-    predictionAndLabels.foreach { case (p, l) =>
-      assert(p ~== l absTol 0.5)
+    predictionAndLabels.foreach { case (p, label) =>
+      assert(p ~== label absTol 0.5)
     }
   }
 }

@@ -73,11 +73,11 @@ class DecimalPrecisionSuite extends PlanTest with BeforeAndAfter {
     val plan =
       Union(Project(Seq(Alias(left, "l")()), relation),
         Project(Seq(Alias(right, "r")()), relation))
-    val (l, r) = analyzer.execute(plan).collect {
+    val (a, b) = analyzer.execute(plan).collect {
       case Union(Seq(child1, child2)) => (child1.output.head, child2.output.head)
     }.head
-    assert(l.dataType === expectedType)
-    assert(r.dataType === expectedType)
+    assert(a.dataType === expectedType)
+    assert(b.dataType === expectedType)
   }
 
   test("basic operations") {

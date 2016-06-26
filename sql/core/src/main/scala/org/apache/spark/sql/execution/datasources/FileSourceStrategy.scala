@@ -58,7 +58,7 @@ import org.apache.spark.sql.execution.SparkPlan
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
-      l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table)) =>
+      lr @ LogicalRelation(fsRelation: HadoopFsRelation, _, table)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -73,12 +73,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val normalizedFilters = filters.map { e =>
         e transform {
           case a: AttributeReference =>
-            a.withName(l.output.find(_.semanticEquals(a)).get.name)
+            a.withName(lr.output.find(_.semanticEquals(a)).get.name)
         }
       }
 
       val partitionColumns =
-        l.resolve(
+        lr.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
@@ -86,7 +86,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       val dataColumns =
-        l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+        lr.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)

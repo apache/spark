@@ -31,7 +31,7 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
   private def registerGauge[T](name: String, f: StreamingJobProgressListener => T,
       defaultValue: T): Unit = {
     registerGaugeWithOption[T](name,
-      (l: StreamingJobProgressListener) => Option(f(streamingListener)), defaultValue)
+      (_: StreamingJobProgressListener) => Option(f(streamingListener)), defaultValue)
   }
 
   private def registerGaugeWithOption[T](

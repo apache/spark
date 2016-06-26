@@ -141,7 +141,7 @@ trait BaseGenericInternalRow extends InternalRow {
             case b: Byte => b.toInt
             case s: Short => s.toInt
             case i: Int => i
-            case l: Long => (l ^ (l >>> 32)).toInt
+            case v: Long => (v ^ (v >>> 32)).toInt
             case f: Float => java.lang.Float.floatToIntBits(f)
             case d: Double =>
               val b = java.lang.Double.doubleToLongBits(d)

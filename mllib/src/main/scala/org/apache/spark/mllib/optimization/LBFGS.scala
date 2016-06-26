@@ -242,9 +242,8 @@ object LBFGS extends Logging {
 
       val (gradientSum, lossSum) = data.treeAggregate((Vectors.zeros(n), 0.0))(
           seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
-            val l = localGradient.compute(
-              features, label, bcW.value, grad)
-            (grad, loss + l)
+            val localLoss = localGradient.compute(features, label, bcW.value, grad)
+            (grad, loss + localLoss)
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
             axpy(1.0, grad2, grad1)

@@ -519,10 +519,10 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
         case PredicateSubquery(query, conditions, true, exprId) =>
           val (in, correlated) = conditions.partition(_.isInstanceOf[EqualTo])
           val (outer, inner) = in.zipWithIndex.map {
-            case (EqualTo(l, r), i) if query.outputSet.intersect(r.references).nonEmpty =>
-              (l, Alias(r, s"_c$i")())
-            case (EqualTo(r, l), i) =>
-              (l, Alias(r, s"_c$i")())
+            case (EqualTo(a, b), i) if query.outputSet.intersect(b.references).nonEmpty =>
+              (a, Alias(b, s"_c$i")())
+            case (EqualTo(b, a), i) =>
+              (a, Alias(b, s"_c$i")())
           }.unzip
           val wrapped = addSubqueryIfNeeded(query)
           val filtered = if (correlated.nonEmpty) {
@@ -566,8 +566,8 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
   object ExtractSQLTable {
     def unapply(plan: LogicalPlan): Option[SQLTable] = plan match {
-      case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-        Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
+      case lr @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
+        Some(SQLTable(database, table, lr.output.map(_.withQualifier(None))))
 
       case relation: CatalogRelation =>
         val m = relation.catalogTable

@@ -140,9 +140,9 @@ abstract class QueryTest extends PlanTest {
     case (null, _) => false
     case (_, null) => false
     case (a: Array[_], b: Array[_]) =>
-      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
+      a.length == b.length && a.zip(b).forall { case (left, right) => compare(left, right)}
     case (a: Iterable[_], b: Iterable[_]) =>
-      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
+      a.size == b.size && a.zip(b).forall { case (left, right) => compare(left, right)}
     case (a, b) => a == b
   }
 
@@ -275,10 +275,10 @@ abstract class QueryTest extends PlanTest {
     val localRelations = new ArrayDeque[LocalRelation]()
     val inMemoryRelations = new ArrayDeque[InMemoryRelation]()
     def collectData: (LogicalPlan => Unit) = {
-      case l: LogicalRDD =>
-        logicalRDDs.offer(l)
-      case l: LocalRelation =>
-        localRelations.offer(l)
+      case lrdd: LogicalRDD =>
+        logicalRDDs.offer(lrdd)
+      case lr: LocalRelation =>
+        localRelations.offer(lr)
       case i: InMemoryRelation =>
         inMemoryRelations.offer(i)
       case p =>
@@ -307,21 +307,21 @@ abstract class QueryTest extends PlanTest {
     }
 
     def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
-      case l: LogicalRDD =>
+      case lrdd: LogicalRDD =>
         val origin = logicalRDDs.pop()
-        LogicalRDD(l.output, origin.rdd)(spark)
-      case l: LocalRelation =>
+        LogicalRDD(lrdd.output, origin.rdd)(spark)
+      case lr: LocalRelation =>
         val origin = localRelations.pop()
-        l.copy(data = origin.data)
-      case l: InMemoryRelation =>
+        lr.copy(data = origin.data)
+      case i: InMemoryRelation =>
         val origin = inMemoryRelations.pop()
         InMemoryRelation(
-          l.output,
-          l.useCompression,
-          l.batchSize,
-          l.storageLevel,
+          i.output,
+          i.useCompression,
+          i.batchSize,
+          i.storageLevel,
           origin.child,
-          l.tableName)(
+          i.tableName)(
           origin.cachedColumnBuffers,
           origin.batchStats)
       case p =>

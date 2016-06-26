@@ -576,8 +576,8 @@ private[hive] trait HiveInspectors {
         data: Any => {
           if (data != null) {
             Option(li.getList(data))
-              .map { l =>
-                val values = l.asScala.map(unwrapper).toArray
+              .map { list =>
+                val values = list.asScala.map(unwrapper).toArray
                 new GenericArrayData(values)
               }
               .orNull
@@ -880,7 +880,8 @@ private[hive] trait HiveInspectors {
         types.StructField(
           f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
       ))
-    case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
+    case loi: ListObjectInspector =>
+      ArrayType(inspectorToDataType(loi.getListElementObjectInspector))
     case m: MapObjectInspector =>
       MapType(
         inspectorToDataType(m.getMapKeyObjectInspector),

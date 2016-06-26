@@ -250,6 +250,14 @@ This file is divided into 3 sections:
     <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
+  <!-- SPARK-16081: Disallow using "l" as variable name -->
+  <check customId="DisallowMisleadingVariableName"  level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters>
+      <parameter name="regex">^l$</parameter>
+    </parameters>
+    <customMessage>Disallow misleading variable names like `l`</customMessage>
+  </check>
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->

@@ -297,7 +297,7 @@ private[spark] object SerializationDebugger extends Logging {
     override def writeBoolean(b: Boolean): Unit = {}
     override def writeBytes(s: String): Unit = {}
     override def writeChar(i: Int): Unit = {}
-    override def writeLong(l: Long): Unit = {}
+    override def writeLong(v: Long): Unit = {}
     override def writeByte(i: Int): Unit = {}
   }
 

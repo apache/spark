@@ -155,7 +155,7 @@ object HashingTF {
       case b: Byte => hashInt(b, seed)
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
-      case l: Long => hashLong(l, seed)
+      case v: Long => hashLong(v, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case s: String =>

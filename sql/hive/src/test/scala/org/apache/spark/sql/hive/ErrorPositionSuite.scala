@@ -142,7 +142,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
       assert(!error.getMessage.contains("List("))
 
       val (line, expectedLineNum) = query.split("\n").zipWithIndex.collect {
-        case (l, i) if l.contains(token) => (l, i + 1)
+        case (line, i) if line.contains(token) => (line, i + 1)
       }.headOption.getOrElse(sys.error(s"Invalid test. Token $token not in $query"))
       val actualLine = error.line.getOrElse {
         fail(

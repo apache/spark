@@ -209,7 +209,7 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
 trait StringPredicate extends Predicate with ImplicitCastInputTypes {
   self: BinaryExpression =>
 
-  def compare(l: UTF8String, r: UTF8String): Boolean
+  def compare(a: UTF8String, b: UTF8String): Boolean
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
@@ -224,7 +224,7 @@ trait StringPredicate extends Predicate with ImplicitCastInputTypes {
  */
 case class Contains(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
+  override def compare(a: UTF8String, b: UTF8String): Boolean = a.contains(b)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
@@ -235,7 +235,7 @@ case class Contains(left: Expression, right: Expression)
  */
 case class StartsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
+  override def compare(a: UTF8String, b: UTF8String): Boolean = a.startsWith(b)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
@@ -246,7 +246,7 @@ case class StartsWith(left: Expression, right: Expression)
  */
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
+  override def compare(a: UTF8String, b: UTF8String): Boolean = a.endsWith(b)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
@@ -441,8 +441,8 @@ case class StringInstr(str: Expression, substr: Expression)
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (l, r) =>
-      s"($l).indexOf($r, 0) + 1")
+    defineCodeGen(ctx, ev, (a, b) =>
+      s"($a).indexOf($b, 0) + 1")
   }
 }
 
@@ -508,20 +508,20 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
       // if the start position is null, we need to return 0, (conform to Hive)
       0
     } else {
-      val r = substr.eval(input)
-      if (r == null) {
+      val right = substr.eval(input)
+      if (right == null) {
         null
       } else {
-        val l = str.eval(input)
-        if (l == null) {
+        val left = str.eval(input)
+        if (left == null) {
           null
         } else {
           val sVal = s.asInstanceOf[Int]
           if (sVal < 1) {
             0
           } else {
-            l.asInstanceOf[UTF8String].indexOf(
-              r.asInstanceOf[UTF8String],
+            left.asInstanceOf[UTF8String].indexOf(
+              right.asInstanceOf[UTF8String],
               s.asInstanceOf[Int] - 1) + 1
           }
         }
@@ -726,7 +726,7 @@ case class StringRepeat(str: Expression, times: Expression)
   override def prettyName: String = "repeat"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
+    defineCodeGen(ctx, ev, (a, b) => s"($a).repeat($b)")
   }
 }
 
@@ -1107,7 +1107,7 @@ case class FormatNumber(x: Expression, d: Expression)
       val sb = classOf[StringBuffer].getName
       val df = classOf[DecimalFormat].getName
       val dfs = classOf[DecimalFormatSymbols].getName
-      val l = classOf[Locale].getName
+      val lo = classOf[Locale].getName
       // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
       // as a decimal separator.
       val usLocale = "US"
@@ -1119,7 +1119,7 @@ case class FormatNumber(x: Expression, d: Expression)
       ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
       ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
       ctx.addMutableState(df, numberFormat,
-      s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
+      s"""$numberFormat = new $df("", new $dfs($lo.$usLocale));""")
 
       s"""
         if ($d >= 0) {

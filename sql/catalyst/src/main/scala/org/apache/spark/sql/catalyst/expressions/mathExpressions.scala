@@ -648,7 +648,7 @@ case class ShiftLeft(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
-      case l: jl.Long => l << input2.asInstanceOf[jl.Integer]
+      case v: jl.Long => v << input2.asInstanceOf[jl.Integer]
       case i: jl.Integer => i << input2.asInstanceOf[jl.Integer]
     }
   }
@@ -678,7 +678,7 @@ case class ShiftRight(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
-      case l: jl.Long => l >> input2.asInstanceOf[jl.Integer]
+      case v: jl.Long => v >> input2.asInstanceOf[jl.Integer]
       case i: jl.Integer => i >> input2.asInstanceOf[jl.Integer]
     }
   }
@@ -708,7 +708,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
-      case l: jl.Long => l >>> input2.asInstanceOf[jl.Integer]
+      case v: jl.Long => v >>> input2.asInstanceOf[jl.Integer]
       case i: jl.Integer => i >>> input2.asInstanceOf[jl.Integer]
     }
   }

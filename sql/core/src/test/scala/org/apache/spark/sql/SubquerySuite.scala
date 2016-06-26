@@ -26,7 +26,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   val row = identity[(java.lang.Integer, java.lang.Double)](_)
 
-  lazy val l = Seq(
+  lazy val left = Seq(
     row(1, 2.0),
     row(1, 2.0),
     row(2, 1.0),
@@ -36,7 +36,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     row(null, 5.0),
     row(6, null)).toDF("a", "b")
 
-  lazy val r = Seq(
+  lazy val right = Seq(
     row(2, 3.0),
     row(2, 3.0),
     row(3, 2.0),
@@ -45,12 +45,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     row(null, 5.0),
     row(6, null)).toDF("c", "d")
 
-  lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
+  lazy val t = right.filter($"c".isNotNull && $"d".isNotNull)
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    l.createOrReplaceTempView("l")
-    r.createOrReplaceTempView("r")
+    left.createOrReplaceTempView("l")
+    right.createOrReplaceTempView("r")
     t.createOrReplaceTempView("t")
   }
 
@@ -158,7 +158,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val df = sql("select a, sum(b) as s from l group by a having a > (select avg(a) from l)")
     val expected = Row(3, 2.0, 3, 3.0) :: Row(6, null, 6, null) :: Nil
     (1 to 10).foreach { _ =>
-      checkAnswer(r.join(df, $"c" === $"a"), expected)
+      checkAnswer(right.join(df, $"c" === $"a"), expected)
     }
   }
 
