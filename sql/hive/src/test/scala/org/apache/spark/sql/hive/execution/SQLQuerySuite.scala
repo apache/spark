@@ -395,7 +395,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   def checkRelation(
       tableName: String,
-      isDataSourceParquet: Boolean,
+      isDataSourceTable: Boolean,
       format: String,
       userSpecifiedLocation: Option[String] = None): Unit = {
     val relation = EliminateSubqueryAliases(
@@ -404,7 +404,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
       case LogicalRelation(r: HadoopFsRelation, _, _) =>
-        if (!isDataSourceParquet) {
+        if (!isDataSourceTable) {
           fail(
             s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
@@ -418,7 +418,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
 
       case r: MetastoreRelation =>
-        if (isDataSourceParquet) {
+        if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
               s"${classOf[MetastoreRelation].getCanonicalName}.")
@@ -479,11 +479,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "orc")
+      checkRelation("ctas1", true, "orc")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "parquet")
+      checkRelation("ctas1", true, "parquet")
       sql("DROP TABLE ctas1")
     } finally {
       setConf(SQLConf.CONVERT_CTAS, originalConf)
