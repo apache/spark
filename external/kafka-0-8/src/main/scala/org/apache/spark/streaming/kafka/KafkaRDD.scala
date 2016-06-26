@@ -137,6 +137,9 @@ class KafkaRDD[
     }
   }
 
+  /**
+   * An iterator that fetches messages directly from Kafka for the offsets in partition.
+   */
   private class KafkaRDDIterator(
       part: KafkaRDDPartition,
       context: TaskContext) extends NextIterator[R] {
