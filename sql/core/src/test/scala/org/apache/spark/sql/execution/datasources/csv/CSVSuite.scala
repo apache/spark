@@ -681,7 +681,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("header", "true")
         .save(datesPath)
 
-      // This will load back the dates as string.
+      // This will load back the timestamps as string.
       val stringDates = spark.read
         .format("csv")
         .option("header", "true")
@@ -708,7 +708,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("dateFormat", "yyyy/MM/dd HH:mm")
         .save(datesWithFormatPath)
 
-      // This will load back the dates as string.
+      // This will load back the timestamps as string.
       val stringDatesWithFormat = spark.read
         .format("csv")
         .option("header", "true")
