@@ -1102,9 +1102,16 @@ object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
     // Case 2: General aggregations can generate non-empty results.
     case a: Aggregate => a
 
-    // Case 3: Other plans having only empty relations return empty results.
+    // Case 3: The following non-leaf plans having only empty relations return empty results.
     case p: LogicalPlan if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) =>
-      LocalRelation(p.output, data = Seq.empty)
+      p match {
+        case _: Project | _: Generate | _: Filter | _: Sample | _: Join |
+             _: Sort | _: GlobalLimit | _: LocalLimit |
+             _: Distinct | _: Intersect | _: Except | _: Union |
+             _: Repartition =>
+          LocalRelation(p.output, data = Seq.empty)
+        case _ => p
+      }
   }
 }
 
