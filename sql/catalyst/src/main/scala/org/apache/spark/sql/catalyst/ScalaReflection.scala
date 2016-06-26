@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericRefArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -459,7 +459,7 @@ object ScalaReflection extends ScalaReflection {
 
         case dt =>
           NewInstance(
-            classOf[GenericArrayData],
+            classOf[GenericRefArrayData],
             input :: Nil,
             dataType = ArrayType(dt, schemaFor(elementType).nullable))
       }
