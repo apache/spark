@@ -58,26 +58,53 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+    val dt = dataType match {
+      case a @ ArrayType(et, _) => et
+    }
+    val isPrimitive = ctx.isPrimitiveType(dt)
+    val evals = children.map(e => e.genCode(ctx))
+    val allNonNull = evals.find(_.isNull != "false").isEmpty
+    if (isPrimitive && allNonNull) {
+      val javaDataType = ctx.javaType(dt)
+      ctx.addMutableState(s"${javaDataType}[]", values,
+        s"this.$values = new ${javaDataType}[${children.size}];")
 
-    ev.copy(code = s"""
-      this.$values = new Object[${children.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        children.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
+      ev.copy(code =
+        ctx.splitExpressions(
+          ctx.INPUT_ROW,
+            evals.zipWithIndex.map { case (eval, i) =>
+              eval.code +
+                s"\n$values[$i] = ${eval.value};"
+            }) +
+       s"""
+      /* final ArrayData ${ev.value} = $arrayClass.allocate($values); */
+      final ArrayData ${ev.value} = new $arrayClass($values);
+     """,
+       isNull = "false")
+    } else {
+      ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
+      ev.copy(code = s"""
+       final boolean ${ev.isNull} = false;
+       this.$values = new Object[${children.size}];""" +
+        ctx.splitExpressions(
+          ctx.INPUT_ROW,
+          children.zipWithIndex.map { case (e, i) =>
+            val eval = e.genCode(ctx)
+            eval.code + s"""
             if (${eval.isNull}) {
               $values[$i] = null;
             } else {
               $values[$i] = ${eval.value};
             }
-           """
-        }) +
-      s"""
-        final ArrayData ${ev.value} = new $arrayClass($values);
-        this.$values = null;
-      """, isNull = "false")
+          """
+          }) +
+        s"""
+         /* final ArrayData ${ev.value} = $arrayClass.allocate($values); */
+         final ArrayData ${ev.value} = new $arrayClass($values);
+         this.$values = null;
+       """)
+    }
   }
 
   override def prettyName: String = "array"
