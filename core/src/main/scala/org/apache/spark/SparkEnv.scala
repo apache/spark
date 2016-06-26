@@ -23,7 +23,7 @@ import java.net.Socket
 import scala.collection.mutable
 import scala.util.Properties
 
-import com.google.common.collect.MapMaker
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
