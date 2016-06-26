@@ -225,7 +225,31 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
-    val primitiveTypeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
+    val storeElements = if (containsNull) {
+      s"""
+      for (int $index = 0; $index < $numElements; $index++) {
+        if ($input.isNullAt($index)) {
+          $arrayWriter.setNullAt($index);
+        } else {
+          final $jt $element = ${ctx.getValue(input, et, index)};
+          $writeElement
+        }
+      }
+      """
+    } else {
+      if (ctx.isPrimitiveType(et)) {
+        val typeName = ctx.primitiveTypeName(et)
+        s"$arrayWriter.writePrimitive${typeName}Array($input);"
+      } else {
+        s"""
+        for (int $index = 0; $index < $numElements; $index++) {
+          final $jt $element = ${ctx.getValue(input, et, index)};
+          $writeElement
+        }
+        """
+      }
+    }
+
     s"""
       if ($input instanceof UnsafeArrayData) {
         ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
@@ -233,14 +257,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         final int $numElements = $input.numElements();
         $arrayWriter.initialize($bufferHolder, $numElements, $elementOrOffsetSize);
 
-        for (int $index = 0; $index < $numElements; $index++) {
-          if ($input.isNullAt($index)) {
-            $arrayWriter.setNull$primitiveTypeName($index);
-          } else {
-            final $jt $element = ${ctx.getValue(input, et, index)};
-            $writeElement
-          }
-        }
+        $storeElements
       }
     """
   }
