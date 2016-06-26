@@ -220,8 +220,8 @@ test_that("read csv as DataFrame", {
   df <- read.df(csvPath, "csv", header = "true")
   expect_equal(count(df), 3)
   expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
-  expect_equal(as.list(collect(where(df, df$year == "2015"))),
-               list(year = "2015", make = "Chevy", model = "Volt"))
+  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
+               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
 
   unlink(csvPath)
 })
