@@ -91,9 +91,9 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     kafkaParams.put("auto.offset.reset", "earliest");
     kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
 
-    Map<TopicPartition, String> preferredHosts = DirectKafkaInputDStream.preferConsistent();
+    Map<TopicPartition, String> preferredHosts = KafkaUtils.preferConsistent();
 
-    JavaInputDStream istream1 = DirectKafkaInputDStream.create(
+    JavaInputDStream istream1 = KafkaUtils.createDirectStream(
         ssc,
         String.class,
         String.class,
@@ -135,7 +135,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     final Map<String, Object> kafkaParams2 = new HashMap<>(kafkaParams);
     kafkaParams2.put("group.id", "java-test-consumer-" + random.nextInt());
 
-    JavaInputDStream istream2 = DirectKafkaInputDStream.create(
+    JavaInputDStream istream2 = KafkaUtils.createDirectStream(
         ssc,
         String.class,
         String.class,

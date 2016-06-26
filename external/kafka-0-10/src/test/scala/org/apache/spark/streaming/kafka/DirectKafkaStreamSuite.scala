@@ -93,7 +93,7 @@ class DirectKafkaStreamSuite
     kp
   }
 
-  val preferredHosts = DirectKafkaInputDStream.preferConsistent
+  val preferredHosts = KafkaUtils.preferConsistent
 
   test("basic stream receiving with multiple topics and smallest starting offset") {
     val topics = List("basic1", "basic2", "basic3")
@@ -107,7 +107,7 @@ class DirectKafkaStreamSuite
 
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
-      DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
+      KafkaUtils.createDirectStream[String, String](ssc, preferredHosts, kafkaParams, () => {
         val consumer = new KafkaConsumer[String, String](kafkaParams)
         consumer.subscribe(Arrays.asList(topics: _*))
         consumer
@@ -180,11 +180,12 @@ class DirectKafkaStreamSuite
     // Setup context and kafka stream with largest offset
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
-      val s = DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
-        val consumer = new KafkaConsumer[String, String](kafkaParams)
-        consumer.subscribe(Arrays.asList(topic))
-        consumer
-      })
+      val s = new DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams,
+        () => {
+          val consumer = new KafkaConsumer[String, String](kafkaParams)
+          consumer.subscribe(Arrays.asList(topic))
+          consumer
+        })
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -231,12 +232,13 @@ class DirectKafkaStreamSuite
     // Setup context and kafka stream with largest offset
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
-      val s = DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
-        val consumer = new KafkaConsumer[String, String](kafkaParams)
-        consumer.assign(Arrays.asList(topicPartition))
-        consumer.seek(topicPartition, 11L)
-        consumer
-      })
+      val s = new DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams,
+        () => {
+          val consumer = new KafkaConsumer[String, String](kafkaParams)
+          consumer.assign(Arrays.asList(topicPartition))
+          consumer.seek(topicPartition, 11L)
+          consumer
+        })
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -273,7 +275,7 @@ class DirectKafkaStreamSuite
     // Setup the streaming context
     ssc = new StreamingContext(sparkConf, Milliseconds(100))
     val kafkaStream = withClue("Error creating direct stream") {
-      DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
+      KafkaUtils.createDirectStream[String, String](ssc, preferredHosts, kafkaParams, () => {
         val consumer = new KafkaConsumer[String, String](kafkaParams)
         consumer.subscribe(Arrays.asList(topic))
         consumer
@@ -369,7 +371,7 @@ class DirectKafkaStreamSuite
     // Setup the streaming context
     ssc = new StreamingContext(sparkConf, Milliseconds(100))
     withClue("Error creating direct stream") {
-      val kafkaStream = DirectKafkaInputDStream[String, String](
+      val kafkaStream = KafkaUtils.createDirectStream[String, String](
         ssc, preferredHosts, kafkaParams, () => {
           val consumer = new KafkaConsumer[String, String](kafkaParams)
           consumer.subscribe(Arrays.asList(topic))
@@ -379,15 +381,16 @@ class DirectKafkaStreamSuite
         val offsets = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
         val data = rdd.map(_.value).collect()
         collectedData.addAll(Arrays.asList(data: _*))
-        kafkaStream.commitAsync(offsets, new OffsetCommitCallback() {
-          def onComplete(m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) {
-            if (null != e) {
-              logError("commit failed", e)
-            } else {
-              committed.putAll(m)
+        kafkaStream.asInstanceOf[CanCommitOffsets]
+          .commitAsync(offsets, new OffsetCommitCallback() {
+            def onComplete(m: JMap[TopicPartition, OffsetAndMetadata], e: Exception) {
+              if (null != e) {
+                logError("commit failed", e)
+              } else {
+                committed.putAll(m)
+              }
             }
-          }
-        })
+          })
       }
     }
     ssc.start()
@@ -424,7 +427,7 @@ class DirectKafkaStreamSuite
     ssc.addStreamingListener(collector)
 
     val stream = withClue("Error creating direct stream") {
-      DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
+      KafkaUtils.createDirectStream[String, String](ssc, preferredHosts, kafkaParams, () => {
         val consumer = new KafkaConsumer[String, String](kafkaParams)
         consumer.subscribe(Arrays.asList(topic))
         consumer
@@ -483,7 +486,7 @@ class DirectKafkaStreamSuite
     kafkaTestUtils.createTopic(topic, 2)
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
     val executorKafkaParams = new JHashMap[String, Object](kafkaParams)
-    KafkaRDD.fixKafkaParams(executorKafkaParams)
+    KafkaUtils.fixKafkaParams(executorKafkaParams)
 
     val batchIntervalMilliseconds = 100
     val estimator = new ConstantEstimator(100)
@@ -501,11 +504,12 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
 
     val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](ssc, preferredHosts, executorKafkaParams, () => {
-        val consumer = new KafkaConsumer[String, String](kafkaParams)
-        consumer.subscribe(Arrays.asList(topic))
-        consumer
-      }) {
+      new DirectKafkaInputDStream[String, String](ssc, preferredHosts, executorKafkaParams,
+        () => {
+          val consumer = new KafkaConsumer[String, String](kafkaParams)
+          consumer.subscribe(Arrays.asList(topic))
+          consumer
+        }) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }.map(r => (r.key, r.value))
@@ -564,7 +568,7 @@ class DirectKafkaStreamSuite
 
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
     val executorKafkaParams = new JHashMap[String, Object](kafkaParams)
-    KafkaRDD.fixKafkaParams(executorKafkaParams)
+    KafkaUtils.fixKafkaParams(executorKafkaParams)
 
     val s = new DirectKafkaInputDStream[String, String](
       ssc,

@@ -93,7 +93,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         }
       };
 
-    JavaRDD<String> rdd1 = KafkaRDD.create(
+    JavaRDD<String> rdd1 = KafkaUtils.createRDD(
         sc,
         String.class,
         String.class,
@@ -102,7 +102,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         leaders
     ).map(handler);
 
-    JavaRDD<String> rdd2 = KafkaRDD.create(
+    JavaRDD<String> rdd2 = KafkaUtils.createRDD(
         sc,
         String.class,
         String.class,

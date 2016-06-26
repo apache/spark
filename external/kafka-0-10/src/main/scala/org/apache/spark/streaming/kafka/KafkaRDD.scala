@@ -50,9 +50,9 @@ import org.apache.spark.storage.StorageLevel
  * @tparam V type of Kafka message value
  */
 @Experimental
-class KafkaRDD[
+private[spark] class KafkaRDD[
   K: ClassTag,
-  V: ClassTag] private[spark] (
+  V: ClassTag](
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
@@ -146,6 +146,8 @@ class KafkaRDD[
   private def floorMod(a: Int, b: Int): Int = ((a % b) + b) % b
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
+    // The intention is best-effort consistent executor for a given topicpartition,
+    // so that caching consumers can be effective.
     // TODO what about hosts specified by ip vs name
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     val allExecs = executors()
@@ -156,6 +158,7 @@ class KafkaRDD[
     if (execs.isEmpty) {
       Seq()
     } else {
+      // execs is sorted, tp.hashCode depends only on topic and partition, so consistent index
       val index = this.floorMod(tp.hashCode, execs.length)
       val chosen = execs(index)
       Seq(chosen.toString)
@@ -222,93 +225,4 @@ class KafkaRDD[
       r
     }
   }
-}
-
-/**
- * Companion object that provides methods to create instances of [[KafkaRDD]]
- */
-@Experimental
-object KafkaRDD extends Logging {
-  import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
-
-  private[kafka] def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
-    logWarn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
-    kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
-
-    logWarn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
-    kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
-
-    // driver and executor should be in different consumer groups
-    val groupId = "spark-executor-" + kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
-    logWarn(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
-    kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
-
-    // possible workaround for KAFKA-3135
-    val rbb = kafkaParams.get(ConsumerConfig.RECEIVE_BUFFER_CONFIG)
-    if (null == rbb || rbb.asInstanceOf[java.lang.Integer] < 65536) {
-      logWarn(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 see KAFKA-3135")
-      kafkaParams.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-    }
-  }
-
-  /**
-   * Scala constructor
-   * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
-   * configuration parameters</a>. Requires "bootstrap.servers" to be set
-   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
-   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
-   * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
-   * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
-   * @tparam K type of Kafka message key
-   * @tparam V type of Kafka message value
-   */
-  def apply[K: ClassTag, V: ClassTag](
-      sc: SparkContext,
-      kafkaParams: ju.Map[String, Object],
-      offsetRanges: Array[OffsetRange],
-      preferredHosts: ju.Map[TopicPartition, String]
-    ): KafkaRDD[K, V] = {
-    assert(preferredHosts != DirectKafkaInputDStream.preferBrokers,
-      "If you want to prefer brokers, you must provide a mapping for preferredHosts. " +
-        "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you. ")
-
-    val kp = new ju.HashMap[String, Object](kafkaParams)
-    fixKafkaParams(kp)
-    val osr = offsetRanges.clone()
-    val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
-
-    new KafkaRDD[K, V](sc, kp, osr, ph, true)
-  }
-
-  /**
-   * Java constructor
-   * @param keyClass Class of the keys in the Kafka records
-   * @param valueClass Class of the values in the Kafka records
-   * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
-   * configuration parameters</a>. Requires "bootstrap.servers" to be set
-   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
-   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
-   * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
-   * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
-   * @tparam K type of Kafka message key
-   * @tparam V type of Kafka message value
-   */
-  def create[K, V](
-      jsc: JavaSparkContext,
-      keyClass: Class[K],
-      valueClass: Class[V],
-      kafkaParams: ju.Map[String, Object],
-      offsetRanges: Array[OffsetRange],
-      preferredHosts: ju.Map[TopicPartition, String]
-    ): JavaRDD[ConsumerRecord[K, V]] = {
-    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
-    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
-
-    new JavaRDD(KafkaRDD[K, V](jsc.sc, kafkaParams, offsetRanges, preferredHosts))
-  }
-
 }

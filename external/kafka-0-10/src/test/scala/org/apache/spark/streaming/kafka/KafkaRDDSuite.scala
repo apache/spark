@@ -71,7 +71,8 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
-    val rdd = KafkaRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts).map(_.value)
+    val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts)
+      .map(_.value)
 
     val received = rdd.collect.toSet
     assert(received === messages.toSet)
@@ -84,7 +85,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(1).head === messages.head)
     assert(rdd.take(messages.size + 10).size === messages.size)
 
-    val emptyRdd = KafkaRDD[String, String](
+    val emptyRdd = KafkaUtils.createRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
     assert(emptyRdd.isEmpty)
@@ -92,7 +93,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     // invalid offset ranges throw exceptions
     val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
     intercept[SparkException] {
-      val result = KafkaRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
+      val result = KafkaUtils.createRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
         .map(_.value)
         .collect()
     }
@@ -110,7 +111,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     kafkaTestUtils.sendMessages(topic, sent)
     var sentCount = sent.values.sum
 
-    val rdd = KafkaRDD[String, String](sc, kafkaParams,
+    val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams,
       Array(OffsetRange(topic, 0, 0, sentCount)), preferredHosts)
 
     val ranges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
@@ -121,7 +122,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       "didn't get all sent messages")
 
     // this is the "0 messages" case
-    val rdd2 = KafkaRDD[String, String](sc, kafkaParams,
+    val rdd2 = KafkaUtils.createRDD[String, String](sc, kafkaParams,
       Array(OffsetRange(topic, 0, sentCount, sentCount)), preferredHosts)
 
     // shouldn't get anything, since message is sent after rdd was defined
@@ -132,7 +133,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd2.map(_.value).collect.size === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
-    val rdd3 = KafkaRDD[String, String](sc, kafkaParams,
+    val rdd3 = KafkaUtils.createRDD[String, String](sc, kafkaParams,
       Array(OffsetRange(topic, 0, sentCount, sentCount + 1)), preferredHosts)
 
     // send lots of messages after rdd was defined, they shouldn't show up
