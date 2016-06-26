@@ -91,20 +91,12 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     kafkaParams.put("auto.offset.reset", "earliest");
     kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
 
-    JavaInputDStream istream1 = KafkaUtils.createDirectStream(
+    JavaInputDStream<ConsumerRecord<String, String>> istream1 = KafkaUtils.createDirectStream(
         ssc,
         String.class,
         String.class,
-        PreferConsistent.instance(),
-        kafkaParams,
-        new Function0<Consumer<String, String>>() {
-          @Override
-          public Consumer<String, String> call() {
-            KafkaConsumer<String, String> consumer = new KafkaConsumer(kafkaParams);
-            consumer.subscribe(Arrays.asList(topic1));
-            return consumer;
-          }
-        }
+        PreferConsistent.create(),
+        Subscribe.create(String.class, String.class, Arrays.asList(topic1), kafkaParams)
     );
 
     JavaDStream<String> stream1 = istream1.transform(
@@ -133,20 +125,12 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     final Map<String, Object> kafkaParams2 = new HashMap<>(kafkaParams);
     kafkaParams2.put("group.id", "java-test-consumer-" + random.nextInt());
 
-    JavaInputDStream istream2 = KafkaUtils.createDirectStream(
+    JavaInputDStream<ConsumerRecord<String, String>> istream2 = KafkaUtils.createDirectStream(
         ssc,
         String.class,
         String.class,
-        PreferConsistent.instance(),
-        kafkaParams2,
-        new Function0<Consumer<String, String>>() {
-          @Override
-          public Consumer<String, String> call() {
-            KafkaConsumer<String, String> consumer = new KafkaConsumer(kafkaParams2);
-            consumer.subscribe(Arrays.asList(topic2));
-            return consumer;
-          }
-        }
+        PreferConsistent.create(),
+        Subscribe.create(String.class, String.class, Arrays.asList(topic2), kafkaParams2)
     );
 
     JavaDStream<String> stream2 = istream2.transform(

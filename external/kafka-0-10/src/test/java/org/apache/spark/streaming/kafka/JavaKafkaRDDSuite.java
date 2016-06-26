@@ -98,7 +98,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         String.class,
         kafkaParams,
         offsetRanges,
-        PreferFixed.apply(leaders)
+        PreferFixed.create(leaders)
     ).map(handler);
 
     JavaRDD<String> rdd2 = KafkaUtils.createRDD(
@@ -107,7 +107,7 @@ public class JavaKafkaRDDSuite implements Serializable {
         String.class,
         kafkaParams,
         offsetRanges,
-        PreferConsistent.instance()
+        PreferConsistent.create()
     ).map(handler);
 
     // just making sure the java user apis work; the scala tests handle logic corner cases

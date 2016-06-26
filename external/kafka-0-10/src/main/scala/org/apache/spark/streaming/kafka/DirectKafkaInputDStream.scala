@@ -62,18 +62,24 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
 private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
     _ssc: StreamingContext,
     locationStrategy: LocationStrategy,
-    executorKafkaParams: ju.Map[String, Object],
-    driverConsumer: () => Consumer[K, V]
+    consumerStrategy: ConsumerStrategy[K, V]
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
+
+  val executorKafkaParams = {
+    val ekp = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
+    KafkaUtils.fixKafkaParams(ekp)
+    ekp
+  }
+
+  protected var currentOffsets = Map[TopicPartition, Long]()
 
   @transient private var kc: Consumer[K, V] = null
   def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
-      kc = driverConsumer()
+      kc = consumerStrategy.onStart(currentOffsets)
     }
     kc
   }
-  consumer()
 
   override def persist(newLevel: StorageLevel): DStream[ConsumerRecord[K, V]] = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -159,8 +165,6 @@ private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
       None
     }
   }
-
-  protected var currentOffsets = Map[TopicPartition, Long]()
 
   protected def latestOffsets(): Map[TopicPartition, Long] = {
     val c = consumer

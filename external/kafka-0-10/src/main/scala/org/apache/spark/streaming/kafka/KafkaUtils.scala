@@ -111,15 +111,8 @@ object KafkaUtils extends Logging {
    * per second that each '''partition''' will accept.
    * @param locationStrategy In most cases, pass in [[PreferConsistent]],
    *   see [[LocationStrategy]] for more details.
-   * @param executorKafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
-   * configuration parameters</a>.
-   *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
-   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-   * @param driverConsumer zero-argument function for you to construct a Kafka Consumer,
-   *  and subscribe topics or assign partitions.
-   *  This consumer will be used on the driver to query for offsets only, not messages.
-   *  See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Consumer doc</a>
+   * @param consumerStrategy In most cases, pass in [[Subscribe]],
+   *   see [[ConsumerStrategy]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -127,14 +120,9 @@ object KafkaUtils extends Logging {
   def createDirectStream[K: ClassTag, V: ClassTag](
       ssc: StreamingContext,
       locationStrategy: LocationStrategy,
-      executorKafkaParams: ju.Map[String, Object],
-      driverConsumer: () => Consumer[K, V]
+      consumerStrategy: ConsumerStrategy[K, V]
     ): InputDStream[ConsumerRecord[K, V]] = {
-    val ekp = new ju.HashMap[String, Object](executorKafkaParams)
-    fixKafkaParams(ekp)
-    val cleaned = ssc.sparkContext.clean(driverConsumer)
-
-    new DirectKafkaInputDStream[K, V](ssc, locationStrategy, ekp, cleaned)
+    new DirectKafkaInputDStream[K, V](ssc, locationStrategy, consumerStrategy)
   }
 
   /**
@@ -144,14 +132,8 @@ object KafkaUtils extends Logging {
    * @param valueClass Class of the values in the Kafka records
    * @param locationStrategy In most cases, pass in [[PreferConsistent]],
    *   see [[LocationStrategy]] for more details.
-   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
-   * configuration parameters</a>.
-   *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
-   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-   * @param driverConsumer zero-argument function for you to construct a Kafka Consumer,
-   *  and subscribe topics or assign partitions.
-   *  This consumer will be used on the driver to query for offsets only, not messages.
-   *  See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Consumer doc</a>
+   * @param consumerStrategy In most cases, pass in [[Subscribe]],
+   *   see [[ConsumerStrategy]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -161,18 +143,17 @@ object KafkaUtils extends Logging {
       keyClass: Class[K],
       valueClass: Class[V],
       locationStrategy: LocationStrategy,
-      executorKafkaParams: ju.Map[String, Object],
-      driverConsumer: JFunction0[Consumer[K, V]]
+      consumerStrategy: ConsumerStrategy[K, V]
     ): JavaInputDStream[ConsumerRecord[K, V]] = {
 
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
 
+    // TODO implement hasOffsetRanges etc so users dont have to rdd.rdd()
     new JavaInputDStream(
       createDirectStream[K, V](
-        jssc.ssc, locationStrategy, executorKafkaParams, driverConsumer.call _))
+        jssc.ssc, locationStrategy, consumerStrategy))
   }
-
 
   /**
    * Tweak kafka params to prevent issues on executors
