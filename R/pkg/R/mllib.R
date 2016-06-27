@@ -373,7 +373,6 @@ setMethod("summary", signature(object = "KMeansModel"),
 #'
 #' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
-#' @param object A fitted k-means model
 #' @return \code{predict} returns the predicted values based on a k-means model
 #' @rdname spark.kmeans
 #' @export
@@ -496,7 +495,6 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #'
 #' Save the k-means model to the input path.
 #'
-#' @param object A fitted k-means model
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
