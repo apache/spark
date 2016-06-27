@@ -482,7 +482,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
   configured in yarn-site.xml.
   Besides this feature can only be used with Hadoop 2.6.1+. And the log4j appender should be changed to
-  File appender.
+  File appender. Based on the file name configured in log4j configuration (like spark.log),
+  user could set regex (spark*) to include all the log files need to be aggregated.
   </td>
 </tr>
 <tr>
