@@ -216,30 +216,20 @@ private[sql] class CsvOutputWriter(
     values
   }
 
-  private def makeConverter(dataType: DataType): ValueConverter = {
-    dataType match {
-      case DateType if params.dateFormat != null =>
-        (row: InternalRow, ordinal: Int) =>
-          params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+  private def makeConverter(dataType: DataType): ValueConverter = dataType match {
+    case DateType if params.dateFormat != null =>
+      (row: InternalRow, ordinal: Int) =>
+        params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
 
-      case DateType =>
-        (row: InternalRow, ordinal: Int) =>
-          DateTimeUtils.toJavaDate(row.getInt(ordinal)).toString
+    case TimestampType if params.dateFormat != null =>
+      (row: InternalRow, ordinal: Int) =>
+        params.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
 
-      case TimestampType if params.dateFormat != null =>
-        (row: InternalRow, ordinal: Int) =>
-          params.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+    case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
-      case TimestampType =>
-        (row: InternalRow, ordinal: Int) =>
-          DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)).toString
-
-      case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
-
-      case dt: DataType =>
-        (row: InternalRow, ordinal: Int) =>
-          row.get(ordinal, dt).toString
-    }
+    case dt: DataType =>
+      (row: InternalRow, ordinal: Int) =>
+        row.get(ordinal, dt).toString
   }
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")

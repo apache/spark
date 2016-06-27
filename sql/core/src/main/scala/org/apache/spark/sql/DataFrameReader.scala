@@ -378,6 +378,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
    * and timestamp type. By default, it is `null` which means trying to parse times and date by
    * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()`.</li>
+   * <li>`timezone` (default is the timezone of your current system): defines the timezone to
+   * be used for both date type and timestamp type. If a timezone is specified in the data, this
+   * will load them after calculating the time difference between both.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
