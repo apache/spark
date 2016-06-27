@@ -58,12 +58,10 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
-    val dt = dataType match {
-      case a @ ArrayType(et, _) => et
-    }
+    val ArrayType(dt, _) = dataType
     val isPrimitive = ctx.isPrimitiveType(dt)
     val evals = children.map(e => e.genCode(ctx))
-    val allNonNull = evals.find(_.isNull != "false").isEmpty
+    val allNonNull = evals.forall(_.isNull == "false")
     if (isPrimitive && allNonNull) {
       val javaDataType = ctx.javaType(dt)
       ctx.addMutableState(s"${javaDataType}[]", values,
