@@ -528,7 +528,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("upper") {
     checkAnswer(
-      lowerCaseData.select(upper('l)),
+      lowerCaseData.select(upper('s)),
       ('a' to 'd').map(c => Row(c.toString.toUpperCase))
     )
 

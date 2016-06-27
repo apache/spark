@@ -985,7 +985,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("system function upper()") {
     checkAnswer(
-      sql("SELECT n,UPPER(l) FROM lowerCaseData"),
+      sql("SELECT n,UPPER(s) FROM lowerCaseData"),
       Seq(
         Row(1, "A"),
         Row(2, "B"),
@@ -1036,7 +1036,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("UNION with column mismatches") {
     // Column name mismatches are allowed.
     checkAnswer(
-      sql("SELECT n,l FROM lowerCaseData UNION SELECT N as x1, L as x2 FROM upperCaseData"),
+      sql("SELECT n,s FROM lowerCaseData UNION SELECT N as x1, L as x2 FROM upperCaseData"),
       Row(1, "A") :: Row(1, "a") :: Row(2, "B") :: Row(2, "b") :: Row(3, "C") :: Row(3, "c") ::
       Row(4, "D") :: Row(4, "d") :: Row(5, "E") :: Row(6, "F") :: Nil)
     // Column type mismatches are not allowed, forcing a type coercion.

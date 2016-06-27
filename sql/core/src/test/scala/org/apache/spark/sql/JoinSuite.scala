@@ -260,7 +260,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(6, "F", null, null) :: Nil)
 
       checkAnswer(
-        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"s" > $"L", "left"),
         Row(1, "A", 1, "a") ::
           Row(2, "B", 2, "b") ::
           Row(3, "C", 3, "c") ::
@@ -323,7 +323,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
       checkAnswer(
-        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"s" > $"L", "right"),
         Row(1, "a", 1, "A") ::
           Row(2, "b", 2, "B") ::
           Row(3, "c", 3, "C") ::
