@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.mockito.Matchers._
-import org.mockito.Mockito.{atLeast, never, verify, when}
+import org.mockito.Mockito.{atLeast, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.mock.MockitoSugar
@@ -281,7 +281,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     assert("executor1" === taskDescriptions3(0).executorId)
   }
 
-  test("scheduled tasks obey all blacklists") {
+  test("scheduled tasks obey task and stage blacklists") {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     val blacklist = mock[BlacklistTracker]
     val taskScheduler = new TaskSchedulerImpl(sc, 4, blacklist)
@@ -329,13 +329,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
         }
       })
 
-    (0 to 2).foreach{ stageId =>
+    (0 to 2).foreach { stageId =>
       taskScheduler.taskSetManagerForAttempt(stageId, 0).get.setBlacklistTracker(blacklist)
     }
 
     val tasks0 = taskScheduler.resourceOffers(offers).flatten
-    // these verifications are *really* tricky b/c we reference them multiple times, when we check
-    // if we need to abort any stages from unschedulability.
+    // these verifications are tricky b/c we reference them multiple times -- also invoked when we
+    // check if we need to abort any stages from unschedulability.
     verify(blacklist, atLeast(1)).nodeBlacklist()
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(0)
     verify(blacklist, atLeast(1)).nodeBlacklistForStage(1)
@@ -376,24 +376,46 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with L
     }
     // no restrictions on stage 2
 
-    // have all tasks finish successfully
-    (0 to 2).foreach{ stageId =>
+    // have all tasksets finish (stages 0 & 1 successfully, 2 unsuccessfully)
+    (0 to 2).foreach { stageId =>
       val tasks = tasksForStage(stageId)
       val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
       val valueSer = SparkEnv.get.serializer.newInstance()
-      tasks.foreach { task =>
-        val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq())
-        tsm.handleSuccessfulTask(task.taskId, result)
+      if (stageId == 2) {
+        // just need to make one task fail 4 times
+        var task = tasks(0)
+        val taskIndex = task.index
+        (0 until 4).foreach { attempt =>
+          assert(task.attemptNumber == attempt)
+          tsm.handleFailedTask(task.taskId, TaskState.FAILED, TaskResultLost)
+          val nextAttempts = taskScheduler.resourceOffers(Seq(WorkerOffer("4", "host4", 1))).flatten
+          if (attempt < 3) {
+            assert(nextAttempts.size == 1)
+            task = nextAttempts(0)
+            assert(task.index == taskIndex)
+          } else {
+            assert(nextAttempts.size == 0)
+          }
+        }
+        // end the other task of the taskset, doesn't matter whether it succeeds or fails
+        val otherTask = tasks(1)
+        val result = new DirectTaskResult[Int](valueSer.serialize(otherTask.taskId), Seq())
+        tsm.handleSuccessfulTask(otherTask.taskId, result)
+      } else {
+        tasks.foreach { task =>
+          val result = new DirectTaskResult[Int](valueSer.serialize(task.taskId), Seq())
+          tsm.handleSuccessfulTask(task.taskId, result)
+        }
       }
     }
 
-    // the tasksSets complete successfully, so the tracker should be notified
-    // TODO have one task set fail
-    verify(blacklist, atLeast(1)).taskSetSucceeded(0)
-    verify(blacklist, atLeast(1)).taskSetSucceeded(1)
-    verify(blacklist, atLeast(1)).taskSetSucceeded(2)
+    // the tasksSets complete, so the tracker should be notified
+    verify(blacklist, times(1)).taskSetSucceeded(0)
+    verify(blacklist, times(1)).taskSetSucceeded(1)
+    verify(blacklist, times(1)).taskSetFailed(2)
+  }
 
-
+  test("scheduled tasks obey node and executor blacklists") {
     // TODO another case with full node & executor blacklist, which should prevent *everything*
     // else from being called.
     pending
