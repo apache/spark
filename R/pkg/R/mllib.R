@@ -342,18 +342,12 @@ setMethod("fitted", signature(object = "KMeansModel"),
 
 #' Get the summary of a k-means model
 #'
-#' Returns the summary of a k-means model produced by spark.kmeans(),
-#' similarly to R's summary().
+#' Returns the summary of a k-means model produced by spark.kmeans(), similarly to R's summary().
 #'
 #' @param object A fitted k-means model
 #' @return \code{summary} returns the model's coefficients, size and cluster
-#' @rdname summary
+#' @rdname spark.kmeans
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.kmeans(trainingData, ~ ., 2)
-#' summary(model)
-#' }
 #' @note summary(KMeansModel) since 2.0.0
 setMethod("summary", signature(object = "KMeansModel"),
           function(object, ...) {
@@ -381,14 +375,8 @@ setMethod("summary", signature(object = "KMeansModel"),
 #'
 #' @param object A fitted k-means model
 #' @return \code{predict} returns the predicted values based on a k-means model
-#' @rdname predict
+#' @rdname spark.kmeans
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.kmeans(trainingData, ~ ., 2)
-#' predicted <- predict(model, testData)
-#' showDF(predicted)
-#' }
 #' @note predict(KMeansModel) since 2.0.0
 setMethod("predict", signature(object = "KMeansModel"),
           function(object, newData) {
@@ -513,15 +501,9 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname write.ml
+#' @rdname spark.kmeans
 #' @name write.ml
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.kmeans(trainingData, ~ ., k = 2)
-#' path <- "path/to/model"
-#' write.ml(model, path)
-#' }
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
           function(object, path, overwrite = FALSE) {
