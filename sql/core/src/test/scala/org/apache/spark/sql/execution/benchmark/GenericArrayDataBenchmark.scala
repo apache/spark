@@ -271,17 +271,17 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
     */
   }
 
-  test("allocate GenericArrayData") {
+  ignore("allocate GenericArrayData") {
     allocateGenericIntArray(20)
     allocateGenericDoubleArray(20)
   }
 
-  test("get primitive array") {
+  ignore("get primitive array") {
     getPrimitiveIntArray(50)
     getPrimitiveDoubleArray(50)
   }
 
-  test("read elements in GenericArrayData") {
+  ignore("read elements in GenericArrayData") {
     readGenericIntArray(100)
     readGenericDoubleArray(100)
   }

@@ -226,14 +226,6 @@ case class NewInstance(
     outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
-  private val instantiatedCls: Class[_] = {
-    if (!cls.isAssignableFrom(classOf[GenericArrayData])) {
-      cls
-    } else {
-      GenericArrayData.instantiatedClass(dataType)
-    }
-  }
-
   override def nullable: Boolean = propagateNull
 
   override def children: Seq[Expression] = arguments
@@ -244,8 +236,7 @@ case class NewInstance(
     // Note that static inner classes (e.g., inner classes within Scala objects) don't need
     // outer pointer registration.
     val needOuterPointer =
-      outerPointer.isEmpty && instantiatedCls.isMemberClass &&
-        !Modifier.isStatic(instantiatedCls.getModifiers)
+      outerPointer.isEmpty && cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)
     childrenResolved && !needOuterPointer
   }
 
@@ -306,7 +297,7 @@ case class NewInstance(
     ev.copy(code = code, isNull = isNull)
   }
 
-  override def toString: String = s"newInstance($instantiatedCls)"
+  override def toString: String = s"newInstance($cls)"
 }
 
 /**
