@@ -87,8 +87,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
        this.$values = new Object[${children.size}];""" +
         ctx.splitExpressions(
           ctx.INPUT_ROW,
-          children.zipWithIndex.map { case (e, i) =>
-            val eval = e.genCode(ctx)
+          evals.zipWithIndex.map { case (eval, i) =>
             eval.code + s"""
             if (${eval.isNull}) {
               $values[$i] = null;
