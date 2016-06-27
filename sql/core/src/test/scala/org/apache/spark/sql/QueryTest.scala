@@ -434,9 +434,9 @@ object QueryTest {
          |== Results ==
          |${sideBySide(
         s"== Correct Answer - ${expectedAnswer.size} ==" +:
-         prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
+         expectedAnswer.map(_.toString()),
         s"== Spark Answer - ${sparkAnswer.size} ==" +:
-         prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
+         sparkAnswer.map(_.toString())).mkString("\n")}
         """.stripMargin
       return Some(errorMessage)
     }
