@@ -42,8 +42,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
 
   protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
 
-  val aggregateOptimizationsRules: Seq[Rule[LogicalPlan]] = RewriteDistinctAggregates :: Nil
-
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
@@ -53,7 +51,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateSubqueryAliases,
       ReplaceExpressions,
       ComputeCurrentTime,
-      GetCurrentDatabase(sessionCatalog)) ::
+      GetCurrentDatabase(sessionCatalog),
+      RewriteDistinctAggregates) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -62,8 +61,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
-    Batch("Aggregate Optimizations", Once,
-      aggregateOptimizationsRules : _*) ::
     Batch("Union", Once,
       CombineUnions) ::
     Batch("Subquery", Once,

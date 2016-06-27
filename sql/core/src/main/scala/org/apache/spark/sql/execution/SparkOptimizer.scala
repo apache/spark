@@ -33,11 +33,8 @@ class SparkOptimizer(
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalog, conf) {
 
-  override val aggregateOptimizationsRules: Seq[Rule[LogicalPlan]] =
-    MetadataOnlyOptimizer(sparkSession, catalog) ::
-      RewriteDistinctAggregates :: Nil
-
   override def batches: Seq[Batch] = super.batches :+
+    Batch("Metadata Only Optimization", Once, MetadataOnlyOptimizer(sparkSession, catalog)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }

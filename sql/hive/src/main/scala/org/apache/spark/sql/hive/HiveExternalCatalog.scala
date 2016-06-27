@@ -324,15 +324,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   }
 
   /**
-   * Returns partitions filtered by predicates for the given table.
-   */
-  override def getPartitionsByFilter(
-      catalogTable: CatalogTable,
-      filters: Seq[Expression] = Nil): Seq[CatalogTablePartition] = withClient {
-    client.getPartitionsByFilter(catalogTable, filters)
-  }
-
-  /**
    * Returns the partition names from hive metastore for a given table in a database.
    */
   override def listPartitions(

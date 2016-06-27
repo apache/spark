@@ -29,7 +29,14 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 /**
  * When scanning only partition columns, get results based on metadata without scanning files.
  * It is used for distinct, distinct aggregations or distinct-like aggregations(example: Max/Min).
- * Example: select Max(partition) from table.
+ * First of all, scanning only partition columns are required, then the rule does the following
+ * things here:
+ * 1. aggregate expression is partition columns,
+ *  e.g. SELECT col FROM tbl GROUP BY col or SELECT col FROM tbl GROUP BY cube(col).
+ * 2. aggregate function on partition columns with DISTINCT,
+ *  e.g. SELECT count(DISTINCT col) FROM tbl GROUP BY col.
+ * 3. aggregate function on partition columns which have same result with DISTINCT keyword.
+ *  e.g. SELECT Max(col2) FROM tbl GROUP BY col1.
  */
 case class MetadataOnlyOptimizer(
     sparkSession: SparkSession,
@@ -44,6 +51,7 @@ case class MetadataOnlyOptimizer(
     if (aggregateExpressions.isEmpty) {
       // Support for aggregate that has no aggregateFunction when expressions are partition columns
       // example: select partitionCol from table group by partitionCol.
+      // Moreover, multiple-distinct has been rewritted into it by RewriteDistinctAggregates.
       true
     } else {
       aggregateExpressions.forall { agg =>
@@ -100,6 +108,9 @@ case class MetadataOnlyOptimizer(
         val substitutedCondition = substitute(aliases)(condition)
         (plan, fields, filters ++ Seq(substitutedCondition), aliases)
 
+      case e @ Expand(_, _, child) =>
+        findRelation(child)
+
       case _ => (None, Seq.empty[NamedExpression], Seq.empty[Expression], Map.empty)
     }
   }
@@ -139,7 +150,7 @@ case class MetadataOnlyOptimizer(
       val projectSet = parent.references ++ AttributeSet(filterColumns)
       if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
         val partitionColumnDataTypes = partitionColumns.map(_.dataType)
-        val partitionValues = catalog.getPartitionsByFilter(relation.catalogTable, filters)
+        val partitionValues = catalog.listPartitions(relation.catalogTable.identifier)
           .map { p =>
             InternalRow.fromSeq(
               partitionColumns.map(a => p.spec(a.name)).zip(partitionColumnDataTypes).map {
@@ -171,14 +182,6 @@ case class MetadataOnlyOptimizer(
           convertToMetadataOnlyPlan(a, projectList, filters, plan.get)
         } else {
           a
-        }
-
-      case d @ Distinct(p @ Project(_, _)) =>
-        val (plan, projectList, filters, _) = findRelation(p)
-        if (plan.isDefined) {
-          convertToMetadataOnlyPlan(d, projectList, filters, plan.get)
-        } else {
-          d
         }
     }
   }

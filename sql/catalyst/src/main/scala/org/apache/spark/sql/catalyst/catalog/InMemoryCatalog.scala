@@ -448,13 +448,6 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     catalog(db).tables(table).partitions(spec)
   }
 
-  override def getPartitionsByFilter(
-      catalogTable: CatalogTable,
-      filters: Seq[Expression] = Nil): Seq[CatalogTablePartition] = synchronized {
-    requireTableExists(catalogTable.database, catalogTable.identifier.table)
-    catalog(catalogTable.database).tables(catalogTable.identifier.table).partitions.values.toSeq
-  }
-
   override def listPartitions(
       db: String,
       table: String,
