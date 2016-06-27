@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
@@ -87,8 +89,15 @@ case class CreateHiveTableAsSelectCommand(
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
     } else {
-      sparkSession.sessionState.executePlan(InsertIntoTable(
-        metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
+      try {
+        sparkSession.sessionState.executePlan(InsertIntoTable(
+          metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
+      } catch {
+        case NonFatal(e) =>
+          // drop the created table.
+          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true)
+          throw e
+      }
     }
 
     Seq.empty[Row]
