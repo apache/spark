@@ -243,7 +243,7 @@ class Dataset[T] private[sql](
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
-    // first `truncate` and "..."
+    // first `truncate-3` and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
