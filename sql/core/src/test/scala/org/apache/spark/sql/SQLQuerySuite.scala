@@ -80,13 +80,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
       "isize", "ispace", "to_datei", "date_addi", "current_datei")
 
-    assert(sql("SHOW functions").collect().isEmpty)
-
     createFunction(functions)
 
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    assert(sql("SHOW functions").collect().size === functions.size)
-    assert(sql("SHOW functions").collect().toSet === functions.map(Row(_)).toSet)
+    assert(sql("SHOW functions").collect().size > 200)
 
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.

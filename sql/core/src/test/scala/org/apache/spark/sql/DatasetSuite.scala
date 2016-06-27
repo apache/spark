@@ -34,6 +34,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
 
+  test("checkAnswer should compare map correctly") {
+    val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
+    checkAnswer(
+      data.toDF(),
+      Seq(Row(1, "2", Map(2 -> 1, 1 -> 2))))
+  }
+
   test("toDS") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
     checkDataset(
