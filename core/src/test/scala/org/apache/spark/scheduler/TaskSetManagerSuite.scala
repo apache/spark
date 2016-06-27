@@ -833,7 +833,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(sched.endedTasks(id) === Success)
     }
 
-    // check speculatable tasks requires a non-zero runtime for the tasks
+    // checkSpeculatableTasks checks that the task runtime is greater than the threshold for
+    // speculating. Since we use a threshold of 0 for speculation, tasks need to be running for
+    // > 0ms, so advance the clock by 1ms here.
     clock.advance(1)
     assert(manager.checkSpeculatableTasks(0))
     // Offer resource to start the speculative attempt for the running task
