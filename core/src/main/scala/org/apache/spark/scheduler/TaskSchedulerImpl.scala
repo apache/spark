@@ -298,10 +298,10 @@ private[spark] class TaskSchedulerImpl(
       if (!executorIdToHost.contains(o.executorId)) {
         executorsByHost(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
+        executorIdToHost(o.executorId) = o.host
+        executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
         newExecAvail = true
       }
-      executorIdToHost(o.executorId) = o.host
-      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
       for (rack <- getRackForHost(o.host)) {
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
