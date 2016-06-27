@@ -630,6 +630,8 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
 case class ShowPartitionsCommand(
     table: TableIdentifier,
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
+
+  // The result of SHOW PARTITIONS has one column called 'partition'
   override val output: Seq[Attribute] = {
     AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
