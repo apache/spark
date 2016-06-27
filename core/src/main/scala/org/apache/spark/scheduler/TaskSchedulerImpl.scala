@@ -275,7 +275,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     val nodeBlacklist = blacklistTracker.nodeBlacklistForStage(taskSet.stageId)
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
-      val execBlacklisted = blacklistTracker.isExecutorBlacklisted(taskSet.stageId, execId)
+      val execBlacklisted = blacklistTracker.isExecutorBlacklistedForStage(taskSet.stageId, execId)
       val host = shuffledOffers(i).host
       if (!nodeBlacklist(host) && !execBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
         try {
@@ -331,7 +331,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
             !blacklistTracker.nodeBlacklistForStage(stage).contains(host)) {
           execs.foreach { exec =>
             if (
-              !blacklistTracker.isExecutorBlacklisted(stage, exec) &&
+              !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
                 !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = task)
             ) {
               // we've found some executor this task can run on.  Its possible that some *other*
@@ -371,12 +371,17 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }
 
-//    val nodeBlacklist = blacklistTracker.nodeBlacklist()
-//    val execBlacklist = blacklistTracker.executorBlacklist()
-//    val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
-//      !nodeBlacklist.contains(offer.host) && !execBlacklist.contains(offer.executorId)
-//    }.toIndexedSeq
-    val filteredOffers = offers
+    val nodeBlacklist = blacklistTracker.nodeBlacklist()
+    val execBlacklist = blacklistTracker.executorBlacklist()
+    val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
+      !nodeBlacklist.contains(offer.host)  && !execBlacklist.contains(offer.executorId)
+    }.toIndexedSeq
+    if (filteredOffers.isEmpty) {
+      // TODO if the offers are empty now, check if we've blacklisted our entire cluster.  Though
+      // unlikely, its possible we get here without aborting stages on the check in
+      // resourceOfferSingleTaskSet
+      return Seq()
+    }
 
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.  We will
     // index into this list by position later, so we want an IndexedSeq so its efficient.

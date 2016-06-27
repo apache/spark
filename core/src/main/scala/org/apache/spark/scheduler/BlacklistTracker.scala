@@ -147,7 +147,7 @@ private[spark] class BlacklistTracker(
    * Return true iff this executor is EITHER (a) completely blacklisted or (b) blacklisted
    * for the given stage.
    */
-  def isExecutorBlacklisted(stageId: Int, executorId: String): Boolean = synchronized {
+  def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean = synchronized {
     // TODO any point in caching anything here?  do we need to avoid the lock?
     // TODO should TaskSchedulerImpl just filter out completely blacklisted executors earlier?
     val stageExecFailures = stageIdToExecToFailures.getOrElse(stageId, new HashMap())
@@ -325,7 +325,7 @@ private[spark] class NoopBlacklistTracker(
 
   override def taskSetFailed(stageId: Int): Unit = {}
 
-  override def isExecutorBlacklisted(stageId: Int, executorId: String): Boolean = {
+  override def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean = {
     false
   }
 

@@ -91,7 +91,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
         val taskExp = (badExec && stage == stage1 && badPart)
         assert(tracker.isExecutorBlacklisted(executor, stage, partition) === taskExp)
         val executorExp = badExec && stage == stage1
-        assert(tracker.isExecutorBlacklisted(stage, executor) === executorExp)
+        assert(tracker.isExecutorBlacklistedForStage(stage, executor) === executorExp)
       }
     }
     assert(tracker.nodeBlacklistForStage(stage1) === Set("hostA"))
@@ -165,7 +165,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
         tracker.taskFailed(stageId, partition, new TaskInfo(stageId * 4 + partition, partition, 0,
           clock.getTimeMillis(), "1", "hostA", TaskLocality.ANY, false))
       }
-      assert(tracker.isExecutorBlacklisted(stageId, "1"))
+      assert(tracker.isExecutorBlacklistedForStage(stageId, "1"))
       assert(tracker.executorBlacklist() === Set())
       if (succeedTaskSet) {
         // the task set succeeded elsewhere, so we count those failures against our executor,
