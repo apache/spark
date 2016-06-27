@@ -127,7 +127,7 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
             case b: Byte => b.toInt
             case s: Short => s.toInt
             case i: Int => i
-            case v: Long => (v ^ (v >>> 32)).toInt
+            case i: Long => (i ^ (i >>> 32)).toInt
             case f: Float => java.lang.Float.floatToIntBits(f)
             case d: Double =>
               val b = java.lang.Double.doubleToLongBits(d)

@@ -36,7 +36,7 @@ object Literal {
 
   def apply(v: Any): Literal = v match {
     case i: Int => Literal(i, IntegerType)
-    case v: Long => Literal(v, LongType)
+    case i: Long => Literal(i, LongType)
     case d: Double => Literal(d, DoubleType)
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
@@ -186,7 +186,7 @@ case class Literal protected (value: Any, dataType: DataType)
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
-      case (v: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(v).toString)
+      case (i: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(i).toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil

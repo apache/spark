@@ -62,7 +62,7 @@ object LiteralGenerator {
     for { i <- Arbitrary.arbInt.arbitrary } yield Literal.create(i, IntegerType)
 
   lazy val longLiteralGen: Gen[Literal] =
-    for { v <- Arbitrary.arbLong.arbitrary } yield Literal.create(v, LongType)
+    for { i <- Arbitrary.arbLong.arbitrary } yield Literal.create(i, LongType)
 
   lazy val floatLiteralGen: Gen[Literal] =
     for {

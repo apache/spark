@@ -348,7 +348,7 @@ class TestCreateNullValue {
     val b: Byte = 1
     val s: Short = 1
     val i: Int = 1
-    val v: Long = 1
+    val long: Long = 1
     val f: Float = 1
     val d: Double = 1
 
@@ -363,7 +363,7 @@ class TestCreateNullValue {
         println(b)
         println(s)
         println(i)
-        println(v)
+        println(long)
         println(f)
         println(d)
       }

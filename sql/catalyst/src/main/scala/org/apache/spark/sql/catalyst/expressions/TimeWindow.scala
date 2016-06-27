@@ -134,7 +134,7 @@ object TimeWindow {
   private def parseExpression(expr: Expression): Long = expr match {
     case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
-    case NonNullLiteral(v, LongType) => v.toString.toLong
+    case NonNullLiteral(i, LongType) => i.toString.toLong
     case _ => throw new AnalysisException("The duration and time inputs to window must be " +
       "an integer, long or string literal.")
   }

@@ -124,7 +124,7 @@ package object dsl {
     implicit def byteToLiteral(b: Byte): Literal = Literal(b)
     implicit def shortToLiteral(s: Short): Literal = Literal(s)
     implicit def intToLiteral(i: Int): Literal = Literal(i)
-    implicit def longToLiteral(v: Long): Literal = Literal(v)
+    implicit def longToLiteral(i: Long): Literal = Literal(i)
     implicit def floatToLiteral(f: Float): Literal = Literal(f)
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
     implicit def stringToLiteral(s: String): Literal = Literal(s)
