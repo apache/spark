@@ -94,6 +94,27 @@ private[spark] class DTStatsAggregator(
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
   }
 
+  def calculateGain(
+      featureOffset: Int,
+      leftBinIndex: Int,
+      parentBinIndex: Int): Double = {
+    val leftChildOffset = featureOffset + leftBinIndex * statsSize
+    val parentOffset = featureOffset + parentBinIndex * statsSize
+    val gain = metadata.impurity match {
+      case Gini => Gini.calculateGain(
+        allStats, leftChildOffset, parentOffset, statsSize, metadata.minInstancesPerNode,
+        metadata.minInfoGain)
+      case Entropy => Entropy.calculateGain(
+        allStats, leftChildOffset, parentOffset, statsSize, metadata.minInstancesPerNode,
+        metadata.minInfoGain)
+      case Variance => Variance.calculateGain(
+        allStats, leftChildOffset, parentOffset, statsSize, metadata.minInstancesPerNode,
+        metadata.minInfoGain)
+      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
+    }
+    gain
+  }
+
   /**
    * Get an [[ImpurityCalculator]] for the parent node.
    */

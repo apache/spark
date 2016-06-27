@@ -712,7 +712,7 @@ private[spark] object RandomForest extends Logging {
             splitIndex += 1
           }
           // Find best split.
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+          val (temp, bestFeatureGainStats) =
             Range(0, numSplits).map { case splitIdx =>
               val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
               val rightChildStats =
@@ -722,6 +722,11 @@ private[spark] object RandomForest extends Logging {
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIdx, gainAndImpurityStats)
             }.maxBy(_._2.gain)
+          val (bestFeatureSplitIndex, maxGain) =
+            Range(0, numSplits).map { case splitIdx =>
+              val gain = binAggregates.calculateGain(nodeFeatureOffset, splitIdx, numSplits)
+              (splitIdx, gain)
+            }.maxBy(_._2)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
@@ -794,7 +799,7 @@ private[spark] object RandomForest extends Logging {
           // lastCategory = index of bin with total aggregates for this (node, feature)
           val lastCategory = categoriesSortedByCentroid.last._1
           // Find best split.
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+          val (temp, bestFeatureGainStats) =
             Range(0, numSplits).map { splitIndex =>
               val featureValue = categoriesSortedByCentroid(splitIndex)._1
               val leftChildStats =
@@ -806,6 +811,12 @@ private[spark] object RandomForest extends Logging {
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.gain)
+          val (bestFeatureSplitIndex, maxGain) =
+            Range(0, numSplits).map { case splitIdx =>
+              val featureValue = categoriesSortedByCentroid(splitIndex)._1
+              val gain = binAggregates.calculateGain(nodeFeatureOffset, featureValue, lastCategory)
+              (splitIdx, gain)
+            }.maxBy(_._2)
           val categoriesForSplit =
             categoriesSortedByCentroid.map(_._1.toDouble).slice(0, bestFeatureSplitIndex + 1)
           val bestFeatureSplit =

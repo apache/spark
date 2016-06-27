@@ -52,6 +52,14 @@ trait Impurity extends Serializable {
   @Since("1.0.0")
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
+
+  protected def calculateGain(
+      allStats: Array[Double],
+      leftChildOffset: Int,
+      parentOffset: Int,
+      statsSize: Int,
+      minInstancesPerNode: Int,
+      minInfoGain: Double): Double
 }
 
 /**

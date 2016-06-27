@@ -64,6 +64,46 @@ object Variance extends Impurity {
   @Since("1.0.0")
   def instance: this.type = this
 
+  override def calculateGain(
+      allStats: Array[Double],
+      leftChildOffset: Int,
+      parentOffset: Int,
+      statsSize: Int,
+      minInstancesPerNode: Int,
+      minInfoGain: Double): Double = {
+    val leftCount = allStats(leftChildOffset)
+    val totalCount = allStats(parentOffset)
+    val rightCount = totalCount - leftCount
+
+    if ((leftCount < minInstancesPerNode) ||
+      (rightCount < minInstancesPerNode)) {
+      return Double.MinValue
+    }
+
+    val leftSum = allStats(leftChildOffset + 1)
+    val leftSumSquares = allStats(leftChildOffset + 2)
+
+    val parentSum = allStats(parentOffset + 1)
+    val parentSumSquares = allStats(parentOffset + 2)
+
+    val rightSum = parentSum - leftSum
+    val rightSumSquares = parentSumSquares - leftSumSquares
+
+    val parentImpurity = (parentSumSquares - (parentSum * parentSum) / totalCount) / totalCount
+    val leftImpurity = (leftSumSquares - (leftSum * leftSum) / leftCount) / leftCount
+    val rightImpurity = (rightSumSquares - (rightSum * rightSum) / rightCount) / leftCount
+
+    val leftWeighted = leftImpurity * leftCount / totalCount
+    val rightWeighted = rightImpurity * rightCount / totalCount
+    val gain = parentImpurity - leftWeighted - rightWeighted
+
+    if (gain < minInfoGain) {
+      return Double.MinValue
+    }
+    gain
+
+  }
+
 }
 
 /**
