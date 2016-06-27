@@ -377,8 +377,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       !nodeBlacklist.contains(offer.host)  && !execBlacklist.contains(offer.executorId)
     }.toIndexedSeq
     if (filteredOffers.isEmpty) {
-      // TODO if the offers are empty now, check if we've blacklisted our entire cluster.  Though
-      // unlikely, its possible we get here without aborting stages on the check in
+      // TODO if the offers are empty now, check if we've blacklisted our entire cluster.
+      // Its possible we get here without aborting stages on the check in
       // resourceOfferSingleTaskSet
       return Seq()
     }

@@ -456,6 +456,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     verify(blacklist, never()).nodeBlacklistForStage(anyInt())
     verify(blacklist, never()).isExecutorBlacklistedForStage(anyInt(), anyString())
     verify(blacklist, never()).isExecutorBlacklisted(anyString(), anyInt(), anyInt())
+
+    // we should have aborted the existing stages, since they aren't schedulable
+    (0 to 2).foreach { stageId =>
+      assert(taskScheduler.taskSetManagerForAttempt(stageId, 0).get.isZombie)
+    }
   }
 
   test("SPARK-16106 locality levels updated if executor added to existing host") {
