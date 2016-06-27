@@ -38,32 +38,6 @@ function formatDuration(milliseconds, type) {
   return hours.toFixed(1) + " h";
 }
 
-function makeIdNumeric(id) {
-  var strs = id.split("_");
-  if (strs.length < 3) {
-    return id;
-  }
-  var appSeqNum = strs[2];
-  var resl = strs[0] + "_" + strs[1] + "_";
-  var diff = 10 - appSeqNum.length;
-  while (diff > 0) {
-      resl += "0"; // padding 0 before the app sequence number to make sure it has 10 characters
-      diff--;
-  }
-  resl += appSeqNum;
-  return resl;
-}
-
-function formatDate(date) {
-  return date.split(".")[0].replace("T", " ");
-}
-
-function getParameterByName(name, searchString) {
-  var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
-  results = regex.exec(searchString);
-  return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
-}
-
 function formatStatus(status, type) {
     if(type !== 'display') return status;
     if(status) {
@@ -95,21 +69,6 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     },
 
     "title-numeric-desc": function ( a, b ) {
-        return ((a < b) ? 1 : ((a > b) ? -1 : 0));
-    }
-} );
-
-jQuery.extend( jQuery.fn.dataTableExt.oSort, {
-    "appid-numeric-pre": function ( a ) {
-        var x = a.match(/title="*(-?[0-9a-zA-Z\-\_]+)/)[1];
-        return makeIdNumeric(x);
-    },
-
-    "appid-numeric-asc": function ( a, b ) {
-        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
-    },
-
-    "appid-numeric-desc": function ( a, b ) {
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
     }
 } );
@@ -224,8 +183,6 @@ $(document).ready(function() {
 
     executorsSummary = $("#active-executors");
     searchString = executorsSummary["context"]["location"]["search"];
-    requestedIncomplete = getParameterByName("showIncomplete", searchString);
-    requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
     var endPoint = createRESTEndPoint();
 
