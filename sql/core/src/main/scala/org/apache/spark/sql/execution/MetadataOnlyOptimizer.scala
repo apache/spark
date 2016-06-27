@@ -115,60 +115,60 @@ case class MetadataOnlyOptimizer(
     }
   }
 
-  private def convertToMetadataOnlyPlan(
+  private def convertLogicalToMetadataOnly(
       parent: LogicalPlan,
-      projectList: Seq[NamedExpression],
       filters: Seq[Expression],
-      relation: LogicalPlan): LogicalPlan = relation match {
-    case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
-      val attributeMap = l.output.map(attr => (attr.name, attr)).toMap
-      val partitionColumns = files.partitionSchema.map { field =>
-        attributeMap.getOrElse(field.name, throw new AnalysisException(
-          s"Unable to resolve ${field.name} given [${l.output.map(_.name).mkString(", ")}]"))
+      logical: LogicalPlan,
+      files: HadoopFsRelation): LogicalPlan = {
+    val attributeMap = logical.output.map(attr => (attr.name, attr)).toMap
+    val partitionColumns = files.partitionSchema.map { field =>
+      attributeMap.getOrElse(field.name, throw new AnalysisException(
+        s"Unable to resolve ${field.name} given [${logical.output.map(_.name).mkString(", ")}]"))
+    }
+    val filterColumns = filters.flatMap(_.references)
+    val projectSet = parent.references ++ AttributeSet(filterColumns)
+    if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
+      val selectedPartitions = files.location.listFiles(filters)
+      val valuesRdd = sparkSession.sparkContext.parallelize(selectedPartitions.map(_.values), 1)
+      val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
+      parent.transform {
+        case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
+          valuesPlan
       }
-      val filterColumns = filters.flatMap(_.references)
-      val projectSet = parent.references ++ AttributeSet(filterColumns)
-      if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
-        val selectedPartitions = files.location.listFiles(filters)
-        val valuesRdd = sparkSession.sparkContext.parallelize(selectedPartitions.map(_.values), 1)
-        val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-        parent.transform {
-          case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
-            valuesPlan
-        }
-      } else {
-        parent
-      }
-
-    case relation: CatalogRelation =>
-      val attributeMap = relation.output.map(attr => (attr.name, attr)).toMap
-      val partitionColumns = relation.catalogTable.partitionColumnNames.map { column =>
-        attributeMap.getOrElse(column, throw new AnalysisException(
-          s"Unable to resolve ${column} given [${relation.output.map(_.name).mkString(", ")}]"))
-      }
-      val filterColumns = filters.flatMap(_.references)
-      val projectSet = parent.references ++ AttributeSet(filterColumns)
-      if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
-        val partitionColumnDataTypes = partitionColumns.map(_.dataType)
-        val partitionValues = catalog.listPartitions(relation.catalogTable.identifier)
-          .map { p =>
-            InternalRow.fromSeq(
-              partitionColumns.map(a => p.spec(a.name)).zip(partitionColumnDataTypes).map {
-                case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
-              })
-          }
-        val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
-        val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-        parent.transform {
-          case relation: CatalogRelation =>
-            valuesPlan
-        }
-      } else {
-        parent
-      }
-
-    case _ =>
+    } else {
       parent
+    }
+  }
+
+  private def convertCatalogToMetadataOnly(
+      parent: LogicalPlan,
+      filters: Seq[Expression],
+      relation: CatalogRelation): LogicalPlan = {
+    val attributeMap = relation.output.map(attr => (attr.name, attr)).toMap
+    val partitionColumns = relation.catalogTable.partitionColumnNames.map { column =>
+      attributeMap.getOrElse(column, throw new AnalysisException(
+        s"Unable to resolve ${column} given [${relation.output.map(_.name).mkString(", ")}]"))
+    }
+    val filterColumns = filters.flatMap(_.references)
+    val projectSet = parent.references ++ AttributeSet(filterColumns)
+    if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
+      val partitionColumnDataTypes = partitionColumns.map(_.dataType)
+      val partitionValues = catalog.listPartitions(relation.catalogTable.identifier)
+        .map { p =>
+          InternalRow.fromSeq(
+            partitionColumns.map(a => p.spec(a.name)).zip(partitionColumnDataTypes).map {
+              case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
+            })
+        }
+      val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
+      val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
+      parent.transform {
+        case relation: CatalogRelation =>
+          valuesPlan
+      }
+    } else {
+      parent
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -177,9 +177,16 @@ case class MetadataOnlyOptimizer(
     }
     plan.transform {
       case a @ Aggregate(_, _, child) if canSupportMetadataOnly(a) =>
-        val (plan, projectList, filters, _) = findRelation(child)
+        val (plan, _, filters, _) = findRelation(child)
         if (plan.isDefined) {
-          convertToMetadataOnlyPlan(a, projectList, filters, plan.get)
+          plan.get match {
+            case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
+              convertLogicalToMetadataOnly(a, filters, l, files)
+            case relation: CatalogRelation =>
+              convertCatalogToMetadataOnly(a, filters, relation)
+            case _ =>
+              a
+          }
         } else {
           a
         }
