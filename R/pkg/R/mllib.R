@@ -318,7 +318,7 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #' Note: A saved-loaded model does not support this method.
 #'
 #' @param object A fitted k-means model
-#' @return SparkDataFrame containing fitted values
+#' @return \code{fitted} returns a SparkDataFrame containing fitted values
 #' @rdname fitted
 #' @export
 #' @examples
@@ -346,7 +346,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' similarly to R's summary().
 #'
 #' @param object A fitted k-means model
-#' @return \code{summary} the model's coefficients, size and cluster
+#' @return \code{summary} returns the model's coefficients, size and cluster
 #' @rdname summary
 #' @export
 #' @examples
@@ -375,11 +375,12 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
-#' Predicted values based a k-means on model
+#' Predicted values based on a k-means model
 #'
 #' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
 #' @param object A fitted k-means model
+#' @return \code{predict} returns the predicted values based on a k-means model
 #' @rdname predict
 #' @export
 #' @examples
