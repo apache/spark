@@ -18,7 +18,6 @@
 import warnings
 
 from pyspark import since, keyword_only
-from pyspark.ml.base import HasNumFeaturesModel
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
@@ -72,6 +71,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
+    >>> model.numFeatures
+    1
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
     True
@@ -131,7 +132,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
+class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -155,6 +156,14 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable, HasNumFea
         Model intercept.
         """
         return self._call_java("intercept")
+
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
 
     @property
     @since("2.0.0")
@@ -661,6 +670,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     3
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -681,8 +692,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.transform(test1).head().variance
     0.0
-    >>> model.numFeatures
-    1
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -804,8 +815,7 @@ class TreeEnsembleModels(JavaModel):
 
 
 @inherit_doc
-class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable,
-                                  HasNumFeaturesModel):
+class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -835,6 +845,14 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
+
 
 @inherit_doc
 class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
@@ -856,6 +874,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model = rf.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -929,7 +949,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
+class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -959,6 +979,14 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
+
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
@@ -982,6 +1010,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model = gbt.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -1005,6 +1035,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
     >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -1072,7 +1103,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable, HasNumFeaturesModel):
+class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1095,6 +1126,14 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable, Has
         .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
         """
         return self._call_java("featureImportances")
+
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
 
     @property
     @since("2.0.0")
