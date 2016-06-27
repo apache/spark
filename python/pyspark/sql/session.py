@@ -167,14 +167,11 @@ class SparkSession(object):
                     sc = SparkContext.getOrCreate(sparkConf)
                     # This SparkContext may be an existing one.
                     for key, value in self._options.items():
-                        sc._conf.set(key, value)
-                        # We need to set conf directly into Scala SparkContext's SparkConf
-                        # because Python side confs will not be propagated to Scala after
-                        # a SparkContext is created. Also, we need to propagate the confs
+                        # we need to propagate the confs
                         # before we create the SparkSession. Otherwise, confs like
                         # warehouse path and metastore url will not be set correctly (
                         # these confs cannot be changed once the SparkSession is created).
-                        sc._jsc.sc().conf().set(key, value)
+                        sc._conf.set(key, value)
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session.conf.set(key, value)
