@@ -104,10 +104,12 @@ and the migration guide below will explain all changes between releases.
 
 ## From 1.6 to 2.0
 
+### Breaking changes
 The deprecations and changes of behavior in the `spark.mllib` or `spark.ml` packages include:
 
-Deprecations:
+There were several breaking changes in Spark 2.0, outlined below.
 
+**Linear algebra classes for DataFrame-based APIs**
 * [SPARK-14984](https://issues.apache.org/jira/browse/SPARK-14984):
  In `spark.ml.regression.LinearRegressionSummary`, the `model` field has been deprecated.
 * [SPARK-13784](https://issues.apache.org/jira/browse/SPARK-13784):
@@ -125,8 +127,31 @@ Deprecations:
  In `spark.ml.util.MLReader` and `spark.ml.util.MLWriter`, the `context` method has been deprecated in favor of `session`.
 * In `spark.ml.feature.ChiSqSelectorModel`, the `setLabelCol` method has been deprecated since it was not used by `ChiSqSelectorModel`.
 
-Changes of behavior:
+Spark's linear algebra dependencies were moved to a new project, `spark-mllib-local` (see [SPARK-13944](https://issues.apache.org/jira/browse/SPARK-13944)). 
+As part of this change, the linear algebra classes were moved to a new package, `spark.ml.linalg`. 
+The DataFrame-based APIs in `spark.ml` now depend on the `spark.ml.linalg` classes, leading to a few breaking changes, predominantly in various model classes 
+(see [SPARK-14810](https://issues.apache.org/jira/browse/SPARK-14810) for a full list).
 
+**Note:** the RDD-based APIs in `spark.mllib` continue to depend on the previous package `spark.mllib.linalg`.
+
+**Deprecated methods removed**
+
+Several deprecated methods were removed.
+
+In `spark.ml`:
+
+* `setScoreCol` in `ml.evaluation.BinaryClassificationEvaluator`
+* `weights` in `LinearRegression` and `LogisticRegression`
+
+In `spark.mllib`:
+
+* `setMaxNumIterations` in `mllib.optimization.LBFGS` (marked as `DeveloperApi`)
+* `treeReduce` and `treeAggregate` in `mllib.rdd.RDDFunctions` (these functions are available on `RDD`s directly, and were marked as `DeveloperApi`)
+* `defaultStategy` in `mllib.tree.configuration.Strategy`
+* `build` in `mllib.tree.Node`
+* libsvm loaders for multiclass and load/save labeledData methods in `mllib.util.MLUtils`
+
+A full list of breaking changes can be found at [SPARK-14810](https://issues.apache.org/jira/browse/SPARK-14810).
 * [SPARK-7780](https://issues.apache.org/jira/browse/SPARK-7780):
  `spark.mllib.classification.LogisticRegressionWithLBFGS` directly calls `spark.ml.classification.LogisticRegresson` for binary classification now.
  This will introduce the following behavior changes for `spark.mllib.classification.LogisticRegressionWithLBFGS`:
