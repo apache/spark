@@ -217,8 +217,9 @@ private[spark] object GradientBoostedTrees extends Logging {
           .predictImpl(point.features)
           .prediction
         prediction * localTreeWeights(idx)
-      }.scanLeft(0.0)(_ + _).drop(1)
-        .map(prediction => loss.computeError(prediction, point.label))
+      }
+      .scanLeft(0.0)(_ + _).drop(1)
+      .map(prediction => loss.computeError(prediction, point.label))
     }
       .aggregate(treesIndices.map(_ => 0.0))(
         (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),

@@ -165,7 +165,7 @@ class GradientBoostedTreesModel @Since("1.2.0") (
       .aggregate(treesIndices.map(_ => 0.0))(
         (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
         (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
-      .map(d => d / dataCount)
+      .map(_ / dataCount)
     broadcastTrees.destroy()
     evaluation.toArray
   }
