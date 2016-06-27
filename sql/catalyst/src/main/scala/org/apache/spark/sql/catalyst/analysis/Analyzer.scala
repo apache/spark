@@ -923,7 +923,7 @@ class Analyzer(
               withPosition(u) {
                 try {
                   val outer = outers.iterator
-                  var expr: Option[NamedExpression] = None
+                  var expr = Option.empty[NamedExpression]
                   while (expr.isEmpty && outer.hasNext) {
                     expr = outer.next().resolve(nameParts, resolver)
                   }
