@@ -23,6 +23,7 @@ import java.util.Properties
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -94,6 +95,17 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
     assert(
       2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+  }
+
+  test("Basic CREATE with batchsize") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    (-1 to 3).foreach { size =>
+      val properties = new Properties
+      properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
+      df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
+      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    }
   }
 
   test("CREATE with overwrite") {

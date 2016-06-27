@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -83,7 +84,7 @@ class JDBCSuite extends SparkFunSuite
         |CREATE TEMPORARY TABLE fetchtwo
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
-        |         fetchSize '2')
+        |         ${JdbcUtils.JDBC_BATCH_FETCH_SIZE} '2')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
@@ -353,7 +354,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("Basic API with FetchSize") {
     val properties = new Properties
-    properties.setProperty("fetchSize", "2")
+    properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "2")
     assert(spark.read.jdbc(
       urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
   }
