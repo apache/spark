@@ -30,7 +30,10 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 class TaskInfo(
     val taskId: Long,
-    /** the index of this task in its TaskSet.  *Not* necessarily the same as the partitionid */
+    /**
+     * The index of this task within its task set. Not necessarily the same as the ID of the RDD
+     * partition that the task is computing.
+     */
     val index: Int,
     val attemptNumber: Int,
     val launchTime: Long,
