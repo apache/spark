@@ -77,7 +77,8 @@ class ReaderUtils(object):
     def _set_csv_opts(self, schema, sep, encoding, quote, escape,
                       comment, header, inferSchema, ignoreLeadingWhiteSpace,
                       ignoreTrailingWhiteSpace, nullValue, nanValue, positiveInf, negativeInf,
-                      dateFormat, maxColumns, maxCharsPerColumn, maxMalformedLogPerPartition, mode):
+                      dateFormat, timezone, maxColumns, maxCharsPerColumn,
+                      maxMalformedLogPerPartition, mode):
         """
         Set options based on the CSV optional parameters
         """
@@ -111,6 +112,8 @@ class ReaderUtils(object):
             self.option("negativeInf", negativeInf)
         if dateFormat is not None:
             self.option("dateFormat", dateFormat)
+        if timezone is not None:
+            self.option("timezone", timezone)
         if maxColumns is not None:
             self.option("maxColumns", maxColumns)
         if maxCharsPerColumn is not None:
@@ -347,8 +350,8 @@ class DataFrameReader(ReaderUtils):
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None,
-            maxMalformedLogPerPartition=None, mode=None):
+            negativeInf=None, dateFormat=None, timezone=None, maxColumns=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -392,6 +395,10 @@ class DataFrameReader(ReaderUtils):
                            applies to both date type and timestamp type. By default, it is None
                            which means trying to parse times and date by
                            ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
+        :param timezone: defines the timezone to be used for both date type and timestamp type.
+                         If a timezone is specified in the data, this will load them after
+                         calculating the time difference between both. If None is set, it uses
+                         the timezone of your current system.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -418,7 +425,8 @@ class DataFrameReader(ReaderUtils):
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
+            dateFormat=dateFormat, timezone=timezone, maxColumns=maxColumns,
+            maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode)
         if isinstance(path, basestring):
             path = [path]
@@ -698,7 +706,7 @@ class DataFrameWriter(object):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None, escapeQuotes=None):
+            header=None, dateFormat=None, timezone=None, nullValue=None, escapeQuotes=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -725,6 +733,13 @@ class DataFrameWriter(object):
                              ``true``, escaping all values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
                        the default value, ``false``.
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This applies to
+                           both date type and timestamp type. By default, it is None which means
+                           writing both as numeric timestamps.
+        :param timezone: defines the timezone to be used with ``dateFormat`` option. If a timezone
+                         is specified in ``dateFormat`` (e.g. ``Z``), then it will write the
+                         appropriate value with this timezone.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
 
@@ -741,6 +756,10 @@ class DataFrameWriter(object):
             self.option("escape", escape)
         if header is not None:
             self.option("header", header)
+        if dateFormat is not None:
+            self.option("dateFormat", dateFormat)
+        if timezone is not None:
+            self.option("timezone", timezone)
         if nullValue is not None:
             self.option("nullValue", nullValue)
         if escapeQuotes is not None:
@@ -1028,8 +1047,8 @@ class DataStreamReader(ReaderUtils):
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
-            negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None,
-            maxMalformedLogPerPartition=None, mode=None):
+            negativeInf=None, dateFormat=None, timezone=None, maxColumns=None,
+            maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -1075,6 +1094,10 @@ class DataStreamReader(ReaderUtils):
                            applies to both date type and timestamp type. By default, it is None
                            which means trying to parse times and date by
                            ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
+        :param timezone: defines the timezone to be used for both date type and timestamp type.
+                         If a timezone is specified in the data, this will load them after
+                         calculating the time difference between both. If None is set, it uses
+                         the timezone of your current system.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -1100,7 +1123,8 @@ class DataStreamReader(ReaderUtils):
             header=header, inferSchema=inferSchema, ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
             ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace, nullValue=nullValue,
             nanValue=nanValue, positiveInf=positiveInf, negativeInf=negativeInf,
-            dateFormat=dateFormat, maxColumns=maxColumns, maxCharsPerColumn=maxCharsPerColumn,
+            dateFormat=dateFormat, timezone=timezone, maxColumns=maxColumns,
+            maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
