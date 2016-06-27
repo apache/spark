@@ -162,10 +162,11 @@ class GradientBoostedTreesModel @Since("1.2.0") (
         .scanLeft(0.0)(_ + _).drop(1)
         .map(prediction => loss.computeError(prediction, point.label))
     }
-      .aggregate(treesIndices.map(_ => 0.0))(
-        (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
-        (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
-      .map(_ / dataCount)
+    .aggregate(treesIndices.map(_ => 0.0))(
+      (aggregated, row) => treesIndices.map(idx => aggregated(idx) + row(idx)),
+      (a, b) => treesIndices.map(idx => a(idx) + b(idx)))
+    .map(_ / dataCount)
+
     broadcastTrees.destroy()
     evaluation.toArray
   }
