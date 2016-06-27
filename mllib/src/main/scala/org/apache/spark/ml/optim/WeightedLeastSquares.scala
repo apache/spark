@@ -200,20 +200,20 @@ private[ml] object WeightedLeastSquares {
      * Adds an instance.
      */
     def add(instance: Instance): this.type = {
-      val Instance(label, w, f) = instance
-      val ak = f.size
+      val Instance(label, weight, feature) = instance
+      val ak = feature.size
       if (!initialized) {
         init(ak)
       }
       assert(ak == k, s"Dimension mismatch. Expect vectors of size $k but got $ak.")
       count += 1L
-      wSum += w
-      wwSum += w * w
-      bSum += w * label
-      bbSum += w * label * label
-      BLAS.axpy(w, f, aSum)
-      BLAS.axpy(w * label, f, abSum)
-      BLAS.spr(w, f, aaSum)
+      wSum += weight
+      wwSum += weight * weight
+      bSum += weight * label
+      bbSum += weight * label * label
+      BLAS.axpy(weight, feature, aSum)
+      BLAS.axpy(weight * label, feature, abSum)
+      BLAS.spr(weight, feature, aaSum)
       this
     }
 

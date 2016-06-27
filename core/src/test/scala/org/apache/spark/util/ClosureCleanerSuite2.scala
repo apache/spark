@@ -415,10 +415,10 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
         (1 to x).map { y => y + localValue } // 2 levels
       }
     }
-    val closure3 = (k: Int, v: Int, m: Int) => {
+    val closure3 = (k: Int, m: Int, n: Int) => {
       (1 to k).flatMap(closure2) ++ // 4 levels
-      (1 to v).flatMap(closure1) ++ // 3 levels
-      (1 to m).map { x => x + 1 } // 2 levels
+      (1 to m).flatMap(closure1) ++ // 3 levels
+      (1 to n).map { x => x + 1 } // 2 levels
     }
     val closure1r = closure1(1)
     val closure2r = closure2(2)

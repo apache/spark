@@ -664,7 +664,7 @@ private[spark] object JsonProtocol {
     val numTasks = (json \ "Number of Tasks").extract[Int]
     val rddInfos = (json \ "RDD Info").extract[List[JValue]].map(rddInfoFromJson)
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
-      .map { ids => ids.extract[List[JValue]].map(_.extract[Int]) }
+      .map(_.extract[List[JValue]].map(_.extract[Int]))
       .getOrElse(Seq.empty)
     val details = (json \ "Details").extractOpt[String].getOrElse("")
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
@@ -900,7 +900,7 @@ private[spark] object JsonProtocol {
       .map(RDDOperationScope.fromJson)
     val callsite = Utils.jsonOption(json \ "Callsite").map(_.extract[String]).getOrElse("")
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
-      .map { ids => ids.extract[List[JValue]].map(_.extract[Int]) }
+      .map(_.extract[List[JValue]].map(_.extract[Int]))
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
     val numPartitions = (json \ "Number of Partitions").extract[Int]
