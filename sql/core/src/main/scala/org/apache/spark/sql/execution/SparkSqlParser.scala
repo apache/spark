@@ -538,14 +538,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
-    if (qualifiedName != null) {
-      val name = visitFunctionName(qualifiedName)
-      ShowFunctionsCommand(name.database, Some(name.funcName))
-    } else if (pattern != null) {
-      ShowFunctionsCommand(None, Some(string(pattern)))
-    } else {
-      ShowFunctionsCommand(None, None)
+    val (user, system) = Option(ctx.identifier).map(_.getText.toLowerCase) match {
+      case None | Some("all") => (true, true)
+      case Some("system") => (false, true)
+      case Some("user") => (true, false)
+      case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
     }
+
+    val (db, pat) = if (qualifiedName != null) {
+      val name = visitFunctionName(qualifiedName)
+      (name.database, Some(name.funcName))
+    } else if (pattern != null) {
+      (None, Some(string(pattern)))
+    } else {
+      (None, None)
+    }
+
+    ShowFunctionsCommand(db, pat, user, system)
   }
 
   /**
