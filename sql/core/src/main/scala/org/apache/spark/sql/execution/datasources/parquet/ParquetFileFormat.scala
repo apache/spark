@@ -129,7 +129,7 @@ private[sql] class ParquetFileFormat
       conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
     }
 
-    ParquetFileFormat.redirectParquetLogs
+    ParquetFileFormat.redirectParquetLogs()
 
     new OutputWriterFactory {
       override def newInstance(
