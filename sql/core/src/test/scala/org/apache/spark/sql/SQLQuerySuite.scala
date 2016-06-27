@@ -83,8 +83,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     createFunction(functions)
 
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    assert(sql("SHOW functions").collect().size === functions.size)
-    assert(sql("SHOW functions").collect().toSet === functions.map(Row(_)).toSet)
+    assert(sql("SHOW functions").collect().size > 200)
 
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
