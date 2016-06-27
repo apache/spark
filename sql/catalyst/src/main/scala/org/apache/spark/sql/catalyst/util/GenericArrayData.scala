@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.types.{DataType, Decimal}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object GenericArrayData {
@@ -40,8 +40,21 @@ object GenericArrayData {
     new GenericShortArrayData(primitiveArray)
   def allocate(primitiveArray: Array[Byte]): GenericByteArrayData =
     new GenericByteArrayData(primitiveArray)
-  def allocate(primitiveArray: Array[Boolean]): GenericArrayData =
+  def allocate(primitiveArray: Array[Boolean]): GenericBooleanArrayData =
     new GenericBooleanArrayData(primitiveArray)
+
+  def instantiatedClass(dt: DataType): Class[_] = {
+    dt match {
+      case IntegerType => classOf[GenericIntArrayData]
+      case LongType => classOf[GenericLongArrayData]
+      case FloatType => classOf[GenericFloatArrayData]
+      case DoubleType => classOf[GenericDoubleArrayData]
+      case ShortType => classOf[GenericShortArrayData]
+      case ByteType => classOf[GenericByteArrayData]
+      case BooleanType => classOf[GenericBooleanArrayData]
+      case _ => classOf[GenericRefArrayData]
+    }
+  }
 }
 
 private object GenericArrayData {
