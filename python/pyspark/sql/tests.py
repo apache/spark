@@ -1609,6 +1609,30 @@ class SQLTests(ReusedPySparkTestCase):
             lambda: spark.catalog.uncacheTable("does_not_exist"))
 
 
+class SQLContextTests(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+
+    def test_conf_propagation(self):
+        # This SparkSession will use self.sc.
+        spark = SparkSession.builder.config("spark.test.SPARK16224", "16224").getOrCreate()
+        self.assertEqual(self.sc._conf.get("spark.test.SPARK16224"), "16224")
+        # We need to make sure that the Scala SparkContext's SparkConf also get the conf because
+        # spark.sql.catalogImplementation is set to a active SparkContext and it needs to be
+        # propagated to the Scala side (so SparkSession will know if to use Hive's metastore).
+        self.assertEqual(self.sc._jsc.sc().conf().get("spark.test.SPARK16224"), "16224")
+        self.assertEqual(spark.conf.get("spark.test.SPARK16224"), "16224")
+        self.assertEqual(spark._jsparkSession.conf().get("spark.test.SPARK16224"), "16224")
+        self.assertEqual(spark.sparkContext._conf.get("spark.test.SPARK16224"), "16224")
+        self.assertEqual(spark.sparkContext._jsc.sc().conf().get("spark.test.SPARK16224"), "16224")
+
+
 class HiveContextSQLTests(ReusedPySparkTestCase):
 
     @classmethod
