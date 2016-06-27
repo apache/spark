@@ -577,7 +577,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
           })
 
 
-# Get a summary of the AFT survival regression model produced by spark.survreg,
+# Returns a summary of the AFT survival regression model produced by spark.survreg,
 # similarly to R's summary().
 
 #' @param object A fitted AFT survival regression model
