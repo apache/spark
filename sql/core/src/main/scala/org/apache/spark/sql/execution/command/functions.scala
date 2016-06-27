@@ -199,7 +199,10 @@ case class ShowFunctionsCommand(
     val functionNames =
       sparkSession.sessionState.catalog
         .listFunctions(dbName, pattern.getOrElse("*"))
-        .map(_.unquotedString)
+        .collect {
+          case (f, "USER") if showUserFunctions => f.unquotedString
+          case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
+        }
     // The session catalog caches some persistent functions in the FunctionRegistry
     // so there can be duplicates.
     functionNames.distinct.sorted.map(Row(_))
