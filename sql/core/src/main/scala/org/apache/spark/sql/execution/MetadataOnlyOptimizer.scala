@@ -42,9 +42,9 @@ case class MetadataOnlyOptimizer(
       }
     }.distinct
     if (aggregateExpressions.isEmpty) {
-      // Cannot support for aggregate that has no aggregateFunction.
-      // example: select col1 from table group by col1.
-      false
+      // Support for aggregate that has no aggregateFunction when expressions are partition columns
+      // example: select partitionCol from table group by partitionCol.
+      true
     } else {
       aggregateExpressions.forall { agg =>
         if (agg.isDistinct) {
@@ -119,13 +119,11 @@ case class MetadataOnlyOptimizer(
       val projectSet = parent.references ++ AttributeSet(filterColumns)
       if (projectSet.subsetOf(AttributeSet(partitionColumns))) {
         val selectedPartitions = files.location.listFiles(filters)
-        val partitionValues = selectedPartitions.map(_.values)
-        val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
+        val valuesRdd = sparkSession.sparkContext.parallelize(selectedPartitions.map(_.values), 1)
         val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-        if (projectList.nonEmpty) {
-          parent.withNewChildren(Project(projectList, valuesPlan) :: Nil)
-        } else {
-          parent.withNewChildren(valuesPlan :: Nil)
+        parent.transform {
+          case l @ LogicalRelation(files: HadoopFsRelation, _, _) =>
+            valuesPlan
         }
       } else {
         parent
@@ -150,12 +148,9 @@ case class MetadataOnlyOptimizer(
           }
         val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
         val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-        val filterPlan =
-          filters.reduceLeftOption(And).map(Filter(_, valuesPlan)).getOrElse(valuesPlan)
-        if (projectList.nonEmpty) {
-          parent.withNewChildren(Project(projectList, filterPlan) :: Nil)
-        } else {
-          parent.withNewChildren(filterPlan :: Nil)
+        parent.transform {
+          case relation: CatalogRelation =>
+            valuesPlan
         }
       } else {
         parent
