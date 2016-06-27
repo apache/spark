@@ -251,7 +251,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListString AS '${classOf[UDFListString].getName}'")
     checkAnswer(
-      sql("SELECT testUDFListString(l) FROM listStringTable"),
+      sql("SELECT testUDFListString(ls) FROM listStringTable"),
       Seq(Row("a,b,c"), Row("d,e")))
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFListString")
 
