@@ -18,11 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.RewriteDistinctAggregates
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
 import org.apache.spark.sql.internal.SQLConf
 
