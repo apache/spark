@@ -391,6 +391,8 @@ private[sql] class JDBCRDD(
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     val fetchSize = properties.getProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "0").toInt
+    require(fetchSize >= 0,
+      s"Invalid value `${fetchSize.toString}` for parameter `${JdbcUtils.JDBC_BATCH_FETCH_SIZE}`.")
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 

@@ -22,6 +22,7 @@ import java.util.Properties
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.test.SharedSQLContext
@@ -97,10 +98,23 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
   }
 
+  test("Basic CREATE with illegal batchsize") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    (-1 to 0).foreach { size =>
+      val properties = new Properties
+      properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
+      val e = intercept[SparkException] {
+        df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
+      }.getMessage
+      assert(e.contains(s"Invalid value `$size` for parameter `batchsize`"))
+    }
+  }
+
   test("Basic CREATE with batchsize") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    (-1 to 3).foreach { size =>
+    (1 to 3).foreach { size =>
       val properties = new Properties
       properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
       df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)

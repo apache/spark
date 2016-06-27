@@ -158,6 +158,9 @@ object JdbcUtils extends Logging {
       nullTypes: Array[Int],
       batchSize: Int,
       dialect: JdbcDialect): Iterator[Byte] = {
+    require(batchSize >= 1,
+      s"Invalid value `${batchSize.toString}` for parameter `${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`.")
+
     val conn = getConnection()
     var committed = false
     val supportsTransactions = try {
@@ -279,16 +282,7 @@ object JdbcUtils extends Logging {
 
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
-    val batch_insert_size = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
-    val batchSize =
-      if (batch_insert_size >= 1) {
-        batch_insert_size
-      } else {
-        logWarning(s"The value of property `$JDBC_BATCH_INSERT_SIZE` is increased to 1 " +
-          s"because the specified number is less than one. $JDBC_BATCH_INSERT_SIZE: " +
-          s"$batch_insert_size.")
-        1
-      }
+    val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
     }

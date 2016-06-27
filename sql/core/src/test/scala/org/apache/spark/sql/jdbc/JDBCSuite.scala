@@ -24,7 +24,7 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -352,11 +352,22 @@ class JDBCSuite extends SparkFunSuite
       urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
   }
 
-  test("Basic API with FetchSize") {
+  test("Basic API with illegal FetchSize") {
     val properties = new Properties
-    properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "2")
-    assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+    properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "-1")
+    val e = intercept[SparkException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+    }.getMessage
+    assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+  }
+
+  test("Basic API with FetchSize") {
+    (0 to 4).foreach { size =>
+      val properties = new Properties
+      properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, size.toString)
+      assert(spark.read.jdbc(
+        urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+    }
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {

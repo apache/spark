@@ -392,7 +392,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "batchsize" can be used to control the
-   *                             number of rows per insert batch.
+   *                             number of rows per insert.
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
