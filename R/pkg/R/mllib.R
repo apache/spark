@@ -541,10 +541,10 @@ read.ml <- function(path) {
 #' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #'
-#' @param data A SparkDataFrame for training.
+#' @param data A SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
-#'                Note that operator '.' is not supported currently.
+#'                Note that operator '.' is not supported currently
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model
 #' @rdname spark.survreg
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
