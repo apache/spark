@@ -95,6 +95,7 @@ object Entropy extends Impurity {
   override def calculateGain(
       allStats: Array[Double],
       leftChildOffset: Int,
+      parentStats: Array[Double],
       parentOffset: Int,
       statsSize: Int,
       minInstancesPerNode: Int,
@@ -104,7 +105,7 @@ object Entropy extends Impurity {
     var i = 0
     while (i < statsSize) {
       leftCount += allStats(leftChildOffset + i)
-      totalCount += allStats(parentOffset + i)
+      totalCount += parentStats(parentOffset + i)
       i += 1
     }
     val rightCount = totalCount - leftCount
@@ -121,11 +122,11 @@ object Entropy extends Impurity {
     i = 0
     while (i < statsSize) {
       val leftStats = allStats(leftChildOffset + i)
-      val parentStats = allStats(parentOffset + i)
+      val totalStats = parentStats(parentOffset + i)
 
       val leftFreq = leftStats / leftCount
-      val rightFreq = (parentStats - leftStats) / rightCount
-      val parentFreq = parentStats / totalCount
+      val rightFreq = (totalStats - leftStats) / rightCount
+      val parentFreq = totalStats / totalCount
 
       leftImpurity -= leftFreq * log2(leftFreq)
       rightImpurity -= rightFreq * log2(rightFreq)

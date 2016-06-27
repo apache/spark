@@ -731,7 +731,7 @@ private[spark] object RandomForest extends Logging {
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+          val (temp, bestFeatureGainStats) =
             Range(0, numSplits).map { splitIndex =>
               val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
               val rightChildStats = binAggregates.getParentImpurityCalculator()
@@ -740,6 +740,11 @@ private[spark] object RandomForest extends Logging {
                 leftChildStats, rightChildStats, binAggregates.metadata)
               (splitIndex, gainAndImpurityStats)
             }.maxBy(_._2.gain)
+          val (bestFeatureSplitIndex, maxGain) =
+            Range(0, numSplits).map { case splitIdx =>
+              val gain = binAggregates.calculateGain(leftChildOffset, splitIdx)
+              (splitIdx, gain)
+            }.maxBy(_._2)
           (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else {
           // Ordered categorical feature

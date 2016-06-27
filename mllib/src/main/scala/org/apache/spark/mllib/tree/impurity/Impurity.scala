@@ -56,6 +56,7 @@ trait Impurity extends Serializable {
   protected def calculateGain(
       allStats: Array[Double],
       leftChildOffset: Int,
+      parentStats: Array[Double],
       parentOffset: Int,
       statsSize: Int,
       minInstancesPerNode: Int,

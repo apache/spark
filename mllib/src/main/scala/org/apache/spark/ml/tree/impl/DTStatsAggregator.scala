@@ -102,13 +102,32 @@ private[spark] class DTStatsAggregator(
     val parentOffset = featureOffset + parentBinIndex * statsSize
     val gain = metadata.impurity match {
       case Gini => Gini.calculateGain(
-        allStats, leftChildOffset, parentOffset, statsSize, metadata.minInstancesPerNode,
+        allStats, leftChildOffset, allStats, parentOffset, statsSize,
+        metadata.minInstancesPerNode, metadata.minInfoGain)
+      case Entropy => Entropy.calculateGain(
+        allStats, leftChildOffset, allStats, parentOffset, statsSize,
+        metadata.minInstancesPerNode, metadata.minInfoGain)
+      case Variance => Variance.calculateGain(
+        allStats, leftChildOffset, allStats, parentOffset, statsSize,
+        metadata.minInstancesPerNode, metadata.minInfoGain)
+      case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
+    }
+    gain
+  }
+
+  def calculateGain(
+      featureOffset: Int,
+      leftBinIndex: Int): Double = {
+    val leftChildOffset = featureOffset + leftBinIndex * statsSize
+    val gain = metadata.impurity match {
+      case Gini => Gini.calculateGain(
+        allStats, leftChildOffset, parentStats, 0, statsSize, metadata.minInstancesPerNode,
         metadata.minInfoGain)
       case Entropy => Entropy.calculateGain(
-        allStats, leftChildOffset, parentOffset, statsSize, metadata.minInstancesPerNode,
+        allStats, leftChildOffset, parentStats, 0, statsSize, metadata.minInstancesPerNode,
         metadata.minInfoGain)
       case Variance => Variance.calculateGain(
-        allStats, leftChildOffset, parentOffset, statsSize, metadata.minInstancesPerNode,
+        allStats, leftChildOffset, parentStats, 0, statsSize, metadata.minInstancesPerNode,
         metadata.minInfoGain)
       case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
     }

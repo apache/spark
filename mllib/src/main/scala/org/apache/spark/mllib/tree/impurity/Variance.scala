@@ -67,6 +67,7 @@ object Variance extends Impurity {
   override def calculateGain(
       allStats: Array[Double],
       leftChildOffset: Int,
+      parentStats: Array[Double],
       parentOffset: Int,
       statsSize: Int,
       minInstancesPerNode: Int,
@@ -83,8 +84,8 @@ object Variance extends Impurity {
     val leftSum = allStats(leftChildOffset + 1)
     val leftSumSquares = allStats(leftChildOffset + 2)
 
-    val parentSum = allStats(parentOffset + 1)
-    val parentSumSquares = allStats(parentOffset + 2)
+    val parentSum = parentStats(parentOffset + 1)
+    val parentSumSquares = parentStats(parentOffset + 2)
 
     val rightSum = parentSum - leftSum
     val rightSumSquares = parentSumSquares - leftSumSquares
