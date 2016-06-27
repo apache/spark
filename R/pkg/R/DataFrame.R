@@ -1352,9 +1352,11 @@ setMethod("dapplyCollect",
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               The schema must match to output of `func`. It has to be defined for each
 #'               output column with preferred output column name and corresponding data type.
+#' @return a SparkDataFrame
 #' @family SparkDataFrame functions
 #' @rdname gapply
 #' @name gapply
+#' @seealso \link{gapplyCollect}
 #' @export
 #' @examples
 #'
@@ -1433,8 +1435,16 @@ setMethod("gapply",
 #' group and collects the result back to R as data.frame.
 #'
 #' @param x A SparkDataFrame
+#' @param cols Grouping columns
+#' @param func A function to be applied to each group partition specified by grouping
+#'             column of the SparkDataFrame. The function `func` takes as argument
+#'             a key - grouping columns and a data frame - a local R data.frame.
+#'             The output of `func` is a local R data.frame.
+#' @return a data.frame
+#' @family SparkDataFrame functions
 #' @rdname gapplyCollect
 #' @name gapplyCollect
+#' @seealso \link{gapply}
 #' @export
 #' @examples
 #'
@@ -1463,6 +1473,7 @@ setMethod("gapply",
 #'   function(key, x) {
 #'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 #'     colnames(y) <- c("key_a", "key_c", "mean_b")
+#'     y
 #'   })
 #'
 #' Result

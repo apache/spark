@@ -196,13 +196,10 @@ createMethods()
 
 #' gapply
 #'
-#' Applies a R function to each group in the input GroupedData
-#'
 #' @param x A GroupedData
 #' @rdname gapply
 #' @name gapply
 #' @export
-#' @seealso \link{gapplyCollect}
 #' @note gapply(GroupedData) since 2.0.0
 setMethod("gapply",
           signature(x = "GroupedData"),
@@ -213,19 +210,10 @@ setMethod("gapply",
 
 #' gapplyCollect
 #'
-#' Applies a R function to each group in the input GroupedData and collects the result
-#' back to R as a data.frame.
-#'
 #' @param x A GroupedData
-#' @param func A function to be applied to each group partition specified by GroupedData.
-#'             The function `func` takes as argument a key - grouping columns and
-#'             a data frame - a local R data.frame.
-#'             The output of `func` is a local R data.frame.
-#' @return a SparkDataFrame
 #' @rdname gapplyCollect
 #' @name gapplyCollect
 #' @export
-#' @seealso \link{gapply}
 #' @note gapplyCollect(GroupedData) since 2.0.0
 setMethod("gapplyCollect",
           signature(x = "GroupedData"),
@@ -253,6 +241,6 @@ gapplyInternal <- function(x, func, schema) {
            serialize(cleanClosure(func), connection = NULL),
            packageNamesArr,
            broadcastArr,
-           if (is.null(schema)) { schema } else { schema$jobj })
+           if (class(schema) == "structType") { schema$jobj } else { NULL })
   dataFrame(sdf)
 }
