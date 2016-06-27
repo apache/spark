@@ -27,8 +27,7 @@ class CollapseRepartitionSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("CollapseRepartition", FixedPoint(10),
-        CollapseRepartition,
-        CollapseRepartitionBy) :: Nil
+        CollapseRepartition) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int)
@@ -39,18 +38,40 @@ class CollapseRepartitionSuite extends PlanTest {
       .repartition(20)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.repartition(20)
+    val correctAnswer = testRelation.repartition(20).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse repartition and repartitionBy into one") {
+    val query = testRelation
+      .repartition(10)
+      .distribute('a)(20)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation.distribute('a)(20).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse repartitionBy and repartition into one") {
+    val query = testRelation
+      .distribute('a)(20)
+      .repartition(10)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation.distribute('a)(10).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("collapse two adjacent repartitionBys into one") {
     val query = testRelation
-      .distribute('b)
-      .distribute('a)
+      .distribute('b)(10)
+      .distribute('a)(20)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.distribute('a).analyze
+    val correctAnswer = testRelation.distribute('a)(20).analyze
 
     comparePlans(optimized, correctAnswer)
   }
