@@ -266,9 +266,9 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             return(list(apriori = apriori, tables = tables))
           })
 
-#' Fit a k-means model
+#' K-Means Model
 #'
-#' Fit a k-means model, similarly to R's kmeans().
+#' Fits a k-means model, similarly to R's kmeans().
 #'
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -277,14 +277,32 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @param k Number of centers
 #' @param maxIter Maximum iteration number
 #' @param initMode The initialization algorithm choosen to fit the model
-#' @return A fitted k-means model
+#' @return \code{spark.kmeans} returns a fitted k-means model
 #' @rdname spark.kmeans
+#' @name spark.kmeans
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(data, ~ ., k = 4, initMode = "random")
+#' sparkR.session()
+#' data(iris)
+#' df <- createDataFrame(iris)
+#' model <- spark.kmeans(df, Sepal_Length ~ Sepal_Width, k = 4, initMode = "random")
+#' summary(model)
+#'
+#' # fitted values on training data
+#' fitted <- predict(model, df)
+#' head(select(fitted, "Sepal_Length", "prediction"))
+#'
+#' # save fitted model to input path
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#'
+#' # can also read back the saved model and print
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
 #' }
 #' @note spark.kmeans since 2.0.0
+#' @seealso \link{kmeans}, \link{read.ml}
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
             formula <- paste(deparse(formula), collapse = "")
@@ -327,8 +345,8 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' Returns the summary of a k-means model produced by spark.kmeans(),
 #' similarly to R's summary().
 #'
-#' @param object a fitted k-means model
-#' @return the model's coefficients, size and cluster
+#' @param object A fitted k-means model
+#' @return \code{summary} the model's coefficients, size and cluster
 #' @rdname summary
 #' @export
 #' @examples
@@ -357,7 +375,7 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
-#' Predicted values based on model
+#' Predicted values based a k-means on model
 #'
 #' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
