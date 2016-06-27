@@ -265,6 +265,23 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("Describe Table") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(s"CREATE TABLE $tabName(a int comment 'test')")
+
+      assert(sql(s"DESC $tabName").collect().length == 1)
+
+      assert(
+        sql(s"DESC FORMATTED $tabName").collect()
+          .exists(_.getString(0) == "# Storage Information"))
+
+      assert(
+        sql(s"DESC EXTENDED $tabName").collect()
+          .exists(_.getString(0) == "# Detailed Table Information"))
+    }
+  }
+
   test("Alter/Describe Database") {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
