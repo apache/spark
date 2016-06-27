@@ -295,7 +295,7 @@ private[spark] class TaskSchedulerImpl(
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
       }
-      if (!executorIdToHost.contains(o.executorId)) {
+      if (!executorIdToTaskCount.contains(o.executorId)) {
         executorsByHost(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
