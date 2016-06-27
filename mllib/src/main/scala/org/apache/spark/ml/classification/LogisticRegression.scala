@@ -674,12 +674,12 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
-        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
+
       // We will need numClasses, numFeatures in the future for multinomial logreg support.
-      // val numClasses = data.getInt(0)
-      // val numFeatures = data.getInt(1)
-      val intercept = data.getDouble(2)
-      val coefficients = data.getAs[Vector](3)
+      val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
+        MLUtils.convertVectorColumnsToML(data, "coefficients")
+          .select("numClasses", "numFeatures", "intercept", "coefficients")
+          .head()
       val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
 
       DefaultParamsReader.getAndSetParams(model, metadata)

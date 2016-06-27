@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -52,7 +53,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   /**
    * Check the equality between result of expression and expected value, it will handle
-   * Array[Byte] and Spread[Double].
+   * Array[Byte], Spread[Double], and MapData.
    */
   protected def checkResult(result: Any, expected: Any): Boolean = {
     (result, expected) match {
@@ -60,7 +61,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         java.util.Arrays.equals(result, expected)
       case (result: Double, expected: Spread[Double @unchecked]) =>
         expected.asInstanceOf[Spread[Double]].isWithin(result)
-      case _ => result == expected
+      case (result: MapData, expected: MapData) =>
+        result.keyArray() == expected.keyArray() && result.valueArray() == expected.valueArray()
+      case _ =>
+        result == expected
     }
   }
 
