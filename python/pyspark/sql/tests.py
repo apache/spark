@@ -22,6 +22,7 @@ individual modules.
 """
 import os
 import sys
+import subprocess
 import pydoc
 import shutil
 import tempfile
@@ -48,7 +49,7 @@ else:
 from pyspark.sql import SparkSession, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
-from pyspark.tests import ReusedPySparkTestCase
+from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
@@ -1609,28 +1610,44 @@ class SQLTests(ReusedPySparkTestCase):
             lambda: spark.catalog.uncacheTable("does_not_exist"))
 
 
-class SQLContextTests(ReusedPySparkTestCase):
+class HiveSparkSubmitTests(SparkSubmitTests):
 
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-
-    def test_conf_propagation(self):
-        # This SparkSession will use self.sc.
-        spark = SparkSession.builder.config("spark.test.SPARK16224", "16224").getOrCreate()
-        self.assertEqual(self.sc._conf.get("spark.test.SPARK16224"), "16224")
-        # We need to make sure that the Scala SparkContext's SparkConf also get the conf because
-        # spark.sql.catalogImplementation is set to a active SparkContext and it needs to be
-        # propagated to the Scala side (so SparkSession will know if to use Hive's metastore).
-        self.assertEqual(self.sc._jsc.sc().conf().get("spark.test.SPARK16224"), "16224")
-        self.assertEqual(spark.conf.get("spark.test.SPARK16224"), "16224")
-        self.assertEqual(spark._jsparkSession.conf().get("spark.test.SPARK16224"), "16224")
-        self.assertEqual(spark.sparkContext._conf.get("spark.test.SPARK16224"), "16224")
-        self.assertEqual(spark.sparkContext._jsc.sc().conf().get("spark.test.SPARK16224"), "16224")
+    def test_hivecontext(self):
+        # This test checks that HiveContext is using Hive metastore (SPARK-16224).
+        # It sets a metastore url and checks if there is a derby dir created by
+        # Hive metastore. If this derby dir exists, HiveContext is using
+        # Hive metastore.
+        metastore_path = os.path.join(tempfile.mkdtemp(), "spark16224_metastore_db")
+        metastore_URL = "jdbc:derby:;databaseName=" + metastore_path + ";create=true"
+        hive_site_dir = os.path.join(self.programDir, "conf")
+        hive_site_file = self.createTempFile("hive-site.xml", ("""
+            |<configuration>
+            |  <property>
+            |  <name>javax.jdo.option.ConnectionURL</name>
+            |  <value>%s</value>
+            |  </property>
+            |</configuration>
+            """ % metastore_URL).lstrip(), "conf")
+        script = self.createTempFile("test.py", """
+            |import os
+            |
+            |from pyspark.conf import SparkConf
+            |from pyspark.context import SparkContext
+            |from pyspark.sql import HiveContext
+            |
+            |conf = SparkConf()
+            |sc = SparkContext(conf=conf)
+            |hive_context = HiveContext(sc)
+            |print(hive_context.sql("show databases").collect())
+            """)
+        proc = subprocess.Popen(
+            [self.sparkSubmit, "--master", "local-cluster[1,1,1024]",
+             "--driver-class-path", hive_site_dir, script],
+            stdout=subprocess.PIPE)
+        out, err = proc.communicate()
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("default", out.decode('utf-8'))
+        self.assertTrue(os.path.exists(metastore_path))
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
