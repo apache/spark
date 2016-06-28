@@ -33,21 +33,20 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * An Unsafe implementation of Array which is backed by raw memory instead of Java objects.
  *
- * Each tuple has three four: [numElements] [null bits] [values] [variable length portion]
+ * Each tuple has four parts: [numElements][null bits][values or offset][variable length portion]
  *
  * The `numElements` is 4 bytes storing the number of elements of this array.
  *
  * In the `null bits` region, we store 1 bit per element, represents whether a element has null
  * Its total size is ceil(numElements / 8) bytes, and  it is aligned to 8-byte word boundaries.
  *
- * In the `offsets` region, we store 4 bytes per element, represents the relative offset (w.r.t. the
- * base address of the array) of this element in `values` region. We can get the length of this
- * element by subtracting next offset.
- * Note that offset can by negative which means this element is null.
+ * In the `values or offset` region, we store the content of elements. For fields that hold
+ * fixed-length primitive types, such as long, double, or int, we store the value directly
+ * in the field. For fields with non-primitive or variable-length values, we store a relative
+ * offset (w.r.t. the base address of the row) that points to the beginning of the variable-length
+ * field, and length (they are combined into a long).
  *
- * In the `values` region, we store the content of elements. As we can get length info, so elements
- * can be variable-length.
- *
+ * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 
 // todo: there is a lof of duplicated code between UnsafeRow and UnsafeArrayData.
@@ -67,11 +66,11 @@ public final class UnsafeArrayData extends ArrayData {
   // The 4-bytes header of `numElements` is also included.
   private int sizeInBytes;
 
-  /** The width of the null tracking bit set, in bytes */
+  /** The width of the null tracking bit set plus `numElements`, in bytes */
   private int headerInBytes;
 
-  private long getFieldOffset(int ordinal, int scale) {
-    return baseOffset + headerInBytes + ordinal * scale;
+  private long getFieldOffset(int ordinal, int elementSize) {
+    return baseOffset + headerInBytes + ordinal * elementSize;
   }
 
   public Object getBaseObject() { return baseObject; }
@@ -92,7 +91,7 @@ public final class UnsafeArrayData extends ArrayData {
    * `pointTo()` has been called, since the value returned by this constructor is equivalent
    * to a null pointer.
    */
-  public UnsafeArrayData() {  }
+  public UnsafeArrayData() { }
 
   @Override
   public int numElements() { return numElements; }
@@ -123,7 +122,7 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   @Override
-  public final Object get(int ordinal, DataType dataType) {
+  public Object get(int ordinal, DataType dataType) {
     if (isNullAt(ordinal) || dataType instanceof NullType) {
       return null;
     } else if (dataType instanceof BooleanType) {
@@ -210,6 +209,7 @@ public final class UnsafeArrayData extends ArrayData {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
+    assertIndexIsValid(ordinal);
     if (isNullAt(ordinal)) {
       return null;
     }
@@ -286,11 +286,30 @@ public final class UnsafeArrayData extends ArrayData {
     return map;
   }
 
-  public final void writeToMemory(Object target, long targetOffset) {
+  // This `hashCode` computation could consume much processor time for large data.
+  // If the computation becomes a bottleneck, we can use a light-weight logic; the first fixed bytes
+  // are used to compute `hashCode` (See `Vector.hashCode`).
+  // The same issue exists in `UnsafeRow.hashCode`.
+  @Override
+  public int hashCode() {
+    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other instanceof UnsafeArrayData) {
+      UnsafeArrayData o = (UnsafeArrayData) other;
+      return (sizeInBytes == o.sizeInBytes) &&
+        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
+          sizeInBytes);
+    }
+    return false;
+  }
+  public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
 
-  public final void writeTo(ByteBuffer buffer) {
+  public void writeTo(ByteBuffer buffer) {
     assert(buffer.hasArray());
     byte[] target = buffer.array();
     int offset = buffer.arrayOffset();
@@ -299,10 +318,6 @@ public final class UnsafeArrayData extends ArrayData {
     buffer.position(pos + sizeInBytes);
   }
 
-  // This `hashCode` computation could consume much processor time for large data.
-  // If the computation becomes a bottleneck, we can use a light-weight logic; the first fixed bytes
-  // are used to compute `hashCode` (See `Vector.hashCode`).
-  // The same issue exists in `UnsafeRow.hashCode`.
   @Override
   public UnsafeArrayData copy() {
     UnsafeArrayData arrayCopy = new UnsafeArrayData();
@@ -336,7 +351,7 @@ public final class UnsafeArrayData extends ArrayData {
     int size = numElements();
     short[] values = new short[size];
     Platform.copyMemory(
-      baseObject, baseOffset + headerInBytes, values, Platform.BYTE_ARRAY_OFFSET, size * 2);
+      baseObject, baseOffset + headerInBytes, values, Platform.SHORT_ARRAY_OFFSET, size * 2);
     return values;
   }
 
@@ -345,7 +360,7 @@ public final class UnsafeArrayData extends ArrayData {
     int size = numElements();
     int[] values = new int[size];
     Platform.copyMemory(
-      baseObject, baseOffset + headerInBytes, values, Platform.BYTE_ARRAY_OFFSET, size * 4);
+      baseObject, baseOffset + headerInBytes, values, Platform.INT_ARRAY_OFFSET, size * 4);
     return values;
   }
 
@@ -354,7 +369,7 @@ public final class UnsafeArrayData extends ArrayData {
     int size = numElements();
     long[] values = new long[size];
     Platform.copyMemory(
-      baseObject, baseOffset + headerInBytes, values, Platform.BYTE_ARRAY_OFFSET, size * 8);
+      baseObject, baseOffset + headerInBytes, values, Platform.LONG_ARRAY_OFFSET, size * 8);
     return values;
   }
 
@@ -363,7 +378,7 @@ public final class UnsafeArrayData extends ArrayData {
     int size = numElements();
     float[] values = new float[size];
     Platform.copyMemory(
-      baseObject, baseOffset + headerInBytes, values, Platform.BYTE_ARRAY_OFFSET, size * 4);
+      baseObject, baseOffset + headerInBytes, values, Platform.FLOAT_ARRAY_OFFSET, size * 4);
     return values;
   }
 
@@ -372,22 +387,21 @@ public final class UnsafeArrayData extends ArrayData {
     int size = numElements();
     double[] values = new double[size];
     Platform.copyMemory(
-      baseObject, baseOffset + headerInBytes, values, Platform.BYTE_ARRAY_OFFSET, size * 8);
+      baseObject, baseOffset + headerInBytes, values, Platform.DOUBLE_ARRAY_OFFSET, size * 8);
     return values;
   }
 
-  public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
-    final int elementSize = 4;
-    final int headerSize = calculateHeaderPortionInBytes(arr.length);
-    if (arr.length > (Integer.MAX_VALUE - headerSize) / elementSize) {
+  private static UnsafeArrayData fromPrimitiveArray(Object arr, int length, final int elementSize) {
+    final int headerSize = calculateHeaderPortionInBytes(length);
+    if (length > (Integer.MAX_VALUE - headerSize) / elementSize) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
               "it's too big.");
     }
 
-    final int valueRegionSize = elementSize * arr.length;
+    final int valueRegionSize = elementSize * length;
     final byte[] data = new byte[valueRegionSize + headerSize];
 
-    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, length);
     Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
             Platform.BYTE_ARRAY_OFFSET + headerSize, valueRegionSize);
 
@@ -396,39 +410,31 @@ public final class UnsafeArrayData extends ArrayData {
     return result;
   }
 
+  public static UnsafeArrayData fromPrimitiveArray(boolean[] arr) {
+    return fromPrimitiveArray(arr, arr.length, 1);
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(byte[] arr) {
+    return fromPrimitiveArray(arr, arr.length, 1);
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(short[] arr) {
+    return fromPrimitiveArray(arr, arr.length, 2);
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
+    return fromPrimitiveArray(arr, arr.length, 4);
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(long[] arr) {
+    return fromPrimitiveArray(arr, arr.length, 8);
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(float[] arr) {
+    return fromPrimitiveArray(arr, arr.length, 4);
+  }
+
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
-    final int elementSize = 8;
-    final int headerSize = calculateHeaderPortionInBytes(arr.length);
-    if (arr.length > (Integer.MAX_VALUE - headerSize) / elementSize) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-              "it's too big.");
-    }
-
-    final int valueRegionSize = elementSize * arr.length;
-    final byte[] data = new byte[valueRegionSize + headerSize];
-
-    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
-    Platform.copyMemory(arr, Platform.DOUBLE_ARRAY_OFFSET, data,
-            Platform.BYTE_ARRAY_OFFSET + headerSize, valueRegionSize);
-
-    UnsafeArrayData result = new UnsafeArrayData();
-    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, valueRegionSize + headerSize);
-    return result;
-  }
-
-  @Override
-  public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
-  }
-
-  @Override
-  public boolean equals(Object other) {
-    if (other instanceof UnsafeArrayData) {
-      UnsafeArrayData o = (UnsafeArrayData) other;
-      return (sizeInBytes == o.sizeInBytes) &&
-              ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-                      sizeInBytes);
-    }
-    return false;
+    return fromPrimitiveArray(arr, arr.length, 8);
   }
 }
