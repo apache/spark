@@ -36,21 +36,23 @@ Dataset is a new interface added in Spark 1.6 that provides the benefits of RDDs
 typing, ability to use powerful lambda functions) with the benefits of Spark SQL's optimized
 execution engine. A Dataset can be [constructed](#creating-datasets) from JVM objects and then
 manipulated using functional transformations (`map`, `flatMap`, `filter`, etc.).
+The Dataset API is available in [Scala][scala-datasets] and
+[Java][java-datasets]. Python does not have the support for the Dataset API. But due to Python's dynamic nature,
+many of the benefits of the Dataset API are already available (i.e. you can access the field of a row by name naturally
+`row.columnName`). The case for R is similar.
 
-A DataFrame is a Dataset organized into named columns. It is conceptually
+A DataFrame is a *Dataset* organized into named columns. It is conceptually
 equivalent to a table in a relational database or a data frame in R/Python, but with richer
 optimizations under the hood. DataFrames can be constructed from a wide array of [sources](#data-sources) such
 as: structured data files, tables in Hive, external databases, or existing RDDs.
+The DataFrame API is available in Scala,
+Java, [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame), and [R](api/R/index.html).
 In Scala and Java, a DataFrame is represented by a Dataset of `Row`s.
 In [the Scala API][scala-datasets], `DataFrame` is simply a type alias of `Dataset[Row]`.
 While, in [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.
 
 [scala-datasets]: api/scala/index.html#org.apache.spark.sql.Dataset
 [java-datasets]: api/java/index.html?org/apache/spark/sql/Dataset.html
-
-Python does not have the support for the Dataset API. But due to Python's dynamic nature,
-many of the benefits of the Dataset API are already available (i.e. you can access the field of a row by name naturally
-`row.columnName`). The case for R is similar.
 
 Throughout this document, we will often refer to Scala/Java Datasets of `Row`s as DataFrames.
 
@@ -2044,14 +2046,6 @@ that these options will be deprecated in future release as more optimizations ar
       performing a join. By setting this value to -1 broadcasting can be disabled. Note that currently
       statistics are only supported for Hive Metastore tables where the command
       <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
-    </td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.tungsten.enabled</code></td>
-    <td>true</td>
-    <td>
-      When true, use the optimized Tungsten physical execution backend which explicitly manages memory
-      and dynamically generates bytecode for expression evaluation.
     </td>
   </tr>
   <tr>
