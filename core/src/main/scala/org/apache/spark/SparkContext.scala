@@ -1247,6 +1247,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
+   *
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
@@ -1262,6 +1264,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
    *                     same RDD/partition. This adds some additional overhead for tracking and is
    *                     an experimental feature.
+   * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
   def accumulator[T](initialValue: T, name: String, dataProperty: Boolean)
     (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
@@ -1325,6 +1328,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Register the given accumulator. Note that accumulators must be registered before use, or it
    * will throw exception.
+   *
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and
+   *                     is an experimental feature.
    */
   def register(acc: AccumulatorV2[_, _], dataProperty: Boolean): Unit = {
     acc.register(this, dataProperty = dataProperty)
@@ -1333,6 +1340,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Register the given accumulator with given name. Note that accumulators must be registered
    * before use, or it will throw exception.
+   *
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and
+   *                     is an experimental feature.
+   * @param name The name of accumulator.
    */
   def register(acc: AccumulatorV2[_, _], dataProperty: Boolean, name: String): Unit = {
     acc.register(this, name = Some(name), dataProperty = dataProperty)
