@@ -219,7 +219,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     Without SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
     ------------------------------------------------------------------------------------------------
     Int                                            218 /  256        288.1           3.5       1.0X
     Double                                         318 /  539        198.0           5.1       0.7X
@@ -228,7 +228,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     With SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
     ------------------------------------------------------------------------------------------------
     Int                                             86 /   96        734.2           1.4       1.0X
     Double                                         203 /  268        310.6           3.2       0.4X
@@ -266,7 +266,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     Without SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)   Rate(M/s)  Per Row(ns) Relative
     ------------------------------------------------------------------------------------------------
     Int                                            343 /  437        183.6           5.4       1.0X
     Double                                         322 /  505        195.6           5.1       1.1X
@@ -275,7 +275,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     With SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)   Rate(M/s)  Per Row(ns) Relative
     ------------------------------------------------------------------------------------------------
     Int                                             84 /   95        748.3           1.3       1.0X
     Double                                         196 /  227        320.9           3.1       0.4X
