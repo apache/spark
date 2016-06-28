@@ -369,8 +369,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       taskScheduler.handleFailedTask(tsm, taskAttempt.taskId, TaskState.FAILED, TaskResultLost)
     }
 
-    // Here is the main check of this test -- we have the same offers again, but we don't
-    // schedule anything due to blacklist + locality wait.
+    // Here is the main check of this test -- we have the same offers again, and we schedule it
+    // successfully.  Because the scheduler first tries to schedule with locality in mind, at first
+    // it won't schedule anything on executor1.  But despite that, we don't abort the job.  Then the
+    // scheduler tries for ANY locality, and successfully schedules tasks on executor1.
     val secondTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     assert(secondTaskAttempts.size == 2)
     secondTaskAttempts.foreach { taskAttempt => assert("executor1" === taskAttempt.executorId) }
