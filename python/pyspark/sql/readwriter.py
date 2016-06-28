@@ -723,6 +723,7 @@ class DataFrameWriter(OptionUtils):
             jprop.setProperty(k, properties[k])
         self._jwrite.mode(mode).jdbc(url, table, jprop)
 
+
 def _test():
     import doctest
     import os
