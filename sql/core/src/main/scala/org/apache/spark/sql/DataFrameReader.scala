@@ -129,7 +129,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load(Seq(path): _*) // force invocation of `load(...varargs...)`
+    option("path", path).load(Seq.empty: _*) // force invocation of `load(...varargs...)`
   }
 
   /**
