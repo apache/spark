@@ -257,7 +257,9 @@ class Dataset[T] private[sql](
           // do not show ellipses for strings shorter than 4 characters.
           if (truncate < 4) str.substring(0, truncate)
           else str.substring(0, truncate - 3) + "..."
-        } else str
+        } else {
+          str
+        }
       }: Seq[String]
     }
 
