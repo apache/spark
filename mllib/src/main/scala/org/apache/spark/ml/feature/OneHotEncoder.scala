@@ -59,6 +59,10 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
     new BooleanParam(this, "dropLast", "whether to drop the last category")
   setDefault(dropLast -> true)
 
+  /** @group getParam */
+  @Since("2.0.0")
+  def getDropLast: Boolean = $(dropLast)
+
   /** @group setParam */
   @Since("1.4.0")
   def setDropLast(value: Boolean): this.type = set(dropLast, value)

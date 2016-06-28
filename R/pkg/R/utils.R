@@ -685,3 +685,11 @@ launchScript <- function(script, combinedArgs, capture = FALSE) {
     system2(script, combinedArgs, wait = capture, stdout = capture)
   }
 }
+
+getSparkContext <- function() {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc
+}
