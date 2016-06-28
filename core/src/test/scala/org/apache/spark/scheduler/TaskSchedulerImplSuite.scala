@@ -412,8 +412,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // the tasksSets complete, so the tracker should be notified
-    verify(blacklist, times(1)).taskSetSucceeded(0)
-    verify(blacklist, times(1)).taskSetSucceeded(1)
+    verify(blacklist, times(1)).taskSetSucceeded(0, taskScheduler)
+    verify(blacklist, times(1)).taskSetSucceeded(1, taskScheduler)
     verify(blacklist, times(1)).taskSetFailed(2)
   }
 

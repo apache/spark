@@ -491,6 +491,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
+    _blacklistTracker = SparkContext.createBlacklistTracker(_conf, master)
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -536,12 +537,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     _executorAllocationManager.foreach(_.start())
 
-    // By default blacklistTracker is enabled.
-    _blacklistTracker = if (_conf.getBoolean("spark.scheduler.blacklist.enabled", true)) {
-      new BlacklistTracker(_conf, scheduler = taskScheduler.asInstanceOf[TaskSchedulerImpl])
-    } else {
-      new NoopBlacklistTracker(_conf, taskScheduler.asInstanceOf[TaskSchedulerImpl])
-    }
     _blacklistTracker.start()
 
     _cleaner =
@@ -2424,6 +2419,22 @@ object SparkContext extends Logging {
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
       case _ => 0 // driver is not used for execution
+    }
+  }
+
+  private def createBlacklistTracker(conf: SparkConf, master: String): BlacklistTracker = {
+    import SparkMasterRegex._
+    master match {
+      case "local" => new NoopBlacklistTracker(conf)
+      case LOCAL_N_REGEX(_) => new NoopBlacklistTracker(conf)
+      case LOCAL_N_FAILURES_REGEX(_, _) => new NoopBlacklistTracker(conf)
+      case other =>
+        // we *do* want the blacklist enabled in local-cluster mode, for testing
+        if (conf.getBoolean("spark.scheduler.blacklist.enabled", true)) {
+          new BlacklistTracker(conf)
+        } else {
+          new NoopBlacklistTracker(conf)
+        }
     }
   }
 

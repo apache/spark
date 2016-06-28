@@ -39,7 +39,6 @@ import org.apache.spark.util.Utils
  */
 private[spark] class BlacklistTracker(
     sparkConf: SparkConf,
-    scheduler: TaskSchedulerImpl,
     clock: Clock = new SystemClock()) extends BlacklistCache with Logging {
 
 
@@ -106,7 +105,7 @@ private[spark] class BlacklistTracker(
 
   }
 
-  def taskSetSucceeded(stageId: Int): Unit = synchronized {
+  def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit = synchronized {
     // if any tasks failed, we count them towards the overall failure count for the executor at
     // this point.  Also clean out all data abotu the stage to avoid memory leak.
     stageIdToExecToFailures.remove(stageId).map { failuresForStage =>
@@ -314,14 +313,13 @@ private[scheduler] case class StageAndPartition(val stageId: Int, val partition:
 
 
 private[spark] class NoopBlacklistTracker(
-    sparkConf: SparkConf,
-    scheduler: TaskSchedulerImpl) extends BlacklistTracker(sparkConf, scheduler) {
+    sparkConf: SparkConf) extends BlacklistTracker(sparkConf) {
 
   // TODO don't extend, just have a common interface
   override def start: Unit = {}
   override def stop: Unit = {}
 
-  override def taskSetSucceeded(stageId: Int): Unit = {}
+  override def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit = {}
 
   override def taskSetFailed(stageId: Int): Unit = {}
 

@@ -427,7 +427,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // spy taskSetManager to set Manual clock for BlacklistTracker
     val manager = new TaskSetManager(sched, taskSet, 4, clock)
-    val tracker = new BlacklistTracker(conf, sched, clock)
+    val tracker = new BlacklistTracker(conf, clock)
     manager.setBlacklistTracker(tracker)
 
     {
