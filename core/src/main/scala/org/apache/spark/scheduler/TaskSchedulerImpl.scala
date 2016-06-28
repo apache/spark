@@ -346,6 +346,17 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }.getOrElse(false)
   }
 
+  private[scheduler] def areAllExecutorsBlacklisted(): Boolean = {
+    val nodeBlacklist = blacklistTracker.nodeBlacklist()
+    val execBlacklist = blacklistTracker.executorBlacklist()
+    executorsByHost.foreach { case (host, execs) =>
+      if (!nodeBlacklist.contains(host) && execs.exists(!execBlacklist.contains(_))) {
+        return false
+      }
+    }
+    true
+  }
+
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
@@ -371,15 +382,21 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }
 
+    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     val nodeBlacklist = blacklistTracker.nodeBlacklist()
     val execBlacklist = blacklistTracker.executorBlacklist()
     val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
       !nodeBlacklist.contains(offer.host)  && !execBlacklist.contains(offer.executorId)
     }.toIndexedSeq
     if (filteredOffers.isEmpty) {
-      // TODO if the offers are empty now, check if we've blacklisted our entire cluster.
-      // Its possible we get here without aborting stages on the check in
-      // resourceOfferSingleTaskSet
+      // Its possible that all the executors are now blacklisted, though we haven't aborted stages
+      // during the check in resourceOfferSingleTaskSet.  If so, fail all existing task sets to
+      // avoid unschedulability.
+      if (areAllExecutorsBlacklisted()) {
+        sortedTaskSets.foreach { tsm =>
+          tsm.abort(s"All executors are blacklisted, so aborting ${tsm.taskSet}")
+        }
+      }
       return Seq()
     }
 
@@ -389,7 +406,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))

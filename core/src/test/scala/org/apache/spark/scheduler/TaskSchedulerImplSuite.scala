@@ -19,8 +19,6 @@ package org.apache.spark.scheduler
 
 import org.mockito.Matchers._
 import org.mockito.Mockito.{atLeast, never, times, verify, when}
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
 
@@ -445,9 +443,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     when(blacklist.isExecutorBlacklistedForStage(anyInt(), anyString())).thenReturn(false)
     when(blacklist.isExecutorBlacklisted(anyString(), anyInt(), anyInt())).thenReturn(false)
 
-    (0 to 2).foreach { stageId =>
-      taskScheduler.taskSetManagerForAttempt(stageId, 0).get.setBlacklistTracker(blacklist)
-    }
+    val stageToTsm = (0 to 2).map { stageId =>
+      val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
+      tsm.setBlacklistTracker(blacklist)
+      stageId -> tsm
+    }.toMap
 
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     firstTaskAttempts.foreach { task => logInfo(s"scheduled $task on ${task.executorId}")}
@@ -459,7 +459,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // we should have aborted the existing stages, since they aren't schedulable
     (0 to 2).foreach { stageId =>
-      assert(taskScheduler.taskSetManagerForAttempt(stageId, 0).get.isZombie)
+      assert(stageToTsm(stageId).isZombie)
+      verify(blacklist).taskSetFailed(stageId)
     }
   }
 
