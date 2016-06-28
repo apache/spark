@@ -21,7 +21,6 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
