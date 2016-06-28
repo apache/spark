@@ -25,6 +25,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class BinaryClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new BinaryClassificationEvaluator)
@@ -42,25 +43,25 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator()
       .setMetricName("areaUnderPR")
 
-    val vectorDF = spark.createDataFrame(Seq(
+    val vectorDF = Seq(
       (0d, Vectors.dense(12, 2.5)),
       (1d, Vectors.dense(1, 3)),
       (0d, Vectors.dense(10, 2))
-    )).toDF("label", "rawPrediction")
+    ).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(vectorDF) === 1.0)
 
-    val doubleDF = spark.createDataFrame(Seq(
+    val doubleDF = Seq(
       (0d, 0d),
       (1d, 1d),
       (0d, 0d)
-    )).toDF("label", "rawPrediction")
+    ).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(doubleDF) === 1.0)
 
-    val stringDF = spark.createDataFrame(Seq(
+    val stringDF = Seq(
       (0d, "0d"),
       (1d, "1d"),
       (0d, "0d")
-    )).toDF("label", "rawPrediction")
+    ).toDF("label", "rawPrediction")
     val thrown = intercept[IllegalArgumentException] {
       evaluator.evaluate(stringDF)
     }

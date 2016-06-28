@@ -24,6 +24,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
 class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  import testImplicits._
 
   test("MinMaxScaler fit basic case") {
     val data = Array(
@@ -57,8 +58,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
 
   test("MinMaxScaler arguments max must be larger than min") {
     withClue("arguments max must be larger than min") {
-      val dummyDF = spark.createDataFrame(Seq(
-        (1, Vectors.dense(1.0, 2.0)))).toDF("id", "feature")
+      val dummyDF = Seq((1, Vectors.dense(1.0, 2.0))).toDF("id", "feature")
       intercept[IllegalArgumentException] {
         val scaler = new MinMaxScaler().setMin(10).setMax(0).setInputCol("feature")
         scaler.transformSchema(dummyDF.schema)

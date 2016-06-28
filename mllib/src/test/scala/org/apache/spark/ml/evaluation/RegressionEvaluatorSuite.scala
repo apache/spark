@@ -26,6 +26,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 
 class RegressionEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new RegressionEvaluator)
@@ -42,9 +43,10 @@ class RegressionEvaluatorSuite
      * data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1))
      *   .saveAsTextFile("path")
      */
-    val dataset = spark.createDataFrame(
-      sc.parallelize(LinearDataGenerator.generateLinearInput(
-        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2).map(_.asML))
+    val dataset = sc.parallelize(
+      LinearDataGenerator.generateLinearInput(
+        6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2)
+      .map(_.asML).toDF()
 
     /**
      * Using the following R code to load the data, train the model and evaluate metrics.

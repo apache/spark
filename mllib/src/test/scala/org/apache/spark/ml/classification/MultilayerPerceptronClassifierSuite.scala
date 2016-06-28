@@ -32,17 +32,18 @@ import org.apache.spark.sql.{Dataset, Row}
 
 class MultilayerPerceptronClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  import testImplicits._
 
   @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = spark.createDataFrame(Seq(
-        (Vectors.dense(0.0, 0.0), 0.0),
-        (Vectors.dense(0.0, 1.0), 1.0),
-        (Vectors.dense(1.0, 0.0), 1.0),
-        (Vectors.dense(1.0, 1.0), 0.0))
+    dataset = Seq(
+      (Vectors.dense(0.0, 0.0), 0.0),
+      (Vectors.dense(0.0, 1.0), 1.0),
+      (Vectors.dense(1.0, 0.0), 1.0),
+      (Vectors.dense(1.0, 1.0), 0.0)
     ).toDF("features", "label")
   }
 
@@ -80,11 +81,11 @@ class MultilayerPerceptronClassifierSuite
   }
 
   test("Test setWeights by training restart") {
-    val dataFrame = spark.createDataFrame(Seq(
+    val dataFrame = Seq(
       (Vectors.dense(0.0, 0.0), 0.0),
       (Vectors.dense(0.0, 1.0), 1.0),
       (Vectors.dense(1.0, 0.0), 1.0),
-      (Vectors.dense(1.0, 1.0), 0.0))
+      (Vectors.dense(1.0, 1.0), 0.0)
     ).toDF("features", "label")
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
@@ -116,7 +117,7 @@ class MultilayerPerceptronClassifierSuite
     // the input seed is somewhat magic, to make this test pass
     val rdd = sc.parallelize(generateMultinomialLogisticInput(
       coefficients, xMean, xVariance, true, nPoints, 1), 2)
-    val dataFrame = spark.createDataFrame(rdd).toDF("label", "features")
+    val dataFrame = rdd.toDF("label", "features")
     val numClasses = 3
     val numIterations = 100
     val layers = Array[Int](4, 5, 4, numClasses)

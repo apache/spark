@@ -28,6 +28,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new PCA)
@@ -50,7 +51,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val pc = mat.computePrincipalComponents(3)
     val expected = mat.multiply(pc).rows.map(_.asML)
 
-    val df = spark.createDataFrame(dataRDD.zip(expected)).toDF("features", "expected")
+    val df = dataRDD.zip(expected).toDF("features", "expected")
 
     val pca = new PCA()
       .setInputCol("features")

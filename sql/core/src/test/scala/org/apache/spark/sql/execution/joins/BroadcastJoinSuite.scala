@@ -68,8 +68,8 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   private def testBroadcastJoin[T: ClassTag](
       joinType: String,
       forceBroadcast: Boolean = false): SparkPlan = {
-    val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
-    val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
+    val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
     // Comparison at the end is for broadcast left semi join
     val joinExpression = df1("key") === df2("key") && df1("value") > df2("value")
@@ -109,11 +109,11 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   test("broadcast hint isn't propagated after a join") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
-      val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
+      val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+      val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df3 = df1.join(broadcast(df2), Seq("key"), "inner").drop(df2("key"))
 
-      val df4 = spark.createDataFrame(Seq((1, "5"), (2, "5"))).toDF("key", "value")
+      val df4 = Seq((1, "5"), (2, "5")).toDF("key", "value")
       val df5 = df4.join(df3, Seq("key"), "inner")
 
       val plan =
@@ -125,7 +125,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   private def assertBroadcastJoin(df : Dataset[Row]) : Unit = {
-    val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
+    val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
     val joined = df1.join(df, Seq("key"), "inner")
 
     val plan =
@@ -136,9 +136,9 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   test("broadcast hint is propagated correctly") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"), (3, "2"))).toDF("key", "value")
+      val df2 = Seq((1, "1"), (2, "2"), (3, "2")).toDF("key", "value")
       val broadcasted = broadcast(df2)
-      val df3 = spark.createDataFrame(Seq((2, "2"), (3, "3"))).toDF("key", "value")
+      val df3 = Seq((2, "2"), (3, "3")).toDF("key", "value")
 
       val cases = Seq(broadcasted.limit(2),
                       broadcasted.filter("value < 10"),
