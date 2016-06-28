@@ -282,12 +282,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("abort stage if executor loss results in unschedulability from previously failed tasks") {
-    // Make sure we can detect when a taskset becomes unschedulability from a blacklisting.  This
+    // Make sure we can detect when a taskset becomes unschedulable from a blacklisting.  This
     // test explores a particular corner case -- you may have one task fail, but still be
     // schedulable on another executor.  However, that executor may fail later on, leaving the
     // first task with no place to run.
     val taskScheduler = setupScheduler(
-      // set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
     )
 
@@ -327,8 +328,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(tsm.isZombie)
     assert(failedTaskSet)
     val idx = failedTask.index
-    assert(failedTaskSetReason.contains(s"Aborting TaskSet 0.0 because Task $idx (partition $idx)" +
-      s" cannot be scheduled on any executor due to blacklists."))
+    assert(failedTaskSetReason == s"Aborting TaskSet 0.0 because task $idx (partition $idx) has " +
+      s"already failed on executors (executor0), and no other executors are available.")
   }
 
   test("don't abort if there is an executor available, though it hasn't had scheduled tasks yet") {
@@ -338,7 +339,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // available and not bail on the job
 
     val taskScheduler = setupScheduler(
-      // set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
     )
 
@@ -347,8 +349,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
 
     val offers = Seq(
-      // each offer has more than enough free cores for the entire task set, so we schedule
-      // all tasks on one executor
+      // each offer has more than enough free cores for the entire task set, so when combined
+      // with the locality preferences, we schedule all tasks on one executor
       new WorkerOffer("executor0", "host0", 4),
       new WorkerOffer("executor1", "host1", 4)
     )

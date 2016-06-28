@@ -592,8 +592,7 @@ private[spark] class TaskSetManager(
    * failures (this is because the method picks on unscheduled task, and then iterates through each
    * executor until it finds one that the task hasn't failed on already).
    */
-  private[scheduler] def abortIfTaskSetCompletelyBlacklisted(
-      executorsByHost: HashMap[String, HashSet[String]]): Unit = {
+  private[scheduler] def abortIfCompletelyBlacklisted(executors: Iterable[String]): Unit = {
 
     def pendingTask: Option[Int] = {
       // usually this will just take the last pending task, but because of the lazy removal
@@ -613,19 +612,18 @@ private[spark] class TaskSetManager(
 
     // If no executors have registered yet, don't abort the stage, just wait.  We probably
     // got here because a task set was added before the executors registered.
-    if (executorsByHost.nonEmpty) {
+    if (executors.nonEmpty) {
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
       pendingTask.foreach { taskId =>
-        executorsByHost.foreach { case (host, execs) =>
-          execs.foreach { exec =>
-            if (!executorIsBlacklisted(exec, taskId)) {
-              return
-            }
+        executors.foreach { exec =>
+          if (!executorIsBlacklisted(exec, taskId)) {
+            return
           }
         }
-        abort(s"Aborting ${taskSet} because Task $taskId (partition " +
-          s"${tasks(taskId).partitionId}) cannot be scheduled on any executor due to blacklists.")
+        val execs = executors.toIndexedSeq.sorted.mkString("(", ",", ")")
+        abort(s"Aborting ${taskSet} because task $taskId (partition ${tasks(taskId).partitionId})" +
+          s" has already failed on executors $execs, and no other executors are available.")
       }
     }
   }

@@ -35,7 +35,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util._
+import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -280,7 +280,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     if (!launchedTask) {
-      taskSet.abortIfTaskSetCompletelyBlacklisted(executorsByHost)
+      taskSet.abortIfCompletelyBlacklisted(executorIdToHost.keys)
     }
     return launchedTask
   }
