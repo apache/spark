@@ -57,8 +57,9 @@ private[spark] class BlacklistTracker(
   // successfully
   private val executorIdToFailureCount: HashMap[String, Int] = HashMap()
   // failures for each executor by stage.  Only tracked while the stage is running.
-  private val stageIdToExecToFailures: HashMap[Int, HashMap[String, FailureStatus]] = new HashMap()
-  private val stageIdToBlacklistedNodes: HashMap[Int, HashSet[String]] = new HashMap()
+  private[scheduler] val stageIdToExecToFailures: HashMap[Int, HashMap[String, FailureStatus]] =
+    new HashMap()
+  private[scheduler] val stageIdToBlacklistedNodes: HashMap[Int, HashSet[String]] = new HashMap()
   private val executorIdToBlacklistTime: HashMap[String, Long] = new HashMap()
   private val nodeIdToBlacklistTime: HashMap[String, Long] = new HashMap()
 
@@ -140,10 +141,18 @@ private[spark] class BlacklistTracker(
         }
       }
     }
+    // when we blacklist a node within a stage, we don't directly promote that node to being
+    // blacklisted for the app.  Instead, we use the mechanism above to decide whether or not to
+    // blacklist any executors for the app, and when doing so we'll check whether or not to also
+    // blacklist the node.
+    stageIdToBlacklistedNodes.remove(stageId)
   }
 
   def taskSetFailed(stageId: Int): Unit = {
-    // TODO
+    // just throw away all the info for the failures in this taskSet -- assume the executors were
+    // fine, the failures were just b/c the taskSet itself was bad (eg., bad user code)
+    stageIdToExecToFailures.remove(stageId)
+    stageIdToBlacklistedNodes.remove(stageId)
   }
 
   /**
@@ -312,6 +321,10 @@ private[scheduler] trait BlacklistCache extends Logging {
 private[scheduler] final class FailureStatus {
   val failuresByPart = HashSet[Int]()
   var totalFailures = 0
+
+  override def toString(): String = {
+    s"totalFailures = $totalFailures; partitionsFailed = $failuresByPart"
+  }
 }
 
 private[scheduler] case class StageAndPartition(val stageId: Int, val partition: Int)

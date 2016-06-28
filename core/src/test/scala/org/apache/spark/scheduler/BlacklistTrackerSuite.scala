@@ -213,4 +213,40 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     tracker.taskSetSucceeded(1, scheduler)
     assert(tracker.executorBlacklist() === Set())
   }
+
+  test("memory cleaned up as tasksets complete") {
+    // We want to make sure that memory used by the blacklist tracker is not O(nTotalTaskSetsRun),
+    // that would be really bad for long-lived applications.  This test just requires some knowledge
+    // of the internals on what to check (without the overhead of trying to trigger an OOM or
+    // something).
+    val (tracker, scheduler) = trackerFixture
+    // fail a couple of tasks in two stages
+    for {
+      stage <- 0 until 2
+      partition <- 0 until 4
+    } {
+      val tid = stage * 4 + partition
+      // we want to fail on multiple executors, to trigger node blacklist
+      val exec = (partition % 2).toString
+      tracker.taskFailed(stage, partition, new TaskInfo(tid, partition, 0, clock.getTimeMillis(),
+        exec, "hostA", TaskLocality.ANY, false))
+    }
+
+    when(scheduler.getHostForExecutor("0")).thenReturn("hostA")
+    when(scheduler.getHostForExecutor("1")).thenReturn("hostA")
+    when(scheduler.getExecutorsAliveOnHost("hostA")).thenReturn(Some(Set("0", "1")))
+
+    // just make sure our test is even checking something useful -- we expect these data structures
+    // to grow for running task sets with failed tasks
+    assert(tracker.stageIdToExecToFailures.nonEmpty)
+    assert(tracker.stageIdToBlacklistedNodes.nonEmpty)
+
+    // now say stage 0 fails, and stage 1 completes
+    tracker.taskSetFailed(0)
+    tracker.taskSetSucceeded(1, scheduler)
+
+    // datastructures should be empty again
+    assert(tracker.stageIdToExecToFailures.isEmpty)
+    assert(tracker.stageIdToBlacklistedNodes.isEmpty)
+  }
 }

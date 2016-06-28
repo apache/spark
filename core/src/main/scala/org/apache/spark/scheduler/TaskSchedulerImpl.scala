@@ -327,11 +327,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       taskSet.pollPendingTask.flatMap { task =>
         val stage = taskSet.stageId
         val nodeBlacklist = blacklistTracker.nodeBlacklist()
-        logInfo(s"checking if task $task in stage $stage can run anywhere")
         executorsByHost.foreach { case (host, execs) =>
-          logInfo(s"checking against $host, $execs")
-          logInfo(s"nodeBlacklist = ${nodeBlacklist}; forStage =" +
-            s" ${blacklistTracker.nodeBlacklistForStage(stage)}")
           if (!nodeBlacklist.contains(host) &&
             !blacklistTracker.nodeBlacklistForStage(stage).contains(host)) {
             execs.foreach { exec =>
