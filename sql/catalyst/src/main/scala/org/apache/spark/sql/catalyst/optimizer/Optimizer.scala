@@ -688,6 +688,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case c: Command =>
           stop = true
           c
+        // For outer join, although its output attributes are derived from its children, they are
+        // actually different attributes: the output of outer join is not always picked from its
+        // children, but can also be null.
+        // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
+        // of outer join.
+        case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
+          stop = true
+          j
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
             foldableMap(a)
@@ -1002,7 +1010,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
-          Filter(And(ac, nc), grandChild)
+          Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
