@@ -393,7 +393,19 @@ private[spark] class TaskSetManager(
    * completely blacklisted.
    */
   private[scheduler] def pollPendingTask: Option[Int] = {
-    allPendingTasks.lastOption
+    // usually this will just take the last pending task, but because of the lazy removal
+    // from each list, we may need to go deeper in the list.  We poll from the end because
+    // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
+    // an unschedulable task this way.
+    var indexOffset = allPendingTasks.size
+    while (indexOffset > 0) {
+      indexOffset -= 1
+      val indexInTaskSet = allPendingTasks(indexOffset)
+      if (copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)) {
+        return Some(indexInTaskSet)
+        }
+      }
+    None
   }
 
   /**
