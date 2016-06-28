@@ -162,17 +162,6 @@ private[sql] class HiveSessionCatalog(
     }
   }
 
-  // We have a list of Hive built-in functions that we do not support. So, we will check
-  // Hive's function registry and lazily load needed functions into our own function registry.
-  // Those Hive built-in functions are
-  // assert_true, collect_list, collect_set, compute_stats, context_ngrams, create_union,
-  // current_user ,elt, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // histogram_numeric, in_file, index, inline, java_method, map_keys, map_values,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url, parse_url_tuple, percentile, percentile_approx, posexplode, reflect, reflect2,
-  // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
-  // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
-  // xpath_short, and xpath_string.
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
     // if (super.functionExists(name)) {
@@ -196,6 +185,10 @@ private[sql] class HiveSessionCatalog(
           // built-in function.
           // Hive is case insensitive.
           val functionName = funcName.unquotedString.toLowerCase
+          if (!hiveFunctions.contains(functionName)) {
+            failFunctionLookup(funcName.unquotedString)
+          }
+
           // TODO: This may not really work for current_user because current_user is not evaluated
           // with session info.
           // We do not need to use executionHive at here because we only load
@@ -221,4 +214,18 @@ private[sql] class HiveSessionCatalog(
         }
     }
   }
+
+  /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
+  // We have a list of Hive built-in functions that we do not support. So, we will check
+  // Hive's function registry and lazily load needed functions into our own function registry.
+  // Those Hive built-in functions are
+  // compute_stats, context_ngrams, create_union,
+  // current_user ,elt, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
+  // histogram_numeric, in_file, index, inline, java_method, map_keys, map_values,
+  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
+  // parse_url, parse_url_tuple, percentile, percentile_approx, posexplode, reflect, reflect2,
+  // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
+  // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
+  // xpath_short, and xpath_string.
+  private val hiveFunctions = Seq("percentile", "percentile_approx")
 }
