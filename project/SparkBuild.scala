@@ -720,7 +720,7 @@ object Unidoc {
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
       ignoreUndocumentedPackages((unidocAllSources in (JavaUnidoc, unidoc)).value)
-        .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop/hive/ql/io/orc")))
+        .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
     // Javadoc options: create a window title, and group key packages on index page
