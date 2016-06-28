@@ -47,9 +47,9 @@ private[spark] class BlacklistTracker(
   private val MAX_FAILURES_PER_EXEC_STAGE =
     conf.getInt("spark.blacklist.maxFailedTasksPerExecutorStage", 2)
   private val MAX_FAILED_EXEC_PER_NODE =
-    conf.getInt("spark.blacklist.maxFailedExecsPerNode", 2)
+    conf.getInt("spark.blacklist.maxFailedExecutorsPerNode", 2)
   private val MAX_FAILED_EXEC_PER_NODE_STAGE =
-    conf.getInt("spark.blacklist.maxFailedExecsPerNodeStage", 2)
+    conf.getInt("spark.blacklist.maxFailedExecutorsPerNodeStage", 2)
   private[scheduler] val EXECUTOR_RECOVERY_MILLIS = conf.getTimeAsMs(
     "spark.scheduler.blacklist.recoverPeriod", (60 * 60 * 1000).toString)
 
@@ -194,6 +194,7 @@ private[spark] class BlacklistTracker(
       val blacklistedExecutors =
         stageFailures.filter{_._2.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE}
       if (blacklistedExecutors.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
+        logInfo(s"Blacklisting ${info.host} for stage $stageId")
         stageIdToBlacklistedNodes.getOrElseUpdate(stageId, new HashSet()) += info.host
       }
     }
