@@ -1701,10 +1701,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
              |select key, value from data_15752
         """.stripMargin)
       }
+
       checkAnswer(sql("select hr from srcpart_15752 where hr = 11 group by hr"), Row(11))
       checkAnswer(
         sql("select hr from srcpart_15752 where hr = 12 group by rollup(hr)"),
         Row(null) :: Row(12) :: Nil)
+      checkAnswer(
+        sql("select hr from (select hr from srcpart_15752 where hr = 11 union all " +
+          "select hr from srcpart_15752 where hr= 12)t group by hr"),
+        Row(11) :: Row(12) :: Nil)
       checkAnswer(sql("select max(hr) from srcpart_15752"), Row(12))
       checkAnswer(sql("select max(hr) from srcpart_15752 where hr = 11"), Row(11))
       checkAnswer(sql("select max(hr) from (select hr from srcpart_15752) t"), Row(12))
@@ -1728,6 +1733,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(
         sql("select hr from srctext_15752 where hr = 12 group by rollup(hr)"),
         Row(null) :: Row(12) :: Nil)
+      checkAnswer(
+        sql("select hr from (select hr from srctext_15752 where hr = 11 union all " +
+          "select hr from srctext_15752 where hr= 12)t group by hr"),
+        Row(11) :: Row(12) :: Nil)
       checkAnswer(sql("select max(hr) from srctext_15752"), Row(12))
       checkAnswer(sql("select max(hr) from srctext_15752 where hr = 11"), Row(11))
       checkAnswer(sql("select max(hr) from (select hr from srctext_15752) t"), Row(12))

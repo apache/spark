@@ -231,7 +231,7 @@ object CatalogTypes {
  * If we can in the future consolidate SimpleCatalogRelation and MetastoreRelation, we should
  * probably remove this interface.
  */
-trait CatalogRelation {
+trait CatalogRelation extends LogicalPlan {
   def catalogTable: CatalogTable
   def output: Seq[Attribute]
 }
