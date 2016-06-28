@@ -613,10 +613,7 @@ private[spark] class TaskSetManager(
 
     // If no executors have registered yet, don't abort the stage, just wait.  We probably
     // got here because a task set was added before the executors registered.
-    // Workaround for SPARK-16106: just checking executorsByHost.nonEmpty should be enough, but
-    // because of that issue we can end up with hosts with no executors.
-    val numExecs = executorsByHost.values.map{_.size}.sum
-    if (numExecs > 0) {
+    if (executorsByHost.nonEmpty) {
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
       pendingTask.foreach { taskId =>
