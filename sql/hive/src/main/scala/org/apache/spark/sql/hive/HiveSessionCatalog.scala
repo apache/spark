@@ -189,10 +189,8 @@ private[sql] class HiveSessionCatalog(
             failFunctionLookup(funcName.unquotedString)
           }
 
-          // TODO: This may not really work for current_user because current_user is not evaluated
-          // with session info.
-          // We do not need to use executionHive at here because we only load
-          // Hive's builtin functions, which do not need current db.
+          // TODO: Remove this fallback path once we implement the list of fallback functions
+          // defined below in hiveFunctions.
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
