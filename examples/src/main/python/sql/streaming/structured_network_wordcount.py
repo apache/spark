@@ -18,7 +18,8 @@
 """
  Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  Usage: structured_network_wordcount.py <hostname> <port> <checkpoint dir>
-   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
+   <hostname> and <port> describe the TCP server that Structured Streaming
+   would connect to receive data.
 
  To run this on your local machine, you need to first run a Netcat server
     `$ nc -lk 9999`

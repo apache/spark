@@ -23,12 +23,13 @@ import org.apache.spark.sql.streaming.StreamingQuery;
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  *
  * Usage: JavaStructuredNetworkWordCount <hostname> <port> <checkpoint dir>
- * <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
+ * <hostname> and <port> describe the TCP server that Structured Streaming
+ * would connect to receive data.
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ bin/run-example org.apache.spark.examples.sql.streaming.JavaStructuredNetworkWordCount
+ *    `$ bin/run-example sql.streaming.JavaStructuredNetworkWordCount
  *    localhost 9999 <checkpoint dir>`
  */
 public final class JavaStructuredNetworkWordCount {
