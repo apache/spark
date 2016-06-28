@@ -637,12 +637,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     }
 
     private def copyToTri(): Unit = {
+      var i = 0
+      var j = 0
       var ii = 0
-      for(i <- 0 until k)
-        for(j <- 0 to i) {
-          ata(ii) += ata2(i * k + j)
+      while (i < k) {
+        val temp = i * k
+        j = 0
+        while (j <= i) {
+          ata(ii) += ata2(temp + j)
+          j += 1
           ii += 1
         }
+        i += 1
+      }
     }
 
     /** Adds an observation. */
@@ -1316,7 +1323,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           }
           var i = srcPtrs(j)
           var numExplicits = 0
-          val doStack = if (srcPtrs(j + 1) - srcPtrs(j) > 10) true else false
+          // Stacking factors(vectors) in matrices to speed up the computation,
+          // when the number of factors and the rank is large enough.
+          val doStack = srcPtrs(j + 1) - srcPtrs(j) > 128 && rank > 128
           val srcFactorBuffer = mutable.ArrayBuilder.make[Double]
           val bBuffer = mutable.ArrayBuilder.make[Double]
           while (i < srcPtrs(j + 1)) {
