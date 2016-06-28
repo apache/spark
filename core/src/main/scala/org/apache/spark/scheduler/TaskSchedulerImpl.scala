@@ -319,31 +319,37 @@ private[spark] class TaskSchedulerImpl private[scheduler](
    * really be fast unless you've got a bunch of things blacklisted.
    */
   private[scheduler] def isTaskSetCompletelyBlacklisted(taskSet: TaskSetManager): Boolean = {
-    taskSet.pollPendingTask.map { task =>
-      val stage = taskSet.stageId
-      val nodeBlacklist = blacklistTracker.nodeBlacklist()
-      logInfo(s"checking if task $task in stage $stage can run anywhere")
-      executorsByHost.foreach { case (host, execs) =>
-        logInfo(s"checking against $host, $execs")
-        logInfo(s"nodeBlacklist = ${nodeBlacklist}; forStage =" +
-          s" ${blacklistTracker.nodeBlacklistForStage(stage)}")
-        if (!nodeBlacklist.contains(host) &&
+    if (executorsByHost.nonEmpty) {
+      taskSet.pollPendingTask.map { task =>
+        val stage = taskSet.stageId
+        val nodeBlacklist = blacklistTracker.nodeBlacklist()
+        logInfo(s"checking if task $task in stage $stage can run anywhere")
+        executorsByHost.foreach { case (host, execs) =>
+          logInfo(s"checking against $host, $execs")
+          logInfo(s"nodeBlacklist = ${nodeBlacklist}; forStage =" +
+            s" ${blacklistTracker.nodeBlacklistForStage(stage)}")
+          if (!nodeBlacklist.contains(host) &&
             !blacklistTracker.nodeBlacklistForStage(stage).contains(host)) {
-          execs.foreach { exec =>
-            if (
-              !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
-                !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = task)
-            ) {
-              // we've found some executor this task can run on.  Its possible that some *other*
-              // task isn't schedulable anywhere, but we will discover that in some later call,
-              // when that unschedulable task is the last task remaining.
-              return false
+            execs.foreach { exec =>
+              if (
+                !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
+                  !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = task)
+              ) {
+                // we've found some executor this task can run on.  Its possible that some *other*
+                // task isn't schedulable anywhere, but we will discover that in some later call,
+                // when that unschedulable task is the last task remaining.
+                return false
+              }
             }
           }
         }
-      }
-      true
-    }.getOrElse(false)
+        true
+      }.getOrElse(false)
+    } else {
+      // If no executors have registered yet, don't abort the stage, just wait.  We probably
+      // got here because a task set was added before the executors registered.
+      false
+    }
   }
 
   private[scheduler] def areAllExecutorsBlacklisted(): Boolean = {
@@ -418,7 +424,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
-    logInfo(s"about to make offers to ${sortedTaskSets}")
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
         launchedTask = resourceOfferSingleTaskSet(
