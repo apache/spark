@@ -92,19 +92,15 @@ public class JavaKafkaRDDSuite implements Serializable {
         }
       };
 
-    JavaRDD<String> rdd1 = KafkaUtils.createRDD(
+    JavaRDD<String> rdd1 = KafkaUtils.<String, String>createRDD(
         sc,
-        String.class,
-        String.class,
         kafkaParams,
         offsetRanges,
         PreferFixed.create(leaders)
     ).map(handler);
 
-    JavaRDD<String> rdd2 = KafkaUtils.createRDD(
+    JavaRDD<String> rdd2 = KafkaUtils.<String, String>createRDD(
         sc,
-        String.class,
-        String.class,
         kafkaParams,
         offsetRanges,
         PreferConsistent.create()

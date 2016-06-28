@@ -22,10 +22,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -35,7 +32,6 @@ import org.junit.Test;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.Function0;
 import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
@@ -93,10 +89,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaInputDStream<ConsumerRecord<String, String>> istream1 = KafkaUtils.createDirectStream(
         ssc,
-        String.class,
-        String.class,
         PreferConsistent.create(),
-        Subscribe.create(String.class, String.class, Arrays.asList(topic1), kafkaParams)
+        Subscribe.<String, String>create(Arrays.asList(topic1), kafkaParams)
     );
 
     JavaDStream<String> stream1 = istream1.transform(
@@ -127,10 +121,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaInputDStream<ConsumerRecord<String, String>> istream2 = KafkaUtils.createDirectStream(
         ssc,
-        String.class,
-        String.class,
         PreferConsistent.create(),
-        Subscribe.create(String.class, String.class, Arrays.asList(topic2), kafkaParams2)
+        Subscribe.<String, String>create(Arrays.asList(topic2), kafkaParams2)
     );
 
     JavaDStream<String> stream2 = istream2.transform(

@@ -19,8 +19,6 @@ package org.apache.spark.streaming.kafka
 
 import java.{ util => ju }
 
-import scala.reflect.{classTag, ClassTag}
-
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
@@ -51,7 +49,7 @@ object KafkaUtils extends Logging {
    * @tparam V type of Kafka message value
    */
   @Experimental
-  def createRDD[K: ClassTag, V: ClassTag](
+  def createRDD[K, V](
       sc: SparkContext,
       kafkaParams: ju.Map[String, Object],
       offsetRanges: Array[OffsetRange],
@@ -91,14 +89,10 @@ object KafkaUtils extends Logging {
   @Experimental
   def createRDD[K, V](
       jsc: JavaSparkContext,
-      keyClass: Class[K],
-      valueClass: Class[V],
       kafkaParams: ju.Map[String, Object],
       offsetRanges: Array[OffsetRange],
       locationStrategy: LocationStrategy
     ): JavaRDD[ConsumerRecord[K, V]] = {
-    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
-    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
 
     new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
   }
@@ -117,7 +111,7 @@ object KafkaUtils extends Logging {
    * @tparam V type of Kafka message value
    */
   @Experimental
-  def createDirectStream[K: ClassTag, V: ClassTag](
+  def createDirectStream[K, V](
       ssc: StreamingContext,
       locationStrategy: LocationStrategy,
       consumerStrategy: ConsumerStrategy[K, V]
@@ -140,16 +134,9 @@ object KafkaUtils extends Logging {
   @Experimental
   def createDirectStream[K, V](
       jssc: JavaStreamingContext,
-      keyClass: Class[K],
-      valueClass: Class[V],
       locationStrategy: LocationStrategy,
       consumerStrategy: ConsumerStrategy[K, V]
     ): JavaInputDStream[ConsumerRecord[K, V]] = {
-
-    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
-    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
-
-    // TODO implement hasOffsetRanges etc so users dont have to rdd.rdd()
     new JavaInputDStream(
       createDirectStream[K, V](
         jssc.ssc, locationStrategy, consumerStrategy))

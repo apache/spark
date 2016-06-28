@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.reflect.ClassTag
 
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
@@ -59,7 +58,7 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * @tparam V type of Kafka message value
  */
 @Experimental
-private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
+private[spark] class DirectKafkaInputDStream[K, V](
     _ssc: StreamingContext,
     locationStrategy: LocationStrategy,
     consumerStrategy: ConsumerStrategy[K, V]
@@ -166,6 +165,9 @@ private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
     }
   }
 
+  /**
+   * Returns the latest (highest) available offsets, taking new partitions into account.
+   */
   protected def latestOffsets(): Map[TopicPartition, Long] = {
     val c = consumer
     c.poll(0)
@@ -173,9 +175,11 @@ private[spark] class DirectKafkaInputDStream[K: ClassTag, V: ClassTag](
 
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
+    // position for new partitions determined by auto.offset.reset if no commit
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+    // don't want to consume messages, so pause
     c.pause(newPartitions.asJava)
-
+    // find latest available offsets
     c.seekToEnd(currentOffsets.keySet.asJava)
     parts.map(tp => tp -> c.position(tp)).toMap
   }

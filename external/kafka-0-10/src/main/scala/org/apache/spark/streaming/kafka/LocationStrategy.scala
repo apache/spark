@@ -50,10 +50,10 @@ case object PreferConsistent extends LocationStrategy {
  * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
  * Any TopicPartition not specified in the map will use a consistent location.
  */
-case class PreferFixed(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
+case class PreferFixed private(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
 
 object PreferFixed {
-  def apply(hostMap: Map[TopicPartition, String]): PreferFixed = {
+  def apply(hostMap: collection.Map[TopicPartition, String]): PreferFixed = {
     PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))
   }
   def create(hostMap: ju.Map[TopicPartition, String]): PreferFixed =

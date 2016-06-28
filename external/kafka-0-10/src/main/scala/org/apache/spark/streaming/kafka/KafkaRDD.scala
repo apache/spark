@@ -20,7 +20,6 @@ package org.apache.spark.streaming.kafka
 import java.{ util => ju }
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.{classTag, ClassTag}
 
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
@@ -50,9 +49,7 @@ import org.apache.spark.storage.StorageLevel
  * @tparam V type of Kafka message value
  */
 @Experimental
-private[spark] class KafkaRDD[
-  K: ClassTag,
-  V: ClassTag](
+private[spark] class KafkaRDD[K, V](
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
