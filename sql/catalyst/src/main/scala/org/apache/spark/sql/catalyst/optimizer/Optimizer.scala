@@ -559,7 +559,7 @@ object CollapseProject extends Rule[LogicalPlan] {
  * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
  * by keeping only the one.
  * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
- * 2. For adjacent [[RepartitionByExpression]], collapse into the last [[RepartitionByExpression]].
+ * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
  * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
  *    [[RepartitionByExpression]] with the expression and last number of partition.
  */
