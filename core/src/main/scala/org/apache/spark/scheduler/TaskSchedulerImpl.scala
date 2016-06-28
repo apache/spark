@@ -306,8 +306,6 @@ private[spark] class TaskSchedulerImpl(
         executorIdToTaskCount(o.executorId) = 0
         newExecAvail = true
       }
-      executorIdToHost(o.executorId) = o.host
-      executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
       for (rack <- getRackForHost(o.host)) {
         hostsByRack.getOrElseUpdate(rack, new HashSet[String]()) += o.host
       }
