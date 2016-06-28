@@ -218,15 +218,21 @@ private[sql] class HiveSessionCatalog(
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
   // We have a list of Hive built-in functions that we do not support. So, we will check
   // Hive's function registry and lazily load needed functions into our own function registry.
-  // Those Hive built-in functions are
+  // List of functions we are explicitly not supporting are:
   // compute_stats, context_ngrams, create_union,
-  // current_user ,elt, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // histogram_numeric, in_file, index, inline, java_method, map_keys, map_values,
+  // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
+  // in_file, index, java_method,
   // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url, parse_url_tuple, percentile, percentile_approx, posexplode, reflect, reflect2,
-  // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
-  // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
-  // xpath_short, and xpath_string.
+  // parse_url_tuple, posexplode, reflect2,
+  // str_to_map, windowingtablefunction.
   private val hiveFunctions = Seq(
-    "elt", "hash", "java_method", "parse_url", "percentile", "percentile_approx", "stack")
+    "elt", "hash", "java_method", "histogram_numeric",
+    "map_keys", "map_values",
+    "parse_url", "percentile", "percentile_approx", "reflect", "sentences", "stack", "str_to_map",
+    "xpath", "xpath_boolean", "xpath_double", "xpath_float", "xpath_int", "xpath_long",
+    "xpath_number", "xpath_short", "xpath_string",
+
+    // table generating function
+    "inline", "posexplode"
+  )
 }
