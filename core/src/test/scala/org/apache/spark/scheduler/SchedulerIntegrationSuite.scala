@@ -279,12 +279,6 @@ private[spark] abstract class MockBackend(
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
   private val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "10ms")
 
-  reviveThread.scheduleAtFixedRate(new Runnable {
-    override def run(): Unit = Utils.tryLogNonFatalError {
-      reviveOffers()
-    }
-  }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
-
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
@@ -603,7 +597,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    * (a) map output is available whenever we run stage 1
    * (b) we get a second attempt for stage 0 & stage 1
    */
-  testScheduler("job with fetch failure") {
+  testNoBlacklist("job with fetch failure") {
     val input = new MockRDD(sc, 2, Nil)
     val shuffledRdd = shuffle(10, input)
     val shuffleId = shuffledRdd.shuffleDeps.head.shuffleId
@@ -634,12 +628,12 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
+    assertDataStructuresEmpty()
     assert(results === (0 until 10).map { idx => idx -> (42 + idx) }.toMap)
     assert(stageToAttempts === Map(0 -> Set(0, 1), 1 -> Set(0, 1)))
-    assertDataStructuresEmpty()
   }
 
-  testScheduler("job failure after 4 attempts") {
+  testNoBlacklist("job failure after 4 attempts") {
     def runBackend(): Unit = {
       val (taskDescription, _) = backend.beginTask()
       backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
@@ -651,5 +645,12 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       failure.getMessage.contains("test task failure")
     }
     assertDataStructuresEmpty(noFailure = false)
+  }
+
+
+  def testNoBlacklist(name: String)(body: => Unit): Unit = {
+    // in these simple tests, we only have one executor, so it doens't make sense to turn on the
+    // blacklist.  Just an artifact of this simple test-framework still kinda acting like local-mode
+    testScheduler(name, extraConfs = Seq("spark.scheduler.blacklist.enabled" -> "false"))(body)
   }
 }

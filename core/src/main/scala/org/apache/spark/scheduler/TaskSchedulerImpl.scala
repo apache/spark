@@ -298,9 +298,13 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         }
       }
     }
-    if (!launchedTask && isTaskSetCompletelyBlacklisted(taskSet)) {
-      taskSet.abort(s"Aborting ${taskSet.taskSet} because it has a task which cannot be scheduled" +
-        s" on any executor due to blacklists.")
+    if (!launchedTask) {
+      val unschedulableTask = isTaskSetCompletelyBlacklisted(taskSet)
+      unschedulableTask.foreach { task =>
+        val partition = taskSet.tasks(task).partitionId
+        taskSet.abort(s"Aborting ${taskSet.taskSet} because Task $task (partition $partition) " +
+          s"cannot be scheduled on any executor due to blacklists.")
+      }
     }
     return launchedTask
   }
@@ -318,9 +322,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
    * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
    * really be fast unless you've got a bunch of things blacklisted.
    */
-  private[scheduler] def isTaskSetCompletelyBlacklisted(taskSet: TaskSetManager): Boolean = {
+  private[scheduler] def isTaskSetCompletelyBlacklisted(taskSet: TaskSetManager): Option[Int] = {
     if (executorsByHost.nonEmpty) {
-      taskSet.pollPendingTask.map { task =>
+      taskSet.pollPendingTask.flatMap { task =>
         val stage = taskSet.stageId
         val nodeBlacklist = blacklistTracker.nodeBlacklist()
         logInfo(s"checking if task $task in stage $stage can run anywhere")
@@ -338,17 +342,17 @@ private[spark] class TaskSchedulerImpl private[scheduler](
                 // we've found some executor this task can run on.  Its possible that some *other*
                 // task isn't schedulable anywhere, but we will discover that in some later call,
                 // when that unschedulable task is the last task remaining.
-                return false
+                return None
               }
             }
           }
         }
-        true
-      }.getOrElse(false)
+        Some(task)
+      }
     } else {
       // If no executors have registered yet, don't abort the stage, just wait.  We probably
       // got here because a task set was added before the executors registered.
-      false
+      None
     }
   }
 
@@ -394,7 +398,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
       !nodeBlacklist.contains(offer.host)  && !execBlacklist.contains(offer.executorId)
     }.toIndexedSeq
-    if (filteredOffers.isEmpty) {
+    if (offers.nonEmpty && filteredOffers.isEmpty) {
       // Its possible that all the executors are now blacklisted, though we haven't aborted stages
       // during the check in resourceOfferSingleTaskSet.  If so, fail all existing task sets to
       // avoid unschedulability.
