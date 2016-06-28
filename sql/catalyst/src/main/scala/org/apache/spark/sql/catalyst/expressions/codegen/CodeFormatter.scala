@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.util.regex.Matcher
+
 /**
  * An utility class that indents a block of code based on the curly braces and parentheses.
  * This is used to prettify generated code when in debug mode (or exceptions).
@@ -24,13 +26,25 @@ package org.apache.spark.sql.catalyst.expressions.codegen
  * Written by Matei Zaharia.
  */
 object CodeFormatter {
-  def format(code: String): String = new CodeFormatter().addLines(code).result()
+  val commentHolder = """\/\*(.+?)\*\/""".r
+
+  def format(code: CodeAndComment): String = {
+    val formatter = new CodeFormatter
+    code.body.split("\n").foreach { line =>
+      val commentReplaced = commentHolder.replaceAllIn(
+        line.trim,
+        m => code.comment.get(m.group(1)).map(Matcher.quoteReplacement).getOrElse(m.group(0)))
+      formatter.addLine(commentReplaced)
+    }
+    formatter.result()
+  }
+
   def stripExtraNewLines(input: String): String = {
     val code = new StringBuilder
     var lastLine: String = "dummy"
     input.split('\n').foreach { l =>
       val line = l.trim()
-      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{"))
+      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{") || lastLine.endsWith("*/"))
       if (!skip) {
         code.append(line)
         code.append("\n")
@@ -38,6 +52,36 @@ object CodeFormatter {
       lastLine = line
     }
     code.result()
+  }
+
+  def stripOverlappingComments(codeAndComment: CodeAndComment): CodeAndComment = {
+    val code = new StringBuilder
+    val map = codeAndComment.comment
+
+    def getComment(line: String): Option[String] = {
+      if (line.startsWith("/*") && line.endsWith("*/")) {
+        map.get(line.substring(2, line.length - 2))
+      } else {
+        None
+      }
+    }
+
+    var lastLine: String = "dummy"
+    codeAndComment.body.split('\n').foreach { l =>
+      val line = l.trim()
+
+      val skip = getComment(lastLine).zip(getComment(line)).exists {
+        case (lastComment, currentComment) =>
+          lastComment.substring(3).contains(currentComment.substring(3))
+      }
+
+      if (!skip) {
+        code.append(line).append("\n")
+      }
+
+      lastLine = line
+    }
+    new CodeAndComment(code.result().trim(), map)
   }
 }
 
@@ -89,18 +133,17 @@ private class CodeFormatter {
     } else {
       indentString
     }
-    code.append(f"/* ${currentLine}%03d */ ")
-    code.append(thisLineIndent)
-    code.append(line)
+    code.append(f"/* ${currentLine}%03d */")
+    if (line.trim().length > 0) {
+      code.append(" ") // add a space after the line number comment.
+      code.append(thisLineIndent)
+      if (inCommentBlock && line.startsWith("*") || line.startsWith("*/")) code.append(" ")
+      code.append(line)
+    }
     code.append("\n")
     indentLevel = newIndentLevel
     indentString = " " * (indentSize * newIndentLevel)
     currentLine += 1
-  }
-
-  private def addLines(code: String): CodeFormatter = {
-    code.split('\n').foreach(s => addLine(s.trim()))
-    this
   }
 
   private def result(): String = code.result()

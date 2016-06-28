@@ -24,6 +24,7 @@ import java.util.regex.Pattern
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
@@ -351,9 +352,10 @@ private[yarn] class YarnAllocator(
         logInfo(s"Submitted container request (host: ${hostStr(request)}, capability: $resource)")
       }
 
-    } else if (missing < 0) {
+    } else if (numPendingAllocate > 0 && missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
-      logInfo(s"Canceling requests for $numToCancel executor containers")
+      logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired " +
+        s"total $targetNumExecutors executors.")
 
       val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
       if (!matchingRequests.isEmpty) {
@@ -472,41 +474,58 @@ private[yarn] class YarnAllocator(
    */
   private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = {
     for (container <- containersToUse) {
-      numExecutorsRunning += 1
-      assert(numExecutorsRunning <= targetNumExecutors)
+      executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
-      executorIdCounter += 1
       val executorId = executorIdCounter.toString
-
       assert(container.getResource.getMemory >= resource.getMemory)
-
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
-      executorIdToContainer(executorId) = container
-      containerIdToExecutorId(container.getId) = executorId
 
-      val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
-        new HashSet[ContainerId])
+      def updateInternalState(): Unit = synchronized {
+        numExecutorsRunning += 1
+        assert(numExecutorsRunning <= targetNumExecutors)
+        executorIdToContainer(executorId) = container
+        containerIdToExecutorId(container.getId) = executorId
 
-      containerSet += containerId
-      allocatedContainerToHostMap.put(containerId, executorHostname)
+        val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
+          new HashSet[ContainerId])
+        containerSet += containerId
+        allocatedContainerToHostMap.put(containerId, executorHostname)
+      }
 
-      val executorRunnable = new ExecutorRunnable(
-        container,
-        conf,
-        sparkConf,
-        driverUrl,
-        executorId,
-        executorHostname,
-        executorMemory,
-        executorCores,
-        appAttemptId.getApplicationId.toString,
-        securityMgr,
-        localResources)
       if (launchContainers) {
         logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
           driverUrl, executorHostname))
-        launcherPool.execute(executorRunnable)
+
+        launcherPool.execute(new Runnable {
+          override def run(): Unit = {
+            try {
+              new ExecutorRunnable(
+                container,
+                conf,
+                sparkConf,
+                driverUrl,
+                executorId,
+                executorHostname,
+                executorMemory,
+                executorCores,
+                appAttemptId.getApplicationId.toString,
+                securityMgr,
+                localResources
+              ).run()
+              updateInternalState()
+            } catch {
+              case NonFatal(e) =>
+                logError(s"Failed to launch executor $executorId on container $containerId", e)
+                // Assigned container should be released immediately to avoid unnecessary resource
+                // occupation.
+                amClient.releaseAssignedContainer(containerId)
+            }
+          }
+        })
+      } else {
+        // For test only
+        updateInternalState()
       }
     }
   }

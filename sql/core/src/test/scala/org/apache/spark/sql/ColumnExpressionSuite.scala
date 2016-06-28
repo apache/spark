@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
@@ -321,7 +323,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         nanvl($"b", $"e"), nanvl($"e", $"f")),
       Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
     )
-    testData.registerTempTable("t")
+    testData.createOrReplaceTempView("t")
     checkAnswer(
       sql(
         "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
@@ -592,12 +594,41 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("input_file_name") {
+  test("input_file_name - FileScanRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
       val answer = spark.read.parquet(dir.getCanonicalPath).select(input_file_name())
         .head.getString(0)
+      assert(answer.contains(dir.getCanonicalPath))
+
+      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
+    }
+  }
+
+  test("input_file_name - HadoopRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
+      data.write.text(dir.getCanonicalPath)
+      val df = spark.sparkContext.textFile(dir.getCanonicalPath).toDF()
+      val answer = df.select(input_file_name()).head.getString(0)
+      assert(answer.contains(dir.getCanonicalPath))
+
+      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
+    }
+  }
+
+  test("input_file_name - NewHadoopRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
+      data.write.text(dir.getCanonicalPath)
+      val rdd = spark.sparkContext.newAPIHadoopFile(
+        dir.getCanonicalPath,
+        classOf[NewTextInputFormat],
+        classOf[LongWritable],
+        classOf[Text])
+      val df = rdd.map(pair => pair._2.toString).toDF()
+      val answer = df.select(input_file_name()).head.getString(0)
       assert(answer.contains(dir.getCanonicalPath))
 
       checkAnswer(data.select(input_file_name()).limit(1), Row(""))
@@ -707,5 +738,4 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.select($"a".bitwiseXOR($"b").bitwiseXOR(39)),
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
   }
-
 }

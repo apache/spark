@@ -27,7 +27,7 @@ from array import array
 
 if sys.version >= "3":
     long = int
-    unicode = str
+    basestring = unicode = str
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -401,6 +401,7 @@ class StructField(DataType):
         False
         """
         assert isinstance(dataType, DataType), "dataType should be DataType"
+        assert isinstance(name, basestring), "field name should be string"
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
@@ -1045,7 +1046,7 @@ def _need_converter(dataType):
 
 
 def _create_converter(dataType):
-    """Create an converter to drop the names of fields in obj """
+    """Create a converter to drop the names of fields in obj """
     if not _need_converter(dataType):
         return lambda x: x
 
@@ -1400,11 +1401,7 @@ class Row(tuple):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
-        if args:
-            # create row class or objects
-            return tuple.__new__(self, args)
-
-        elif kwargs:
+        if kwargs:
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
@@ -1412,7 +1409,8 @@ class Row(tuple):
             return row
 
         else:
-            raise ValueError("No args or kwargs")
+            # create row class or objects
+            return tuple.__new__(self, args)
 
     def asDict(self, recursive=False):
         """

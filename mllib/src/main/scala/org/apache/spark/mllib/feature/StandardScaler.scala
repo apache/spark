@@ -97,6 +97,9 @@ class StandardScalerModel @Since("1.3.0") (
   @Since("1.3.0")
   def this(std: Vector) = this(std, null)
 
+  /**
+   * :: DeveloperApi ::
+   */
   @Since("1.3.0")
   @DeveloperApi
   def setWithMean(withMean: Boolean): this.type = {
@@ -105,6 +108,9 @@ class StandardScalerModel @Since("1.3.0") (
     this
   }
 
+  /**
+   * :: DeveloperApi ::
+   */
   @Since("1.3.0")
   @DeveloperApi
   def setWithStd(withStd: Boolean): this.type = {

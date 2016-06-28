@@ -20,13 +20,14 @@ package org.apache.spark.sql.execution.exchange
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -72,9 +73,18 @@ case class BroadcastExchangeExec(
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
+        if (input.length >= 512000000) {
+          throw new SparkException(
+            s"Cannot broadcast the table with more than 512 millions rows: ${input.length} rows")
+        }
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
-        longMetric("dataSize") += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        val dataSize = input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        longMetric("dataSize") += dataSize
+        if (dataSize >= (8L << 30)) {
+          throw new SparkException(
+            s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+        }
 
         // Construct and broadcast the relation.
         val relation = mode.transform(input)
@@ -83,6 +93,14 @@ case class BroadcastExchangeExec(
 
         val broadcasted = sparkContext.broadcast(relation)
         longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+
+        // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
+        // directly without setting an execution id. We should be tolerant to it.
+        if (executionId != null) {
+          sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
+            executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
+        }
+
         broadcasted
       }
     }(BroadcastExchangeExec.executionContext)

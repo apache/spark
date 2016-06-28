@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.Modifier
 
-import scala.annotation.tailrec
 import scala.language.existentials
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -289,8 +289,8 @@ case class UnwrapOption(
       ${inputObject.code}
 
       final boolean ${ev.isNull} = ${inputObject.isNull} || ${inputObject.value}.isEmpty();
-      $javaType ${ev.value} =
-        ${ev.isNull} ? ${ctx.defaultValue(javaType)} : ($javaType) ${inputObject.value}.get();
+      $javaType ${ev.value} = ${ev.isNull} ?
+        ${ctx.defaultValue(javaType)} : (${ctx.boxedType(javaType)}) ${inputObject.value}.get();
     """
     ev.copy(code = code)
   }
@@ -376,45 +376,6 @@ case class MapObjects private(
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
-  @tailrec
-  private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
-    case NullType =>
-      val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
-      (i: String) => s".get($i, $nullTypeClassName)"
-    case IntegerType => (i: String) => s".getInt($i)"
-    case LongType => (i: String) => s".getLong($i)"
-    case FloatType => (i: String) => s".getFloat($i)"
-    case DoubleType => (i: String) => s".getDouble($i)"
-    case ByteType => (i: String) => s".getByte($i)"
-    case ShortType => (i: String) => s".getShort($i)"
-    case BooleanType => (i: String) => s".getBoolean($i)"
-    case StringType => (i: String) => s".getUTF8String($i)"
-    case s: StructType => (i: String) => s".getStruct($i, ${s.size})"
-    case a: ArrayType => (i: String) => s".getArray($i)"
-    case _: MapType => (i: String) => s".getMap($i)"
-    case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
-    case DecimalType.Fixed(p, s) => (i: String) => s".getDecimal($i, $p, $s)"
-    case DateType => (i: String) => s".getInt($i)"
-  }
-
-  private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
-    case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-      (".size()", (i: String) => s".apply($i)", false)
-    case ObjectType(cls) if cls.isArray =>
-      (".length", (i: String) => s"[$i]", false)
-    case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-      (".size()", (i: String) => s".get($i)", false)
-    case ArrayType(t, _) =>
-      val (sqlType, primitiveElement) = t match {
-        case m: MapType => (m, false)
-        case s: StructType => (s, false)
-        case s: StringType => (s, false)
-        case udt: UserDefinedType[_] => (udt.sqlType, false)
-        case o => (o, true)
-      }
-      (".numElements()", itemAccessorMethod(sqlType), primitiveElement)
-  }
-
   override def nullable: Boolean = true
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
@@ -425,7 +386,6 @@ case class MapObjects private(
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
     ctx.addMutableState("boolean", loopVar.isNull, "")
     ctx.addMutableState(elementJavaType, loopVar.value, "")
@@ -448,27 +408,61 @@ case class MapObjects private(
       s"new $convertedType[$dataLength]"
     }
 
-    val loopNullCheck = if (primitiveElement) {
-      s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
-    } else {
-      s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
+    // In RowEncoder, we use `Object` to represent Array or Seq, so we need to determine the type
+    // of input collection at runtime for this case.
+    val seq = ctx.freshName("seq")
+    val array = ctx.freshName("array")
+    val determineCollectionType = inputData.dataType match {
+      case ObjectType(cls) if cls == classOf[Object] =>
+        val seqClass = classOf[Seq[_]].getName
+        s"""
+          $seqClass $seq = null;
+          $elementJavaType[] $array = null;
+          if (${genInputData.value}.getClass().isArray()) {
+            $array = ($elementJavaType[]) ${genInputData.value};
+          } else {
+            $seq = ($seqClass) ${genInputData.value};
+          }
+         """
+      case _ => ""
+    }
+
+
+    val (getLength, getLoopVar) = inputData.dataType match {
+      case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+        s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
+      case ObjectType(cls) if cls.isArray =>
+        s"${genInputData.value}.length" -> s"${genInputData.value}[$loopIndex]"
+      case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+        s"${genInputData.value}.size()" -> s"${genInputData.value}.get($loopIndex)"
+      case ArrayType(et, _) =>
+        s"${genInputData.value}.numElements()" -> ctx.getValue(genInputData.value, et, loopIndex)
+      case ObjectType(cls) if cls == classOf[Object] =>
+        s"$seq == null ? $array.length : $seq.size()" ->
+          s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
+    }
+
+    val loopNullCheck = inputData.dataType match {
+      case _: ArrayType => s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+      // The element of primitive array will never be null.
+      case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
+        s"${loopVar.isNull} = false"
+      case _ => s"${loopVar.isNull} = ${loopVar.value} == null;"
     }
 
     val code = s"""
       ${genInputData.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
 
-      boolean ${ev.isNull} = ${genInputData.value} == null;
-      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-
-      if (!${ev.isNull}) {
+      if (!${genInputData.isNull}) {
+        $determineCollectionType
         $convertedType[] $convertedArray = null;
-        int $dataLength = ${genInputData.value}$lengthFunction;
+        int $dataLength = $getLength;
         $convertedArray = $arrayConstructor;
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          ${loopVar.value} =
-            ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
+          ${loopVar.value} = ($elementJavaType) ($getLoopVar);
           $loopNullCheck
 
           ${genFunction.code}
@@ -481,11 +475,10 @@ case class MapObjects private(
           $loopIndex += 1;
         }
 
-        ${ev.isNull} = false;
         ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
       }
     """
-    ev.copy(code = code)
+    ev.copy(code = code, isNull = genInputData.isNull)
   }
 }
 
@@ -527,7 +520,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     val code = s"""
       $values = new Object[${children.size}];
       $childrenCode
-      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);
+      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
       """
     ev.copy(code = code, isNull = "false")
   }
@@ -554,11 +547,17 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
         (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
       }
     }
+    // try conf from env, otherwise create a new one
+    val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addMutableState(
-      serializerInstanceClass,
-      serializer,
-      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
+    val serializerInit = s"""
+      if ($env == null) {
+        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
+    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -594,11 +593,17 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
         (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
       }
     }
+    // try conf from env, otherwise create a new one
+    val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addMutableState(
-      serializerInstanceClass,
-      serializer,
-      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
+    val serializerInit = s"""
+      if ($env == null) {
+        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
+    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to deserialize.
     val input = child.genCode(ctx)
@@ -663,7 +668,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
-
+  override def foldable: Boolean = false
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any =
@@ -683,7 +688,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
       ${childGen.code}
 
       if (${childGen.isNull}) {
-        throw new RuntimeException(this.$errMsgField);
+        throw new RuntimeException($errMsgField);
       }
      """
     ev.copy(code = code, isNull = "false", value = childGen.value)
@@ -700,21 +705,17 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 case class GetExternalRowField(
     child: Expression,
     index: Int,
-    dataType: DataType) extends UnaryExpression with NonSQLExpression {
+    fieldName: String) extends UnaryExpression with NonSQLExpression {
 
   override def nullable: Boolean = false
+
+  override def dataType: DataType = ObjectType(classOf[Object])
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val row = child.genCode(ctx)
-
-    val getField = dataType match {
-      case ObjectType(x) if x == classOf[Row] => s"""${row.value}.getStruct($index)"""
-      case _ => s"""(${ctx.boxedType(dataType)}) ${row.value}.get($index)"""
-    }
-
     val code = s"""
       ${row.code}
 
@@ -723,11 +724,59 @@ case class GetExternalRowField(
       }
 
       if (${row.value}.isNullAt($index)) {
-        throw new RuntimeException("The ${index}th field of input row cannot be null.");
+        throw new RuntimeException("The ${index}th field '$fieldName' of input row " +
+          "cannot be null.");
       }
 
-      final ${ctx.javaType(dataType)} ${ev.value} = $getField;
+      final Object ${ev.value} = ${row.value}.get($index);
      """
     ev.copy(code = code, isNull = "false")
+  }
+}
+
+/**
+ * Validates the actual data type of input expression at runtime.  If it doesn't match the
+ * expectation, throw an exception.
+ */
+case class ValidateExternalType(child: Expression, expected: DataType)
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
+
+  override def nullable: Boolean = child.nullable
+
+  override def dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val input = child.genCode(ctx)
+    val obj = input.value
+
+    val typeCheck = expected match {
+      case _: DecimalType =>
+        Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
+          .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+      case _: ArrayType =>
+        s"$obj instanceof ${classOf[Seq[_]].getName} || $obj.getClass().isArray()"
+      case _ =>
+        s"$obj instanceof ${ctx.boxedType(dataType)}"
+    }
+
+    val code = s"""
+      ${input.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${input.isNull}) {
+        if ($typeCheck) {
+          ${ev.value} = (${ctx.boxedType(dataType)}) $obj;
+        } else {
+          throw new RuntimeException($obj.getClass().getName() + " is not a valid " +
+            "external type for schema of ${expected.simpleString}");
+        }
+      }
+
+    """
+    ev.copy(code = code, isNull = input.isNull)
   }
 }

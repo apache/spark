@@ -159,11 +159,13 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     }
   }
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val leftSize = left.statistics.sizeInBytes
     val rightSize = right.statistics.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(sizeInBytes = sizeInBytes)
+    val isBroadcastable = left.statistics.isBroadcastable || right.statistics.isBroadcastable
+
+    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
   }
 }
 
@@ -182,8 +184,8 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
       duplicateResolved
 
-  override def statistics: Statistics = {
-    Statistics(sizeInBytes = left.statistics.sizeInBytes)
+  override lazy val statistics: Statistics = {
+    left.statistics.copy()
   }
 }
 
@@ -222,7 +224,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     children.length > 1 && childrenResolved && allChildrenCompatible
   }
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
@@ -330,6 +332,16 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
+
+  override lazy val statistics: Statistics = joinType match {
+    case LeftAnti | LeftSemi =>
+      // LeftSemi and LeftAnti won't ever be bigger than left
+      left.statistics.copy()
+    case _ =>
+      // make sure we don't propagate isBroadcastable in other joins, because
+      // they could explode the size.
+      super.statistics.copy(isBroadcastable = false)
+  }
 }
 
 /**
@@ -338,9 +350,8 @@ case class Join(
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  // We manually set statistics of BroadcastHint to smallest value to make sure
-  // the plan wrapped by BroadcastHint will be considered to broadcast later.
-  override def statistics: Statistics = Statistics(sizeInBytes = 1)
+  // set isBroadcastable to true so the child will be broadcasted
+  override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
 case class InsertIntoTable(
@@ -358,15 +369,17 @@ case class InsertIntoTable(
     if (table.output.isEmpty) {
       None
     } else {
-      val numDynamicPartitions = partition.values.count(_.isEmpty)
-      val (partitionColumns, dataColumns) = table.output
-          .partition(a => partition.keySet.contains(a.name))
-      Some(dataColumns ++ partitionColumns.takeRight(numDynamicPartitions))
+      // Note: The parser (visitPartitionSpec in AstBuilder) already turns
+      // keys in partition to their lowercase forms.
+      val staticPartCols = partition.filter(_._2.isDefined).keySet
+      Some(table.output.filterNot(a => staticPartCols.contains(a.name)))
     }
   }
 
   assert(overwrite || !ifNotExists)
-  override lazy val resolved: Boolean = childrenResolved && expectedColumns.forall { expected =>
+  assert(partition.values.forall(_.nonEmpty) || !ifNotExists)
+  override lazy val resolved: Boolean =
+    childrenResolved && table.resolved && expectedColumns.forall { expected =>
     child.output.size == expected.size && child.output.zip(expected).forall {
       case (childAttr, tableAttr) =>
         DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
@@ -420,8 +433,11 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
-  require(step != 0, "step cannot be 0")
+    output: Seq[Attribute])
+  extends LeafNode with MultiInstanceRelation {
+
+  require(step != 0, s"step ($step) cannot be 0")
+
   val numElements: BigInt = {
     val safeStart = BigInt(start)
     val safeEnd = BigInt(end)
@@ -433,12 +449,19 @@ case class Range(
     }
   }
 
-  override def newInstance(): Range =
-    Range(start, end, step, numSlices, output.map(_.newInstance()))
+  override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
+  }
+
+  override def simpleString: String = {
+    if (step == 1) {
+      s"Range ($start, $end, splits=$numSlices)"
+    } else {
+      s"Range ($start, $end, step=$step, splits=$numSlices)"
+    }
   }
 }
 
@@ -463,9 +486,9 @@ case class Aggregate(
   override def validConstraints: Set[Expression] =
     child.constraints.union(getAliasedConstraints(aggregateExpressions))
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     if (groupingExpressions.isEmpty) {
-      Statistics(sizeInBytes = 1)
+      super.statistics.copy(sizeInBytes = 1)
     } else {
       super.statistics
     }
@@ -508,7 +531,7 @@ private[sql] object Expand {
 
   /**
    * Apply the all of the GroupExpressions to every input row, hence we will get
-   * multiple output rows for a input row.
+   * multiple output rows for an input row.
    *
    * @param bitmasks The bitmask set represents the grouping sets
    * @param groupByAliases The aliased original group by expressions
@@ -550,7 +573,7 @@ private[sql] object Expand {
 
 /**
  * Apply a number of projections to every input row, hence we will get multiple output rows for
- * a input row.
+ * an input row.
  *
  * @param projections to apply
  * @param output of all projections.
@@ -563,13 +586,13 @@ case class Expand(
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
-  // the contraints of the child may no longer be valid.
+  // the constraints of the child may no longer be valid.
   override protected def validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
@@ -638,7 +661,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -653,7 +676,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -683,14 +706,14 @@ case class Sample(
 
   override def output: Seq[Attribute] = child.output
 
-  override def statistics: Statistics = {
+  override lazy val statistics: Statistics = {
     val ratio = upperBound - lowerBound
     // BigInt can't multiply with Double
     var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
     if (sizeInBytes == 0) {
       sizeInBytes = 1
     }
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
@@ -712,6 +735,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   override def output: Seq[Attribute] = child.output
 }
 
@@ -729,5 +753,5 @@ case object OneRowRelation extends LeafNode {
    *
    * [[LeafNode]]s must override this.
    */
-  override def statistics: Statistics = Statistics(sizeInBytes = 1)
+  override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
 }

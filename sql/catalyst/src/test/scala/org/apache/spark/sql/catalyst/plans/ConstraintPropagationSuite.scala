@@ -298,7 +298,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         Cast(resolveColumn(tr, "a"), LongType) * resolveColumn(tr, "b") + Cast(100, LongType) ===
           Cast(resolveColumn(tr, "c"), LongType),
         Cast(resolveColumn(tr, "d"), DoubleType) /
-          Cast(Cast(10, LongType), DoubleType) ===
+          Cast(10, DoubleType) ===
             Cast(resolveColumn(tr, "e"), DoubleType),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "b")),
@@ -312,7 +312,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         Cast(resolveColumn(tr, "a"), LongType) * resolveColumn(tr, "b") - Cast(10, LongType) >=
           Cast(resolveColumn(tr, "c"), LongType),
         Cast(resolveColumn(tr, "d"), DoubleType) /
-          Cast(Cast(10, LongType), DoubleType) <
+          Cast(10, DoubleType) <
             Cast(resolveColumn(tr, "e"), DoubleType),
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "b")),
