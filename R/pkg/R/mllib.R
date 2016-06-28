@@ -233,9 +233,10 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 # Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
 # similarly to R package e1071's predict.
 
-#' @rdname spark.naiveBayes
+#' @param newData A SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction"
+#' @rdname spark.naiveBayes
 #' @export
 #' @note predict(NaiveBayesModel) since 2.0.0
 setMethod("predict", signature(object = "NaiveBayesModel"),
@@ -439,25 +440,16 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
-#' Save fitted MLlib model to the input path
-#'
-#' Save the AFT survival regression model to the input path.
-#'
-#' @param object A fitted AFT survival regression model
-#' @param path The directory where the model is saved
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+# Saves the AFT survival regression model to the input path.
+
+#' @param path The directory where the model is savedist containing the model's coefficien
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname write.ml
+#' @rdname spark.survreg
 #' @name write.ml
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
-#' path <- "path/to/model"
-#' write.ml(model, path)
-#' }
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
+#' @seealso \link{read.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
@@ -542,15 +534,18 @@ read.ml <- function(path) {
   }
 }
 
-#' Fit an accelerated failure time (AFT) survival regression model.
+#' Accelerated Failure Time (AFT) Survival Regression Model
 #'
-#' Fit an accelerated failure time (AFT) survival regression model on a Spark DataFrame.
+#' \code{spark.survreg} fits an accelerated failure time (AFT) survival regression model on
+#' a SparkDataFrame. Users can call \code{summary} to get a summary of the fitted AFT model,
+#' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
+#' save/load fitted models.
 #'
-#' @param data SparkDataFrame for training.
+#' @param data A SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
-#'                Note that operator '.' is not supported currently.
-#' @return a fitted AFT survival regression model
+#'                Note that operator '.' is not supported currently
+#' @return \code{spark.survreg} returns a fitted AFT survival regression model
 #' @rdname spark.survreg
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
 #' @export
@@ -558,6 +553,19 @@ read.ml <- function(path) {
 #' \dontrun{
 #' df <- createDataFrame(ovarian)
 #' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
+#'
+#' # get a summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predicted <- predict(model, df)
+#' showDF(predicted)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
@@ -569,20 +577,14 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
           })
 
 
-#' Get the summary of an AFT survival regression model
-#'
-#' Returns the summary of an AFT survival regression model produced by spark.survreg(),
-#' similarly to R's summary().
-#'
-#' @param object a fitted AFT survival regression model
-#' @return coefficients the model's coefficients, intercept and log(scale).
-#' @rdname summary
+# Returns a summary of the AFT survival regression model produced by spark.survreg,
+# similarly to R's summary().
+
+#' @param object A fitted AFT survival regression model
+#' @return \code{summary} returns a list containing the model's coefficients,
+#' intercept and log(scale)
+#' @rdname spark.survreg
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
-#' summary(model)
-#' }
 #' @note summary(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
           function(object, ...) {
@@ -595,20 +597,14 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             return(list(coefficients = coefficients))
           })
 
-#' Predicted values based on model
-#'
-#' Makes predictions from an AFT survival regression model or a model produced by spark.survreg(),
-#' similarly to R package survival's predict.
-#'
-#' @param object A fitted AFT survival regression model
-#' @rdname predict
+# Makes predictions from an AFT survival regression model or a model produced by
+# spark.survreg, similarly to R package survival's predict.
+
+#' @param newData A SparkDataFrame for testing
+#' @return \code{predict} returns a SparkDataFrame containing predicted values
+#' on the original scale of the data (mean predicted value at scale = 1.0)
+#' @rdname spark.survreg
 #' @export
-#' @examples
-#' \dontrun{
-#' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
-#' predicted <- predict(model, testData)
-#' showDF(predicted)
-#' }
 #' @note predict(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
           function(object, newData) {
