@@ -55,7 +55,6 @@ import org.apache.spark.util._
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    val clock: Clock = new SystemClock,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
@@ -209,7 +208,7 @@ private[spark] class TaskSchedulerImpl(
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, clock)
+    new TaskSetManager(this, taskSet, maxTaskFailures)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {

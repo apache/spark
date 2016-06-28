@@ -61,15 +61,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   def setupScheduler(confs: (String, String)*): TaskSchedulerImpl = {
-    setupScheduler(new SystemClock, confs: _*)
-  }
-
-  def setupScheduler(clock: Clock, confs: (String, String)*): TaskSchedulerImpl = {
     sc = new SparkContext("local", "TaskSchedulerImplSuite")
     confs.foreach { case (k, v) =>
       sc.conf.set(k, v)
     }
-    taskScheduler = new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4), clock)
+    taskScheduler = new TaskSchedulerImpl(sc)
     taskScheduler.initialize(new FakeSchedulerBackend)
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     dagScheduler = new DAGScheduler(sc, taskScheduler) {
@@ -342,12 +338,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // executor.  But if those tasks fail, we should still realize there is another executor
     // available and not bail on the job
 
-    val clock = new ManualClock()
     val taskScheduler = setupScheduler(
-      clock,
       // set this to something much longer than the test duration
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-      "spark.locality.wait" -> "10ms"
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
     )
 
     val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
