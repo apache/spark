@@ -37,7 +37,7 @@ from pyspark.sql.functions import split
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: network_wordcount.py <hostname> <port>", file=sys.stderr)
+        print("Usage: structured_network_wordcount.py <hostname> <port>", file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]
