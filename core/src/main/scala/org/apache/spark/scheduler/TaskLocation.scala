@@ -73,11 +73,8 @@ private[spark] object TaskLocation {
       if (str.startsWith(executorLocationTag)) {
         val hostAndExecutorId = str.stripPrefix(executorLocationTag)
         val splits = hostAndExecutorId.split("_", 2)
-        if (splits.length != 2) {
-          throw new IllegalArgumentException("Illegal executor location format: " + str)
-        }
-        val host = splits(0)
-        val executorId = splits(1)
+        require(splits.length == 2, "Illegal executor location format: " + str)
+        val Array(host, executorId) = splits
         new ExecutorCacheTaskLocation(host, executorId)
       } else {
         new HostTaskLocation(str)
