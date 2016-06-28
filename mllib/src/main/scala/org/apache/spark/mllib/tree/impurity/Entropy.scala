@@ -40,19 +40,7 @@ object Entropy extends Impurity {
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
-   * @return information value, or 0 if totalCount = 0    var leftCount = 0.0
-    var totalCount = 0.0
-    var i = 0
-    while (i < statsSize) {
-      leftCount += allStats(leftChildOffset + i)
-      totalCount += allStats(parentOffset + i)
-    }
-    val rightCount = totalCount - leftCount
-
-    if ((leftCount < minInstancesPerNode) ||
-      (rightCount < minInstancesPerNode)) {
-      return Double.MinValue
-    }
+   * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
   @DeveloperApi
