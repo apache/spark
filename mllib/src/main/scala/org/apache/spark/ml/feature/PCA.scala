@@ -30,6 +30,7 @@ import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, DenseVector
   Matrices => OldMatrices, Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -215,14 +216,16 @@ object PCAModel extends MLReadable[PCAModel] {
       }
 
       val dataPath = new Path(path, "data").toString
+      val data = sparkSession.read.parquet(dataPath)
       val model = if (hasExplainedVariance) {
+        val vectorConverted = MLUtils.convertVectorColumnsToML(data, "explainedVariance")
         val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
-          sparkSession.read.parquet(dataPath)
+          MLUtils.convertMatrixColumnsToML(vectorConverted, "pc")
             .select("pc", "explainedVariance")
             .head()
         new PCAModel(metadata.uid, pc, explainedVariance)
       } else {
-        val Row(pc: DenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
+        val Row(pc: DenseMatrix) = MLUtils.convertMatrixColumnsToML(data, "pc").select("pc").head()
         new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
       }
       DefaultParamsReader.getAndSetParams(model, metadata)
