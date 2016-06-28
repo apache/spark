@@ -2383,14 +2383,14 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
+   * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
    * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
-   * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
+   * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
    * @group basic
    * @since 1.6.0
    */
