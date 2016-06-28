@@ -30,12 +30,22 @@ import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 /**
- * BlacklistTracker is designed to track problematic executors and nodes. It belongs to
- * SparkContext as an centralized and unified collection for all tasks with same SparkContext.
- * So that a new TaskSet could be benefit from previous experiences of other TaskSets.
+ * BlacklistTracker is designed to track problematic executors and nodes.  It supports blacklisting
+ * specific (executor, task) pairs within a stage, blacklisting entire executors and nodes for a
+ * stage, and blacklisting executors and nodes across an entire application (with a periodic
+ * expiry).
  *
- * Once task finished, the callback method in TaskSetManager should update
- * executorIdToFailureStatus Map.
+ * The tracker needs to deal with a variety of workloads, eg.: bad user code, which may lead to many
+ * task failures, but that should not count against individual executors; many small stages, which
+ * may prevent a bad executor for having many failures within one stage, but still many failures
+ * over the entire application; "flaky" executors, that don't fail every task, but are still
+ * faulty; etc.
+ *
+ * THREADING: All public methods in this class are thread-safe, simply by being synchronized on
+ * this.  Most access will occur from within TaskSchedulerImpl, and will already have a lock on
+ * the taskScheduler.  However, it will also be accessed by the YarnSchedulerBackend, to determine
+ * the set of currently blacklisted nodes, and by an internal thread to periodically remove
+ * nodes and executors from the blacklist.
  */
 private[spark] class BlacklistTracker(
     conf: SparkConf,
@@ -92,7 +102,6 @@ private[spark] class BlacklistTracker(
 //    }
   }
 
-  // The actual implementation is delegated to strategy
   private[scheduler] def expireExecutorsInBlackList(): Unit = synchronized {
     // TODO do we need to re-introduce strategy here?
     val maxTime = clock.getTimeMillis() - EXECUTOR_RECOVERY_MILLIS
@@ -106,8 +115,6 @@ private[spark] class BlacklistTracker(
       logInfo(s"Removing nodes $nodesToClear from blacklist during periodic recovery")
       nodesToClear.foreach { node => nodeIdToBlacklistTime.remove(node) }
     }
-
-
   }
 
   def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit = synchronized {
@@ -148,7 +155,7 @@ private[spark] class BlacklistTracker(
     stageIdToBlacklistedNodes.remove(stageId)
   }
 
-  def taskSetFailed(stageId: Int): Unit = {
+  def taskSetFailed(stageId: Int): Unit = synchronized {
     // just throw away all the info for the failures in this taskSet -- assume the executors were
     // fine, the failures were just b/c the taskSet itself was bad (eg., bad user code)
     stageIdToExecToFailures.remove(stageId)
@@ -217,7 +224,7 @@ private[spark] class BlacklistTracker(
   def isExecutorBlacklisted(
       executorId: String,
       stageId: Int,
-      partition: Int) : Boolean = {
+      partition: Int) : Boolean = synchronized {
     // note that this is NOT only called from the dag scheduler event loop
     stageIdToExecToFailures.get(stageId) match {
       case Some(stageFailures) =>
@@ -232,10 +239,9 @@ private[spark] class BlacklistTracker(
         // creation on this very commonly called method
         false
     }
-
   }
 
-  def removeExecutor(executorId: String): Unit = {
+  def removeExecutor(executorId: String): Unit = synchronized {
     executorIdToBlacklistTime -= executorId
     executorIdToFailureCount -= executorId
     stageIdToExecToFailures.values.foreach { execFailureOneStage =>

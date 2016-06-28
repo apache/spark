@@ -648,6 +648,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
     }
+    blacklistTracker.removeExecutor(executorId)
   }
 
   def executorAdded(execId: String, host: String) {
