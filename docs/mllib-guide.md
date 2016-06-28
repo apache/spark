@@ -122,7 +122,7 @@ Deprecations:
 * [SPARK-14900](https://issues.apache.org/jira/browse/SPARK-14900):
  In `spark.mllib.evaluation.MulticlassMetrics`, the parameters `precision`, `recall` and `fMeasure` have been deprecated in favor of `accuracy`.
 * [SPARK-15644](https://issues.apache.org/jira/browse/SPARK-15644):
- In `spark.ml.util.BaseReadWrite`, the `context` method has been deprecated in favor of `session`.
+ In `spark.ml.util.MLReader` and `spark.ml.util.MLWriter`, the `context` method has been deprecated in favor of `session`.
 * In `spark.ml.feature.ChiSqSelectorModel`, the `setLabelCol` method has been deprecated since it was not used by `ChiSqSelectorModel`.
 
 Changes of behavior:
