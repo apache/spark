@@ -138,13 +138,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  /**
-    * Returns a qualified path constructed by means of Hadoop Path and FileSystem.
-    * Copy-paste from SessionCatalog.scala
-    * @param path path
-    * @return qualified path
-    */
   private def makeQualifiedPath(path: String): Path = {
+    // copy-paste from SessionCatalog
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
     fs.makeQualified(hadoopPath)
