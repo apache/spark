@@ -304,7 +304,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.kmeans since 2.0.0
-#' @seealso \link{read.ml}, \link{write.ml}
+#' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
             formula <- paste(deparse(formula), collapse = "")
