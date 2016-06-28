@@ -464,7 +464,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   }
 
   test("SPARK-16106 locality levels updated if executor added to existing host") {
-    // val taskScheduler = setupScheduler("spark.locality.wait" -> "0s")
     val taskScheduler = setupScheduler()
 
     taskScheduler.submitTasks(FakeTask.createTaskSet(2, 0, 0,
@@ -484,7 +483,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(taskScheduler.getExecutorsAliveOnHost("host0") === Some(Set("executor0")))
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1")))
 
-    // suppose that now executor2 is added, we should realize that we can run process-local tasks.
+    // when executor2 is added, we should realize that we can run process-local tasks.
     // And we should know its alive on the host.
     val secondTaskDescs = taskScheduler.resourceOffers(
       Seq(new WorkerOffer("executor2", "host0", 1))).flatten

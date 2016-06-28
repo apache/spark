@@ -363,6 +363,13 @@ class SQLTests(ReusedPySparkTestCase):
             .select(my_add(col("k"), col("s")).alias("t"))
         self.assertEqual(sel.collect(), [Row(t=4), Row(t=3)])
 
+    def test_udf_in_generate(self):
+        from pyspark.sql.functions import udf, explode
+        df = self.spark.range(5)
+        f = udf(lambda x: list(range(x)), ArrayType(LongType()))
+        row = df.select(explode(f(*df))).groupBy().sum().first()
+        self.assertEqual(row[0], 10)
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
@@ -1502,7 +1509,17 @@ class SQLTests(ReusedPySparkTestCase):
         spark.sql("CREATE DATABASE some_db")
         functions = dict((f.name, f) for f in spark.catalog.listFunctions())
         functionsDefault = dict((f.name, f) for f in spark.catalog.listFunctions("default"))
-        self.assertEquals(len(functions), 0)
+        self.assertTrue(len(functions) > 200)
+        self.assertTrue("+" in functions)
+        self.assertTrue("like" in functions)
+        self.assertTrue("month" in functions)
+        self.assertTrue("to_unix_timestamp" in functions)
+        self.assertTrue("current_database" in functions)
+        self.assertEquals(functions["+"], Function(
+            name="+",
+            description=None,
+            className="org.apache.spark.sql.catalyst.expressions.Add",
+            isTemporary=True))
         self.assertEquals(functions, functionsDefault)
         spark.catalog.registerFunction("temp_func", lambda x: str(x))
         spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
