@@ -895,7 +895,7 @@ object CodeGenerator extends Logging {
    * Records the generated class and method bytecode sizes by inspecting janino private fields.
    */
   private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
-    // First retrieve the generated classes
+    // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
       resultField.setAccessible(true)
