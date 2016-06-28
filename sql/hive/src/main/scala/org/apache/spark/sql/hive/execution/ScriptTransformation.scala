@@ -67,6 +67,14 @@ case class ScriptTransformation(
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd.asJava)
 
+      // for compatibility with hive
+      // if the script is a python/bash/... file, we should make it executable
+      if (new File(script).exists) {
+        new File(script).setExecutable(true)
+        val env = builder.environment()
+        env.put("PATH", env.get("PATH") + ":.")
+      }
+
       val proc = builder.start()
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
