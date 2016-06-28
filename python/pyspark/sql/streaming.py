@@ -28,8 +28,7 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.readwriter import OptionUtils
 from pyspark.sql.types import *
 
-__all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter",
-           "Trigger", "ProcessingTime"]
+__all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 
 
 class StreamingQuery(object):
