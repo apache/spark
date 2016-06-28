@@ -22,11 +22,11 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
+import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
-import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
@@ -45,18 +45,19 @@ private[hive] object IsolatedClientLoader extends Logging {
       hiveMetastoreVersion: String,
       hadoopVersion: String,
       sparkConf: SparkConf,
-      hadoopConf: Configuration,
+      sharesHadoopClasses: Boolean = true,
+      hadoopConf: Map[String, String],
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
-    // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
-    // with the given version, we will use Hadoop 2.4.0 and then will not share Hadoop classes.
-    var sharesHadoopClasses = true
+    var newSharesHadoopClasses = sharesHadoopClasses
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
+      // If we cannot resolve the Hadoop artifact with the given version, we will use Hadoop 2.4.0
+      // and then will not share Hadoop classes.
       val (downloadedFiles, actualHadoopVersion) =
         try {
           (downloadVersion(resolvedVersion, hadoopVersion, ivyPath), hadoopVersion)
@@ -72,7 +73,7 @@ private[hive] object IsolatedClientLoader extends Logging {
               "Hadoop classes will not be shared between Spark and Hive metastore client. " +
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
-            sharesHadoopClasses = false
+            newSharesHadoopClasses = false
             (downloadVersion(resolvedVersion, "2.4.0", ivyPath), "2.4.0")
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
@@ -85,7 +86,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       execJars = files,
       hadoopConf = hadoopConf,
       config = config,
-      sharesHadoopClasses = sharesHadoopClasses,
+      sharesHadoopClasses = newSharesHadoopClasses,
       sharedPrefixes = sharedPrefixes,
       barrierPrefixes = barrierPrefixes)
   }
@@ -154,7 +155,7 @@ private[hive] object IsolatedClientLoader extends Logging {
 private[hive] class IsolatedClientLoader(
     val version: HiveVersion,
     val sparkConf: SparkConf,
-    val hadoopConf: Configuration,
+    val hadoopConf: Map[String, String],
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,

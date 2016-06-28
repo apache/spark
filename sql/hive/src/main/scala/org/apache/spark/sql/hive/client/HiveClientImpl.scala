@@ -65,8 +65,9 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  *
  * @param version the version of hive used when pick function calls that are not compatible.
  * @param sparkConf all configuration options set in SparkConf.
- * @param hadoopConf the base Configuration object used by the HiveConf created inside
- *                   this HiveClientImpl.
+ * @param hadoopConf the map containing all entries of the base Hadoop Configuration.
+ *                   We cannot pass in Hadoop Configuration to here because Hadoop classes
+ *                  can be loaded by the IsolatedClientLoader.
  * @param extraConfig a collection of configuration options that will be added to the
  *                hive conf before opening the hive client.
  * @param initClassLoader the classloader used when creating the `state` field of
@@ -75,7 +76,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 private[hive] class HiveClientImpl(
     override val version: HiveVersion,
     sparkConf: SparkConf,
-    hadoopConf: Configuration,
+    hadoopConf: Map[String, String],
     extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
@@ -129,6 +130,17 @@ private[hive] class HiveClientImpl(
       found
     }
 
+    def setToHiveConf(hiveConf: HiveConf, confs: Map[String, String]): Unit = {
+      confs.foreach { case (k, v) =>
+        if (k.toLowerCase.contains("password")) {
+          logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
+        } else {
+          logDebug(s"Applying Spark config to Hive Conf: $k=$v")
+        }
+        hiveConf.set(k, v)
+      }
+    }
+
     val ret = try {
       // originState will be created if not exists, will never be null
       val originalState = SessionState.get()
@@ -139,31 +151,19 @@ private[hive] class HiveClientImpl(
         // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
         originalState
       } else {
-        val hiveConf = new HiveConf(hadoopConf, classOf[SessionState])
+        val hiveConf = new HiveConf(classOf[SessionState])
         // HiveConf is a Hadoop Configuration, which has a field of classLoader and
         // the initial value will be the current thread's context class loader
         // (i.e. initClassLoader at here).
         // We call initialConf.setClassLoader(initClassLoader) at here to make
         // this action explicit.
         hiveConf.setClassLoader(initClassLoader)
-        // First, we set all spark confs to this hiveConf.
-        sparkConf.getAll.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
-            logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
-          } else {
-            logDebug(s"Applying Spark config to Hive Conf: $k=$v")
-          }
-          hiveConf.set(k, v)
-        }
-        // Second, we set all entries in config to this hiveConf.
-        extraConfig.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
-            logDebug(s"Applying extra config to HiveConf: $k=xxx")
-          } else {
-            logDebug(s"Applying extra config to HiveConf: $k=$v")
-          }
-          hiveConf.set(k, v)
-        }
+        // First, we set all Hadoop confs to this hiveConf.
+        setToHiveConf(hiveConf, hadoopConf)
+        // Second, we set all spark confs to this hiveConf.
+        setToHiveConf(hiveConf, sparkConf.getAll.toMap)
+        // Third, we set all entries in config to this hiveConf.
+        setToHiveConf(hiveConf, extraConfig)
         val state = new SessionState(hiveConf)
         if (clientLoader.cachedHive != null) {
           Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
