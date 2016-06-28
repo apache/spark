@@ -266,9 +266,10 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             return(list(apriori = apriori, tables = tables))
           })
 
-#' K-Means Model
+#' K-Means Clustering Model
 #'
-#' Fits a k-means model, similarly to R's kmeans().
+#' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
+#' Users can print, make predictions on the produced model and save the model to the input path.
 #'
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -302,7 +303,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.kmeans since 2.0.0
-#' @seealso \link{kmeans}, \link{read.ml}
+#' @seealso \link{read.ml}, \link{write.ml}
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 20, initMode = c("k-means||", "random")) {
             formula <- paste(deparse(formula), collapse = "")
@@ -340,9 +341,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
             }
           })
 
-#' Get the summary of a k-means model
-#'
-#' Returns the summary of a k-means model produced by spark.kmeans(), similarly to R's summary().
+#  Get the summary of a k-means model
 #'
 #' @param object A fitted k-means model
 #' @return \code{summary} returns the model's coefficients, size and cluster
@@ -369,9 +368,7 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
-#' Predicted values based on a k-means model
-#'
-#' Makes predictions from a k-means model or a model produced by spark.kmeans().
+#  Predicted values based on a k-means model
 #'
 #' @return \code{predict} returns the predicted values based on a k-means model
 #' @rdname spark.kmeans
@@ -491,9 +488,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
             invisible(callJMethod(writer, "save", path))
           })
 
-#' Save fitted MLlib model to the input path
-#'
-#' Save the k-means model to the input path.
+#  Save fitted MLlib model to the input path
 #'
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
