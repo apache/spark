@@ -126,8 +126,9 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       Await.ready(jobFuture, duration)
-      assert(failure.getMessage.contains("Aborting TaskSet 0.0 because it has a task which " +
-        "cannot be scheduled on any executor due to blacklists"))
+      val pattern = ("Aborting TaskSet 0.0 because Task .* " +
+        "cannot be scheduled on any executor due to blacklists").r
+      assert(pattern.findFirstIn(failure.getMessage).isDefined)
     }
     assertDataStructuresEmpty(noFailure = false)
   }
