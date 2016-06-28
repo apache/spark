@@ -77,3 +77,4 @@ spark-warehouse/
 # For R session data
 .RData
 .RHistory
+.Rhistory

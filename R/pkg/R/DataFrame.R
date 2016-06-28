@@ -176,8 +176,8 @@ setMethod("isLocal",
 #' @param x A SparkDataFrame
 #' @param numRows The number of rows to print. Defaults to 20.
 #' @param truncate Whether truncate long strings. If true, strings more than 20 characters will be
-#' truncated and all cells will be aligned right
-#'
+#'    truncated. However, if set greater than zero, truncates strings longer than `truncate`
+#'    characters and all cells will be aligned right.
 #' @family SparkDataFrame functions
 #' @rdname showDF
 #' @name showDF
@@ -193,7 +193,12 @@ setMethod("isLocal",
 setMethod("showDF",
           signature(x = "SparkDataFrame"),
           function(x, numRows = 20, truncate = TRUE) {
-            s <- callJMethod(x@sdf, "showString", numToInt(numRows), truncate)
+            if (is.logical(truncate) && truncate) {
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(20))
+            } else {
+              truncate2 <- as.numeric(truncate)
+              s <- callJMethod(x@sdf, "showString", numToInt(numRows), numToInt(truncate2))
+            }
             cat(s)
           })
 

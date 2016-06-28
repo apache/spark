@@ -232,16 +232,18 @@ class Dataset[T] private[sql](
    * Compose the string representing rows for output
    *
    * @param _numRows Number of rows to show
-   * @param truncate Whether truncate long strings and align cells right
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
    */
-  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  private[sql] def showString(_numRows: Int, truncate: Int = 20): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
     // For array values, replace Seq and Array with square brackets
-    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    // For cells that are beyond `truncate` characters, replace it with the
+    // first `truncate-3` and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
@@ -251,7 +253,13 @@ class Dataset[T] private[sql](
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
           case _ => cell.toString
         }
-        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
+        if (truncate > 0 && str.length > truncate) {
+          // do not show ellipses for strings shorter than 4 characters.
+          if (truncate < 4) str.substring(0, truncate)
+          else str.substring(0, truncate - 3) + "..."
+        } else {
+          str
+        }
       }: Seq[String]
     }
 
@@ -273,7 +281,7 @@ class Dataset[T] private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      if (truncate) {
+      if (truncate > 0) {
         StringUtils.leftPad(cell, colWidths(i))
       } else {
         StringUtils.rightPad(cell, colWidths(i))
@@ -285,7 +293,7 @@ class Dataset[T] private[sql](
     // data
     rows.tail.map {
       _.zipWithIndex.map { case (cell, i) =>
-        if (truncate) {
+        if (truncate > 0) {
           StringUtils.leftPad(cell.toString, colWidths(i))
         } else {
           StringUtils.rightPad(cell.toString, colWidths(i))
@@ -523,7 +531,32 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   // scalastyle:off println
-  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  def show(numRows: Int, truncate: Boolean): Unit = if (truncate) {
+    println(showString(numRows, truncate = 20))
+  } else {
+    println(showString(numRows, truncate = 0))
+  }
+  // scalastyle:on println
+
+  /**
+   * Displays the Dataset in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+ *
+   * @param numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                    all cells will be aligned right.
+   * @group action
+   * @since 1.6.0
+   */
+  // scalastyle:off println
+  def show(numRows: Int, truncate: Int): Unit = println(showString(numRows, truncate))
   // scalastyle:on println
 
   /**
