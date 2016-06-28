@@ -227,5 +227,6 @@ private[sql] class HiveSessionCatalog(
   // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
   // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
   // xpath_short, and xpath_string.
-  private val hiveFunctions = Seq("percentile", "percentile_approx")
+  private val hiveFunctions = Seq(
+    "elt", "hash", "java_method", "parse_url", "percentile", "percentile_approx", "stack")
 }

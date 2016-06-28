@@ -559,6 +559,9 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
       |order by p_mfgr,p_name, p_size, sdev, sdev_pop, uniq_data, var, cor, covarp
     """.stripMargin, reset = false)
   */
+
+  /*
+  [SPARK-16248][SQL] Whitelist the list of Hive fallback functions
   createQueryTest("windowing.q -- 21. testDISTs",
     """
       |select  p_mfgr,p_name, p_size,
@@ -569,6 +572,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
       |window w1 as (distribute by p_mfgr sort by p_mfgr, p_name
       |             rows between 2 preceding and 2 following)
     """.stripMargin, reset = false)
+  */
 
   createQueryTest("windowing.q -- 24. testLateralViews",
     """
