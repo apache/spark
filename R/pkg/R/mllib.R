@@ -601,8 +601,8 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 # spark.survreg, similarly to R package survival's predict.
 
 #' @param newData A SparkDataFrame for testing
-#' @return \code{predict} returns a SparkDataFrame containing predicted values (median of
-#' survival time)
+#' @return \code{predict} returns a SparkDataFrame containing predicted values
+#' on the original scale of the data (mean predicted value at scale = 1.0)
 #' @rdname spark.survreg
 #' @export
 #' @note predict(AFTSurvivalRegressionModel) since 2.0.0
