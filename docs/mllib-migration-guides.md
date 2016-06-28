@@ -7,6 +7,33 @@ description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 
 The migration guide for the current Spark version is kept on the [MLlib Programming Guide main page](mllib-guide.html#migration-guide).
 
+## From 1.5 to 1.6
+
+There are no breaking API changes in the `spark.mllib` or `spark.ml` packages, but there are
+deprecations and changes of behavior.
+
+Deprecations:
+
+* [SPARK-11358](https://issues.apache.org/jira/browse/SPARK-11358):
+ In `spark.mllib.clustering.KMeans`, the `runs` parameter has been deprecated.
+* [SPARK-10592](https://issues.apache.org/jira/browse/SPARK-10592):
+ In `spark.ml.classification.LogisticRegressionModel` and
+ `spark.ml.regression.LinearRegressionModel`, the `weights` field has been deprecated in favor of
+ the new name `coefficients`.  This helps disambiguate from instance (row) "weights" given to
+ algorithms.
+
+Changes of behavior:
+
+* [SPARK-7770](https://issues.apache.org/jira/browse/SPARK-7770):
+ `spark.mllib.tree.GradientBoostedTrees`: `validationTol` has changed semantics in 1.6.
+ Previously, it was a threshold for absolute change in error. Now, it resembles the behavior of
+ `GradientDescent`'s `convergenceTol`: For large errors, it uses relative error (relative to the
+ previous error); for small errors (`< 0.01`), it uses absolute error.
+* [SPARK-11069](https://issues.apache.org/jira/browse/SPARK-11069):
+ `spark.ml.feature.RegexTokenizer`: Previously, it did not convert strings to lowercase before
+ tokenizing. Now, it converts to lowercase by default, with an option not to. This matches the
+ behavior of the simpler `Tokenizer` transformer.
+
 ## From 1.4 to 1.5
 
 In the `spark.mllib` package, there are no breaking API changes but several behavior changes:
