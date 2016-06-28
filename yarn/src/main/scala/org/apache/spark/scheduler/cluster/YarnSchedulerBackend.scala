@@ -126,7 +126,7 @@ private[spark] abstract class YarnSchedulerBackend(
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
 
-    val nodeBlacklist: Set[String] = scheduler.sc.blacklistTracker.nodeBlacklist()
+    val nodeBlacklist: Set[String] = scheduler.sc.blacklistTracker.nodeBlacklist().toSet
 
     yarnSchedulerEndpointRef.askWithRetry[Boolean](
       RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount, nodeBlacklist))
