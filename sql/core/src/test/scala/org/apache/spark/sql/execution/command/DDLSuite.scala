@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -1368,6 +1368,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("select a, b, c from partitionedTable"),
         Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
       )
+    }
+  }
+
+  test("show functions") {
+    withUserDefinedFunction("add_one" -> true) {
+      val numFunctions = FunctionRegistry.functionSet.size.toLong
+      assert(sql("show functions").count() === numFunctions)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions)
+      assert(sql("show user functions").count() === 0L)
+      spark.udf.register("add_one", (x: Long) => x + 1)
+      assert(sql("show functions").count() === numFunctions + 1L)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions + 1L)
+      assert(sql("show user functions").count() === 1L)
     }
   }
 }
