@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.streaming.ContinuousQuery
+import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -179,7 +179,7 @@ class Dataset[T] private[sql](
       case _ => false
     }
 
-    queryExecution.logical match {
+    queryExecution.analyzed match {
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) =>
@@ -232,16 +232,18 @@ class Dataset[T] private[sql](
    * Compose the string representing rows for output
    *
    * @param _numRows Number of rows to show
-   * @param truncate Whether truncate long strings and align cells right
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
    */
-  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  private[sql] def showString(_numRows: Int, truncate: Int = 20): String = {
     val numRows = _numRows.max(0)
     val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
     // For array values, replace Seq and Array with square brackets
-    // For cells that are beyond 20 characters, replace it with the first 17 and "..."
+    // For cells that are beyond `truncate` characters, replace it with the
+    // first `truncate-3` and "..."
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
@@ -251,7 +253,13 @@ class Dataset[T] private[sql](
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
           case _ => cell.toString
         }
-        if (truncate && str.length > 20) str.substring(0, 17) + "..." else str
+        if (truncate > 0 && str.length > truncate) {
+          // do not show ellipses for strings shorter than 4 characters.
+          if (truncate < 4) str.substring(0, truncate)
+          else str.substring(0, truncate - 3) + "..."
+        } else {
+          str
+        }
       }: Seq[String]
     }
 
@@ -273,7 +281,7 @@ class Dataset[T] private[sql](
 
     // column names
     rows.head.zipWithIndex.map { case (cell, i) =>
-      if (truncate) {
+      if (truncate > 0) {
         StringUtils.leftPad(cell, colWidths(i))
       } else {
         StringUtils.rightPad(cell, colWidths(i))
@@ -285,7 +293,7 @@ class Dataset[T] private[sql](
     // data
     rows.tail.map {
       _.zipWithIndex.map { case (cell, i) =>
-        if (truncate) {
+        if (truncate > 0) {
           StringUtils.leftPad(cell.toString, colWidths(i))
         } else {
           StringUtils.rightPad(cell.toString, colWidths(i))
@@ -455,7 +463,7 @@ class Dataset[T] private[sql](
   /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
-   * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
+   * must be executed as a [[StreamingQuery]] using the `startStream()` method in
    * [[DataFrameWriter]]. Methods that return a single answer, e.g. `count()` or
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
@@ -523,7 +531,32 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   // scalastyle:off println
-  def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
+  def show(numRows: Int, truncate: Boolean): Unit = if (truncate) {
+    println(showString(numRows, truncate = 20))
+  } else {
+    println(showString(numRows, truncate = 0))
+  }
+  // scalastyle:on println
+
+  /**
+   * Displays the Dataset in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+ *
+   * @param numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                    all cells will be aligned right.
+   * @group action
+   * @since 1.6.0
+   */
+  // scalastyle:off println
+  def show(numRows: Int, truncate: Int): Unit = println(showString(numRows, truncate))
   // scalastyle:on println
 
   /**
@@ -1812,7 +1845,13 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
-    val groupCols = colNames.map(resolve)
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    val groupCols = colNames.map { colName =>
+      allColumns.find(col => resolver(col.name, colName)).getOrElse(
+        throw new AnalysisException(
+          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
+    }
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
       if (groupColExprIds.contains(attr.exprId)) {
@@ -1902,7 +1941,8 @@ class Dataset[T] private[sql](
     // All columns are string type
     val schema = StructType(
       StructField("summary", StringType) :: outputCols.map(StructField(_, StringType))).toAttributes
-    LocalRelation.fromExternalRows(schema, ret)
+    // `toArray` forces materialization to make the seq serializable
+    LocalRelation.fromExternalRows(schema, ret.toArray.toSeq)
   }
 
   /**
@@ -2316,7 +2356,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.tryUncacheQuery(this, blocking)
+    sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
     this
   }
 
@@ -2407,13 +2447,36 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Interface for saving the content of the Dataset out into external storage or streams.
+   * Interface for saving the content of the non-streaming Dataset out into external storage.
    *
    * @group basic
    * @since 1.6.0
    */
   @Experimental
-  def write: DataFrameWriter[T] = new DataFrameWriter[T](this)
+  def write: DataFrameWriter[T] = {
+    if (isStreaming) {
+      logicalPlan.failAnalysis(
+        "'write' can not be called on streaming Dataset/DataFrame")
+    }
+    new DataFrameWriter[T](this)
+  }
+
+  /**
+   * :: Experimental ::
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @Experimental
+  def writeStream: DataStreamWriter[T] = {
+    if (!isStreaming) {
+      logicalPlan.failAnalysis(
+        "'writeStream' can be called only on streaming Dataset/DataFrame")
+    }
+    new DataStreamWriter[T](this)
+  }
+
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.

@@ -130,6 +130,22 @@ class CodegenContext {
     mutableStates += ((javaType, variableName, initCode))
   }
 
+  /**
+   * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
+   * that the variable is safely stored, which is important for (potentially) byte array backed
+   * data types like: UTF8String, ArrayData, MapData & InternalRow.
+   */
+  def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
+    val value = freshName(variableName)
+    addMutableState(javaType(dataType), value, "")
+    val code = dataType match {
+      case StringType => s"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
+      case _ => s"$value = $initCode;"
+    }
+    ExprCode(code, "false", value)
+  }
+
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.

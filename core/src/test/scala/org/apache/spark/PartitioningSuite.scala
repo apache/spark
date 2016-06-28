@@ -244,6 +244,10 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(abs(6.0/2 - rdd.mean) < 0.01)
     assert(abs(1.0 - rdd.variance) < 0.01)
     assert(abs(1.0 - rdd.stdev) < 0.01)
+    assert(abs(rdd.variance - rdd.popVariance) < 1e-14)
+    assert(abs(rdd.stdev - rdd.popStdev) < 1e-14)
+    assert(abs(2.0 - rdd.sampleVariance) < 1e-14)
+    assert(abs(Math.sqrt(2.0) - rdd.sampleStdev) < 1e-14)
     assert(stats.max === 4.0)
     assert(stats.min === 2.0)
 

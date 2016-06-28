@@ -61,7 +61,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
   @VisibleForTesting
-  static final int INITIAL_SORT_BUFFER_SIZE = 4096;
+  static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
 
   private final BlockManager blockManager;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
@@ -74,6 +74,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
+  private final int initialSortBufferSize;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
@@ -122,6 +123,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
+    this.initialSortBufferSize = sparkConf.getInt("spark.shuffle.sort.initialBufferSize",
+                                                  DEFAULT_INITIAL_SORT_BUFFER_SIZE);
     open();
   }
 
@@ -187,7 +190,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       memoryManager,
       blockManager,
       taskContext,
-      INITIAL_SORT_BUFFER_SIZE,
+      initialSortBufferSize,
       partitioner.numPartitions(),
       sparkConf,
       writeMetrics);

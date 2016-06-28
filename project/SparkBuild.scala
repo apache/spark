@@ -458,7 +458,7 @@ object Core {
     resourceGenerators in Compile += Def.task {
       val buildScript = baseDirectory.value + "/../build/spark-build-info"
       val targetDir = baseDirectory.value + "/target/extra-resources/"
-      val command =  buildScript + " " + targetDir + " " + version.value
+      val command = Seq("bash", buildScript, targetDir, version.value)
       Process(command).!!
       val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
       Seq(propsFile)
@@ -684,11 +684,6 @@ object Unidoc {
   import sbtunidoc.Plugin._
   import UnidocKeys._
 
-  // for easier specification of JavaDoc package groups
-  private def packageList(names: String*): String = {
-    names.map(s => "org.apache.spark." + s).mkString(":")
-  }
-
   private def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
@@ -725,27 +720,13 @@ object Unidoc {
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
       ignoreUndocumentedPackages((unidocAllSources in (JavaUnidoc, unidoc)).value)
+        .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
     // Javadoc options: create a window title, and group key packages on index page
     javacOptions in doc := Seq(
       "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
       "-public",
-      "-group", "Core Java API", packageList("api.java", "api.java.function"),
-      "-group", "Spark Streaming", packageList(
-        "streaming.api.java", "streaming.flume", "streaming.kafka", "streaming.kinesis"
-      ),
-      "-group", "MLlib", packageList(
-        "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
-        "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
-        "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
-        "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
-        "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
-        "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
-        "ml", "ml.attribute", "ml.classification", "ml.clustering", "ml.evaluation", "ml.feature",
-        "ml.param", "ml.recommendation", "ml.regression", "ml.tuning"
-      ),
-      "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
     ),
 
@@ -753,7 +734,8 @@ object Unidoc {
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
-      "-groups" // Group similar methods together based on the @group annotation.
+      "-groups", // Group similar methods together based on the @group annotation.
+      "-skip-packages", "org.apache.hadoop"
     ) ++ (
       // Add links to sources when generating Scaladoc for a non-snapshot release
       if (!isSnapshot.value) {

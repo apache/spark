@@ -22,6 +22,7 @@ import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
@@ -86,7 +87,8 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         recordComparator,
         prefixComparator,
-        /* initialSize */ 4096,
+        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
+                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
         pageSizeBytes,
         canUseRadixSort);
     } else {
@@ -131,7 +133,8 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         new KVComparator(ordering, keySchema.length()),
         prefixComparator,
-        /* initialSize */ 4096,
+        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
+                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
         pageSizeBytes,
         inMemSorter);
 

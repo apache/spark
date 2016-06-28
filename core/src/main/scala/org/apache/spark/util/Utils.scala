@@ -52,6 +52,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -2309,19 +2310,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return whether dynamic allocation is enabled in the given conf
-   * Dynamic allocation and explicitly setting the number of executors are inherently
-   * incompatible. In environments where dynamic allocation is turned on by default,
-   * the latter should override the former (SPARK-9092).
+   * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    val numExecutor = conf.getInt("spark.executor.instances", 0)
     val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
-    if (numExecutor != 0 && dynamicAllocationEnabled) {
-      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
-    }
-    numExecutor == 0 && dynamicAllocationEnabled &&
+    dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
+  }
+
+  /**
+   * Return the initial number of executors for dynamic allocation.
+   */
+  def getDynamicAllocationInitialExecutors(conf: SparkConf): Int = {
+    Seq(
+      conf.get(DYN_ALLOCATION_MIN_EXECUTORS),
+      conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS),
+      conf.get(EXECUTOR_INSTANCES).getOrElse(0)).max
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
@@ -2351,6 +2355,31 @@ private[spark] object Utils extends Logging {
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
+  }
+
+  /**
+   * Unions two comma-separated lists of files and filters out empty strings.
+   */
+  def unionFileLists(leftList: Option[String], rightList: Option[String]): Set[String] = {
+    var allFiles = Set[String]()
+    leftList.foreach { value => allFiles ++= value.split(",") }
+    rightList.foreach { value => allFiles ++= value.split(",") }
+    allFiles.filter { _.nonEmpty }
+  }
+
+  /**
+   * In YARN mode this method returns a union of the jar files pointed by "spark.jars" and the
+   * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
+   * only the "spark.jars" property.
+   */
+  def getUserJars(conf: SparkConf): Seq[String] = {
+    val sparkJars = conf.getOption("spark.jars")
+    if (conf.get("spark.master") == "yarn") {
+      val yarnJars = conf.getOption("spark.yarn.dist.jars")
+      unionFileLists(sparkJars, yarnJars).toSeq
+    } else {
+      sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    }
   }
 }
 

@@ -6,9 +6,15 @@ importFrom(methods, setGeneric, setMethod, setOldClass)
 #useDynLib(SparkR, stringHashCode)
 
 # S3 methods exported
+export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
+export("sparkR.session.stop")
+export("sparkR.conf")
 export("print.jobj")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
 
 # MLlib integration
 exportMethods("glm",
@@ -62,6 +68,7 @@ exportMethods("arrange",
               "filter",
               "first",
               "freqItems",
+              "gapply",
               "group_by",
               "groupBy",
               "head",
@@ -80,7 +87,9 @@ exportMethods("arrange",
               "orderBy",
               "persist",
               "printSchema",
+              "randomSplit",
               "rbind",
+              "registerTempTable",
               "rename",
               "repartition",
               "sample",
@@ -99,6 +108,7 @@ exportMethods("arrange",
               "summary",
               "take",
               "transform",
+              "union",
               "unionAll",
               "unique",
               "unpersist",
@@ -109,6 +119,7 @@ exportMethods("arrange",
               "write.df",
               "write.jdbc",
               "write.json",
+              "write.orc",
               "write.parquet",
               "write.text",
               "write.ml")
@@ -210,6 +221,7 @@ exportMethods("%in%",
               "mean",
               "min",
               "minute",
+              "monotonically_increasing_id",
               "month",
               "months_between",
               "n",
@@ -250,6 +262,7 @@ exportMethods("%in%",
               "skewness",
               "sort_array",
               "soundex",
+              "spark_partition_id",
               "stddev",
               "stddev_pop",
               "stddev_samp",
@@ -283,9 +296,7 @@ exportMethods("%in%",
 
 exportClasses("GroupedData")
 exportMethods("agg")
-
-export("sparkRSQL.init",
-       "sparkRHive.init")
+exportMethods("pivot")
 
 export("as.DataFrame",
        "cacheTable",
@@ -293,12 +304,14 @@ export("as.DataFrame",
        "createDataFrame",
        "createExternalTable",
        "dropTempTable",
+       "dropTempView",
        "jsonFile",
        "loadDF",
        "parquetFile",
        "read.df",
        "read.jdbc",
        "read.json",
+       "read.orc",
        "read.parquet",
        "read.text",
        "spark.lapply",

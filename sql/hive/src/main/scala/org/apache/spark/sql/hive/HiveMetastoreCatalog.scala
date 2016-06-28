@@ -457,49 +457,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           allowExisting)
     }
   }
-
-  /**
-   * Casts input data to correct data types according to table definition before inserting into
-   * that table.
-   */
-  object PreInsertionCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-      // Wait until children are resolved.
-      case p: LogicalPlan if !p.childrenResolved => p
-
-      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _, _) =>
-        castChildOutput(p, table, child)
-    }
-
-    def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan)
-      : LogicalPlan = {
-      val childOutputDataTypes = child.output.map(_.dataType)
-      val numDynamicPartitions = p.partition.values.count(_.isEmpty)
-      val tableOutputDataTypes =
-        (table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions))
-          .take(child.output.length).map(_.dataType)
-
-      if (childOutputDataTypes == tableOutputDataTypes) {
-        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
-      } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
-        childOutputDataTypes.zip(tableOutputDataTypes)
-          .forall { case (left, right) => left.sameType(right) }) {
-        // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
-        // use InsertIntoHiveTable instead of InsertIntoTable.
-        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
-      } else {
-        // Only do the casting when child output data types differ from table output data types.
-        val castedChildOutput = child.output.zip(table.output).map {
-          case (input, output) if input.dataType != output.dataType =>
-            Alias(Cast(input, output.dataType), input.name)()
-          case (input, _) => input
-        }
-
-        p.copy(child = logical.Project(castedChildOutput, child))
-      }
-    }
-  }
-
 }
 
 /**
@@ -544,7 +501,7 @@ private[hive] case class InsertIntoHiveTable(
     child: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean)
-  extends LogicalPlan {
+  extends LogicalPlan with Command {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty

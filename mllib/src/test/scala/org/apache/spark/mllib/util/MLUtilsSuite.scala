@@ -25,12 +25,14 @@ import scala.io.Source
 import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.io.Files
 
-import org.apache.spark.SparkException
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.util.Utils
 
 class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -244,5 +246,113 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(log1pExp(-13.8) ~== math.log1p(math.exp(-13.8)) absTol 1E-10)
     assert(log1pExp(-238423789.865) ~== math.log1p(math.exp(-238423789.865)) absTol 1E-10)
+  }
+
+  test("convertVectorColumnsToML") {
+    val x = Vectors.sparse(2, Array(1), Array(1.0))
+    val metadata = new MetadataBuilder().putLong("numFeatures", 2L).build()
+    val y = Vectors.dense(2.0, 3.0)
+    val z = Vectors.dense(4.0)
+    val p = (5.0, z)
+    val w = Vectors.dense(6.0).asML
+    val df = spark.createDataFrame(Seq(
+      (0, x, y, p, w)
+    )).toDF("id", "x", "y", "p", "w")
+      .withColumn("x", col("x"), metadata)
+    val newDF1 = convertVectorColumnsToML(df)
+    assert(newDF1.schema("x").metadata === metadata, "Metadata should be preserved.")
+    val new1 = newDF1.first()
+    assert(new1 === Row(0, x.asML, y.asML, Row(5.0, z), w))
+    val new2 = convertVectorColumnsToML(df, "x", "y").first()
+    assert(new2 === new1)
+    val new3 = convertVectorColumnsToML(df, "y", "w").first()
+    assert(new3 === Row(0, x, y.asML, Row(5.0, z), w))
+    intercept[IllegalArgumentException] {
+      convertVectorColumnsToML(df, "p")
+    }
+    intercept[IllegalArgumentException] {
+      convertVectorColumnsToML(df, "p._2")
+    }
+  }
+
+  test("convertVectorColumnsFromML") {
+    val x = Vectors.sparse(2, Array(1), Array(1.0)).asML
+    val metadata = new MetadataBuilder().putLong("numFeatures", 2L).build()
+    val y = Vectors.dense(2.0, 3.0).asML
+    val z = Vectors.dense(4.0).asML
+    val p = (5.0, z)
+    val w = Vectors.dense(6.0)
+    val df = spark.createDataFrame(Seq(
+      (0, x, y, p, w)
+    )).toDF("id", "x", "y", "p", "w")
+      .withColumn("x", col("x"), metadata)
+    val newDF1 = convertVectorColumnsFromML(df)
+    assert(newDF1.schema("x").metadata === metadata, "Metadata should be preserved.")
+    val new1 = newDF1.first()
+    assert(new1 === Row(0, Vectors.fromML(x), Vectors.fromML(y), Row(5.0, z), w))
+    val new2 = convertVectorColumnsFromML(df, "x", "y").first()
+    assert(new2 === new1)
+    val new3 = convertVectorColumnsFromML(df, "y", "w").first()
+    assert(new3 === Row(0, x, Vectors.fromML(y), Row(5.0, z), w))
+    intercept[IllegalArgumentException] {
+      convertVectorColumnsFromML(df, "p")
+    }
+    intercept[IllegalArgumentException] {
+      convertVectorColumnsFromML(df, "p._2")
+    }
+  }
+
+  test("convertMatrixColumnsToML") {
+    val x = Matrices.sparse(3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0))
+    val metadata = new MetadataBuilder().putLong("numFeatures", 2L).build()
+    val y = Matrices.dense(2, 1, Array(0.2, 1.3))
+    val z = Matrices.ones(1, 1)
+    val p = (5.0, z)
+    val w = Matrices.dense(1, 1, Array(4.5)).asML
+    val df = spark.createDataFrame(Seq(
+      (0, x, y, p, w)
+    )).toDF("id", "x", "y", "p", "w")
+      .withColumn("x", col("x"), metadata)
+    val newDF1 = convertMatrixColumnsToML(df)
+    assert(newDF1.schema("x").metadata === metadata, "Metadata should be preserved.")
+    val new1 = newDF1.first()
+    assert(new1 === Row(0, x.asML, y.asML, Row(5.0, z), w))
+    val new2 = convertMatrixColumnsToML(df, "x", "y").first()
+    assert(new2 === new1)
+    val new3 = convertMatrixColumnsToML(df, "y", "w").first()
+    assert(new3 === Row(0, x, y.asML, Row(5.0, z), w))
+    intercept[IllegalArgumentException] {
+      convertMatrixColumnsToML(df, "p")
+    }
+    intercept[IllegalArgumentException] {
+      convertMatrixColumnsToML(df, "p._2")
+    }
+  }
+
+  test("convertMatrixColumnsFromML") {
+    val x = Matrices.sparse(3, 2, Array(0, 2, 3), Array(0, 2, 1), Array(0.0, -1.2, 0.0)).asML
+    val metadata = new MetadataBuilder().putLong("numFeatures", 2L).build()
+    val y = Matrices.dense(2, 1, Array(0.2, 1.3)).asML
+    val z = Matrices.ones(1, 1).asML
+    val p = (5.0, z)
+    val w = Matrices.dense(1, 1, Array(4.5))
+    val df = spark.createDataFrame(Seq(
+      (0, x, y, p, w)
+    )).toDF("id", "x", "y", "p", "w")
+      .withColumn("x", col("x"), metadata)
+    val newDF1 = convertMatrixColumnsFromML(df)
+    assert(newDF1.schema("x").metadata === metadata, "Metadata should be preserved.")
+    val new1 = newDF1.first()
+    assert(new1 === Row(0, Matrices.fromML(x), Matrices.fromML(y), Row(5.0, z), w))
+    val new2 = convertMatrixColumnsFromML(df, "x", "y").first()
+    assert(new2 === new1)
+    val new3 = convertMatrixColumnsFromML(df, "y", "w").first()
+    assert(new3 === Row(0, x, Matrices.fromML(y), Row(5.0, z), w))
+    intercept[IllegalArgumentException] {
+      convertMatrixColumnsFromML(df, "p")
+    }
+    intercept[IllegalArgumentException] {
+      convertMatrixColumnsFromML(df, "p._2")
+    }
   }
 }

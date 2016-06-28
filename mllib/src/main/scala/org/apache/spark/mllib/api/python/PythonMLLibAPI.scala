@@ -1201,6 +1201,34 @@ private[python] class PythonMLLibAPI extends Serializable {
     val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     spark.createDataFrame(blockMatrix.blocks)
   }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
+   */
+  def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
+   */
+  def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
+   */
+  def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
+   */
+  def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
+  }
 }
 
 /**

@@ -246,6 +246,55 @@ case class MapGroups(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
+/** Factory for constructing new `FlatMapGroupsInR` nodes. */
+object FlatMapGroupsInR {
+  def apply(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType,
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      inputSchema: StructType,
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      child: LogicalPlan): LogicalPlan = {
+    val mapped = FlatMapGroupsInR(
+      func,
+      packageNames,
+      broadcastVars,
+      inputSchema,
+      schema,
+      UnresolvedDeserializer(keyDeserializer, groupingAttributes),
+      UnresolvedDeserializer(valueDeserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      CatalystSerde.generateObjAttr(RowEncoder(schema)),
+      child)
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
+  }
+}
+
+case class FlatMapGroupsInR(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    outputSchema: StructType,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
+    child: LogicalPlan) extends UnaryNode with ObjectProducer{
+
+  override lazy val schema = outputSchema
+
+  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
+    keyDeserializer, valueDeserializer, groupingAttributes, dataAttributes, outputObjAttr,
+    child)
+}
+
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
   def apply[K : Encoder, L : Encoder, R : Encoder, OUT : Encoder](
