@@ -42,6 +42,7 @@ class SparkSubmitOptionParser {
   protected final String DRIVER_CLASS_PATH = "--driver-class-path";
   protected final String DRIVER_CORES = "--driver-cores";
   protected final String DRIVER_JAVA_OPTIONS =  "--driver-java-options";
+  protected final String DRIVER_JRE = "--driver-jre";
   protected final String DRIVER_LIBRARY_PATH = "--driver-library-path";
   protected final String DRIVER_MEMORY = "--driver-memory";
   protected final String EXECUTOR_MEMORY = "--executor-memory";
@@ -121,6 +122,7 @@ class SparkSubmitOptionParser {
    * List of switches (command line options that do not take parameters) recognized by spark-submit.
    */
   final String[][] switches = {
+    { DRIVER_JRE },
     { HELP, "-h" },
     { SUPERVISE },
     { USAGE_ERROR },

@@ -170,6 +170,8 @@
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.3.2</commons-lang3.version>
+    <!-- org.apache.commons/commons-compress/-->
+    <commons-compress.version>1.12</commons-compress.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <janino.version>2.7.8</janino.version>
     <jersey.version>2.22.2</jersey.version>
@@ -379,6 +381,11 @@
         <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>

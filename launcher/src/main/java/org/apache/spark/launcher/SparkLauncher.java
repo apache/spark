@@ -359,6 +359,16 @@ public class SparkLauncher {
   }
 
   /**
+   * Enables shipping of driver JRE to the YARN cluster nodes.
+   *
+   * This ensures that all executors run with the same version of the JRE as the client.
+   */
+  public SparkLauncher withDriverJre() {
+    builder.driverJre = true;
+    return this;
+  }
+
+  /**
    * Launches a sub-process that will start the configured Spark application.
    * <p>
    * The {@link #startApplication(SparkAppHandle.Listener...)} method is preferred when launching
