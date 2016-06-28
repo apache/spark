@@ -134,6 +134,10 @@ The DataFrame-based APIs in `spark.ml` now depend on the `spark.ml.linalg` class
 
 **Note:** the RDD-based APIs in `spark.mllib` continue to depend on the previous package `spark.mllib.linalg`.
 
+_Converting vectors and matrices_
+
+ghdhgf
+
 **Deprecated methods removed**
 
 Several deprecated methods were removed.
