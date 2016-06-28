@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  *
- * Usage: StructuredNetworkWordCount <hostname> <port> <checkpoint dir>
+ * Usage: StructuredNetworkWordCount <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  *
@@ -32,46 +32,42 @@ import org.apache.spark.sql.SparkSession
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.StructuredNetworkWordCount
- *    localhost 9999 <checkpoint dir>`
+ *    localhost 9999`
  */
 object StructuredNetworkWordCount {
   def main(args: Array[String]) {
-    if (args.length < 3) {
-      System.err.println("Usage: StructuredNetworkWordCount <hostname> <port> <checkpoint dir>")
+    if (args.length < 2) {
+      System.err.println("Usage: StructuredNetworkWordCount <hostname> <port>")
       System.exit(1)
     }
 
     val host = args(0)
     val port = args(1).toInt
-    val checkpointDir = args(2)
 
     val spark = SparkSession
       .builder
       .appName("StructuredNetworkWordCount")
       .getOrCreate()
 
+    import spark.implicits._
+
     // Create DataFrame representing the stream of input lines from connection to host:port
     val lines = spark.readStream
       .format("socket")
       .option("host", host)
       .option("port", port)
-      .load()
+      .load().as[String]
 
     // Split the lines into words
-    val words = lines.select(
-      explode(
-        split(lines.col("value"), " ")
-      ).alias("word")
-    )
+    val words = lines.flatMap(_.split(" "))
 
     // Generate running word count
-    val wordCounts = words.groupBy("word").count()
+    val wordCounts = words.groupBy("value").count()
 
     // Start running the query that prints the running counts to the console
     val query = wordCounts.writeStream
       .outputMode("complete")
       .format("console")
-      .option("checkpointLocation", checkpointDir)
       .start()
 
     query.awaitTermination()

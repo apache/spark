@@ -17,7 +17,7 @@
 
 """
  Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
- Usage: structured_network_wordcount.py <hostname> <port> <checkpoint dir>
+ Usage: structured_network_wordcount.py <hostname> <port>
    <hostname> and <port> describe the TCP server that Structured Streaming
    would connect to receive data.
 
@@ -25,7 +25,7 @@
     `$ nc -lk 9999`
  and then run the example
     `$ bin/spark-submit examples/src/main/python/sql/streaming/structured_network_wordcount.py
-    localhost 9999 <checkpoint dir>`
+    localhost 9999`
 """
 from __future__ import print_function
 
@@ -36,13 +36,12 @@ from pyspark.sql.functions import explode
 from pyspark.sql.functions import split
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: network_wordcount.py <hostname> <port> <checkpoint dir>", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print("Usage: network_wordcount.py <hostname> <port>", file=sys.stderr)
         exit(-1)
 
     host = sys.argv[1]
     port = int(sys.argv[2])
-    checkpointDir = sys.argv[3]
 
     spark = SparkSession\
         .builder\
@@ -72,7 +71,6 @@ if __name__ == "__main__":
         .writeStream\
         .outputMode('complete')\
         .format('console')\
-        .option('checkpointLocation', checkpointDir)\
         .start()
 
     query.awaitTermination()

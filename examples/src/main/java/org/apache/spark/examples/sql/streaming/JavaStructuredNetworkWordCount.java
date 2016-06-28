@@ -16,13 +16,17 @@
  */
 package org.apache.spark.examples.sql.streaming;
 
+import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.StreamingQuery;
+
+import java.util.Arrays;
+import java.util.Iterator;
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  *
- * Usage: JavaStructuredNetworkWordCount <hostname> <port> <checkpoint dir>
+ * Usage: JavaStructuredNetworkWordCount <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  *
@@ -30,19 +34,18 @@ import org.apache.spark.sql.streaming.StreamingQuery;
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.JavaStructuredNetworkWordCount
- *    localhost 9999 <checkpoint dir>`
+ *    localhost 9999`
  */
 public final class JavaStructuredNetworkWordCount {
 
   public static void main(String[] args) throws Exception {
-    if (args.length < 3) {
-      System.err.println("Usage: JavaNetworkWordCount <hostname> <port> <checkpoint dir>");
+    if (args.length < 2) {
+      System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
       System.exit(1);
     }
 
     String host = args[0];
     int port = Integer.parseInt(args[1]);
-    String checkpointDir = args[2];
 
     SparkSession spark = SparkSession
       .builder()
@@ -50,28 +53,28 @@ public final class JavaStructuredNetworkWordCount {
       .getOrCreate();
 
     // Create DataFrame representing the stream of input lines from connection to host:port
-    Dataset<Row> lines = spark
+    Dataset<String> lines = spark
       .readStream()
       .format("socket")
       .option("host", host)
       .option("port", port)
-      .load();
+      .load().as(Encoders.STRING());
 
     // Split the lines into words
-    Dataset<Row> words = lines.select(
-      functions.explode(
-        functions.split(lines.col("value"), " ")
-      ).alias("word")
-    );
+    Dataset<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
+      @Override
+      public Iterator<String> call(String x) {
+        return Arrays.asList(x.split(" ")).iterator();
+      }
+    }, Encoders.STRING());
 
     // Generate running word count
-    Dataset<Row> wordCounts = words.groupBy("word").count();
+    Dataset<Row> wordCounts = words.groupBy("value").count();
 
     // Start running the query that prints the running counts to the console
     StreamingQuery query = wordCounts.writeStream()
       .outputMode("complete")
       .format("console")
-      .option("checkpointLocation", checkpointDir)
       .start();
 
     query.awaitTermination();
