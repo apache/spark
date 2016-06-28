@@ -258,6 +258,10 @@ class DAGScheduler(
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
+  def stageIdToShuffleId(stageInfo: StageInfo): Option[Int] = {
+    shuffleIdToMapStage.find(_._2.id == stageInfo.stageId).map(_._1)
+  }
+
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
