@@ -38,15 +38,19 @@ import org.apache.spark.util.Utils
  * executorIdToFailureStatus Map.
  */
 private[spark] class BlacklistTracker(
-    sparkConf: SparkConf,
+    conf: SparkConf,
     clock: Clock = new SystemClock()) extends BlacklistCache with Logging {
 
 
-  // TODO confs
-  private val MAX_FAILURES_PER_EXEC = 2
-  private val MAX_FAILURES_PER_EXEC_STAGE = 2
-  private val MAX_FAILED_EXECS_PER_NODE = 2
-  private[scheduler] val EXECUTOR_RECOVERY_MILLIS = sparkConf.getTimeAsMs(
+  private val MAX_FAILURES_PER_EXEC =
+    conf.getInt("spark.blacklist.maxFailedTasksPerExecutor", 2)
+  private val MAX_FAILURES_PER_EXEC_STAGE =
+    conf.getInt("spark.blacklist.maxFailedTasksPerExecutorStage", 2)
+  private val MAX_FAILED_EXEC_PER_NODE =
+    conf.getInt("spark.blacklist.maxFailedExecsPerNode", 2)
+  private val MAX_FAILED_EXEC_PER_NODE_STAGE =
+    conf.getInt("spark.blacklist.maxFailedExecsPerNodeStage", 2)
+  private[scheduler] val EXECUTOR_RECOVERY_MILLIS = conf.getTimeAsMs(
     "spark.scheduler.blacklist.recoverPeriod", (60 * 60 * 1000).toString)
 
   // a count of failed tasks for each executor.  Only counts failures after tasksets complete
@@ -62,7 +66,7 @@ private[spark] class BlacklistTracker(
   private val expireBlacklistTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "spark-scheduler-blacklist-expire-timer")
 
-  private val recoverPeriod = sparkConf.getTimeAsSeconds(
+  private val recoverPeriod = conf.getTimeAsSeconds(
     "spark.scheduler.blacklist.recoverPeriod", "60s")
 
   def start(): Unit = {
@@ -126,8 +130,8 @@ private[spark] class BlacklistTracker(
           val execs = scheduler.getExecutorsAliveOnHost(node).getOrElse(Set())
           val blacklistedExecs = execs.filter(executorIdToBlacklistTime.contains(_))
           logInfo(s"On node $node, blacklisted $blacklistedExecs")
-          if (blacklistedExecs.size >= MAX_FAILED_EXECS_PER_NODE) {
-            logInfo(s"Blacklistig node $node because it has ${blacklistedExecs.size} executors " +
+          if (blacklistedExecs.size >= MAX_FAILED_EXEC_PER_NODE) {
+            logInfo(s"Blacklisting node $node because it has ${blacklistedExecs.size} executors " +
               s"blacklisted: ${blacklistedExecs}")
             nodeIdToBlacklistTime.put(node, now)
           }
@@ -189,7 +193,7 @@ private[spark] class BlacklistTracker(
       // the whole node into the blacklist
       val blacklistedExecutors =
         stageFailures.filter{_._2.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE}
-      if (blacklistedExecutors.size >= MAX_FAILED_EXECS_PER_NODE) {
+      if (blacklistedExecutors.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
         stageIdToBlacklistedNodes.getOrElseUpdate(stageId, new HashSet()) += info.host
       }
     }
