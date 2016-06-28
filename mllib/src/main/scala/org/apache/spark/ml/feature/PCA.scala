@@ -217,7 +217,8 @@ object PCAModel extends MLReadable[PCAModel] {
             .head()
         new PCAModel(metadata.uid, pc, explainedVariance)
       } else {
-        // explainedVariance field is not present and we use the old matrix in Spark <= 2.0
+        // pc field is the old matrix format in Spark <= 2.0
+        // explainedVariance field is not present in Spark <= 2.0
         val Row(pc: OldDenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
         new PCAModel(metadata.uid, pc.asML,
           Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
