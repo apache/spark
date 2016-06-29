@@ -129,13 +129,9 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
+    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     if (reverseProxy) {
-      masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", null)
-      if (masterWebUiUrl == null) {
-       throw new SparkException("spark.ui.reverseProxyUrl must be provided")
-      }
-    } else {
-      masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+      masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
     }
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
