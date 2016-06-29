@@ -145,7 +145,7 @@ case class MetadataOnlyOptimizer(
     case e: Expand =>
       e.withNewChildren(e.children.map(convertToMetadataOnly(_)))
 
-    case other: LogicalPlan =>
+    case other =>
       other
   }
 
