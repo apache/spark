@@ -406,7 +406,7 @@ private[spark] class Executor(
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (Utils.isFatalError(t)) {
+          if (Utils.isFatalError(t) && !Utils.isLinkageError(t)) {
             SparkUncaughtExceptionHandler.uncaughtException(t)
           }
 

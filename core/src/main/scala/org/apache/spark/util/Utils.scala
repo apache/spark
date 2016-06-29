@@ -1872,6 +1872,12 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /** Returns true if the given exception is a linkage error. */
+  def isLinkageError(e: Throwable): Boolean = e match {
+    case _: java.lang.LinkageError => true
+    case _ => false
+  }
+
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
