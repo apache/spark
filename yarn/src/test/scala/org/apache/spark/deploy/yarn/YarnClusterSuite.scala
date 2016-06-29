@@ -120,6 +120,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     finalState should be (SparkAppHandle.State.FAILED)
   }
 
+  test("run Spark in yarn-cluster mode falure after sc initialized") {
+    val finalState = runSpark(false, mainClassName(YarnClusterDriverWithFailure.getClass), Seq("abc"))
+    finalState should be (SparkAppHandle.State.FAILED)
+  }
+
   test("run Python application in yarn-client mode") {
     testPySpark(true)
   }
@@ -256,6 +261,43 @@ private[spark] class SaveExecutorInfo extends SparkListener {
 
   override def onApplicationStart(appStart: SparkListenerApplicationStart): Unit = {
     driverLogs = appStart.driverLogs
+  }
+}
+
+private object YarnClusterDriverWithFailure extends Logging with Matchers {
+
+  val WAIT_TIMEOUT_MILLIS = 10000
+
+  def main(args: Array[String]): Unit = {
+    if (args.length != 1) {
+      // scalastyle:off println
+      System.err.println(
+        s"""
+           |Invalid command line: ${args.mkString(" ")}
+            |
+            |Usage: YarnClusterDriver [result file]
+        """.stripMargin)
+      // scalastyle:on println
+      System.exit(1)
+    }
+
+    val sc = new SparkContext(new SparkConf()
+      .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
+      .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    val conf = sc.getConf
+    val status = new File(args(0))
+    var result = "failure"
+    try {
+      val data = sc.parallelize(1 to 4, 4).collect().toSet
+      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+      data should be(Set(1, 2, 3, 4))
+      result = "success"
+    } finally {
+      Files.write(result, status, StandardCharsets.UTF_8)
+      sc.stop()
+    }
+
+    assert(false)
   }
 }
 
