@@ -616,14 +616,12 @@ private[spark] class TaskSetManager(
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
       pendingTask.foreach { taskId =>
-        executors.foreach { exec =>
-          if (!executorIsBlacklisted(exec, taskId)) {
-            return
-          }
+        if (executors.forall(executorIsBlacklisted(_, taskId))) {
+          val execs = executors.toIndexedSeq.sorted.mkString("(", ",", ")")
+          val partition = tasks(taskId).partitionId
+          abort(s"Aborting ${taskSet} because task $taskId (partition $partition)" +
+            s" has already failed on executors $execs, and no other executors are available.")
         }
-        val execs = executors.toIndexedSeq.sorted.mkString("(", ",", ")")
-        abort(s"Aborting ${taskSet} because task $taskId (partition ${tasks(taskId).partitionId})" +
-          s" has already failed on executors $execs, and no other executors are available.")
       }
     }
   }

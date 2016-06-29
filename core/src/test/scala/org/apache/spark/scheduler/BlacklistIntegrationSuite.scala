@@ -57,7 +57,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "With blacklist on, job will still fail if there are too many bad executors on bad host",
     extraConfs = Seq(
-      // just set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       ("spark.scheduler.executorTaskBlacklistTime", "10000000")
     )
   ) {
@@ -74,7 +75,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
-      // just set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       ("spark.scheduler.executorTaskBlacklistTime", "10000000"),
       // this has to be higher than the number of executors on the bad host
       ("spark.task.maxFailures", "5"),
@@ -96,7 +98,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
-      // set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
