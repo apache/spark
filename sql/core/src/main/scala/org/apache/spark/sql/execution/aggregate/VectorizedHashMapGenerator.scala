@@ -379,7 +379,8 @@ class VectorizedHashMapGenerator(
     s"""
        |public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(
        |  ${groupingKeySignature}, ${groupingKeyIsNullSignature}) {
-       |  long h = hash(${groupingKeys.map(_.name).mkString(", ")});
+       |  long h = hash(${groupingKeys.map(_.name).mkString(", ")},
+       |                ${groupingKeys.map(_.isNullName).mkString(", ")});
        |  int step = 0;
        |  int idx = (int) h & (numBuckets - 1);
        |  while (step < maxSteps) {
