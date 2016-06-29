@@ -206,7 +206,6 @@ trait CheckAnalysis extends PredicateHelper {
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-              case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
