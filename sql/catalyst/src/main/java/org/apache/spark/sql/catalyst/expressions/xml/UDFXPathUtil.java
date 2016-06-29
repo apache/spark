@@ -33,8 +33,9 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
 /**
- * Utility class for all XPath UDFs. Each UDF instance should keep an instance
- * of this class.
+ * Utility class for all XPath UDFs. Each UDF instance should keep an instance of this class.
+ *
+ * This is based on Hive's UDFXPathUtil implementation.
  */
 public class UDFXPathUtil {
   private XPath xpath = XPathFactory.newInstance().newXPath();
