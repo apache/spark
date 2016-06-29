@@ -594,20 +594,25 @@ private[spark] class TaskSetManager(
    */
   private[scheduler] def abortIfCompletelyBlacklisted(executors: Iterable[String]): Unit = {
 
-    def pendingTask: Option[Int] = {
+    val pendingTask: Option[Int] = {
       // usually this will just take the last pending task, but because of the lazy removal
       // from each list, we may need to go deeper in the list.  We poll from the end because
       // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
       // an unschedulable task this way.
       var indexOffset = allPendingTasks.size
-      while (indexOffset > 0) {
+      var foundATask = false
+      while (indexOffset > 0 && !foundATask) {
         indexOffset -= 1
         val indexInTaskSet = allPendingTasks(indexOffset)
         if (copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)) {
-          return Some(indexInTaskSet)
+          foundATask = true
         }
       }
-      None
+      if (foundATask) {
+        Some(allPendingTasks(indexOffset))
+      } else {
+        None
+      }
     }
 
     // If no executors have registered yet, don't abort the stage, just wait.  We probably
