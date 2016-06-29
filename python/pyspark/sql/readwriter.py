@@ -677,7 +677,8 @@ class DataFrameWriter(OptionUtils):
         """
         self.mode(mode)
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
-                       nullValue=nullValue, escapeQuotes=escapeQuotes)
+                       nullValue=nullValue, escapeQuotes=escapeQuotes, dateFormat=dateFormat,
+                       timezone=timezone)
         self._jwrite.csv(path)
 
     @since(1.5)
