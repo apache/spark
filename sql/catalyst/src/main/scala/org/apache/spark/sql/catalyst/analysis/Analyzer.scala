@@ -1841,10 +1841,20 @@ class Analyzer(
       joinType: JoinType,
       joinNames: Seq[String],
       condition: Option[Expression]) = {
-    val leftKeys =
-      joinNames.map(keyName => left.output.find(attr => resolver(attr.name, keyName)).get)
-    val rightKeys =
-      joinNames.map(keyName => right.output.find(attr => resolver(attr.name, keyName)).get)
+    val leftKeys = joinNames.map { keyName =>
+      val joinColumn = left.output.find(attr => resolver(attr.name, keyName))
+      assert(
+        joinColumn.isDefined,
+        s"$keyName should exist in ${left.output.map(_.name).mkString(",")}")
+      joinColumn.get
+    }
+    val rightKeys = joinNames.map { keyName =>
+      val joinColumn = right.output.find(attr => resolver(attr.name, keyName))
+      assert(
+        joinColumn.isDefined,
+        s"$keyName should exist in ${right.output.map(_.name).mkString(",")}")
+      joinColumn.get
+    }
     val joinPairs = leftKeys.zip(rightKeys)
 
     val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
