@@ -56,13 +56,13 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     "bootstrap.servers" -> kafkaTestUtils.brokerAddress,
     "key.deserializer" -> classOf[StringDeserializer],
     "value.deserializer" -> classOf[StringDeserializer],
-    "group.id" -> s"test-consumer-${Random.nextInt}"
+    "group.id" -> s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}"
   ).asJava
 
   private val preferredHosts = PreferConsistent
 
   test("basic usage") {
-    val topic = s"topicbasic-${Random.nextInt}"
+    val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"
     kafkaTestUtils.createTopic(topic)
     val messages = Array("the", "quick", "brown", "fox")
     kafkaTestUtils.sendMessages(topic, messages)
@@ -101,7 +101,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("iterator boundary conditions") {
     // the idea is to find e.g. off-by-one errors between what kafka has available and the rdd
-    val topic = s"topicboundary-${Random.nextInt}"
+    val topic = s"topicboundary-${Random.nextInt}-${System.currentTimeMillis}"
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     kafkaTestUtils.createTopic(topic)
 

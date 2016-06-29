@@ -85,7 +85,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     kafkaParams.put("key.deserializer", StringDeserializer.class);
     kafkaParams.put("value.deserializer", StringDeserializer.class);
     kafkaParams.put("auto.offset.reset", "earliest");
-    kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
+    kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt() +
+      "-" + System.currentTimeMillis());
 
     JavaInputDStream<ConsumerRecord<String, String>> istream1 = KafkaUtils.createDirectStream(
         ssc,
@@ -117,7 +118,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     );
 
     final Map<String, Object> kafkaParams2 = new HashMap<>(kafkaParams);
-    kafkaParams2.put("group.id", "java-test-consumer-" + random.nextInt());
+    kafkaParams2.put("group.id", "java-test-consumer-" + random.nextInt() +
+      "-" + System.currentTimeMillis());
 
     JavaInputDStream<ConsumerRecord<String, String>> istream2 = KafkaUtils.createDirectStream(
         ssc,
@@ -155,11 +157,6 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
           @Override
           public void call(JavaRDD<String> rdd) {
             result.addAll(rdd.collect());
-            for (OffsetRange o : offsetRanges.get()) {
-              System.out.println(
-                o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
-              );
-            }
           }
         }
     );

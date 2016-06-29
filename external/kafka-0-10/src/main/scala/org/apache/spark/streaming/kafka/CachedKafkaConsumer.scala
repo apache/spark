@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka
 import java.{ util => ju }
 
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.{ KafkaException, TopicPartition }
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -63,9 +63,9 @@ class CachedKafkaConsumer[K, V] private(
    * Sequential forward access will use buffers, but random access will be horribly inefficient.
    */
   def get(offset: Long, timeout: Long): ConsumerRecord[K, V] = {
-    log.debug(s"Get $groupId $topic $partition nextOffset $nextOffset requested $offset")
+    logDebug(s"Get $groupId $topic $partition nextOffset $nextOffset requested $offset")
     if (offset != nextOffset) {
-      log.info(s"Initial fetch for $groupId $topic $partition $offset")
+      logInfo(s"Initial fetch for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
     }
@@ -76,7 +76,7 @@ class CachedKafkaConsumer[K, V] private(
     var record = buffer.next()
 
     if (record.offset != offset) {
-      log.info(s"Buffer miss for $groupId $topic $partition $offset")
+      logInfo(s"Buffer miss for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
       assert(buffer.hasNext(),
@@ -91,14 +91,14 @@ class CachedKafkaConsumer[K, V] private(
   }
 
   private def seek(offset: Long): Unit = {
-    log.debug(s"Seeking to $topicPartition $offset")
+    logDebug(s"Seeking to $topicPartition $offset")
     consumer.seek(topicPartition, offset)
   }
 
   private def poll(timeout: Long): Unit = {
     val p = consumer.poll(timeout)
     val r = p.records(topicPartition)
-    log.debug(s"Polled ${p.partitions()}  ${r.size}")
+    logDebug(s"Polled ${p.partitions()}  ${r.size}")
     buffer = r.iterator
   }
 
@@ -118,13 +118,18 @@ object CachedKafkaConsumer extends Logging {
       maxCapacity: Int,
       loadFactor: Float): Unit = CachedKafkaConsumer.synchronized {
     if (null == cache) {
-      log.info(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
+      logInfo(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
       cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
           entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer[_, _]]): Boolean = {
           if (this.size > maxCapacity) {
-            entry.getValue.consumer.close()
+            try {
+              entry.getValue.consumer.close()
+            } catch {
+              case x: KafkaException =>
+                logError("Error closing oldest Kafka consumer", x)
+            }
             true
           } else {
             false
@@ -147,8 +152,8 @@ object CachedKafkaConsumer extends Logging {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
       if (null == v) {
-        log.info(s"Cache miss for $k")
-        log.debug(cache.keySet.toString)
+        logInfo(s"Cache miss for $k")
+        logDebug(cache.keySet.toString)
         val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
         cache.put(k, c)
         c
@@ -170,15 +175,15 @@ object CachedKafkaConsumer extends Logging {
     new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
 
   /** remove consumer for given groupId, topic, and partition, if it exists */
-  def remove(groupId: String, topic: String, partition: Int): Unit =
-    CachedKafkaConsumer.synchronized {
-      val k = CacheKey(groupId, topic, partition)
-      log.info(s"Removing $k from cache")
-      val v = cache.get(k)
-      if (null != v) {
-        v.close()
-        cache.remove(k)
-        log.info(s"Removed $k from cache")
-      }
+  def remove(groupId: String, topic: String, partition: Int): Unit = {
+    val k = CacheKey(groupId, topic, partition)
+    logInfo(s"Removing $k from cache")
+    val v = CachedKafkaConsumer.synchronized {
+      cache.remove(k)
     }
+    if (null != v) {
+      v.close()
+      logInfo(s"Removed $k from cache")
+    }
+  }
 }

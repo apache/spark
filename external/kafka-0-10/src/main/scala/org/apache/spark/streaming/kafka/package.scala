@@ -18,6 +18,6 @@
 package org.apache.spark.streaming
 
 /**
- * Kafka receiver for spark streaming,
+ * Spark Integration for Kafka
  */
 package object kafka

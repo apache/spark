@@ -48,7 +48,6 @@ import org.apache.spark.storage.StorageLevel
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
-@Experimental
 private[spark] class KafkaRDD[K, V](
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],

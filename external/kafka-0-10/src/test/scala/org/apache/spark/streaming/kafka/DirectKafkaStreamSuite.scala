@@ -88,7 +88,7 @@ class DirectKafkaStreamSuite
     kp.put("bootstrap.servers", kafkaTestUtils.brokerAddress)
     kp.put("key.deserializer", classOf[StringDeserializer])
     kp.put("value.deserializer", classOf[StringDeserializer])
-    kp.put("group.id", s"test-consumer-${Random.nextInt}")
+    kp.put("group.id", s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}")
     extra.foreach(e => kp.put(e._1, e._2))
     kp
   }

@@ -57,7 +57,6 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
-@Experimental
 private[spark] class DirectKafkaInputDStream[K, V](
     _ssc: StreamingContext,
     locationStrategy: LocationStrategy,
