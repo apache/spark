@@ -714,7 +714,9 @@ dropTempView <- function(viewName) {
 #'
 #' The data source is specified by the `source` and a set of options(...).
 #' If `source` is not specified, the default data source configured by
-#' "spark.sql.sources.default" will be used.
+#' "spark.sql.sources.default" will be used. \cr
+#' Similar to R read.csv, when `source` is "csv", by default, a value of "NA" will be interpreted
+#' as NA.
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
@@ -743,6 +745,9 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   }
   if (is.null(source)) {
     source <- getDefaultSqlSource()
+  }
+  if (source == "csv" && is.null(options[["nullValue"]])) {
+    options[["nullValue"]] <- "NA"
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")

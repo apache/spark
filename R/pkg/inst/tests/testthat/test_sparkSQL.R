@@ -213,15 +213,20 @@ test_that("read csv as DataFrame", {
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
                    "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt")
+                   "2015,Chevy,Volt",
+                   "NA,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
-  # default "header" is false
-  df <- read.df(csvPath, "csv", header = "true")
-  expect_equal(count(df), 3)
+  # default "header" is false, inferSchema to handle "year" as "int"
+  df <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expect_equal(count(df), 4)
   expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
-  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
-               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
+  expect_equal(sort(unlist(collect(where(df, df$year == 2015)))),
+               sort(unlist(list(year = 2015, make = "Chevy", model = "Volt"))))
+
+  # since "year" is "int", let's skip the NA values
+  withoutna <- na.omit(df, how = "any", cols = "year")
+  expect_equal(count(withoutna), 3)
 
   unlink(csvPath)
 })
