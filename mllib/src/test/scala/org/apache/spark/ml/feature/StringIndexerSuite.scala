@@ -129,6 +129,17 @@ class StringIndexerSuite
     }
   }
 
+  test("StringIndexerModel can't overwrite output column") {
+    val df = sqlContext.createDataFrame(Seq((1, 2), (3, 4))).toDF("input", "output")
+    val indexer = new StringIndexer()
+      .setInputCol("input")
+      .setOutputCol("output")
+      .fit(df)
+    intercept[IllegalArgumentException] {
+      indexer.transform(df)
+    }
+  }
+
   test("StringIndexer read/write") {
     val t = new StringIndexer()
       .setInputCol("myInputCol")
