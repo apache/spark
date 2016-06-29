@@ -130,6 +130,47 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
+  ignore("aggregate with null keys") {
+    val N = 20 << 22
+
+    val benchmark = new Benchmark("Aggregate with null keys", N)
+    sparkSession.range(N).selectExpr("cast(null as long) as k1")
+      .createOrReplaceTempView("test")
+
+    def f(): Unit = sparkSession.sql("select count(*) from test group by k1").collect()
+
+    benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 0)
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 10)
+      f()
+    }
+
+    benchmark.run()
+
+
+    /*
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+      Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+      Aggregate with null keys:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ------------------------------------------------------------------------------------------------
+      codegen = F                                   4369 / 4562         19.2          52.1       1.0X
+      codegen = T hashmap = F                       1835 / 1929         45.7          21.9       2.4X
+      codegen = T hashmap = T                        712 /  923        117.8           8.5       6.1X
+    */
+  }
+
   ignore("aggregate with randomized keys") {
     val N = 20 << 22
 
