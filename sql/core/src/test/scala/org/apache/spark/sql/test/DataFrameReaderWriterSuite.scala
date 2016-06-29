@@ -246,8 +246,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
       }
       intercept[AnalysisException] {
-        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
+        spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
       }
+      spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
 
