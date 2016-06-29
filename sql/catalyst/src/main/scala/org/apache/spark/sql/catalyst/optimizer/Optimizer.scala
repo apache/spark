@@ -21,6 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -222,7 +223,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
     case f @ TypedFilter(_, _, s: SerializeFromObject)
         if f.deserializer.dataType == s.inputObjAttr.dataType =>
-      s.copy(child = f.withObject(s.child))
+      s.copy(child = f.withObjectProducerChild(s.child))
 
     // If there is a `DeserializeToObject` upon typed filter and its output object type is same with
     // the typed filter's deserializer, we can convert typed filter to normal filter without
@@ -231,7 +232,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // but `ds.filter(...).as[AnotherType].map(...)` can not be optimized.
     case d @ DeserializeToObject(_, _, f: TypedFilter)
         if d.outputObjAttr.dataType == f.deserializer.dataType =>
-      f.withObject(d.copy(child = f.child))
+      f.withObjectProducerChild(d.copy(child = f.child))
   }
 }
 
@@ -1662,31 +1663,31 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
 }
 
 /**
- * Combines all adjacent [[TypedFilter]]s, which operate on same type object in condition, into a
- * single [[Filter]].
+ * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
+ * mering the filter functions into one conjunctive function.
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case t @ TypedFilter(_, deserializer, child) =>
-      val filters = collectTypedFiltersOnSameTypeObj(child, deserializer.dataType, ArrayBuffer(t))
-      if (filters.length > 1) {
-        val objHolder = BoundReference(0, deserializer.dataType, nullable = false)
-        val condition = filters.map(_.getCondition(objHolder)).reduce(And)
-        Filter(ReferenceToExpressions(condition, deserializer :: Nil), filters.last.child)
-      } else {
-        t
-      }
+    case t1 @ TypedFilter(_, _, t2 @ TypedFilter(_, _, child))
+        if t1.deserializer.dataType == t2.deserializer.dataType =>
+      TypedFilter(combineFilterFunction(t2.func, t1.func), t1.deserializer, child)
   }
 
-  @tailrec
-  private def collectTypedFiltersOnSameTypeObj(
-      plan: LogicalPlan,
-      objType: DataType,
-      filters: ArrayBuffer[TypedFilter]): Array[TypedFilter] = plan match {
-    case t: TypedFilter if t.deserializer.dataType == objType =>
-      filters += t
-      collectTypedFiltersOnSameTypeObj(t.child, objType, filters)
-    case _ => filters.toArray
+  private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
+    (func1, func2) match {
+      case (f1: FilterFunction[_], f2: FilterFunction[_]) =>
+        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+          f2.asInstanceOf[FilterFunction[Any]].call(input)
+      case (f1: FilterFunction[_], f2) =>
+        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+          f2.asInstanceOf[Any => Boolean](input)
+      case (f1, f2: FilterFunction[_]) =>
+        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
+          f2.asInstanceOf[FilterFunction[Any]].call(input)
+      case (f1, f2) =>
+        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
+          f2.asInstanceOf[Any => Boolean].apply(input)
+    }
   }
 }
 

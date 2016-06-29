@@ -19,15 +19,13 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, ReferenceToExpressions}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, TypedFilter}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{BooleanType, ObjectType}
+import org.apache.spark.sql.types.BooleanType
 
 class TypedFilterOptimizationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -40,7 +38,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
 
-  test("filter after serialize") {
+  test("filter after serialize with the same object type") {
     val input = LocalRelation('_1.int, '_2.int)
     val f = (i: (Int, Int)) => i._1 > 0
 
@@ -59,7 +57,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("filter after serialize with object change") {
+  test("filter after serialize with different object types") {
     val input = LocalRelation('_1.int, '_2.int)
     val f = (i: OtherTuple) => i._1 > 0
 
@@ -71,7 +69,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
     comparePlans(optimized, query)
   }
 
-  test("filter before deserialize") {
+  test("filter before deserialize with the same object type") {
     val input = LocalRelation('_1.int, '_2.int)
     val f = (i: (Int, Int)) => i._1 > 0
 
@@ -90,7 +88,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("filter before deserialize with object change") {
+  test("filter before deserialize with different object types") {
     val input = LocalRelation('_1.int, '_2.int)
     val f = (i: OtherTuple) => i._1 > 0
 
@@ -102,32 +100,23 @@ class TypedFilterOptimizationSuite extends PlanTest {
     comparePlans(optimized, query)
   }
 
-  test("back to back filter") {
+  test("back to back filter with the same object type") {
     val input = LocalRelation('_1.int, '_2.int)
     val f1 = (i: (Int, Int)) => i._1 > 0
     val f2 = (i: (Int, Int)) => i._2 > 0
 
     val query = input.filter(f1).filter(f2).analyze
-
     val optimized = Optimize.execute(query)
-
-    val deserializer = UnresolvedDeserializer(encoderFor[(Int, Int)].deserializer)
-    val boundReference = BoundReference(0, ObjectType(classOf[(Int, Int)]), nullable = false)
-    val callFunc1 = callFunction(f1, BooleanType, boundReference)
-    val callFunc2 = callFunction(f2, BooleanType, boundReference)
-    val condition = ReferenceToExpressions(callFunc2 && callFunc1, deserializer :: Nil)
-    val expected = input.where(condition).analyze
-
-    comparePlans(optimized, expected)
+    assert(optimized.collect { case t: TypedFilter => t }.length == 1)
   }
 
-  test("back to back filter with object change") {
+  test("back to back filter with different object types") {
     val input = LocalRelation('_1.int, '_2.int)
     val f1 = (i: (Int, Int)) => i._1 > 0
     val f2 = (i: OtherTuple) => i._2 > 0
 
     val query = input.filter(f1).filter(f2).analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    assert(optimized.collect { case t: TypedFilter => t }.length == 2)
   }
 }

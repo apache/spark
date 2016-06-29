@@ -191,12 +191,12 @@ case class TypedFilter(
 
   override def output: Seq[Attribute] = child.output
 
-  def withObject(obj: LogicalPlan): Filter = {
+  def withObjectProducerChild(obj: LogicalPlan): Filter = {
     assert(obj.output.length == 1)
-    Filter(getCondition(obj.output.head), obj)
+    Filter(typedCondition(obj.output.head), obj)
   }
 
-  def getCondition(input: Expression): Expression = {
+  def typedCondition(input: Expression): Expression = {
     val (funcClass, methodName) = func match {
       case m: FilterFunction[_] => classOf[FilterFunction[_]] -> "call"
       case _ => classOf[Any => Boolean] -> "apply"
