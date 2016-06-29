@@ -134,25 +134,4 @@ class CollapseEmptyPlanSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-
-  test("Collapse intersections on one non-empty and one empty local relations") {
-    val query = testRelation1
-      .where(true)
-      .intersect(testRelation2.where(false))
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int).analyze
-
-    comparePlans(optimized, correctAnswer.analyze)
-  }
-
-  test("Don't collapse intersections on non-empty local relations") {
-    val query = testRelation1
-      .intersect(testRelation2)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = query.analyze
-
-    comparePlans(optimized, correctAnswer.analyze)
-  }
 }

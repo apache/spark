@@ -48,18 +48,13 @@ object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
     case p: LogicalPlan if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) =>
       p match {
         case _: Project | _: Generate | _: Filter | _: Sample | _: Join |
-             _: Sort | _: GlobalLimit | _: LocalLimit |
-             _: Distinct | _: Except | _: Union |
-             _: Repartition =>
+             _: Sort | _: GlobalLimit | _: LocalLimit | _: Union | _: Repartition =>
           LocalRelation(p.output, data = Seq.empty)
         case _ => p
       }
 
     // Case 4: The following plans having at least one empty relation return empty results.
     case p @ Join(_, _, Inner, _) if p.children.exists(isEmptyLocalRelation) =>
-      LocalRelation(p.output, data = Seq.empty)
-
-    case p: Intersect if p.children.exists(isEmptyLocalRelation) =>
       LocalRelation(p.output, data = Seq.empty)
   }
 }
