@@ -23,11 +23,10 @@ import org.apache.spark.sql.test.SharedSQLContext
  * End-to-end tests for XML expressions.
  */
 class XmlFunctionsSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("xpath_boolean") {
-    val input = "<a><b>b</b></a>"
-    val path = "a/b"
-
-    checkAnswer(sql("select xpath_boolean('<a><b>b</b></a>', 'a/b')"), Row(true))
+    val df = Seq("<a><b>b</b></a>" -> "a/b").toDF("xml", "path")
+    checkAnswer(df.selectExpr("xpath_boolean(xml, path)"), Row(true))
   }
 }
