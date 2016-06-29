@@ -65,10 +65,17 @@ object PhysicalOperation extends PredicateHelper {
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
       case Filter(condition, child) =>
-        val (deterministicFilters, nondeterministicFilters) = splitConjunctivePredicates(condition)
-          .partition(_.deterministic)
+        // Deterministic parts of filter condition placed before non-deterministic predicates could
+        // be pushed down safely.
+        var isPredicatePushdownAble = true
+        val predicatePushdownFilters = splitConjunctivePredicates(condition).filter {
+          predicate => {
+            isPredicatePushdownAble = isPredicatePushdownAble && predicate.deterministic
+            isPredicatePushdownAble
+          }
+        }
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
-        val substitutedFilters = deterministicFilters.map(substitute(aliases)(_))
+        val substitutedFilters = predicatePushdownFilters.map(substitute(aliases)(_))
         (fields, filters ++ substitutedFilters, other, aliases)
 
       case BroadcastHint(child) =>
