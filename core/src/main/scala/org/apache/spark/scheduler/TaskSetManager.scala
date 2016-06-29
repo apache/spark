@@ -599,19 +599,13 @@ private[spark] class TaskSetManager(
       // from each list, we may need to go deeper in the list.  We poll from the end because
       // failed tasks are put back at the end of allPendingTasks, so we're more likely to find
       // an unschedulable task this way.
-      var indexOffset = allPendingTasks.size
-      var foundATask = false
-      while (indexOffset > 0 && !foundATask) {
-        indexOffset -= 1
-        val indexInTaskSet = allPendingTasks(indexOffset)
-        if (copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)) {
-          foundATask = true
-        }
+      val indexOffset = allPendingTasks.lastIndexWhere { indexInTaskSet =>
+        copiesRunning(indexInTaskSet) == 0 && !successful(indexInTaskSet)
       }
-      if (foundATask) {
-        Some(allPendingTasks(indexOffset))
-      } else {
+      if (indexOffset == -1) {
         None
+      } else {
+        Some(allPendingTasks(indexOffset))
       }
     }
 
