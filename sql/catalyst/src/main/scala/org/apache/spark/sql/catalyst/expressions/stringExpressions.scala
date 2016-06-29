@@ -162,6 +162,42 @@ case class ConcatWs(children: Seq[Expression])
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(n, str1, str2, ...) - returns the n-th string",
+  extended = "> SELECT _FUNC_(1, 'scala', 'java') FROM src LIMIT 1;\n" + "'scala'")
+case class Elt(children: Seq[Expression])
+  extends Expression with ExpectsInputTypes with CodegenFallback {
+
+  require(children.nonEmpty, "elt requires at least one argument.")
+
+  private lazy val indexExpr = children.head
+  private lazy val stringExprs = children.tail.toArray
+
+  /** This expression is always nullable because it returns null if index is out of range. */
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    IntegerType +: Seq.fill(children.length - 1)(StringType)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val indexObj = indexExpr.eval(input)
+    if (indexObj == null) {
+      null
+    } else {
+      val index = indexObj.asInstanceOf[Int]
+      if (index <= 0 || index > stringExprs.length) {
+        null
+      } else {
+        stringExprs(index - 1).eval(input)
+      }
+    }
+  }
+}
+
+
 trait String2StringExpression extends ImplicitCastInputTypes {
   self: UnaryExpression =>
 
