@@ -463,8 +463,8 @@ class Dataset[T] private[sql](
   /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
-   * must be executed as a [[StreamingQuery]] using the `startStream()` method in
-   * [[DataFrameWriter]]. Methods that return a single answer, e.g. `count()` or
+   * must be executed as a [[StreamingQuery]] using the `start()` method in
+   * [[DataStreamWriter]]. Methods that return a single answer, e.g. `count()` or
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
