@@ -332,7 +332,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case MemoryPlan(sink, output) =>
         val encoder = RowEncoder(sink.schema)
-        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
+        val sizeInBytes = output.map(_.dataType.defaultSize).sum * sink.allData.length
+        val numParallelism = sizeInBytes / conf.autoBroadcastJoinThreshold / 10
+        LocalTableScanExec(
+          output, sink.allData.map(r => encoder.toRow(r).copy()), numParallelism.toInt) :: Nil
 
       case logical.Distinct(child) =>
         throw new IllegalStateException(
@@ -391,8 +394,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.LocalRelation(output, data) =>
-        LocalTableScanExec(output, data) :: Nil
+      case l @ logical.LocalRelation(output, data) =>
+        val numParallelism = l.statistics.sizeInBytes / conf.autoBroadcastJoinThreshold / 10
+        LocalTableScanExec(output, data, numParallelism.toInt) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>

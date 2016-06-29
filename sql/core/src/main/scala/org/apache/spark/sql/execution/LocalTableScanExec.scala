@@ -28,7 +28,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 private[sql] case class LocalTableScanExec(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafExecNode {
+    rows: Seq[InternalRow],
+    numParallelism: Int) extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -38,7 +39,8 @@ private[sql] case class LocalTableScanExec(
     rows.map(r => proj(r).copy()).toArray
   }
 
-  private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows)
+  private lazy val rdd =
+    sqlContext.sparkContext.parallelize(unsafeRows, Math.max(numParallelism, 1))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
