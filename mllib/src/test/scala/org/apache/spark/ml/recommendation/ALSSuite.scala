@@ -389,6 +389,11 @@ class ALSSuite
       targetRMSE = 0.3)
   }
 
+  test("rank-129 matrix with stacking factors in matrices") {
+    val (training, test) = genExplicitTestData(numUsers = 200, numItems = 20, rank = 1)
+    testALS(training, test, maxIter = 1, rank = 129, regParam = 0.01, targetRMSE = 0.02)
+  }
+
   test("using generic ID types") {
     val (ratings, _) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2, noiseStd = 0.01)
 
