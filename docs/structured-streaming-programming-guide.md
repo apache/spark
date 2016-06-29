@@ -459,7 +459,7 @@ val csvDF = spark
     .readStream
     .option("sep", ";")
     .schema(userSchema)      // Specify schema of the parquet files
-    .csv("/path/to/directory")    // Equivalent to format("cv").load("/path/to/directory")
+    .csv("/path/to/directory")    // Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
 </div>
@@ -486,7 +486,7 @@ Dataset[Row] csvDF = spark
     .readStream()
     .option("sep", ";")
     .schema(userSchema)      // Specify schema of the parquet files
-    .csv("/path/to/directory");    // Equivalent to format("cv").load("/path/to/directory")
+    .csv("/path/to/directory");    // Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
 </div>
@@ -513,7 +513,7 @@ csvDF = spark \
     .readStream() \
     .option("sep", ";") \
     .schema(userSchema) \
-    .csv("/path/to/directory")    # Equivalent to format("cv").load("/path/to/directory")
+    .csv("/path/to/directory")    # Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
 </div>
@@ -680,7 +680,7 @@ df.groupBy("type", window("time", "1 minute")).avg("signal")
 
 Now consider what happens if one of the events arrives late to the application.
 For example, a word that was generated at 12:04 but it was received at 12:11. 
-Since this windowing is based on the time in the data, the time 12:04 should considered for windowing. This occurs naturally in our window-based grouping --the late data is automatically placed in the proper windows and the correct aggregates updated as illustrated below.
+Since this windowing is based on the time in the data, the time 12:04 should be considered for windowing. This occurs naturally in our window-based grouping - the late data is automatically placed in the proper windows and the correct aggregates updated as illustrated below.
 
 ![Handling Late Data](img/structured-streaming-late-data.png)
 
@@ -867,7 +867,7 @@ aggDF
    .format("memory")
    .start()
 
-spark.sql("select * from aggregates).show()   // interactively query in-memory table
+spark.sql("select * from aggregates").show()   // interactively query in-memory table
 {% endhighlight %}
 
 </div>
@@ -907,7 +907,7 @@ aggDF
    .format("memory")
    .start();
 
-spark.sql("select * from aggregates).show();   // interactively query in-memory table
+spark.sql("select * from aggregates").show();   // interactively query in-memory table
 {% endhighlight %}
 
 </div>
@@ -947,7 +947,7 @@ aggDF\
    .format("memory")\
    .start()
 
-spark.sql("select * from aggregates).show()   # interactively query in-memory table
+spark.sql("select * from aggregates").show()   # interactively query in-memory table
 {% endhighlight %}
 
 </div>
