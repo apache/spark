@@ -28,10 +28,10 @@ import org.apache.spark.sql.types.{DoubleType, TimestampType}
  * UTF8-encoded and separated by '\n'.
  *
  * A single reading should take the format
- * <device name (string)>, <reading (double)>, <time (timestamp)>
+ * <device name (string)>, <reading (double)>
  *
  * Usage: EventTimeWindow <hostname> <port> <window duration>
- *   <slide duration> <checkpoint dir>
+ *   <slide duration>
  * <hostname> and <port> describe the TCP server that Structured Streaming would connect to
  * receive data.
  * <window duration> gives the size of window, specified as integer number of seconds, minutes,
@@ -45,22 +45,22 @@ import org.apache.spark.sql.types.{DoubleType, TimestampType}
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.EventTimeWindow
- *    localhost 9999 <window duration> <slide duration> <checkpoint dir>`
+ *    localhost 9999 <window duration> <slide duration>`
  *
  * Type device readings in the format given above into Netcat.
  *
  * An example sequence of device readings:
- * dev0,7.0,2015-03-18T12:00:00
- * dev1,8.0,2015-03-18T12:00:10
- * dev0,5.0,2015-03-18T12:00:20
- * dev1,3.0,2015-03-18T12:00:30
+ * dev0,7.0
+ * dev1,8.0
+ * dev0,5.0
+ * dev1,3.0
  */
 object EventTimeWindow {
 
   def main(args: Array[String]) {
-    if (args.length < 3) {
+    if (args.length < 4) {
       System.err.println("Usage: EventTimeWindow <hostname> <port> <window duration>" +
-        "<slide duration> <checkpoint dir>")
+        " <slide duration>")
       System.exit(1)
     }
 
@@ -68,7 +68,6 @@ object EventTimeWindow {
     val port = args(1).toInt
     val windowSize = args(2)
     val slideSize = args(3)
-    val checkpointDir = args(4)
 
     val spark = SparkSession
       .builder
@@ -80,11 +79,13 @@ object EventTimeWindow {
       .format("socket")
       .option("host", host)
       .option("port", port)
+      .option("includeTimestamp", true)
       .load()
 
     // Split the readings into their individual components
     val splitLines = lines.select(
-      split(lines.col("value"), ",").alias("pieces")
+      split(lines.col("value"), ",").alias("pieces"),
+      lines.col("timestamp")
     )
 
     // Place the different components of the readings into different columns and
@@ -92,12 +93,12 @@ object EventTimeWindow {
     val formatted = splitLines.select(
       trim(splitLines.col("pieces").getItem(0)).as("device"),
       trim(splitLines.col("pieces").getItem(1)).cast(DoubleType).as("signal"),
-      trim(splitLines.col("pieces").getItem(2)).cast(TimestampType).as("time")
+      splitLines.col("timestamp")
     )
 
     // Group the readings into windows and compute the signal average within each window
     val windowedAvgs = formatted.groupBy(
-      window(formatted.col("time"), windowSize, slideSize)
+      window(formatted.col("timestamp"), windowSize, slideSize)
     ).avg("signal")
 
     // Start running the query that prints the windowed averages to the console
@@ -105,7 +106,6 @@ object EventTimeWindow {
       .outputMode("complete")
       .format("console")
       .option("truncate", "false")
-      .option("checkpointLocation", checkpointDir)
       .start()
 
     query.awaitTermination()

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
@@ -26,10 +28,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 object TextSocketSource {
-  val SCHEMA = StructType(StructField("value", StringType) :: Nil)
+  val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
+  val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
+    StructField("timestamp", TimestampType) :: Nil)
 }
 
 /**
@@ -37,7 +41,7 @@ object TextSocketSource {
  * This source will *not* work in production applications due to multiple reasons, including no
  * support for fault recovery and keeping all of the text read in memory forever.
  */
-class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
+class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlContext: SQLContext)
   extends Source with Logging
 {
   @GuardedBy("this")
@@ -47,7 +51,7 @@ class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
   private var readThread: Thread = null
 
   @GuardedBy("this")
-  private var lines = new ArrayBuffer[String]
+  private var lines = new ArrayBuffer[(String, String)]
 
   initialize()
 
@@ -67,7 +71,9 @@ class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
               return
             }
             TextSocketSource.this.synchronized {
-              lines += line
+              lines += ((line,
+                new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                  .format(Calendar.getInstance().getTime())))
             }
           }
         } catch {
@@ -79,7 +85,8 @@ class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
   }
 
   /** Returns the schema of the data from this source */
-  override def schema: StructType = TextSocketSource.SCHEMA
+  override def schema: StructType = if (includeTimestamp) TextSocketSource.SCHEMA_TIMESTAMP
+  else TextSocketSource.SCHEMA_REGULAR
 
   /** Returns the maximum available offset for this source. */
   override def getOffset: Option[Offset] = synchronized {
@@ -92,7 +99,12 @@ class TextSocketSource(host: String, port: Int, sqlContext: SQLContext)
     val endIdx = end.asInstanceOf[LongOffset].offset.toInt + 1
     val data = synchronized { lines.slice(startIdx, endIdx) }
     import sqlContext.implicits._
-    data.toDF("value")
+    if (includeTimestamp) {
+      val df = data.toDF("value", "timestamp")
+      df.select(df.col("value"), df.col("timestamp").cast(TimestampType))
+    } else {
+      data.map(_._1).toDF("value")
+    }
   }
 
   /** Stop this source. */
@@ -125,7 +137,8 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
     if (!parameters.contains("port")) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
-    ("textSocket", TextSocketSource.SCHEMA)
+    ("textSocket", if (parameters.getOrElse("includeTimestamp", "false") == "true")
+      { TextSocketSource.SCHEMA_TIMESTAMP } else { TextSocketSource.SCHEMA_REGULAR })
   }
 
   override def createSource(
@@ -136,7 +149,8 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
       parameters: Map[String, String]): Source = {
     val host = parameters("host")
     val port = parameters("port").toInt
-    new TextSocketSource(host, port, sqlContext)
+    new TextSocketSource(host, port,
+      parameters.getOrElse("includeTimestamp", "false").toBoolean, sqlContext)
   }
 
   /** String that represents the format that this data source provider uses. */
