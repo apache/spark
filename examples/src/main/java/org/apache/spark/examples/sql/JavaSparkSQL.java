@@ -26,7 +26,9 @@ import org.apache.spark.api.java.function.Function;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+// $example on:init_session$
 import org.apache.spark.sql.SparkSession;
+// $example off:init_session$
 
 public class JavaSparkSQL {
   public static class Person implements Serializable {
@@ -51,10 +53,13 @@ public class JavaSparkSQL {
   }
 
   public static void main(String[] args) throws Exception {
+    // $example on:init_session$
     SparkSession spark = SparkSession
       .builder()
       .appName("JavaSparkSQL")
+      .config("spark.some.config.option", "some-value")
       .getOrCreate();
+    // $example off:init_session$
 
     System.out.println("=== Data source: RDD ===");
     // Load a text file and convert each line to a Java Bean.

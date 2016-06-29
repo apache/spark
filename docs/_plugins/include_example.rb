@@ -98,7 +98,7 @@ module Jekyll
       startIndices.zip(endIndices).each do |start, endline|
         raise "Overlapping between two example code blocks are not allowed, see #{@file}." \
             if start <= lastIndex
-        raise "$example on[:tag]$ should not be in the same line with $example off[:tag]$, see #{@file}." \
+        raise "$example on$ should not be in the same line with $example off$, see #{@file}." \
             if start == endline
         lastIndex = endline
         range = Range.new(start + 1, endline - 1)
