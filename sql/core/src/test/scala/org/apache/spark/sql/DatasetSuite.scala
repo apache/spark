@@ -730,7 +730,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
     val numRows = expected.split("\n").length - 4
-    val actual = ds.showString(numRows, truncate = true)
+    val actual = ds.showString(numRows, truncate = 20)
 
     if (expected != actual) {
       fail(

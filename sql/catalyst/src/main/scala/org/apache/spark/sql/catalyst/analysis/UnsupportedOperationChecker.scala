@@ -30,7 +30,7 @@ object UnsupportedOperationChecker {
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
-        throwError("Queries with streaming sources must be executed with write.startStream()")(p)
+        throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
       case _ =>
     }
@@ -40,7 +40,7 @@ object UnsupportedOperationChecker {
 
     if (!plan.isStreaming) {
       throwError(
-        "Queries without streaming sources cannot be executed with write.startStream()")(plan)
+        "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
     // Disallow multiple streaming aggregations
@@ -154,7 +154,7 @@ object UnsupportedOperationChecker {
 
         case ReturnAnswer(child) if child.isStreaming =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
-            "with streaming DataFrames/Datasets must be executed with write.startStream().")
+            "with streaming DataFrames/Datasets must be executed with writeStream.start().")
 
         case _ =>
       }
