@@ -2722,6 +2722,14 @@ object functions {
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
 
   /**
+   * Creates a new row for each element with position in the given array or map column.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def posexplode(e: Column): Column = withExpr { PosExplode(e.expr) }
+
+  /**
    * Extracts json object from a json string based on json path specified, and returns json string
    * of the extracted json object. It will return null if the input json string is invalid.
    *

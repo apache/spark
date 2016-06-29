@@ -129,6 +129,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
+  test("single posexplode") {
+    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
+    checkAnswer(
+      df.select(posexplode('intList)),
+      Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Nil)
+  }
+
   test("explode and other columns") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
 
