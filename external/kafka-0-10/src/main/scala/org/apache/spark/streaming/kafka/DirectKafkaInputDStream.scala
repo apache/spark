@@ -28,7 +28,6 @@ import scala.collection.mutable
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel

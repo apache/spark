@@ -23,35 +23,51 @@ import scala.collection.JavaConverters._
 
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.annotation.Experimental
+
 
 /**
+ *  :: Experimental ::
  * Choice of how to schedule consumers for a given TopicPartition on an executor.
  * Kafka 0.10 consumers prefetch messages, so it's important for performance
  * to keep cached consumers on appropriate executors, not recreate them for every partition.
  * Choice of location is only a preference, not an absolute; partitions may be scheduled elsewhere.
  */
+@Experimental
 sealed trait LocationStrategy
 
 /**
+ *  :: Experimental ::
  * Use this only if your executors are on the same nodes as your Kafka brokers.
  */
+@Experimental
 case object PreferBrokers extends LocationStrategy {
   def create: PreferBrokers.type = this
 }
 
 /**
+ *  :: Experimental ::
  * Use this in most cases, it will consistently distribute partitions across all executors.
  */
+@Experimental
 case object PreferConsistent extends LocationStrategy {
   def create: PreferConsistent.type = this
 }
 
 /**
+ *  :: Experimental ::
  * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
  * Any TopicPartition not specified in the map will use a consistent location.
  */
+@Experimental
 case class PreferFixed private(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
 
+/**
+ *  :: Experimental ::
+ * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
+ * Any TopicPartition not specified in the map will use a consistent location.
+ */
+@Experimental
 object PreferFixed {
   def apply(hostMap: collection.Map[TopicPartition, String]): PreferFixed = {
     PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))

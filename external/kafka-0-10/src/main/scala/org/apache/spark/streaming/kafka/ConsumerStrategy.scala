@@ -24,13 +24,18 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.annotation.Experimental
+
+
 /**
+ * :: Experimental ::
  * Choice of how to create and configure underlying Kafka Consumers on driver and executors.
  * Kafka 0.10 consumers can require additional, sometimes complex, setup after object
  *  instantiation. This interface encapsulates that process, and allows it to be checkpointed.
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
+@Experimental
 trait ConsumerStrategy[K, V] {
   /**
    * Kafka <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
@@ -50,6 +55,7 @@ trait ConsumerStrategy[K, V] {
 }
 
 /**
+ * :: Experimental ::
  * Subscribe to a collection of topics.
  * @param topics collection of topics to subscribe
  * @param kafkaParams Kafka
@@ -62,6 +68,7 @@ trait ConsumerStrategy[K, V] {
  * TopicPartition, the committed offset (if applicable) or kafka param
  * auto.offset.reset will be used.
  */
+@Experimental
 case class Subscribe[K, V] private(
     topics: ju.Collection[java.lang.String],
     kafkaParams: ju.Map[String, Object],
@@ -84,10 +91,13 @@ case class Subscribe[K, V] private(
 }
 
 /**
+ * :: Experimental ::
  * Companion object for creating [[Subscribe]] strategy
  */
+@Experimental
 object Subscribe {
   /**
+   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -100,6 +110,7 @@ object Subscribe {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
+  @Experimental
   def apply[K, V](
       topics: Iterable[java.lang.String],
       kafkaParams: collection.Map[String, Object],
@@ -111,6 +122,7 @@ object Subscribe {
   }
 
   /**
+   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -120,6 +132,7 @@ object Subscribe {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
+  @Experimental
   def apply[K, V](
       topics: Iterable[java.lang.String],
       kafkaParams: collection.Map[String, Object]): Subscribe[K, V] = {
@@ -130,6 +143,7 @@ object Subscribe {
   }
 
   /**
+   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -142,6 +156,7 @@ object Subscribe {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
+  @Experimental
   def create[K, V](
       topics: ju.Collection[java.lang.String],
       kafkaParams: ju.Map[String, Object],
@@ -150,6 +165,7 @@ object Subscribe {
   }
 
   /**
+   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -159,6 +175,7 @@ object Subscribe {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
+  @Experimental
   def create[K, V](
       topics: ju.Collection[java.lang.String],
       kafkaParams: ju.Map[String, Object]): Subscribe[K, V] = {
@@ -168,6 +185,7 @@ object Subscribe {
 }
 
 /**
+ * :: Experimental ::
  * Assign a fixed collection of TopicPartitions
  * @param topicPartitions collection of TopicPartitions to assign
  * @param kafkaParams Kafka
@@ -180,6 +198,7 @@ object Subscribe {
  * TopicPartition, the committed offset (if applicable) or kafka param
  * auto.offset.reset will be used.
  */
+@Experimental
 case class Assign[K, V] private(
     topicPartitions: ju.Collection[TopicPartition],
     kafkaParams: ju.Map[String, Object],
@@ -202,10 +221,13 @@ case class Assign[K, V] private(
 }
 
 /**
+ *  :: Experimental ::
  * Companion object for creating [[Assign]] strategy
  */
+@Experimental
 object Assign {
   /**
+   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -218,6 +240,7 @@ object Assign {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
+  @Experimental
   def apply[K, V](
       topicPartitions: Iterable[TopicPartition],
       kafkaParams: collection.Map[String, Object],
@@ -229,6 +252,7 @@ object Assign {
   }
 
   /**
+   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -238,6 +262,7 @@ object Assign {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
+  @Experimental
   def apply[K, V](
       topicPartitions: Iterable[TopicPartition],
       kafkaParams: collection.Map[String, Object]): Assign[K, V] = {
@@ -248,6 +273,7 @@ object Assign {
   }
 
   /**
+   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -260,6 +286,7 @@ object Assign {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
+  @Experimental
   def create[K, V](
       topicPartitions: ju.Collection[TopicPartition],
       kafkaParams: ju.Map[String, Object],
@@ -268,6 +295,7 @@ object Assign {
   }
 
   /**
+   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -277,6 +305,7 @@ object Assign {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
+  @Experimental
   def create[K, V](
       topicPartitions: ju.Collection[TopicPartition],
       kafkaParams: ju.Map[String, Object]): Assign[K, V] = {

@@ -32,9 +32,14 @@ import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
 import org.apache.spark.streaming.dstream._
 
+/**
+ * :: Experimental ::
+ * Companion object for constructing Kafka streams and RDDs
+ */
 @Experimental
 object KafkaUtils extends Logging {
   /**
+   * :: Experimental ::
    * Scala constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
@@ -71,6 +76,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Java constructor for a batch-oriented interface for consuming from Kafka.
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
@@ -98,6 +104,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Scala constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
    * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
@@ -120,6 +127,7 @@ object KafkaUtils extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Java constructor for a DStream where
    * each given Kafka topic/partition corresponds to an RDD partition.
    * @param keyClass Class of the keys in the Kafka records

@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka
 import org.apache.kafka.clients.consumer.OffsetCommitCallback
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.annotation.Experimental
 
 /**
  * Represents any object that has a collection of [[OffsetRange]]s. This can be used to access the
@@ -37,6 +38,7 @@ trait HasOffsetRanges {
 }
 
 /**
+ *  :: Experimental ::
  * Represents any object that can commit a collection of [[OffsetRange]]s.
  * The direct Kafka DStream implements this interface (see
  * [[KafkaUtils.createDirectStream]]).
@@ -54,18 +56,25 @@ trait HasOffsetRanges {
  *   })
  * }}}
  */
+@Experimental
 trait CanCommitOffsets {
   /**
+   *  :: Experimental ::
    * Queue up offset ranges for commit to Kafka at a future time.  Threadsafe.
+   * This is only needed if you intend to store offsets in Kafka, instead of your own store.
    * @param offsetRanges The maximum untilOffset for a given partition will be used at commit.
    */
+  @Experimental
   def commitAsync(offsetRanges: Array[OffsetRange]): Unit
 
   /**
+   *  :: Experimental ::
    * Queue up offset ranges for commit to Kafka at a future time.  Threadsafe.
+   * This is only needed if you intend to store offsets in Kafka, instead of your own store.
    * @param offsetRanges The maximum untilOffset for a given partition will be used at commit.
    * @param callback Only the most recently provided callback will be used at commit.
    */
+  @Experimental
   def commitAsync(offsetRanges: Array[OffsetRange], callback: OffsetCommitCallback): Unit
 }
 
