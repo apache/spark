@@ -84,6 +84,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 
         Seq[Int]().toDS().toDF()
       }
+
+      override def stop() {}
     }
   }
 
@@ -454,5 +456,15 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
           .start(path)
       }
     }
+  }
+
+  test("ConsoleSink should not require checkpointLocation") {
+    LastOptions.clear()
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+
+    val sq = df.writeStream.format("console").start()
+    sq.stop()
   }
 }

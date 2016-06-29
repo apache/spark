@@ -26,7 +26,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -40,28 +40,41 @@ import org.apache.spark.util.Utils
  * Trait for [[MLWriter]] and [[MLReader]].
  */
 private[util] sealed trait BaseReadWrite {
-  private var optionSQLContext: Option[SQLContext] = None
+  private var optionSparkSession: Option[SparkSession] = None
 
   /**
-   * Sets the SQL context to use for saving/loading.
+   * Sets the Spark SQLContext to use for saving/loading.
    */
   @Since("1.6.0")
+  @deprecated("Use session instead", "2.0.0")
   def context(sqlContext: SQLContext): this.type = {
-    optionSQLContext = Option(sqlContext)
+    optionSparkSession = Option(sqlContext.sparkSession)
     this
+  }
+
+  /**
+   * Sets the Spark Session to use for saving/loading.
+   */
+  @Since("2.0.0")
+  def session(sparkSession: SparkSession): this.type = {
+    optionSparkSession = Option(sparkSession)
+    this
+  }
+
+  /**
+   * Returns the user-specified Spark Session or the default.
+   */
+  protected final def sparkSession: SparkSession = {
+    if (optionSparkSession.isEmpty) {
+      optionSparkSession = Some(SparkSession.builder().getOrCreate())
+    }
+    optionSparkSession.get
   }
 
   /**
    * Returns the user-specified SQL context or the default.
    */
-  protected final def sqlContext: SQLContext = {
-    if (optionSQLContext.isEmpty) {
-      optionSQLContext = Some(SQLContext.getOrCreate(SparkContext.getOrCreate()))
-    }
-    optionSQLContext.get
-  }
-
-  protected final def sparkSession: SparkSession = sqlContext.sparkSession
+  protected final def sqlContext: SQLContext = sparkSession.sqlContext
 
   /** Returns the underlying [[SparkContext]]. */
   protected final def sc: SparkContext = sparkSession.sparkContext
@@ -118,7 +131,10 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   }
 
   // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
+  override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
+
+  // override for Java compatibility
+  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -145,7 +161,7 @@ trait MLWritable {
 }
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * Helper trait for making simple [[Params]] types writable.  If a [[Params]] class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
@@ -155,8 +171,7 @@ trait MLWritable {
  *
  * @see  [[DefaultParamsReadable]], the counterpart to this trait
  */
-@Experimental
-@Since("2.0.0")
+@DeveloperApi
 trait DefaultParamsWritable extends MLWritable { self: Params =>
 
   override def write: MLWriter = new DefaultParamsWriter(this)
@@ -180,7 +195,10 @@ abstract class MLReader[T] extends BaseReadWrite {
   def load(path: String): T
 
   // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
+  override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
+
+  // override for Java compatibility
+  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
 }
 
 /**
@@ -211,7 +229,7 @@ trait MLReadable[T] {
 
 
 /**
- * :: Experimental ::
+ * :: DeveloperApi ::
  *
  * Helper trait for making simple [[Params]] types readable.  If a [[Params]] class stores
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
@@ -220,11 +238,9 @@ trait MLReadable[T] {
  * [[org.apache.spark.sql.Dataset]].
  *
  * @tparam T ML instance type
- *
  * @see  [[DefaultParamsWritable]], the counterpart to this trait
  */
-@Experimental
-@Since("2.0.0")
+@DeveloperApi
 trait DefaultParamsReadable[T] extends MLReadable[T] {
 
   override def read: MLReader[T] = new DefaultParamsReader[T]

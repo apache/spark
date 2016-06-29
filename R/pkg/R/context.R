@@ -225,9 +225,10 @@ setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
-#' Run a function over a list of elements, distributing the computations with Spark.
+#' Run a function over a list of elements, distributing the computations with Spark
 #'
-#' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
+#' Run a function over a list of elements, distributing the computations with Spark. Applies a
+#' function in a manner that is similar to doParallel or lapply to elements of a list.
 #' The computations are distributed using Spark. It is conceptually the same as the following code:
 #'   lapply(list, func)
 #'
@@ -245,24 +246,25 @@ setCheckpointDir <- function(sc, dirName) {
 #'   \preformatted{
 #'     train <- function(hyperparam) {
 #'       library(MASS)
-#'       lm.ridge(“y ~ x+z”, data, lambda=hyperparam)
+#'       lm.ridge("y ~ x+z", data, lambda=hyperparam)
 #'       model
 #'     }
 #'   }
 #' }
 #'
 #' @rdname spark.lapply
-#' @param sc Spark Context to use
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
 #' @export
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' doubled <- spark.lapply(sc, 1:10, function(x){2 * x})
+#' sparkR.session()
+#' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
-spark.lapply <- function(sc, list, func) {
+#' @note spark.lapply since 2.0.0
+spark.lapply <- function(list, func) {
+  sc <- getSparkContext()
   rdd <- parallelize(sc, list, length(list))
   results <- map(rdd, func)
   local <- collect(results)
@@ -274,14 +276,14 @@ spark.lapply <- function(sc, list, func) {
 #' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
 #'
 #' @rdname setLogLevel
-#' @param sc Spark Context to use
 #' @param level New log level
 #' @export
 #' @examples
 #'\dontrun{
-#' setLogLevel(sc, "ERROR")
+#' setLogLevel("ERROR")
 #'}
-
-setLogLevel <- function(sc, level) {
+#' @note setLogLevel since 2.0.0
+setLogLevel <- function(level) {
+  sc <- getSparkContext()
   callJMethod(sc, "setLogLevel", level)
 }

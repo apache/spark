@@ -377,7 +377,8 @@ private[spark] class MemoryStore(
         entries.put(blockId, entry)
       }
       logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(entry.size), Utils.bytesToString(blocksMemoryUsed)))
+        blockId, Utils.bytesToString(entry.size),
+        Utils.bytesToString(maxMemory - blocksMemoryUsed)))
       Right(entry.size)
     } else {
       // We ran out of space while unrolling the values for this block
