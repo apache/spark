@@ -92,7 +92,8 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Sort should be included in WholeStageCodegen without column codegen") {
-    val df = sqlContext.range(3, 0, -1).map(i => i.toFloat).toDF().sort(col("value"))
+    val df = sparkContext.parallelize(Seq(3.toFloat, 2.toFloat, 1.toFloat), 1).toDF()
+      .sort(col("value"))
     val plan = df.queryExecution.executedPlan
     assert(df.collect() === Array(Row(1.0), Row(2.0), Row(3.0)))
     assert(plan.find(p =>

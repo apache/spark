@@ -341,7 +341,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
   }
 
   // Spilt this function out since it is the slow path.
-  private final void reserveInternal(int newCapacity) {
+  @Override
+  protected void reserveInternal(int newCapacity) {
     throw new NotImplementedException();
   }
 }

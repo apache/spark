@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.ByteOrder.nativeOrder
+
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.StringUtils
@@ -30,6 +33,8 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
 
@@ -53,17 +58,12 @@ private[sql] object InMemoryRelation {
  * @param stats The stat of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]],
-                       dataTypes: Array[DataType], stats: InternalRow) {
-  def column(ordinal: Int): org.apache.spark.sql.execution.vectorized.ColumnVector = {
-    val dt = dataTypes(ordinal)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow) {
+  def column(columnarIterator: ColumnarIterator, index: Int): ColumnVector = {
+    val ordinal = columnarIterator.getColumnIndexes(index)
+    val dataType = columnarIterator.getColumnTypes(index)
     val buffer = ByteBuffer.wrap(buffers(ordinal)).order(nativeOrder)
-    val accessor: BasicColumnAccessor[_] = dt match {
-      case BooleanType => new BooleanColumnAccessor(buffer)
-      case ByteType => new ByteColumnAccessor(buffer)
-      case ShortType => new ShortColumnAccessor(buffer)
-      case IntegerType | DateType => new IntColumnAccessor(buffer)
-      case LongType | TimestampType => new LongColumnAccessor(buffer)
+    val accessor: BasicColumnAccessor[_] = dataType match {
       case FloatType => new FloatColumnAccessor(buffer)
       case DoubleType => new DoubleColumnAccessor(buffer)
     }
@@ -78,8 +78,7 @@ case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]],
       (buffer, nullsBuffer)
     }
 
-    org.apache.spark.sql.execution.vectorized.ColumnVector.allocate(numRows, dt,
-      true, out, nullsBuffer)
+    ColumnVector.allocate(numRows, dataType, true, out, nullsBuffer)
   }
 }
 
