@@ -206,24 +206,22 @@ object PCAModel extends MLReadable[PCAModel] {
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
-      // explainedVariance field is not present in Spark <= 1.6
-      val versionRegex = "([0-9]+)\\.([0-9]+).*".r
-      val hasExplainedVariance = metadata.sparkVersion match {
-        case versionRegex(major, minor) =>
-          major.toInt >= 2 || (major.toInt == 1 && minor.toInt > 6)
-        case _ => false
-      }
+      val versionRegex = "([0-9]+)\\.(.+)".r
+      val versionRegex(major, _) = metadata.sparkVersion
 
       val dataPath = new Path(path, "data").toString
-      val model = if (hasExplainedVariance) {
+      val model = if (major.toInt >= 2) {
         val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
           sparkSession.read.parquet(dataPath)
             .select("pc", "explainedVariance")
             .head()
         new PCAModel(metadata.uid, pc, explainedVariance)
       } else {
-        val Row(pc: DenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
-        new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
+        // pc field is the old matrix format in Spark <= 1.6
+        // explainedVariance field is not present in Spark <= 1.6
+        val Row(pc: OldDenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
+        new PCAModel(metadata.uid, pc.asML,
+          Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
       }
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

@@ -174,7 +174,8 @@ class CatalogSuite
   }
 
   test("list functions") {
-    assert(spark.catalog.listFunctions().collect().isEmpty)
+    assert(Set("+", "current_database", "window").subsetOf(
+      spark.catalog.listFunctions().collect().map(_.name).toSet))
     createFunction("my_func1")
     createFunction("my_func2")
     createTempFunction("my_temp_func")
@@ -191,7 +192,8 @@ class CatalogSuite
   }
 
   test("list functions with database") {
-    assert(spark.catalog.listFunctions("default").collect().isEmpty)
+    assert(Set("+", "current_database", "window").subsetOf(
+      spark.catalog.listFunctions().collect().map(_.name).toSet))
     createDatabase("my_db1")
     createDatabase("my_db2")
     createFunction("my_func1", Some("my_db1"))
