@@ -46,9 +46,10 @@ public class BufferHolder {
 
   public BufferHolder(UnsafeRow row, int initialSize) {
     int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
-    if (row.numFields() > (Integer.MAX_VALUE - initialSize) / 8) {
+    if (row.numFields() > (Integer.MAX_VALUE - initialSize - bitsetWidthInBytes) / 8) {
       throw new UnsupportedOperationException(
-        "Cannot create BufferHolder from input UnsafeRow because it is too big.");
+        "Cannot create BufferHolder for input UnsafeRow because there are " +
+          "too many fields (number of fields: " + row.numFields() + ")");
     }
     this.fixedSize = bitsetWidthInBytes + 8 * row.numFields();
     this.buffer = new byte[fixedSize + initialSize];
