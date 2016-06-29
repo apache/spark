@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
+import org.apache.log4j.{Level, Logger}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{Row, SaveMode}
@@ -73,6 +74,21 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   after {
     conn.close()
     conn1.close()
+  }
+
+  def runWithoutErrorLogging(command: => Unit) {
+    // capture current (root) log level
+    val logLevel = Logger.getRootLogger().getLevel
+    // temporarily suppress logging of ERROR, WARN, INFO, DEBUG messages
+    Utils.setLogLevel(Level.FATAL)
+    // try running the given command, don't catch any exceptions here
+    try {
+      command
+    }
+    // restore original log level even if an exception was thrown
+    finally {
+      Utils.setLogLevel(logLevel)
+    }
   }
 
   private lazy val arr2x2 = Array[Row](Row.apply("dave", 42), Row.apply("mary", 222))
@@ -135,7 +151,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
     intercept[org.apache.spark.SparkException] {
-      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
+      runWithoutErrorLogging {
+        df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
+      }
     }
   }
 
