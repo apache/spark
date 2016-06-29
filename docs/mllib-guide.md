@@ -110,9 +110,9 @@ There were several breaking changes in Spark 2.0, which are outlined below.
 
 **Linear algebra classes for DataFrame-based APIs**
 
-Spark's linear algebra dependencies were moved to a new project, `spark-mllib-local` 
+Spark's linear algebra dependencies were moved to a new project, `mllib-local` 
 (see [SPARK-13944](https://issues.apache.org/jira/browse/SPARK-13944)). 
-As part of this change, the linear algebra classes were moved to a new package, `spark.ml.linalg`. 
+As part of this change, the linear algebra classes were copied to a new package, `spark.ml.linalg`. 
 The DataFrame-based APIs in `spark.ml` now depend on the `spark.ml.linalg` classes, 
 leading to a few breaking changes, predominantly in various model classes 
 (see [SPARK-14810](https://issues.apache.org/jira/browse/SPARK-14810) for a full list).
@@ -127,14 +127,24 @@ columns, may need to be migrated to the new `spark.ml` vector and matrix types.
 Utilities for converting `DataFrame` columns from `spark.mllib.linalg` to `spark.ml.linalg` types
 (and vice versa) can be found in `spark.mllib.util.MLUtils`.
 
+There are also utility methods available for converting single instances of 
+vectors and matrices. Use the `asML` method on a `mllib.linalg.Vector` / `mllib.linalg.Matrix`
+for converting to `ml.linalg` types, and 
+`mllib.linalg.Vectors.fromML` / `mllib.linalg.Matrices.fromML` 
+for converting to `mllib.linalg` types.
+
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
 import org.apache.spark.mllib.util.MLUtils
 
-val convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF);
-val convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF);
+// convert DataFrame columns
+val convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
+val convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
+// convert a single vector or matrix
+val mlVec: org.apache.spark.ml.linalg.Vector = mllibVec.asML
+val mlMat: org.apache.spark.ml.linalg.Matrix = mllibMat.asML
 {% endhighlight %}
 
 Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) for further detail.
@@ -146,8 +156,12 @@ Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.Dataset;
 
+// convert DataFrame columns
 Dataset<Row> convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF);
 Dataset<Row> convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF);
+// convert a single vector or matrix
+org.apache.spark.ml.linalg.Vector mlVec = mllibVec.asML
+org.apache.spark.ml.linalg.Matrix mlMat = mllibMat.asML
 {% endhighlight %}
 
 Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.html) for further detail.
@@ -158,6 +172,7 @@ Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.
 {% highlight python %}
 from pyspark.mllib.util import MLUtils
 
+# convert DataFrame columns
 convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
 convertedMatrxDF = MLUtils.convertMatrixColumnsToML(matrixDF)
 {% endhighlight %}
