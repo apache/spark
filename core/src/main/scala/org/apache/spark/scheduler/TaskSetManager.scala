@@ -58,14 +58,21 @@ private[spark] class TaskSetManager(
 
   val conf = sched.sc.conf
 
-  /*
-   * Sometimes if an executor is dead or in an otherwise invalid state, the driver
-   * does not realize right away leading to repeated task failures. If enabled,
-   * this temporarily prevents a task from re-launching on an executor where
-   * it just failed.
+  /**
+   * This timeout (specified in milliseconds) is used to prevent tasks from being immediatley
+   * re-launched on an executor where the task has already failed. A task will not be re-launched
+   * on an executor where it has already failed until this amount of time has elapsed since the
+   * failure.  One example of when this is useful is if an executor is in dead and the driver
+   * hasn't realized, leading to repeated task failures.  Blacklisting can be disabled by setting
+   * this to 0.
+   *
+   * The motivation for the default value of 5 seconds is that it is longer than the default
+   * locality wait time (spark.locality.wait), so the task will be launched on an executor with
+   * worse locality (if one is available) before being re-launched on an executor where it failed
+   * (since running more slowly is preferable to failing).
    */
   private val EXECUTOR_TASK_BLACKLIST_TIMEOUT =
-    conf.getLong("spark.scheduler.executorTaskBlacklistTime", 0L)
+    conf.getLong("spark.scheduler.executorTaskBlacklistTime", 5000L)
 
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
