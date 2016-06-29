@@ -30,7 +30,7 @@ import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesMo
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, Dataset}
+import org.apache.spark.sql.{Dataset, Row}
 
 /**
  * Params for Naive Bayes Classifiers.
