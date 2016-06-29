@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-import org.apache.commons.lang.NotImplementedException;
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
 
@@ -27,6 +27,7 @@ import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -98,7 +99,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public ArrayData copy() {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     // TODO: this is extremely expensive.
@@ -169,7 +170,7 @@ public abstract class ColumnVector implements AutoCloseable {
           }
         }
       } else {
-        throw new NotImplementedException("Type " + dt);
+        throw new UnsupportedOperationException("Type " + dt);
       }
       return list;
     }
@@ -179,7 +180,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -187,7 +188,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public short getShort(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -198,7 +199,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public float getFloat(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -238,12 +239,12 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
@@ -277,11 +278,25 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public abstract void close();
 
-  /*
+  public void reserve(int requiredCapacity) {
+    if (requiredCapacity > capacity) {
+      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
+      if (requiredCapacity <= newCapacity) {
+        reserveInternal(newCapacity);
+      } else {
+        throw new RuntimeException("Cannot reserve more than " + newCapacity +
+            " bytes in the vectorized reader (requested = " + requiredCapacity + " bytes). As a " +
+            "workaround, you can disable the vectorized reader by setting "
+            + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " to false.");
+      }
+    }
+  }
+
+  /**
    * Ensures that there is enough storage to store capcity elements. That is, the put() APIs
    * must work for all rowIds < capcity.
    */
-  public abstract void reserve(int capacity);
+  protected abstract void reserveInternal(int capacity);
 
   /**
    * Returns the number of nulls in this column.
@@ -546,7 +561,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public MapData getMap(int ordinal) {
-    throw new NotImplementedException();
+    throw new UnsupportedOperationException();
   }
 
   /**
@@ -845,6 +860,12 @@ public abstract class ColumnVector implements AutoCloseable {
    * Maximum number of rows that can be stored in this column.
    */
   protected int capacity;
+
+  /**
+   * Upper limit for the maximum capacity for this column.
+   */
+  @VisibleForTesting
+  protected int MAX_CAPACITY = Integer.MAX_VALUE;
 
   /**
    * Data type for this column.

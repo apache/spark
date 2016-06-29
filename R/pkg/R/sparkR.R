@@ -31,17 +31,20 @@ connExists <- function(env) {
 #' @rdname sparkR.session.stop
 #' @name sparkR.stop
 #' @export
+#' @note sparkR.stop since 1.4.0
 sparkR.stop <- function() {
   sparkR.session.stop()
 }
 
+#' Stop the Spark Session and Spark Context
+#'
 #' Stop the Spark Session and Spark Context.
 #'
 #' Also terminates the backend this R session is connected to.
 #' @rdname sparkR.session.stop
 #' @name sparkR.session.stop
 #' @export
-#' @note since 2.0.0
+#' @note sparkR.session.stop since 2.0.0
 sparkR.session.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
@@ -87,11 +90,9 @@ sparkR.session.stop <- function() {
   clearJobjs()
 }
 
-#' (Deprecated) Initialize a new Spark Context.
+#' (Deprecated) Initialize a new Spark Context
 #'
-#' This function initializes a new SparkContext. For details on how to initialize
-#' and use SparkR, refer to SparkR programming guide at
-#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
+#' This function initializes a new SparkContext.
 #'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
@@ -114,7 +115,7 @@ sparkR.session.stop <- function() {
 #'                  c("one.jar", "two.jar", "three.jar"),
 #'                  c("com.databricks:spark-avro_2.10:2.0.1"))
 #'}
-
+#' @note sparkR.init since 1.4.0
 sparkR.init <- function(
   master = "",
   appName = "SparkR",
@@ -250,7 +251,7 @@ sparkR.sparkContext <- function(
   sc
 }
 
-#' (Deprecated) Initialize a new SQLContext.
+#' (Deprecated) Initialize a new SQLContext
 #'
 #' This function creates a SparkContext from an existing JavaSparkContext and
 #' then uses it to initialize a new SQLContext
@@ -267,7 +268,7 @@ sparkR.sparkContext <- function(
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #'}
-
+#' @note sparkRSQL.init since 1.4.0
 sparkRSQL.init <- function(jsc = NULL) {
   .Deprecated("sparkR.session")
 
@@ -279,7 +280,7 @@ sparkRSQL.init <- function(jsc = NULL) {
   sparkR.session(enableHiveSupport = FALSE)
 }
 
-#' (Deprecated) Initialize a new HiveContext.
+#' (Deprecated) Initialize a new HiveContext
 #'
 #' This function creates a HiveContext from an existing JavaSparkContext
 #'
@@ -295,7 +296,7 @@ sparkRSQL.init <- function(jsc = NULL) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRHive.init(sc)
 #'}
-
+#' @note sparkRHive.init since 1.4.0
 sparkRHive.init <- function(jsc = NULL) {
   .Deprecated("sparkR.session")
 
@@ -311,6 +312,9 @@ sparkRHive.init <- function(jsc = NULL) {
 #'
 #' Additional Spark properties can be set (...), and these named parameters take priority over
 #' over values in master, appName, named lists of sparkConfig.
+#'
+#' For details on how to initialize and use SparkR, refer to SparkR programming guide at
+#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
 #'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
@@ -333,8 +337,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #'                c("com.databricks:spark-avro_2.10:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
-#' @note since 2.0.0
-
+#' @note sparkR.session since 2.0.0
 sparkR.session <- function(
   master = "",
   appName = "SparkR",
@@ -389,45 +392,89 @@ sparkR.session <- function(
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
-#' @param sc existing spark context
 #' @param groupid the ID to be assigned to job groups
 #' @param description description for the job group ID
 #' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @rdname setJobGroup
+#' @name setJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' setJobGroup(sc, "myJobGroup", "My job group description", TRUE)
+#' sparkR.session()
+#' setJobGroup("myJobGroup", "My job group description", TRUE)
 #'}
+#' @note setJobGroup since 1.5.0
+#' @method setJobGroup default
+setJobGroup.default <- function(groupId, description, interruptOnCancel) {
+  sc <- getSparkContext()
+  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+}
 
 setJobGroup <- function(sc, groupId, description, interruptOnCancel) {
-  callJMethod(sc, "setJobGroup", groupId, description, interruptOnCancel)
+  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("setJobGroup(groupId, description, interruptOnCancel)",
+                old = "setJobGroup(sc, groupId, description, interruptOnCancel)")
+    setJobGroup.default(groupId, description, interruptOnCancel)
+  } else {
+    # Parameter order is shifted
+    groupIdToUse <- sc
+    descriptionToUse <- groupId
+    interruptOnCancelToUse <- description
+    setJobGroup.default(groupIdToUse, descriptionToUse, interruptOnCancelToUse)
+  }
 }
 
 #' Clear current job group ID and its description
 #'
-#' @param sc existing spark context
+#' @rdname clearJobGroup
+#' @name clearJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' clearJobGroup(sc)
+#' sparkR.session()
+#' clearJobGroup()
 #'}
-
-clearJobGroup <- function(sc) {
+#' @note clearJobGroup since 1.5.0
+#' @method clearJobGroup default
+clearJobGroup.default <- function() {
+  sc <- getSparkContext()
   callJMethod(sc, "clearJobGroup")
 }
 
+clearJobGroup <- function(sc) {
+  if (!missing(sc) &&
+      class(sc) == "jobj" &&
+      any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("clearJobGroup()", old = "clearJobGroup(sc)")
+  }
+  clearJobGroup.default()
+}
+
+
 #' Cancel active jobs for the specified group
 #'
-#' @param sc existing spark context
 #' @param groupId the ID of job group to be cancelled
+#' @rdname cancelJobGroup
+#' @name cancelJobGroup
 #' @examples
 #'\dontrun{
-#' sc <- sparkR.init()
-#' cancelJobGroup(sc, "myJobGroup")
+#' sparkR.session()
+#' cancelJobGroup("myJobGroup")
 #'}
+#' @note cancelJobGroup since 1.5.0
+#' @method cancelJobGroup default
+cancelJobGroup.default <- function(groupId) {
+  sc <- getSparkContext()
+  callJMethod(sc, "cancelJobGroup", groupId)
+}
 
 cancelJobGroup <- function(sc, groupId) {
-  callJMethod(sc, "cancelJobGroup", groupId)
+  if (class(sc) == "jobj" && any(grepl("JavaSparkContext", getClassName.jobj(sc)))) {
+    .Deprecated("cancelJobGroup(groupId)", old = "cancelJobGroup(sc, groupId)")
+    cancelJobGroup.default(groupId)
+  } else {
+    # Parameter order is shifted
+    groupIdToUse <- sc
+    cancelJobGroup.default(groupIdToUse)
+  }
 }
 
 sparkConfToSubmitOps <- new.env()

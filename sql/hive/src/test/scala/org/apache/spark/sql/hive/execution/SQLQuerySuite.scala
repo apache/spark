@@ -187,6 +187,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
+    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
+    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
+    allBuiltinFunctions.foreach { f =>
+      assert(allFunctions.contains(f))
+    }
     withTempDatabase { db =>
       def createFunction(names: Seq[String]): Unit = {
         names.foreach { name =>
@@ -1682,38 +1687,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("select (cast(99 as decimal(19,6)) + c1) * c2 from tbl"),
         Row(234.6)
       )
-    }
-  }
-
-  test("SPARK-16036: better error message when insert into a table with mismatch schema") {
-    withTable("hive_table", "datasource_table") {
-      sql("CREATE TABLE hive_table(a INT) PARTITIONED BY (b INT, c INT)")
-      sql("CREATE TABLE datasource_table(a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)")
-      val e1 = intercept[AnalysisException] {
-        sql("INSERT INTO TABLE hive_table PARTITION(b=1, c=2) SELECT 1, 2, 3")
-      }
-      assert(e1.message.contains("the number of columns are different"))
-      val e2 = intercept[AnalysisException] {
-        sql("INSERT INTO TABLE datasource_table PARTITION(b=1, c=2) SELECT 1, 2, 3")
-      }
-      assert(e2.message.contains("the number of columns are different"))
-    }
-  }
-
-  test("SPARK-16037: INSERT statement should match columns by position") {
-    withTable("hive_table", "datasource_table") {
-      sql("CREATE TABLE hive_table(a INT) PARTITIONED BY (b INT, c INT)")
-      sql("CREATE TABLE datasource_table(a INT, b INT, c INT) USING parquet PARTITIONED BY (b, c)")
-
-      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-        sql("INSERT INTO TABLE hive_table SELECT 1, 2 AS c, 3 AS b")
-        checkAnswer(sql("SELECT a, b, c FROM hive_table"), Row(1, 2, 3))
-        sql("INSERT OVERWRITE TABLE hive_table SELECT 1, 2, 3")
-        checkAnswer(sql("SELECT a, b, c FROM hive_table"), Row(1, 2, 3))
-      }
-
-      sql("INSERT INTO TABLE datasource_table SELECT 1, 2 AS c, 3 AS b")
-      checkAnswer(sql("SELECT a, b, c FROM datasource_table"), Row(1, 2, 3))
     }
   }
 }
