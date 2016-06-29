@@ -346,11 +346,34 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
 object MapObjects {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
+  /**
+   * Construct an instance of MapObjects case class.
+   *
+   * @param function The function applied on the collection elements.
+   * @param inputData An expression that when evaluated returns a collection object.
+   * @param elementType The data type of elements in the collection.
+   */
+  def apply(
+      function: Expression => Expression,
+      inputData: Expression,
+      elementType: DataType): MapObjects = {
+    apply(function, inputData, elementType, inputData.dataType)
+  }
+
+  /**
+   * Construct an instance of MapObjects case class.
+   *
+   * @param function The function applied on the collection elements.
+   * @param inputData An expression that when evaluated returns a collection object.
+   * @param elementType The data type of elements in the collection.
+   * @param inputDataType The explicitly given data type of inputData to override the
+   *                      data type inferred from inputData (i.e., inputData.dataType).
+   */
   def apply(
       function: Expression => Expression,
       inputData: Expression,
       elementType: DataType,
-      inputDataType: Option[DataType] = None): MapObjects = {
+      inputDataType: DataType): MapObjects = {
     val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
     val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
     val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
@@ -375,7 +398,7 @@ object MapObjects {
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
  * @param inputData An expression that when evaluated returns a collection object.
- * @param inputDataType The dataType of inputData. Optional.
+ * @param inputDataType The dataType of inputData.
  */
 case class MapObjects private(
     loopValue: String,
@@ -383,7 +406,7 @@ case class MapObjects private(
     loopVarDataType: DataType,
     lambdaFunction: Expression,
     inputData: Expression,
-    inputDataType: Option[DataType]) extends Expression with NonSQLExpression {
+    inputDataType: DataType) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = true
 
@@ -436,9 +459,7 @@ case class MapObjects private(
       case _ => ""
     }
 
-    val inputDT = inputDataType.getOrElse(inputData.dataType)
-
-    val (getLength, getLoopVar) = inputDT match {
+    val (getLength, getLoopVar) = inputDataType match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
         s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
       case ObjectType(cls) if cls.isArray =>
@@ -452,7 +473,7 @@ case class MapObjects private(
           s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
     }
 
-    val loopNullCheck = inputDT match {
+    val loopNullCheck = inputDataType match {
       case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
       case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
