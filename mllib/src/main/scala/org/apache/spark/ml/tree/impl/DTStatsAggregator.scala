@@ -94,6 +94,16 @@ private[spark] class DTStatsAggregator(
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
   }
 
+  /**
+   * Calculate gain for a given (featureOffset, leftBin, parentBin).
+   *
+   * @param featureOffset  This is a pre-computed (node, feature) offset
+   *                           from [[getFeatureOffset]].
+   * @param leftBinIndex  Index of the leftChild in allStats
+   *                          Given by featureOffset + leftBinIndex * statsSize
+   * @param parentBinIndex  Index of the parent in allStats
+   *                            Given by featureOffset + parentBinIndex * statsSize
+   */
   def calculateGain(
       featureOffset: Int,
       leftBinIndex: Int,
@@ -115,6 +125,14 @@ private[spark] class DTStatsAggregator(
     gain
   }
 
+  /**
+   * Calculate gain for a given (featureOffset, leftBin).
+   * The stats of the parent are inferred from parentStats.
+   * @param featureOffset  This is a pre-computed (node, feature) offset
+   *                           from [[getFeatureOffset]].
+   * @param leftBinIndex  Index of the leftChild in allStats
+   *                          Given by featureOffset + leftBinIndex * statsSize
+   */
   def calculateGain(
       featureOffset: Int,
       leftBinIndex: Int): Double = {

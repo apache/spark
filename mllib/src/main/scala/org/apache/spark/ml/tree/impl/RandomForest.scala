@@ -648,7 +648,7 @@ private[spark] object RandomForest extends Logging {
           }
           // Find best split.
           val (bestFeatureSplitIndex, maxGain) =
-            Range(0, numSplits).map { case splitIdx =>
+            Range(0, numSplits).map { splitIdx =>
               val gain = binAggregates.calculateGain(nodeFeatureOffset, splitIdx, numSplits)
               (splitIdx, gain)
             }.maxBy(_._2)
@@ -658,7 +658,7 @@ private[spark] object RandomForest extends Logging {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
           val (bestFeatureSplitIndex, maxGain) =
-            Range(0, numSplits).map { case splitIdx =>
+            Range(0, numSplits).map { splitIdx =>
               val gain = binAggregates.calculateGain(leftChildOffset, splitIdx)
               (splitIdx, gain)
             }.maxBy(_._2)
@@ -723,7 +723,7 @@ private[spark] object RandomForest extends Logging {
           val lastCategory = categoriesSortedByCentroid.last._1
           // Find best split.
           val (bestFeatureSplitIndex, maxGain) =
-            Range(0, numSplits).map { case splitIdx =>
+            Range(0, numSplits).map { splitIdx =>
               val featureValue = categoriesSortedByCentroid(splitIdx)._1
               val gain = binAggregates.calculateGain(nodeFeatureOffset, featureValue, lastCategory)
               (splitIdx, gain)
