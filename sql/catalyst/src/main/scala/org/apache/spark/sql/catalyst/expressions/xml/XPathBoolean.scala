@@ -31,7 +31,8 @@ case class XPathBoolean(xml: Expression, path: Expression)
 
   @transient private lazy val xpathUtil = new UDFXPathUtil
 
-  // We use these to avoid converting the path from UTF8String to String if it is a constant.
+  // If the path is a constant, cache the path string so that we don't need to convert path
+  // from UTF8String to String for every row.
   @transient lazy val pathLiteral: String = path match {
     case Literal(str: UTF8String, _) => str.toString
     case _ => null
