@@ -358,7 +358,8 @@ class JDBCSuite extends SparkFunSuite
     val e = intercept[SparkException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
-    assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+    assert(e.contains("Invalid value `-1` for parameter `fetchsize`. The minimum value is zero. " +
+      "When the value is zero, the JDBC driver ignores the value and does the estimates."))
   }
 
   test("Basic API with FetchSize") {

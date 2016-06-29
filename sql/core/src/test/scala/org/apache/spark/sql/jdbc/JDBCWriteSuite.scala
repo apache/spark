@@ -93,7 +93,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
     df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties)
-    assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count())
     assert(
       2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
   }
@@ -107,7 +107,8 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val e = intercept[SparkException] {
         df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       }.getMessage
-      assert(e.contains(s"Invalid value `$size` for parameter `batchsize`"))
+      assert(e.contains(s"Invalid value `$size` for parameter `batchsize`. The minimum value " +
+        s"is one."))
     }
   }
 
@@ -118,8 +119,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       val properties = new Properties
       properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
       df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
-      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
-      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count())
     }
   }
 
@@ -128,11 +128,11 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
     df.write.jdbc(url1, "TEST.DROPTEST", properties)
-    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count)
+    assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
     assert(3 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
 
     df2.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.DROPTEST", properties)
-    assert(1 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count)
+    assert(1 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.DROPTEST", properties).collect()(0).length)
   }
 
@@ -142,7 +142,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.jdbc(url, "TEST.APPENDTEST", new Properties)
     df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties)
-    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties).count)
+    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties).count())
     assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties).collect()(0).length)
   }
 
@@ -152,7 +152,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
     df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
     df2.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.TRUNCATETEST", properties)
-    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count)
+    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
   }
 
@@ -168,14 +168,14 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
 
   test("INSERT to JDBC Datasource") {
     sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
 
   test("INSERT to JDBC Datasource with overwrite") {
     sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
     sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
-    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+    assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
 }

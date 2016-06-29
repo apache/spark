@@ -159,7 +159,8 @@ object JdbcUtils extends Logging {
       batchSize: Int,
       dialect: JdbcDialect): Iterator[Byte] = {
     require(batchSize >= 1,
-      s"Invalid value `${batchSize.toString}` for parameter `${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`.")
+      s"Invalid value `${batchSize.toString}` for parameter " +
+      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is one.")
 
     val conn = getConnection()
     var committed = false

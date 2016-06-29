@@ -178,9 +178,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "fetchsize" can be used to control the
-   *                             number of rows per fetch. The minimum value is zero. If the
-   *                             "fetchsize" specified is zero, the JDBC driver ignores the value
-   *                             and does the estimates.
+   *                             number of rows per fetch.
    * @since 1.4.0
    */
   def jdbc(
