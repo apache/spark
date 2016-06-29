@@ -191,8 +191,8 @@ object CrossValidator extends MLReadable[CrossValidator] {
 }
 
 /**
- * Pipelines facilitate model selection by making it easy to tune an entire
- * Pipeline at once, rather than tuning each element in the Pipeline separately.
+ * :: Experimental ::
+ * CrossValidatorModel model returns the best set of estimators for your model.
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in

@@ -266,9 +266,8 @@ class CrossValidator(Estimator, ValidatorParams):
 class CrossValidatorModel(Model, ValidatorParams):
     """
 
-    Pipelines facilitate model selection by making it easy to tune an entire 
-    Pipeline at once, rather than tuning each element in the Pipeline separately.
-
+    CrossValidatorModel model returns the best set of estimators for your model.
+	
     .. versionadded:: 1.4.0
     """
 
