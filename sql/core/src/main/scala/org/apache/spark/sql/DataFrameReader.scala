@@ -244,7 +244,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def json(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    json(Seq(path): _*)
+    option("path", path).json(Seq.empty: _*)
   }
 
   /**
@@ -337,7 +337,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def csv(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    csv(Seq(path): _*)
+    option("path", path).csv(Seq.empty: _*)
   }
 
   /**
@@ -406,7 +406,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def parquet(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    parquet(Seq(path): _*)
+    option("path", path).parquet(Seq.empty: _*)
   }
 
   /**
@@ -434,7 +434,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def orc(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    orc(Seq(path): _*)
+    option("path", path).orc(Seq.empty: _*)
   }
 
   /**
@@ -467,7 +467,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def text(path: String): DataFrame = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    text(Seq(path): _*)
+    option("path", path).text(Seq.empty: _*)
   }
 
   /**
@@ -496,7 +496,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def textFile(path: String): Dataset[String] = {
     // This method ensures that calls that explicit need single argument works, see SPARK-16009
-    textFile(Seq(path): _*)
+    option("path", path).textFile(Seq.empty: _*)
   }
 
   /**

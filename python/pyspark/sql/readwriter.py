@@ -143,7 +143,9 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None:
+        if isinstance(path, basestring):
+            return self._df(self._jreader.load(path))
+        elif path is not None:
             if type(path) != list:
                 path = [path]
             return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
