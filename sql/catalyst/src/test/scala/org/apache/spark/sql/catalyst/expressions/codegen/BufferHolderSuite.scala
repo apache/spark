@@ -26,12 +26,13 @@ class BufferHolderSuite extends SparkFunSuite {
     var e = intercept[UnsupportedOperationException] {
       new BufferHolder(new UnsafeRow(Int.MaxValue / 8))
     }
-    assert(e.getMessage.contains("it is too big"))
+    assert(e.getMessage.contains("too many fields"))
 
     val holder = new BufferHolder(new UnsafeRow(1000))
+    holder.reset()
     holder.grow(1000)
     e = intercept[UnsupportedOperationException] {
-      holder.grow(2e10.toInt)
+      holder.grow(Integer.MAX_VALUE)
     }
     assert(e.getMessage.contains("exceeds size limitation"))
   }

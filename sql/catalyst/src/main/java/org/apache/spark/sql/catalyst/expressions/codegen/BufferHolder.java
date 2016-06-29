@@ -61,15 +61,16 @@ public class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   public void grow(int neededSize) {
-    if (neededSize > Integer.MAX_VALUE / 2 - totalSize()) {
+    if (neededSize > Integer.MAX_VALUE - totalSize()) {
       throw new UnsupportedOperationException(
         "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + Integer.MAX_VALUE / 2);
+          "exceeds size limitation " + Integer.MAX_VALUE);
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
-      final byte[] tmp = new byte[length * 2];
+      int newLength = length < Integer.MAX_VALUE / 2 ? length * 2 : Integer.MAX_VALUE;
+      final byte[] tmp = new byte[newLength];
       Platform.copyMemory(
         buffer,
         Platform.BYTE_ARRAY_OFFSET,
