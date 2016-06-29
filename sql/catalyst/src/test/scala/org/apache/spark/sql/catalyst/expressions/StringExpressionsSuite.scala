@@ -90,6 +90,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testElt(null, 3, "hello", "world")
     testElt(null, 0, "hello", "world")
     testElt(null, -1, "hello", "world")
+
+    // type checking
+    assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
+    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
   }
 
   test("StringComparison") {

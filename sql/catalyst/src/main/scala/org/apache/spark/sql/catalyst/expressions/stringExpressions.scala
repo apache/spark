@@ -21,6 +21,7 @@ import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
@@ -168,8 +169,6 @@ case class ConcatWs(children: Seq[Expression])
 case class Elt(children: Seq[Expression])
   extends Expression with ExpectsInputTypes with CodegenFallback {
 
-  require(children.nonEmpty, "elt requires at least one argument.")
-
   private lazy val indexExpr = children.head
   private lazy val stringExprs = children.tail.toArray
 
@@ -178,8 +177,14 @@ case class Elt(children: Seq[Expression])
 
   override def dataType: DataType = StringType
 
-  override def inputTypes: Seq[AbstractDataType] = {
-    IntegerType +: Seq.fill(children.length - 1)(StringType)
+  override def inputTypes: Seq[DataType] = IntegerType +: Seq.fill(children.size - 1)(StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckFailure("input to function elt cannot be empty")
+    } else {
+      super[ExpectsInputTypes].checkInputDataTypes()
+    }
   }
 
   override def eval(input: InternalRow): Any = {
