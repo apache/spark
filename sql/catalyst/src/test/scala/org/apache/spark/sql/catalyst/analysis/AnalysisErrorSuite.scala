@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -161,6 +161,16 @@ class AnalysisErrorSuite extends AnalysisTest {
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as('window)),
     "Distinct window functions are not supported" :: Nil)
+
+  errorTest(
+    "nested aggregate functions",
+    testRelation.groupBy('a)(
+      AggregateExpression(
+        Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
+        Complete,
+        isDistinct = false)),
+    "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
+  )
 
   errorTest(
     "offset window function",
