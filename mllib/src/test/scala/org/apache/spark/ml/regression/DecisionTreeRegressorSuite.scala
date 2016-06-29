@@ -19,9 +19,10 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -36,10 +37,21 @@ class DecisionTreeRegressorSuite
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
 
+  private var toyData: RDD[LabeledPoint] = _
+
   override def beforeAll() {
     super.beforeAll()
+
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
+    toyData = sc.parallelize(Seq(
+      LabeledPoint(1.0, Vectors.dense(Array(0.0))),
+      LabeledPoint(2.0, Vectors.dense(Array(1.0))),
+      LabeledPoint(3.0, Vectors.dense(Array(2.0))),
+      LabeledPoint(10.0, Vectors.dense(Array(3.0))),
+      LabeledPoint(12.0, Vectors.dense(Array(4.0))),
+      LabeledPoint(14.0, Vectors.dense(Array(5.0))))
+    )
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -96,6 +108,15 @@ class DecisionTreeRegressorSuite
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
     }
+
+    val toyDF = TreeTests.setMetadata(toyData, Map.empty[Int, Int], 0)
+    dt.setMaxDepth(1)
+      .setMaxBins(6)
+      .setSeed(0)
+    val expectVariances = dt.fit(toyDF).transform(toyDF).select("variance").collect().map {
+      case Row(variance: Double) => variance }
+    val trueVariances = Array(0.667, 0.667, 0.667, 2.667, 2.667, 2.667)
+    trueVariances.zip(expectVariances).foreach(x => x._1 ~== x._2 absTol 1e-3)
   }
 
   test("Feature importance with toy data") {
