@@ -45,11 +45,14 @@ class VectorizedHashMapGenerator(
     generatedClassName: String,
     groupingKeySchema: StructType,
     bufferSchema: StructType) {
-  case class Buffer(dataType: DataType, name: String)
-  val groupingKeys = groupingKeySchema.map(k => Buffer(k.dataType, ctx.freshName("key")))
+  case class Buffer(dataType: DataType, name: String, isNullName: String = "")
+  val groupingKeys = groupingKeySchema.map(k => Buffer(k.dataType, ctx.freshName("key"),
+    ctx.freshName("isNull")))
   val bufferValues = bufferSchema.map(k => Buffer(k.dataType, ctx.freshName("value")))
   val groupingKeySignature =
     groupingKeys.map(key => s"${ctx.javaType(key.dataType)} ${key.name}").mkString(", ")
+  val groupingKeyIsNullSignature =
+    groupingKeys.map(key => s"boolean ${key.isNullName}").mkString(", ")
   val buffVars: Seq[ExprCode] = {
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
@@ -75,9 +78,15 @@ class VectorizedHashMapGenerator(
        |
        |${generateFindOrInsert()}
        |
+       |${generateFindOrInsertWithNullable()}
+       |
        |${generateEquals()}
        |
+       |${generateEqualsWithNullable()}
+       |
        |${generateHashFunction()}
+       |
+       |${generateHashFunctionWithNullable()}
        |
        |${generateRowIterator()}
        |
@@ -173,6 +182,34 @@ class VectorizedHashMapGenerator(
   }
 
   /**
+    * Similar to generateHashFunction(), but generate hash() with a different signature
+    * to deal with nullable keys
+    */
+  private def generateHashFunctionWithNullable(): String = {
+    val hash = ctx.freshName("hash")
+
+    def genHashForKeys(groupingKeys: Seq[Buffer]): String = {
+      groupingKeys.map { key =>
+        val result = ctx.freshName("result")
+        s"""
+           |if(!${key.isNullName}) {
+           |  ${genComputeHash(ctx, key.name, key.dataType, result)}
+           |  $hash = ($hash ^ (0x9e3779b9)) + $result + ($hash << 6) + ($hash >>> 2);
+           |}
+          """.stripMargin
+      }.mkString("\n")
+    }
+
+    s"""
+       |private long hash($groupingKeySignature, $groupingKeyIsNullSignature) {
+       |  long $hash = 0;
+       |  ${genHashForKeys(groupingKeys)}
+       |  return $hash;
+       |}
+     """.stripMargin
+  }
+
+  /**
    * Generates a method that returns true if the group-by keys exist at a given index in the
    * associated [[org.apache.spark.sql.execution.vectorized.ColumnarBatch]]. For instance, if we
    * have 2 long group-by keys, the generated function would be of the form:
@@ -195,6 +232,31 @@ class VectorizedHashMapGenerator(
 
     s"""
        |private boolean equals(int idx, $groupingKeySignature) {
+       |  return ${genEqualsForKeys(groupingKeys)};
+       |}
+     """.stripMargin
+  }
+
+
+  /**
+    * Similar to generateEquals(), but generate equals() with a different signature
+    * to deal with nullable keys
+    */
+  private def generateEqualsWithNullable(): String = {
+
+    def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
+      groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        s"""((${ctx.genEqual(BooleanType, ctx.getIsNull("batch", "buckets[idx]", ordinal),
+          key.isNullName)})&&""" +
+        s"""
+           (${key.isNullName}||(!${key.isNullName} && ${ctx.genEqual(key.dataType,
+          ctx.getValue("batch", "buckets[idx]", key.dataType, ordinal), key.name)})))
+         """
+      }.mkString(" && ")
+    }
+
+    s"""
+       |private boolean equals(int idx, $groupingKeySignature, $groupingKeyIsNullSignature) {
        |  return ${genEqualsForKeys(groupingKeys)};
        |}
      """.stripMargin
@@ -276,6 +338,71 @@ class VectorizedHashMapGenerator(
        |        return null;
        |      }
        |    } else if (equals(idx, ${groupingKeys.map(_.name).mkString(", ")})) {
+       |      return aggregateBufferBatch.getRow(buckets[idx]);
+       |    }
+       |    idx = (idx + 1) & (numBuckets - 1);
+       |    step++;
+       |  }
+       |  // Didn't find it
+       |  return null;
+       |}
+     """.stripMargin
+  }
+
+  /**
+    * Similar to generateFindOrInsert(), but generate a findOrInsertWithNullable() that
+    * deals with nullable types.
+    *
+    * We generate both versions of findOrInsert(), one can deal with nulls (this one), one cannot.
+    * We could always go with this findOrInsert() but the null dealing logic in this generated
+    * method adds noticeable overhead (observed 40% degradation for some cases) if actual values
+    * are not null for the currently processed record, which could only be known during runtime.
+    */
+  private def generateFindOrInsertWithNullable(): String = {
+
+    def genCodeToSetKeys(groupingKeys: Seq[Buffer]): Seq[String] = {
+      groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        ctx.updateColumn("batch", "numRows", key.dataType, ordinal,
+          ExprCode("", key.isNullName, key.name), true)
+      }
+    }
+
+    def genCodeToSetAggBuffers(bufferValues: Seq[Buffer]): Seq[String] = {
+      bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        ctx.updateColumn("batch", "numRows", key.dataType, groupingKeys.length + ordinal,
+          buffVars(ordinal), nullable = true)
+      }
+    }
+
+    s"""
+       |public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(
+       |  ${groupingKeySignature}, ${groupingKeyIsNullSignature}) {
+       |  long h = hash(${groupingKeys.map(_.name).mkString(", ")});
+       |  int step = 0;
+       |  int idx = (int) h & (numBuckets - 1);
+       |  while (step < maxSteps) {
+       |    // Return bucket index if it's either an empty slot or already contains the key
+       |    if (buckets[idx] == -1) {
+       |      if (numRows < capacity) {
+       |
+       |        // Initialize aggregate keys
+       |        ${genCodeToSetKeys(groupingKeys).mkString("\n")}
+       |
+       |        ${buffVars.map(_.code).mkString("\n")}
+       |
+       |        // Initialize aggregate values
+       |        ${genCodeToSetAggBuffers(bufferValues).mkString("\n")}
+       |
+       |        buckets[idx] = numRows++;
+       |        batch.setNumRows(numRows);
+       |        aggregateBufferBatch.setNumRows(numRows);
+       |        return aggregateBufferBatch.getRow(buckets[idx]);
+       |      } else {
+       |        // No more space
+       |        return null;
+       |      }
+       |    } else if (equals(idx, ${groupingKeys.map(_.name).mkString(", ")},
+       |                        ${groupingKeys.map(_.isNullName).mkString(", ")})) {
        |      return aggregateBufferBatch.getRow(buckets[idx]);
        |    }
        |    idx = (idx + 1) & (numBuckets - 1);

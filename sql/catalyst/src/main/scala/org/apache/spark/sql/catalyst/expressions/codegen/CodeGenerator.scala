@@ -262,6 +262,13 @@ class CodegenContext {
   }
 
   /**
+    * Returns the specialized code to access if null is set at `ordinal` from a `inputRow`.
+    */
+  def getIsNull(input: String, ordinal: String): String = {
+      s"$input.isNullAt($ordinal)"
+  }
+
+  /**
    * Returns the code to update a column in Row for a given DataType.
    */
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
@@ -367,6 +374,13 @@ class CodegenContext {
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
+  }
+
+  /**
+    * Returns the specialized code to access if null is set at `ordinal` from a column vector.
+    */
+  def getIsNull(batch: String, row: String, ordinal: Int): String = {
+    s"$batch.column($ordinal).isNullAt($row)"
   }
 
   /**
