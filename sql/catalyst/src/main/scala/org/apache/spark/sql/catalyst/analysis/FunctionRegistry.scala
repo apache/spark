@@ -248,6 +248,7 @@ object FunctionRegistry {
     expression[Average]("mean"),
     expression[Min]("min"),
     expression[Skewness]("skewness"),
+    expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
