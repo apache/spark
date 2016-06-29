@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
 
-class GeneratorSuite extends SparkFunSuite with ExpressionEvalHelper {
+class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkTuple(actual: ExplodeBase, expected: Seq[InternalRow]): Unit = {
     assert(actual.eval(null).toSeq === expected)
   }

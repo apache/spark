@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
-class GeneratorSuite extends QueryTest with SharedSQLContext {
+class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("single explode") {
