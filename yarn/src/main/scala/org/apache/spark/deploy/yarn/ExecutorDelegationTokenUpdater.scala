@@ -64,7 +64,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
           logInfo("Reading new delegation tokens from " + credentialsStatus.getPath)
           val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
           lastCredentialsFileSuffix = suffix
-          UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+          SparkHadoopUtil.get.addCredentialsToCurrentUser(newCredentials, freshHadoopConf)
           logInfo("Tokens updated from credentials file.")
         } else {
           // Check every hour to see if new credentials arrived.
