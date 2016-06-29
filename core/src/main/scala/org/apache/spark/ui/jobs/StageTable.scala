@@ -117,7 +117,7 @@ private[ui] class StageTableBase(
     } yield {
       UIUtils.makeDescription(desc, basePathUri)
     }
-    <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
+    <div>{stageDesc.getOrElse("")} {nameLink} {killLink} {details}</div>
   }
 
   protected def missingStageRow(stageId: Int): Seq[Node] = {
