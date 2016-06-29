@@ -203,12 +203,12 @@ private[hive] case class MetastoreRelation(
   )
 
   implicit class SchemaAttribute(f: CatalogColumn) {
-    def toAttribute(isPartitionColumn: Boolean): AttributeReference = AttributeReference(
+    def toAttribute(isMetadataColumn: Boolean): AttributeReference = AttributeReference(
       f.name,
       CatalystSqlParser.parseDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifier = Some(alias.getOrElse(tableName)), isPartitionColumn = isPartitionColumn)
+    )(qualifier = Some(alias.getOrElse(tableName)), isMetadataColumn = isMetadataColumn)
   }
 
   /** PartitionKey attributes */

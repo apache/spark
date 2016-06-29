@@ -42,7 +42,7 @@ case class MetadataOnlyOptimizer(
     catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   private def canSupportMetadataOnly(a: Aggregate): Boolean = {
-    if (!a.references.forall(_.isPartitionColumn)) {
+    if (!a.references.forall(_.isMetadataColumn)) {
       // Support for scanning only partition columns
       false
     } else {
@@ -115,10 +115,10 @@ case class MetadataOnlyOptimizer(
    *  Aggregate [Expand] Project [Filter] (LogicalRelation | CatalogRelation)
    */
   private def convertToMetadataOnly(plan: LogicalPlan): LogicalPlan = plan match {
-    case p @ Project(fields, child) if p.references.forall(_.isPartitionColumn) =>
+    case p @ Project(fields, child) if p.references.forall(_.isMetadataColumn) =>
       child match {
         case f @ Filter(condition, l @ LogicalRelation(files: HadoopFsRelation, _, _))
-          if files.partitionSchema.nonEmpty && f.references.forall(_.isPartitionColumn) =>
+          if files.partitionSchema.nonEmpty && f.references.forall(_.isMetadataColumn) =>
           val plan = convertLogicalToMetadataOnly(Some(condition), l, files)
           p.withNewChildren(f.withNewChildren(plan :: Nil) :: Nil)
 
@@ -129,7 +129,7 @@ case class MetadataOnlyOptimizer(
 
         case f @ Filter(condition, relation: CatalogRelation)
           if relation.catalogTable.partitionColumnNames.nonEmpty &&
-            f.references.forall(_.isPartitionColumn) =>
+            f.references.forall(_.isMetadataColumn) =>
           val plan = convertCatalogToMetadataOnly(relation)
           p.withNewChildren(f.withNewChildren(plan :: Nil) :: Nil)
 

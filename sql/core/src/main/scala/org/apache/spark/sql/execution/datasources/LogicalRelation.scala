@@ -38,7 +38,7 @@ case class LogicalRelation(
 
   override val output: Seq[AttributeReference] = {
     val attrs = relation.schema.toAttributes.map { attr =>
-      attr.setPartitionColumn(
+      attr.withMetadataColumn(
         relation.partitionColumnNames.contains(attr.name.toLowerCase))
     }
     expectedOutputAttributes.map { expectedAttrs =>
