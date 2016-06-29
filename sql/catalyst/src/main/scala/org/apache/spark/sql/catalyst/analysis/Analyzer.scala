@@ -1841,8 +1841,10 @@ class Analyzer(
      joinType: JoinType,
      joinNames: Seq[String],
      condition: Option[Expression]) = {
-    val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
-    val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+    val leftKeys =
+      joinNames.map(keyName => left.output.find(attr => resolver(attr.name, keyName)).get)
+    val rightKeys =
+      joinNames.map(keyName => right.output.find(attr => resolver(attr.name, keyName)).get)
     val joinPairs = leftKeys.zip(rightKeys)
 
     val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
