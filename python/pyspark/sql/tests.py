@@ -575,6 +575,17 @@ class SQLTests(ReusedPySparkTestCase):
         _verify_type(PythonOnlyPoint(1.0, 2.0), PythonOnlyUDT())
         self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], PythonOnlyUDT()))
 
+    def test_udt_with_none(self):
+        df = self.spark.range(0, 10, 1, 1)
+
+        def myudf(x):
+            if x > 0:
+                return PythonOnlyPoint(float(x), float(x))
+
+        self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
+        rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
+        self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
+
     def test_infer_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))

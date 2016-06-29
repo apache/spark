@@ -45,8 +45,7 @@ case class SimpleDDLScan(
 
   override def schema: StructType =
     StructType(Seq(
-      StructField("intType", IntegerType, nullable = false,
-        new MetadataBuilder().putString("comment", s"test comment $table").build()),
+      StructField("intType", IntegerType, nullable = false).withComment(s"test comment $table"),
       StructField("stringType", StringType, nullable = false),
       StructField("dateType", DateType, nullable = false),
       StructField("timestampType", TimestampType, nullable = false),
