@@ -114,16 +114,23 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
   override def elementSchema: StructType = child.dataType match {
     case ArrayType(et, containsNull) =>
       if (position) {
-        new StructType().add("pos", IntegerType, false).add("col", et, containsNull)
+        new StructType()
+          .add("pos", IntegerType, false)
+          .add("col", et, containsNull)
       } else {
-        new StructType().add("col", et, containsNull)
+        new StructType()
+          .add("col", et, containsNull)
       }
     case MapType(kt, vt, valueContainsNull) =>
       if (position) {
-        new StructType().add("pos", IntegerType, false).add("key", kt, false)
+        new StructType()
+          .add("pos", IntegerType, false)
+          .add("key", kt, false)
           .add("value", vt, valueContainsNull)
       } else {
-        new StructType().add("key", kt, false).add("value", vt, valueContainsNull)
+        new StructType()
+          .add("key", kt, false)
+          .add("value", vt, valueContainsNull)
       }
   }
 
@@ -159,10 +166,17 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
 
 /**
  * Given an input array produces a sequence of rows for each value in the array.
+ *
+ * {{{
+ *   SELECT explode(array(10,20)) ->
+ *   10
+ *   20
+ * }}}
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.")
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
+  extended = "> SELECT _FUNC_(array(10,20));\n  10\n  20")
 // scalastyle:on line.size.limit
 case class Explode(child: Expression)
   extends ExplodeBase(child, position = false) with Serializable {
@@ -170,10 +184,17 @@ case class Explode(child: Expression)
 
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.
+ *
+ * {{{
+ *   SELECT explode(array(10,20)) ->
+ *   0  10
+ *   1  20
+ * }}}
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.")
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
+  extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
 // scalastyle:on line.size.limit
 case class PosExplode(child: Expression)
   extends ExplodeBase(child, position = true) with Serializable {
