@@ -399,7 +399,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   private def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
     val props = visitTablePropertyList(ctx)
-    val badKeys = props.filter { case (_, v) => v == null }.keys
+    val badKeys = props.collect { case (key, null) => key }
     if (badKeys.nonEmpty) {
       throw operationNotAllowed(
         s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
@@ -456,7 +456,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     // Check for duplicate property names.
     checkDuplicateKeys(properties, ctx)
     val props = properties.toMap
-    val badKeys = props.filter { case (_, v) => v == null }.keys
+    val badKeys = props.collect { case (key, null) => key }
     if (badKeys.nonEmpty) {
       throw operationNotAllowed(
         s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
