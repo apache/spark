@@ -119,6 +119,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
       df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
     }
   }
 
