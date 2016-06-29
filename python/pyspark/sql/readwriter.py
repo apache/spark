@@ -695,8 +695,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
-        if compression is not None:
-            self.option("compression", compression)
+        self._set_opts(compression=compression)
         self._jwrite.orc(path)
 
     @since(1.4)
