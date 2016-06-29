@@ -22,6 +22,7 @@ import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -135,8 +136,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val dtVariances = dtModel.transform(df).select("variance").collect()
     val nSamples = dtVariances.size
     (0 to nSamples - 1).foreach { i =>
-      val diff = math.abs(rfVariances(i).getDouble(0) - dtVariances(i).getDouble(0))
-      assert(diff < 1e-6)
+      assert(rfVariances(i).getDouble(0) ~== dtVariances(i).getDouble(0) absTol 1e-6)
     }
 
     rf.setMaxDepth(2)
@@ -149,9 +149,9 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     results.map { case Row(features: Vector, variance: Double) =>
       val rootNodes = trees.map(_.rootNode.predictImpl(features))
       val predsquared = rootNodes.map(x => math.pow(x.prediction, 2)).sum / numTrees
-      val variance = rootNodes.map(_.impurityStats.calculate()).sum / numTrees
+      val treeVariance = rootNodes.map(_.impurityStats.calculate()).sum / numTrees
       val predictions = rootNodes.map(_.prediction).sum / numTrees
-      val expectedVariance = -math.pow(predictions, 2) + variance + predsquared
+      val expectedVariance = -math.pow(predictions, 2) + treeVariance + predsquared
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
     }
