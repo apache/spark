@@ -133,8 +133,17 @@ private[spark] class KafkaRDD[K, V](
     val bm = sparkContext.env.blockManager
     bm.master.getPeers(bm.blockManagerId).toArray
       .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith((a, b) => a.host > b.host || a.executorId > b.executorId)
+      .sortWith(compareExecutors)
   }
+
+  protected[kafka] def compareExecutors(
+      a: ExecutorCacheTaskLocation,
+      b: ExecutorCacheTaskLocation): Boolean =
+    if (a.host == b.host) {
+      a.executorId > b.executorId
+    } else {
+      a.host > b.host
+    }
 
   /**
    * Non-negative modulus, from java 8 math

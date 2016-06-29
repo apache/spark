@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import java.{ util => ju }
+
 import scala.collection.JavaConverters._
 import scala.util.Random
 
@@ -25,6 +27,7 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 
 class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -143,4 +146,24 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       "didn't get exactly one message")
   }
 
+  test("executor sorting") {
+    val kafkaParams = new ju.HashMap[String, Object](getKafkaParams())
+    kafkaParams.put("auto.offset.reset", "none")
+    val rdd = new KafkaRDD[String, String](
+      sc,
+      kafkaParams,
+      Array(OffsetRange("unused", 0, 1, 2)),
+      ju.Collections.emptyMap[TopicPartition, String](),
+      true)
+    val a3 = ExecutorCacheTaskLocation("a", "3")
+    val a4 = ExecutorCacheTaskLocation("a", "4")
+    val b1 = ExecutorCacheTaskLocation("b", "1")
+    val b2 = ExecutorCacheTaskLocation("b", "2")
+
+    val correct = Array(b2, b1, a4, a3)
+
+    correct.permutations.foreach { p =>
+      assert(p.sortWith(rdd.compareExecutors) === correct)
+    }
+  }
 }
