@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.types._
@@ -179,6 +180,12 @@ private[sql] class CsvOutputWriter(
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
 
+  // A `ValueConverter` is responsible for converting a field of an `InternalRow` to `String`.
+  private type ValueConverter = (InternalRow, Int) => String
+
+  // `ValueConverter`s for all fields of the schema
+  private val fieldsConverters: Seq[ValueConverter] = dataSchema.map(_.dataType).map(makeConverter)
+
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
@@ -195,18 +202,40 @@ private[sql] class CsvOutputWriter(
   private var records: Long = 0L
   private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
 
-  private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
-    if (field != null) {
-      field.toString
-    } else {
-      params.nullValue
+  private def rowToString(row: InternalRow): Seq[String] = {
+    var i = 0
+    val values = new Array[String](row.numFields)
+    while (i < row.numFields) {
+      if (!row.isNullAt(i)) {
+        values(i) = fieldsConverters(i).apply(row, i)
+      } else {
+        values(i) = params.nullValue
+      }
+      i += 1
     }
+    values
+  }
+
+  private def makeConverter(dataType: DataType): ValueConverter = dataType match {
+    case DateType if params.dateFormat != null =>
+      (row: InternalRow, ordinal: Int) =>
+        params.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+
+    case TimestampType if params.dateFormat != null =>
+      (row: InternalRow, ordinal: Int) =>
+        params.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+
+    case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
+
+    case dt: DataType =>
+      (row: InternalRow, ordinal: Int) =>
+        row.get(ordinal, dt).toString
   }
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), records == 0L && params.headerFlag)
+    csvWriter.writeRow(rowToString(row), records == 0L && params.headerFlag)
     records += 1
     if (records % FLUSH_BATCH_SIZE == 0) {
       flush()

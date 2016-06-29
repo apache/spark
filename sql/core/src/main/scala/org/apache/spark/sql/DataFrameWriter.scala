@@ -537,6 +537,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
+   * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
+   * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
+   * and timestamp type. By default, it is `null` which means writing both as numeric
+   * timestamps.</li>
+   * <li>`timezone` (default is the timezone of your current system): defines the timezone to
+   * be used with `dateFormat` option. If a timezone is specified in `dateFormat` (e.g. `Z`),
+   * then it will write the appropriate value with this timezone.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,

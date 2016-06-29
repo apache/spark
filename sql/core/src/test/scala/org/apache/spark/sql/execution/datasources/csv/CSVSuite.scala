@@ -665,4 +665,121 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = true, checkValues = false)
   }
+
+  test("Write timestamps correctly with dateFormat and timezone option") {
+    withTempDir { dir =>
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.csv"
+      val datesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("dateFormat", "yyyy/MM/dd HH:mm")
+        .save(datesWithFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringDatesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "false")
+        .load(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26 18:00"),
+        Row("2014/10/27 18:30"),
+        Row("2016/01/28 20:00"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+
+      // With dateFormat and timezone option.
+      val datesWithZoneAndFormatPath = s"${dir.getCanonicalPath}/datesWithZoneAndFormat.csv"
+      val datesWithZoneAndFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .option("timezone", "GMT")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithZoneAndFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("timezone", "Asia/Seoul")
+        .option("dateFormat", "dd/MM/yyyy HH:mmZ")
+        .save(datesWithZoneAndFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringDates = spark.read
+        .format("csv")
+        .option("header", "true")
+        .load(datesWithZoneAndFormatPath)
+      val expectedStringDates = Seq(
+        Row("27/08/2015 03:00+0900"),
+        Row("28/10/2014 03:30+0900"),
+        Row("29/01/2016 05:00+0900"))
+
+      checkAnswer(stringDates, expectedStringDates)
+    }
+  }
+
+  test("Write dates correctly with dateFormat and timezone option") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    withTempDir { dir =>
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.csv"
+      val datesWithFormat = spark.read
+        .format("csv")
+        .schema(customSchema)
+        .option("header", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("dateFormat", "yyyy/MM/dd")
+        .save(datesWithFormatPath)
+
+      // This will load back the dates as string.
+      val stringDatesWithFormat = spark.read
+        .format("csv")
+        .option("header", "true")
+        .load(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26"),
+        Row("2014/10/27"),
+        Row("2016/01/28"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+
+      // With dateFormat and timezone option.
+      val datesWithZoneAndFormatPath = s"${dir.getCanonicalPath}/datesWithZoneAndFormat.csv"
+      val datesWithZoneAndFormat = spark.read
+        .format("csv")
+        .schema(customSchema)
+        .option("header", "true")
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .load(testFile(datesFile))
+      datesWithZoneAndFormat.write
+        .format("csv")
+        .option("header", "true")
+        .option("timezone", "GTM")
+        .option("dateFormat", "dd/MM/yyyy z")
+        .save(datesWithZoneAndFormatPath)
+
+      // This will load back the dates as string.
+      val stringDates = spark.read
+        .format("csv")
+        .option("header", "true")
+        .load(datesWithZoneAndFormatPath)
+      val expectedStringDates = Seq(
+        Row("26/08/2015 GMT"),
+        Row("27/10/2014 GMT"),
+        Row("28/01/2016 GMT"))
+
+      checkAnswer(stringDates, expectedStringDates)
+    }
+  }
 }

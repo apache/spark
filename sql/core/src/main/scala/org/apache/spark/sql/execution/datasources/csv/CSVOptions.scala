@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
+import java.util.TimeZone
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
@@ -101,10 +102,16 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     name.map(CompressionCodecs.getCodecClassName)
   }
 
+  private val timezone: Option[String] = parameters.get("timezone")
+
   // Share date format object as it is expensive to parse date pattern.
   val dateFormat: SimpleDateFormat = {
     val dateFormat = parameters.get("dateFormat")
-    dateFormat.map(new SimpleDateFormat(_)).orNull
+    dateFormat.map { f =>
+      val format = new SimpleDateFormat(f)
+      timezone.foreach(tz => format.setTimeZone(TimeZone.getTimeZone(tz)))
+      format
+    }.orNull
   }
 
   val maxColumns = getInt("maxColumns", 20480)
