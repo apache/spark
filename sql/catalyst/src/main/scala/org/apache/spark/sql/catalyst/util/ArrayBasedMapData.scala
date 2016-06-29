@@ -19,6 +19,11 @@ package org.apache.spark.sql.catalyst.util
 
 class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) extends MapData {
   require(keyArray.numElements() == valueArray.numElements())
+  for (i <- 0 until keyArray.numElements()) {
+    if (keyArray.isNullAt(i)) {
+      throw new RuntimeException("Cannot use null as map key!")
+    }
+  }
 
   override def numElements(): Int = keyArray.numElements()
 
