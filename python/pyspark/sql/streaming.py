@@ -18,6 +18,7 @@
 import sys
 if sys.version >= '3':
     intlike = int
+    basestring = unicode = str
 else:
     intlike = (int, long)
 
