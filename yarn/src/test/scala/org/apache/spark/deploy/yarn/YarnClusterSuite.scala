@@ -274,9 +274,9 @@ private object YarnClusterDriverWithFailure extends Logging with Matchers {
       // scalastyle:off println
       System.err.println(
         s"""
-           |Invalid command line: ${args.mkString(" ")}
-            |
-            |Usage: YarnClusterDriver [result file]
+        |Invalid command line: ${args.mkString(" ")}
+        |
+        |Usage: YarnClusterDriver [result file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -330,18 +330,18 @@ private object YarnClusterDriver extends Logging with Matchers {
       sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
       data should be (Set(1, 2, 3, 4))
       result = "success"
+
+      // Verify that the config archive is correctly placed in the classpath of all containers.
+      val confFile = "/" + Client.SPARK_CONF_FILE
+      assert(getClass().getResource(confFile) != null)
+      val configFromExecutors = sc.parallelize(1 to 4, 4)
+        .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
+        .collect()
+      assert(configFromExecutors.find(_ == null) === None)
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
       sc.stop()
     }
-
-    // Verify that the config archive is correctly placed in the classpath of all containers.
-    val confFile = "/" + Client.SPARK_CONF_FILE
-    assert(getClass().getResource(confFile) != null)
-    val configFromExecutors = sc.parallelize(1 to 4, 4)
-      .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
-      .collect()
-    assert(configFromExecutors.find(_ == null) === None)
 
     // verify log urls are present
     val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
