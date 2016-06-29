@@ -109,6 +109,11 @@ case class MetadataOnlyOptimizer(
     valuesPlan
   }
 
+  /**
+   * When scanning only partition columns, convert LogicalRelation or CatalogRelation to LogicalRDD.
+   * Now support logical plan:
+   *  Aggregate [Expand] Project [Filter] (LogicalRelation | CatalogRelation)
+   */
   private def convertToMetadataOnly(plan: LogicalPlan): LogicalPlan = plan match {
     case p @ Project(fields, child) if p.references.forall(_.isPartitionColumn) =>
       child match {
