@@ -106,11 +106,8 @@ object Variance extends Impurity {
     val rightSumSquares = parentSumSquares - leftSumSquares
 
     val parentImpurity = (parentSumSquares - (parentSum * parentSum) / totalCount) / totalCount
-    val leftImpurity = (leftSumSquares - (leftSum * leftSum) / leftCount) / leftCount
-    val rightImpurity = (rightSumSquares - (rightSum * rightSum) / rightCount) / leftCount
-
-    val leftWeighted = leftImpurity * leftCount / totalCount
-    val rightWeighted = rightImpurity * rightCount / totalCount
+    val leftWeighted = (leftSumSquares - (leftSum * leftSum) / leftCount) / totalCount
+    val rightWeighted = (rightSumSquares - (rightSum * rightSum) / rightCount) / totalCount
     val gain = parentImpurity - leftWeighted - rightWeighted
 
     if (gain < minInfoGain) {
