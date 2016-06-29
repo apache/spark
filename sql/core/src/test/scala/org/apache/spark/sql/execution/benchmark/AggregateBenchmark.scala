@@ -160,14 +160,14 @@ class AggregateBenchmark extends BenchmarkBase {
 
 
     /*
-      Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
-      Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
-      Aggregate with null keys:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ------------------------------------------------------------------------------------------------
-      codegen = F                                   4369 / 4562         19.2          52.1       1.0X
-      codegen = T hashmap = F                       1835 / 1929         45.7          21.9       2.4X
-      codegen = T hashmap = T                        712 /  923        117.8           8.5       6.1X
+    Aggregate with null keys:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    codegen = F                                   4369 / 4562         19.2          52.1       1.0X
+    codegen = T hashmap = F                       1835 / 1929         45.7          21.9       2.4X
+    codegen = T hashmap = T                        712 /  923        117.8           8.5       6.1X
     */
   }
 

@@ -262,8 +262,8 @@ class CodegenContext {
   }
 
   /**
-    * Returns the specialized code to access if null is set at `ordinal` from a `inputRow`.
-    */
+   * Returns the specialized code to access if null is set at `ordinal` from a `inputRow`.
+   */
   def getIsNull(input: String, ordinal: String): String = {
       s"$input.isNullAt($ordinal)"
   }
@@ -377,8 +377,8 @@ class CodegenContext {
   }
 
   /**
-    * Returns the specialized code to access if null is set at `ordinal` from a column vector.
-    */
+   * Returns the specialized code to access if null is set at `ordinal` from a column vector.
+   */
   def getIsNull(batch: String, row: String, ordinal: Int): String = {
     s"$batch.column($ordinal).isNullAt($row)"
   }

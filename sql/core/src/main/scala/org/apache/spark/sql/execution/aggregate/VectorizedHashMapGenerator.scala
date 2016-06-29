@@ -182,9 +182,9 @@ class VectorizedHashMapGenerator(
   }
 
   /**
-    * Similar to generateHashFunction(), but generate hash() with a different signature
-    * to deal with nullable keys
-    */
+   * Similar to generateHashFunction(), but generate hash() with a different signature
+   * to deal with nullable keys
+   */
   private def generateHashFunctionWithNullable(): String = {
     val hash = ctx.freshName("hash")
 
@@ -239,9 +239,9 @@ class VectorizedHashMapGenerator(
 
 
   /**
-    * Similar to generateEquals(), but generate equals() with a different signature
-    * to deal with nullable keys
-    */
+   * Similar to generateEquals(), but generate equals() with a different signature
+   * to deal with nullable keys
+   */
   private def generateEqualsWithNullable(): String = {
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
@@ -350,14 +350,14 @@ class VectorizedHashMapGenerator(
   }
 
   /**
-    * Similar to generateFindOrInsert(), but generate a findOrInsertWithNullable() that
-    * deals with nullable types.
-    *
-    * We generate both versions of findOrInsert(), one can deal with nulls (this one), one cannot.
-    * We could always go with this findOrInsert() but the null dealing logic in this generated
-    * method adds noticeable overhead (observed 40% degradation for some cases) if actual values
-    * are not null for the currently processed record, which could only be known during runtime.
-    */
+   * Similar to generateFindOrInsert(), but generate a findOrInsertWithNullable() that
+   * deals with nullable types.
+   *
+   * We generate both versions of findOrInsert(), one can deal with nulls (this one), one cannot.
+   * We could always go with this findOrInsert() but the null dealing logic in this generated
+   * method adds noticeable overhead (observed 40% degradation for some cases) if actual values
+   * are not null for the currently processed record, which could only be known during runtime.
+   */
   private def generateFindOrInsertWithNullable(): String = {
 
     def genCodeToSetKeys(groupingKeys: Seq[Buffer]): Seq[String] = {
