@@ -52,7 +52,6 @@ class OptionUtils(object):
         """
         if schema is not None:
             self.schema(schema)
-
         for k, v in options.items():
             if v is not None:
                 self.option(k, v)
