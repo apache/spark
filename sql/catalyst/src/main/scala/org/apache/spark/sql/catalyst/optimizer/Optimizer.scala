@@ -206,7 +206,8 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-        if d.outputObjectType == s.inputObjectType =>
+        if ((d.outputObjectType == s.inputObjectType) &&
+            !d.outputObjectType.isInstanceOf[ObjectType]) =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       // We will remove it later in RemoveAliasOnlyProject rule.
       val objAttr =
