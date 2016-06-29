@@ -37,6 +37,10 @@ class GeneratorSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq(UTF8String.fromString("c")))
 
     checkTuple(
+      Explode(CreateArray(Seq.empty)),
+      Seq.empty)
+
+    checkTuple(
       Explode(CreateArray(int_array.map(Literal(_)))),
       int_correct_answer.map(InternalRow.fromSeq(_)))
 
@@ -51,6 +55,10 @@ class GeneratorSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq(0, UTF8String.fromString("a")),
       Seq(1, UTF8String.fromString("b")),
       Seq(2, UTF8String.fromString("c")))
+
+    checkTuple(
+      PosExplode(CreateArray(Seq.empty)),
+      Seq.empty)
 
     checkTuple(
       PosExplode(CreateArray(int_array.map(Literal(_)))),
