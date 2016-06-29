@@ -28,6 +28,7 @@ trait CatalystConf {
   def orderByOrdinal: Boolean
   def groupByOrdinal: Boolean
 
+  def optimizerMetadataOnly: Boolean
   def optimizerMaxIterations: Int
   def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
@@ -51,6 +52,7 @@ case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
     orderByOrdinal: Boolean = true,
     groupByOrdinal: Boolean = true,
+    optimizerMetadataOnly: Boolean = true,
     optimizerMaxIterations: Int = 100,
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,

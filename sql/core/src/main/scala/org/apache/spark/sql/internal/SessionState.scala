@@ -123,8 +123,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * Logical query plan optimizer.
    */
-  lazy val optimizer: Optimizer =
-    new SparkOptimizer(sparkSession, catalog, conf, experimentalMethods)
+  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.

@@ -24,14 +24,13 @@ import org.apache.spark.sql.execution.python.ExtractPythonUDFFromAggregate
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkOptimizer(
-    sparkSession: SparkSession,
     catalog: SessionCatalog,
     conf: SQLConf,
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalog, conf) {
 
   override def batches: Seq[Batch] = super.batches :+
-    Batch("Metadata Only Optimization", Once, MetadataOnlyOptimizer(sparkSession, catalog)) :+
+    Batch("Metadata Only Optimization", Once, MetadataOnlyOptimizer(catalog, conf)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }

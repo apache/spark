@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{CatalystConf, InternalRow}
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -38,8 +38,8 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
  *  e.g. SELECT Max(col2) FROM tbl GROUP BY col1.
  */
 case class MetadataOnlyOptimizer(
-    sparkSession: SparkSession,
-    catalog: SessionCatalog) extends Rule[LogicalPlan] {
+      catalog: SessionCatalog,
+      conf: CatalystConf) extends Rule[LogicalPlan] {
 
   private def canSupportMetadataOnly(a: Aggregate): Boolean = {
     if (!a.references.forall(_.isMetadataColumn)) {
@@ -85,9 +85,7 @@ case class MetadataOnlyOptimizer(
         s"Unable to resolve ${field.name} given [${logical.output.map(_.name).mkString(", ")}]"))
     }
     val selectedPartitions = files.location.listFiles(filter.map(Seq(_)).getOrElse(Seq.empty))
-    val valuesRdd = sparkSession.sparkContext.parallelize(selectedPartitions.map(_.values), 1)
-    val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-    valuesPlan
+    LocalRelation(partitionColumns, selectedPartitions.map(_.values))
   }
 
   private def convertCatalogToMetadataOnly(relation: CatalogRelation): LogicalPlan = {
@@ -104,14 +102,12 @@ case class MetadataOnlyOptimizer(
             case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
           })
       }
-    val valuesRdd = sparkSession.sparkContext.parallelize(partitionValues, 1)
-    val valuesPlan = LogicalRDD(partitionColumns, valuesRdd)(sparkSession)
-    valuesPlan
+    LocalRelation(partitionColumns, partitionValues)
   }
 
   /**
-   * When scanning only partition columns, convert LogicalRelation or CatalogRelation to LogicalRDD.
-   * Now support logical plan:
+   * When scanning only partition columns, convert LogicalRelation or CatalogRelation
+   * to LocalRelation. Now support logical plan:
    *  Aggregate [Expand] Project [Filter] (LogicalRelation | CatalogRelation)
    */
   private def convertToMetadataOnly(plan: LogicalPlan): LogicalPlan = plan match {
@@ -150,7 +146,7 @@ case class MetadataOnlyOptimizer(
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!sparkSession.sessionState.conf.optimizerMetadataOnly) {
+    if (!conf.optimizerMetadataOnly) {
       return plan
     }
     plan.transform {
