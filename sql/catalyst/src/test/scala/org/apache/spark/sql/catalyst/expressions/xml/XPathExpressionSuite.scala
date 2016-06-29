@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal, NonFoldableLiteral}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for various xpath functions.
@@ -54,15 +54,8 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("xpath_boolean path cache invalidation") {
     // This is a test to ensure the expression is not reusing the path for different strings
-    val xml = NonFoldableLiteral("<a><b>b</b></a>")
-    val path = NonFoldableLiteral("a/b")
-    val expr = XPathBoolean(xml, path)
-
-    // Run evaluation once
-    assert(expr.eval(null) == true)
-
-    // Change the input path and make sure we don't screw up caching
-    path.value = UTF8String.fromString("a/c")
-    assert(expr.eval(null) == false)
+    val expr = XPathBoolean(Literal("<a><b>b</b></a>"), 'path.string.at(0))
+    checkEvaluation(expr, true, create_row("a/b"))
+    checkEvaluation(expr, false, create_row("a/c"))
   }
 }
