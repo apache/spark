@@ -180,8 +180,8 @@ case class Elt(children: Seq[Expression])
   override def inputTypes: Seq[DataType] = IntegerType +: Seq.fill(children.size - 1)(StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("input to function elt cannot be empty")
+    if (children.size < 2) {
+      TypeCheckResult.TypeCheckFailure("elt function requires at least two arguments")
     } else {
       super[ImplicitCastInputTypes].checkInputDataTypes()
     }
