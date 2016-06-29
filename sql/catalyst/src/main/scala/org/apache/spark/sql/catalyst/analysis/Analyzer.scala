@@ -1836,11 +1836,11 @@ class Analyzer(
   }
 
   private def commonNaturalJoinProcessing(
-     left: LogicalPlan,
-     right: LogicalPlan,
-     joinType: JoinType,
-     joinNames: Seq[String],
-     condition: Option[Expression]) = {
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      joinNames: Seq[String],
+      condition: Option[Expression]) = {
     val leftKeys =
       joinNames.map(keyName => left.output.find(attr => resolver(attr.name, keyName)).get)
     val rightKeys =
