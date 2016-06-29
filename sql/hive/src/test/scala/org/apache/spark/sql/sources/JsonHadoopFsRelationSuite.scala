@@ -108,4 +108,29 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
       )
     }
   }
+
+  test("SPARK-10196: save decimal type to JSON") {
+    withTempDir { file =>
+      file.delete()
+
+      val schema =
+        new StructType()
+          .add("decimal", DecimalType(7, 2))
+
+      val data =
+        Row(new BigDecimal("10.02")) ::
+          Row(new BigDecimal("20000.99")) ::
+          Row(new BigDecimal("10000")) :: Nil
+      val df = createDataFrame(sparkContext.parallelize(data), schema)
+
+      // Write the data out.
+      df.write.format(dataSourceName).save(file.getCanonicalPath)
+
+      // Read it back and check the result.
+      checkAnswer(
+        read.format(dataSourceName).schema(schema).load(file.getCanonicalPath),
+        df
+      )
+    }
+  }
 }
