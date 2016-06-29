@@ -32,8 +32,10 @@ case class XPathBoolean(xml: Expression, path: Expression)
   @transient private lazy val xpathUtil = new UDFXPathUtil
 
   // We use these to avoid converting the path from UTF8String to String if it is a constant.
-  @transient private var lastPathUtf8: UTF8String = null
-  @transient private var lastPathString: String = null
+  @transient lazy val pathLiteral: String = path match {
+    case Literal(str: UTF8String, _) => str.toString
+    case _ => null
+  }
 
   override def simpleString: String = "xpath_boolean"
 
@@ -46,11 +48,10 @@ case class XPathBoolean(xml: Expression, path: Expression)
 
   override protected def nullSafeEval(xml: Any, path: Any): Any = {
     val xmlString = xml.asInstanceOf[UTF8String].toString
-    val pathUtf8 = path.asInstanceOf[UTF8String]
-    if (pathUtf8 ne lastPathUtf8) {
-      lastPathUtf8 = pathUtf8
-      lastPathString = lastPathUtf8.toString
+    if (pathLiteral ne null) {
+      xpathUtil.evalBoolean(xmlString, pathLiteral)
+    } else {
+      xpathUtil.evalBoolean(xmlString, path.asInstanceOf[UTF8String].toString)
     }
-    xpathUtil.evalBoolean(xmlString, lastPathString)
   }
 }
