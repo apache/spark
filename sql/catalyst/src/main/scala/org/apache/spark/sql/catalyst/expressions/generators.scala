@@ -178,15 +178,13 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
   usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
   extended = "> SELECT _FUNC_(array(10,20));\n  10\n  20")
 // scalastyle:on line.size.limit
-case class Explode(child: Expression)
-  extends ExplodeBase(child, position = false) with Serializable {
-}
+case class Explode(child: Expression) extends ExplodeBase(child, position = false)
 
 /**
  * Given an input array produces a sequence of rows for each position and value in the array.
  *
  * {{{
- *   SELECT explode(array(10,20)) ->
+ *   SELECT posexplode(array(10,20)) ->
  *   0  10
  *   1  20
  * }}}
@@ -196,6 +194,4 @@ case class Explode(child: Expression)
   usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
   extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
 // scalastyle:on line.size.limit
-case class PosExplode(child: Expression)
-  extends ExplodeBase(child, position = true) with Serializable {
-}
+case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)
