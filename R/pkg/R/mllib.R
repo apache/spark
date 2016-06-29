@@ -442,11 +442,11 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
 
 # Saves the AFT survival regression model to the input path.
 
-#' @param path The directory where the model is savedist containing the model's coefficien
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.survreg
-#' @name write.ml
 #' @export
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
 #' @seealso \link{read.ml}
