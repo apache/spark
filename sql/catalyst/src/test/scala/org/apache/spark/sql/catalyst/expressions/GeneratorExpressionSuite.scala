@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
-  private def checkTuple(actual: ExplodeBase, expected: Seq[InternalRow]): Unit = {
-    assert(actual.eval(null).toSeq === expected)
+  private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
+    assert(actual.eval(null).asInstanceOf[TraversableOnce[InternalRow]].toSeq === expected)
   }
 
   private final val int_array = Seq(1, 2, 3)
@@ -67,5 +68,24 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkTuple(
       PosExplode(CreateArray(str_array.map(Literal(_)))),
       str_correct_answer.map(InternalRow.fromSeq(_)))
+  }
+
+  test("inline") {
+    val correct_answer = Seq(
+      Seq(0, UTF8String.fromString("a")),
+      Seq(1, UTF8String.fromString("b")),
+      Seq(2, UTF8String.fromString("c")))
+
+    checkTuple(
+      Inline(Literal.create(Array(), ArrayType(StructType(Seq(StructField("id1", LongType)))))),
+      Seq.empty)
+
+    checkTuple(
+      Inline(CreateArray(Seq(
+        CreateStruct(Seq(Literal(0), Literal("a"))),
+        CreateStruct(Seq(Literal(1), Literal("b"))),
+        CreateStruct(Seq(Literal(2), Literal("c")))
+      ))),
+      correct_answer.map(InternalRow.fromSeq(_)))
   }
 }

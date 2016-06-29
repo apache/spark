@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -88,5 +90,31 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
       Row(3) :: Nil)
+  }
+
+  test("inline with empty table or empty array") {
+    checkAnswer(
+      spark.range(0).selectExpr("inline(array(struct(10, 100)))"),
+      Nil)
+
+    val m = intercept[AnalysisException] {
+      spark.range(2).selectExpr("inline(array())")
+    }.getMessage
+    assert(m.contains("data type mismatch"))
+  }
+
+  test("inline on literal") {
+    checkAnswer(
+      spark.range(2).selectExpr("inline(array(struct(10, 100), struct(20, 200), struct(30, 300)))"),
+      Row(10, 100) :: Row(20, 200) :: Row(30, 300) ::
+        Row(10, 100) :: Row(20, 200) :: Row(30, 300) :: Nil)
+  }
+
+  test("inline on column") {
+    val df = Seq((1, 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("inline(array(struct(a, b), struct(a, b)))"),
+      Row(1, 2) :: Row(1, 2) :: Nil)
   }
 }
