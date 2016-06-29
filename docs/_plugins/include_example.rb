@@ -32,8 +32,18 @@ module Jekyll
       @code_dir = File.join(site.source, config_dir)
 
       clean_markup = @markup.strip
-      @file = File.join(@code_dir, clean_markup)
-      @lang = clean_markup.split('.').last
+
+      parts = clean_markup.strip.split(' ')
+      if parts.length > 1 then
+        @snippet_label = ':' + parts[0]
+        snippet_file = parts[1]
+      else
+        @snippet_label = ''
+        snippet_file = parts[0]
+      end
+
+      @file = File.join(@code_dir, snippet_file)
+      @lang = snippet_file.split('.').last
 
       code = File.open(@file).read.encode("UTF-8")
       code = select_lines(code)
@@ -41,7 +51,7 @@ module Jekyll
       rendered_code = Pygments.highlight(code, :lexer => @lang)
 
       hint = "<div><small>Find full example code at " \
-        "\"examples/src/main/#{clean_markup}\" in the Spark repo.</small></div>"
+        "\"examples/src/main/#{snippet_file}\" in the Spark repo.</small></div>"
 
       rendered_code + hint
     end
@@ -66,13 +76,13 @@ module Jekyll
       # Select the array of start labels from code.
       startIndices = lines
         .each_with_index
-        .select { |l, i| l.include? "$example on$" }
+        .select { |l, i| l.include? "$example on#{@snippet_label}$" }
         .map { |l, i| i }
 
       # Select the array of end labels from code.
       endIndices = lines
         .each_with_index
-        .select { |l, i| l.include? "$example off$" }
+        .select { |l, i| l.include? "$example off#{@snippet_label}$" }
         .map { |l, i| i }
 
       raise "Start indices amount is not equal to end indices amount, see #{@file}." \
@@ -88,7 +98,7 @@ module Jekyll
       startIndices.zip(endIndices).each do |start, endline|
         raise "Overlapping between two example code blocks are not allowed, see #{@file}." \
             if start <= lastIndex
-        raise "$example on$ should not be in the same line with $example off$, see #{@file}." \
+        raise "$example on[:tag]$ should not be in the same line with $example off[:tag]$, see #{@file}." \
             if start == endline
         lastIndex = endline
         range = Range.new(start + 1, endline - 1)
