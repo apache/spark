@@ -373,9 +373,6 @@ private object YarnClusterDriver extends Logging with Matchers {
 }
 
 private object YarnClasspathTest extends Logging {
-
-  var exitCode = 0
-
   def error(m: String, ex: Throwable = null): Unit = {
     logError(m, ex)
     // scalastyle:off println
@@ -404,7 +401,6 @@ private object YarnClasspathTest extends Logging {
     } finally {
       sc.stop()
     }
-    System.exit(exitCode)
   }
 
   private def readResource(resultPath: String): Unit = {
@@ -417,8 +413,6 @@ private object YarnClasspathTest extends Logging {
     } catch {
       case t: Throwable =>
         error(s"loading test.resource to $resultPath", t)
-        // set the exit code if not yet set
-        exitCode = 2
     } finally {
       Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
     }
