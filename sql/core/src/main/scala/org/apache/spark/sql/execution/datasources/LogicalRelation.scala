@@ -37,7 +37,10 @@ case class LogicalRelation(
   extends LeafNode with MultiInstanceRelation {
 
   override val output: Seq[AttributeReference] = {
-    val attrs = relation.schema.toAttributes
+    val attrs = relation.schema.toAttributes.map { attr =>
+      attr.setPartitionColumn(
+        relation.partitionColumnNames.contains(attr.name.toLowerCase))
+    }
     expectedOutputAttributes.map { expectedAttrs =>
       assert(expectedAttrs.length == attrs.length)
       attrs.zip(expectedAttrs).map {

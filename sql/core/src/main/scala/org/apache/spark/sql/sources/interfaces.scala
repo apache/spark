@@ -185,6 +185,7 @@ trait CreatableRelationProvider {
 abstract class BaseRelation {
   def sqlContext: SQLContext
   def schema: StructType
+  def partitionColumnNames: Set[String] = Set.empty[String]
 
   /**
    * Returns an estimated size of this relation in bytes. This information is used by the planner

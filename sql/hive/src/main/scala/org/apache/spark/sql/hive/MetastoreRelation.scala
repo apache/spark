@@ -203,22 +203,22 @@ private[hive] case class MetastoreRelation(
   )
 
   implicit class SchemaAttribute(f: CatalogColumn) {
-    def toAttribute: AttributeReference = AttributeReference(
+    def toAttribute(isPartitionColumn: Boolean): AttributeReference = AttributeReference(
       f.name,
       CatalystSqlParser.parseDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifier = Some(alias.getOrElse(tableName)))
+    )(qualifier = Some(alias.getOrElse(tableName)), isPartitionColumn = isPartitionColumn)
   }
 
   /** PartitionKey attributes */
-  val partitionKeys = catalogTable.partitionColumns.map(_.toAttribute)
+  val partitionKeys = catalogTable.partitionColumns.map(_.toAttribute(true))
 
   /** Non-partitionKey attributes */
   // TODO: just make this hold the schema itself, not just non-partition columns
   val attributes = catalogTable.schema
     .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
-    .map(_.toAttribute)
+    .map(_.toAttribute(false))
 
   val output = attributes ++ partitionKeys
 

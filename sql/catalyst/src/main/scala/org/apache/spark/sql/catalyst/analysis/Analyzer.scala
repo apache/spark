@@ -292,14 +292,15 @@ class Analyzer(
 
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
-        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)(
+          isPartitionColumn = true)
 
         // Expand works by setting grouping expressions to null as determined by the bitmasks. To
         // prevent these null values from being used in an aggregate instead of the original value
         // we need to create new aliases for all group by expressions that will only be used for
         // the intended purpose.
         val groupByAliases: Seq[Alias] = x.groupByExprs.map {
-          case e: NamedExpression => Alias(e, e.name)()
+          case e: NamedExpression => Alias(e, e.name)(isPartitionColumn = e.isPartitionColumn)
           case other => Alias(other, other.toString)()
         }
 
