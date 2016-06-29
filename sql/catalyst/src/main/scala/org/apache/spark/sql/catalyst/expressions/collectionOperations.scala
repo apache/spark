@@ -44,6 +44,56 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
 }
 
 /**
+ * Returns an unordered array containing the keys of the map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.")
+case class MapKeys(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
+
+  override def dataType: DataType = ArrayType(child.dataType.asInstanceOf[MapType].keyType)
+
+  override def foldable: Boolean = child.foldable
+
+  override def nullSafeEval(map: Any): Any = {
+    map.asInstanceOf[MapData].keyArray().copy()
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).keyArray().copy();")
+  }
+
+  override def prettyName: String = "map_keys"
+}
+
+/**
+ * Returns an unordered array containing the values of the map.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.")
+case class MapValues(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
+
+  override def dataType: DataType = ArrayType(child.dataType.asInstanceOf[MapType].valueType)
+
+  override def foldable: Boolean = child.foldable
+
+  override def nullSafeEval(map: Any): Any = {
+    map.asInstanceOf[MapData].valueArray().copy()
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).valueArray().copy();")
+  }
+
+  override def prettyName: String = "map_values"
+}
+
+/**
  * Sorts the input array in ascending / descending order according to the natural ordering of
  * the array elements and returns it.
  */
