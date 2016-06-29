@@ -165,17 +165,18 @@ private[sql] class HiveSessionCatalog(
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     try {
-      subLookupFunction(name, children)
+      lookupFunction0(name, children)
     } catch {
-      case _: Exception =>
+      case NonFatal(_) =>
         // SPARK-16228 ExternalCatalog may recognize `double`-type only.
-        val newChildren = children.map(x =>
-          if (x.dataType.isInstanceOf[DecimalType]) Cast(x, DoubleType) else x)
-        subLookupFunction(name, newChildren)
+        val newChildren = children.map { child =>
+          if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
+        }
+        lookupFunction0(name, newChildren)
     }
   }
 
-  private def subLookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+  private def lookupFunction0(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
     // if (super.functionExists(name)) {
     //   super.lookupFunction(name, children)
