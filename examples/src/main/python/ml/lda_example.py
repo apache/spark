@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # Creates a SparkSession
     spark = SparkSession \
         .builder \
-        .appName("PythonKMeansExample") \
+        .appName("LDAExample") \
         .getOrCreate()
 
     # $example on$
