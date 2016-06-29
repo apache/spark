@@ -121,7 +121,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Spark in yarn-cluster mode falure after sc initialized") {
-    val finalState = runSpark(false, mainClassName(YarnClusterDriverWithFailure.getClass), Seq("abc"))
+    val finalState = runSpark(false, mainClassName(YarnClusterDriverWithFailure.getClass),
+      appArgs = Seq("abc"))
     finalState should be (SparkAppHandle.State.FAILED)
   }
 
