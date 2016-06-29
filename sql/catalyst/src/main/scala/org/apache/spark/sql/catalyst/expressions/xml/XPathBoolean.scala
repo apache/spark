@@ -37,7 +37,7 @@ case class XPathBoolean(xml: Expression, path: Expression)
     case _ => null
   }
 
-  override def simpleString: String = "xpath_boolean"
+  override def prettyName: String = "xpath_boolean"
 
   override def dataType: DataType = BooleanType
 
