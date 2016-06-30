@@ -20,7 +20,9 @@ package org.apache.spark.streaming.kafka010;
 import java.io.Serializable;
 import java.util.*;
 
-import scala.collection.JavaConverters;
+import scala.Function1;
+import scala.Long;
+import scala.collection.JavaConversions;
 
 import org.apache.kafka.common.TopicPartition;
 
@@ -34,51 +36,50 @@ public class JavaConsumerStrategySuite implements Serializable {
     final String topic1 = "topic1";
     final Collection<String> topics = Arrays.asList(topic1);
     final scala.collection.Iterable<String> sTopics =
-      JavaConverters.collectionAsScalaIterableConverter(topics).asScala();
+        JavaConversions.collectionAsScalaIterable(topics);
     final TopicPartition tp1 = new TopicPartition(topic1, 0);
     final TopicPartition tp2 = new TopicPartition(topic1, 1);
     final Collection<TopicPartition> parts = Arrays.asList(tp1, tp2);
     final scala.collection.Iterable<TopicPartition> sParts =
-      JavaConverters.collectionAsScalaIterableConverter(parts).asScala();
+        JavaConversions.collectionAsScalaIterable(parts);
     final Map<String, Object> kafkaParams = new HashMap<String, Object>();
     kafkaParams.put("bootstrap.servers", "not used");
     final scala.collection.Map<String, Object> sKafkaParams =
-      JavaConverters.mapAsScalaMapConverter(kafkaParams).asScala();
-    final Map<TopicPartition, Object> offsets = new HashMap<>();
+        JavaConversions.mapAsScalaMap(kafkaParams);
+    final Map<TopicPartition, java.lang.Long> offsets = new HashMap<>();
     offsets.put(tp1, 23L);
-    final scala.collection.Map<TopicPartition, Object> sOffsets =
-      JavaConverters.mapAsScalaMapConverter(offsets).asScala();
+
+    final Map<TopicPartition, scala.Long> _sOffsets = new HashMap<>();
+    offsets.put(tp1, 23L);
+
+    final scala.collection.Map<TopicPartition, scala.Long> sOffsets =
+      JavaConversions.<TopicPartition, scala.Long>mapAsScalaMap(_sOffsets);
 
     // make sure constructors can be called from java
-    // final ConsumerStrategy<String, String> sub0 =          // does not compile in Scala 2.10
-    //   Subscribe.<String, String>apply(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub1 =
-      Subscribe.<String, String>apply(sTopics, sKafkaParams, sOffsets);
+      ConsumerStrategy.<String, String>Subscribe(sTopics, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> sub2 =
-      Subscribe.<String, String>apply(sTopics, sKafkaParams);
+        ConsumerStrategy.<String, String>Subscribe(sTopics, sKafkaParams);
     final ConsumerStrategy<String, String> sub3 =
-      Subscribe.<String, String>create(topics, kafkaParams, offsets);
+        ConsumerStrategy.<String, String>Subscribe(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub4 =
-      Subscribe.<String, String>create(topics, kafkaParams);
+        ConsumerStrategy.<String, String>Subscribe(topics, kafkaParams);
 
     Assert.assertEquals(
       sub1.executorKafkaParams().get("bootstrap.servers"),
       sub3.executorKafkaParams().get("bootstrap.servers"));
 
-    // final ConsumerStrategy<String, String> asn0 =          // does not compile in Scala 2.10
-    //   Assign.<String, String>apply(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn1 =
-      Assign.<String, String>apply(sParts, sKafkaParams, sOffsets);
+        ConsumerStrategy.<String, String>Assign(sParts, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> asn2 =
-      Assign.<String, String>apply(sParts, sKafkaParams);
+        ConsumerStrategy.<String, String>Assign(sParts, sKafkaParams);
     final ConsumerStrategy<String, String> asn3 =
-      Assign.<String, String>create(parts, kafkaParams, offsets);
+        ConsumerStrategy.<String, String>Assign(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn4 =
-      Assign.<String, String>create(parts, kafkaParams);
+        ConsumerStrategy.<String, String>Assign(parts, kafkaParams);
 
     Assert.assertEquals(
       asn1.executorKafkaParams().get("bootstrap.servers"),
       asn3.executorKafkaParams().get("bootstrap.servers"));
   }
-
 }

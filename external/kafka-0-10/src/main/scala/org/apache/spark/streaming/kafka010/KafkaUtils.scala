@@ -112,8 +112,8 @@ object KafkaUtils extends Logging {
    * per second that each '''partition''' will accept.
    * @param locationStrategy In most cases, pass in [[PreferConsistent]],
    *   see [[LocationStrategy]] for more details.
-   * @param consumerStrategy In most cases, pass in [[Subscribe]],
-   *   see [[ConsumerStrategy]] for more details
+   * @param consumerStrategy In most cases, pass in [[SubscribeStrategy]],
+   *                         see [[ConsumerStrategy]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -134,8 +134,8 @@ object KafkaUtils extends Logging {
    * @param valueClass Class of the values in the Kafka records
    * @param locationStrategy In most cases, pass in [[PreferConsistent]],
    *   see [[LocationStrategy]] for more details.
-   * @param consumerStrategy In most cases, pass in [[Subscribe]],
-   *   see [[ConsumerStrategy]] for more details
+   * @param consumerStrategy In most cases, pass in [[SubscribeStrategy]],
+   *                         see [[ConsumerStrategy]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */

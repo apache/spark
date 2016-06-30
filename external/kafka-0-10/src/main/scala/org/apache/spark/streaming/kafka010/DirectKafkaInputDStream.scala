@@ -17,18 +17,16 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{ util => ju }
+import java.{util => ju}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
+import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}
@@ -44,13 +42,8 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * per second that each '''partition''' will accept.
  * @param locationStrategy In most cases, pass in [[PreferConsistent]],
  *   see [[LocationStrategy]] for more details.
- * @param executorKafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
- * configuration parameters</a>.
- *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
- *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
- * @param consumerStrategy In most cases, pass in [[Subscribe]],
- *   see [[ConsumerStrategy]] for more details
+ * @param consumerStrategy In most cases, pass in [[SubscribeStrategy]],
+ *                         see [[ConsumerStrategy]] for more details
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
@@ -71,7 +64,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
   @transient private var kc: Consumer[K, V] = null
   def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
-      kc = consumerStrategy.onStart(currentOffsets)
+      kc = consumerStrategy.onStart(currentOffsets.mapValues(l => new java.lang.Long(l)).asJava)
     }
     kc
   }

@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka010;
 import java.io.Serializable;
 import java.util.*;
 
+import scala.collection.JavaConversions;
 import scala.collection.JavaConverters;
 
 import org.apache.kafka.common.TopicPartition;
@@ -38,21 +39,19 @@ public class JavaLocationStrategySuite implements Serializable {
     hosts.put(tp1, "node1");
     hosts.put(tp2, "node2");
     final scala.collection.Map<TopicPartition, String> sHosts =
-      JavaConverters.mapAsScalaMapConverter(hosts).asScala();
+      JavaConversions.mapAsScalaMap(hosts);
 
     // make sure constructors can be called from java
-    final LocationStrategy c1 = PreferConsistent.create();
+    final LocationStrategy c1 = LocationStrategy.PreferConsistent();
     final LocationStrategy c2 = PreferConsistent$.MODULE$;
     Assert.assertEquals(c1, c2);
 
-    final LocationStrategy c3 = PreferBrokers.create();
+    final LocationStrategy c3 = LocationStrategy.PreferBrokers();
     final LocationStrategy c4 = PreferBrokers$.MODULE$;
     Assert.assertEquals(c3, c4);
 
-    final LocationStrategy c5 = PreferFixed.create(hosts);
-    final LocationStrategy c6 = PreferFixed.apply(sHosts);
+    final LocationStrategy c5 = LocationStrategy.PreferFixed(hosts);
+    final LocationStrategy c6 = LocationStrategy.PreferFixed(sHosts);
     Assert.assertEquals(c5, c6);
-
   }
-
 }
