@@ -310,6 +310,13 @@ object FunctionRegistry {
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
     expression[XPathBoolean]("xpath_boolean"),
+    expression[XPathDouble]("xpath_double"),
+    expression[XPathDouble]("xpath_number"),
+    expression[XPathFloat]("xpath_float"),
+    expression[XPathInt]("xpath_int"),
+    expression[XPathLong]("xpath_long"),
+    expression[XPathShort]("xpath_short"),
+    expression[XPathString]("xpath_string"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
