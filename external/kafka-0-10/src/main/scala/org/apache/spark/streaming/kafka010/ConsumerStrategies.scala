@@ -52,8 +52,8 @@ private[kafka010] case class SubscribeStrategy[K, V] private(
       kafkaParams: collection.Map[String, Object],
       offsets: collection.Map[TopicPartition, scala.Long]) = this(
     topics.asJavaCollection,
-    Utils.asJavaMap(kafkaParams),
-    Utils.asJavaMap(offsets.mapValues(l => new java.lang.Long(l))))
+    MapConverter.asJavaMap(kafkaParams),
+    MapConverter.asJavaMap(offsets.mapValues(l => new java.lang.Long(l))))
 
   def executorKafkaParams(): ju.Map[String, Object] = kafkaParams
 
@@ -96,8 +96,8 @@ private[kafka010] case class AssignStrategy[K, V] private(
       kafkaParams: collection.Map[String, Object],
       offsets: collection.Map[TopicPartition, scala.Long]) = this(
     topicPartitions.asJavaCollection,
-    Utils.asJavaMap(kafkaParams),
-    Utils.asJavaMap(offsets.mapValues(l => new java.lang.Long(l))))
+    MapConverter.asJavaMap(kafkaParams),
+    MapConverter.asJavaMap(offsets.mapValues(l => new java.lang.Long(l))))
 
   def executorKafkaParams(): ju.Map[String, Object] = kafkaParams
 

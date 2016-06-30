@@ -18,7 +18,7 @@ package org.apache.spark.streaming.kafka010
 
 import scala.collection.JavaConverters._
 
-private[kafka010] object Utils {
+private[kafka010] object MapConverter {
   /** Convert to Java Map, while ensuring that the map is serializable */
   def asJavaMap[K, V](scalaMap: collection.Map[K, V]): java.util.Map[K, V] = {
     // Putting in a new map ensures that there are no intermediate wrappers that
