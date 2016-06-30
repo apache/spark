@@ -36,7 +36,7 @@ import org.apache.spark.annotation.Experimental
  * @tparam V type of Kafka message value
  */
 @Experimental
-trait ConsumerStrategy[K, V] {
+abstract class ConsumerStrategy[K, V] {
   /**
    * Kafka <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
    * configuration parameters</a> to be used on executors. Requires "bootstrap.servers" to be set

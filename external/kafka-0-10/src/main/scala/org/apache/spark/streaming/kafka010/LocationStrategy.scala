@@ -34,7 +34,7 @@ import org.apache.spark.annotation.Experimental
  * Choice of location is only a preference, not an absolute; partitions may be scheduled elsewhere.
  */
 @Experimental
-sealed trait LocationStrategy
+sealed abstract class LocationStrategy
 
 private case object PreferBrokers extends LocationStrategy
 
