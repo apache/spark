@@ -245,6 +245,6 @@ private[sql] class HiveSessionCatalog(
     "xpath_number", "xpath_short", "xpath_string",
 
     // table generating function
-    "inline", "posexplode"
+    "inline"
   )
 }

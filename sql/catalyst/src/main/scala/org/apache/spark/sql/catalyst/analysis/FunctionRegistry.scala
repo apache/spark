@@ -176,6 +176,7 @@ object FunctionRegistry {
     expression[NullIf]("nullif"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
+    expression[PosExplode]("posexplode"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),

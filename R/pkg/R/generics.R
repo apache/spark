@@ -1050,6 +1050,10 @@ setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
 #' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
+#' @rdname posexplode
+#' @export
+setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
+
 #' @rdname quarter
 #' @export
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
