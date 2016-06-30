@@ -114,7 +114,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineTypedFilters) ::
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
-      CollapseEmptyPlan) ::
+      PropagateEmptyRelation) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,

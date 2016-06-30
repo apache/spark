@@ -24,22 +24,22 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class CollapseEmptyPlanSuite extends PlanTest {
+class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("CollapseEmptyPlan", Once,
+      Batch("PropagateEmptyRelation", Once,
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
         PushDownPredicate,
         PruneFilters,
-        CollapseEmptyPlan) :: Nil
+        PropagateEmptyRelation) :: Nil
   }
 
-  object OptimizeWithoutCollapseEmptyPlan extends RuleExecutor[LogicalPlan] {
+  object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("CollapseEmptyPlan", Once,
+      Batch("OptimizeWithoutPropagateEmptyRelation", Once,
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -50,7 +50,6 @@ class CollapseEmptyPlanSuite extends PlanTest {
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
-  val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
 
   test("Binary Logical Plans - Collapse empty union") {
     val query = testRelation1
@@ -65,7 +64,7 @@ class CollapseEmptyPlanSuite extends PlanTest {
 
   test("Binary Logical Plans - Collapse joins") {
     // Testcases are tuples of (left predicate, right predicate, joinType, correct answer)
-    // Note that `None` is used to compare with OptimizeWithoutCollapseEmptyPlan.
+    // Note that `None` is used to compare with OptimizeWithoutPropagateEmptyRelation.
     val testcases = Seq(
       (true, true, Inner, None),
       (true, true, LeftOuter, None),
@@ -101,7 +100,8 @@ class CollapseEmptyPlanSuite extends PlanTest {
         .where(left)
         .join(testRelation2.where(right), joinType = jt, condition = Some('a.attr == 'b.attr))
       val optimized = Optimize.execute(query.analyze)
-      val correctAnswer = answer.getOrElse(OptimizeWithoutCollapseEmptyPlan.execute(query.analyze))
+      val correctAnswer =
+        answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
       comparePlans(optimized, correctAnswer)
     }
   }

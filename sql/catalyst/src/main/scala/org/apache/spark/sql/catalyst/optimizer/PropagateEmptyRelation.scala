@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.rules._
  *    - Join with one or two empty children (including Intersect/Except).
  * 2. Unary-node Logical Plans
  *    - Project/Filter/Sample/Join/Limit/Repartition with all empty children.
- *    - Aggregate with all empty children and without DeclarativeAggregate expressions like COUNT.
+ *    - Aggregate with all empty children and without AggregateFunction expressions like COUNT.
  *    - Generate(Explode) with all empty children. Others like Hive UDTF may return results.
  */
-object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
+object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
   private def isEmptyLocalRelation(plan: LogicalPlan): Boolean = plan match {
     case p: LocalRelation => p.data.isEmpty
     case _ => false
@@ -46,7 +46,7 @@ object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
   private def empty(plan: LogicalPlan) = LocalRelation(plan.output, data = Seq.empty)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p: Union if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) =>
+    case p: Union if p.children.forall(isEmptyLocalRelation) =>
       empty(p)
 
     case p @ Join(_, _, joinType, _) if p.children.exists(isEmptyLocalRelation) => joinType match {
