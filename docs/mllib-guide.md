@@ -175,7 +175,7 @@ from pyspark.mllib.util import MLUtils
 # convert DataFrame columns
 convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
 convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
-// convert a single vector or matrix
+# convert a single vector or matrix
 mlVec = mllibVec.asML()
 mlMat = mllibMat.asML()
 {% endhighlight %}
