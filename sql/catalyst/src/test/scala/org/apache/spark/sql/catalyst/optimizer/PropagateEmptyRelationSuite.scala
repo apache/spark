@@ -51,7 +51,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
 
-  test("Binary Logical Plans - Collapse empty union") {
+  test("propagate empty relation through Union") {
     val query = testRelation1
       .where(false)
       .union(testRelation2.where(false))
@@ -62,7 +62,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Binary Logical Plans - Collapse joins") {
+  test("propagate empty relation through Join") {
     // Testcases are tuples of (left predicate, right predicate, joinType, correct answer)
     // Note that `None` is used to compare with OptimizeWithoutPropagateEmptyRelation.
     val testcases = Seq(
@@ -106,7 +106,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     }
   }
 
-  test("Unary Logical Plans - Collapse one empty local relation") {
+  test("propagate empty relation through UnaryNode") {
     val query = testRelation1
       .where(false)
       .select('a)
@@ -120,7 +120,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary Logical Plans - Don't collapse one non-empty local relation") {
+  test("don't propagate non-empty local relation") {
     val query = testRelation1
       .where(true)
       .groupBy('a)('a)
@@ -138,18 +138,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer.analyze)
   }
 
-  test("Unary Logical Plans - Collapse non-aggregating expressions on empty plan") {
-    val query = testRelation1
-      .where(false)
-      .groupBy('a)('a)
-
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Unary Logical Plans - Collapse non-aggregating complex expressions on empty plan") {
+  test("propagate empty relation through Aggregate without aggregate function") {
     val query = testRelation1
       .where(false)
       .groupBy('a)('a, ('a + 1).as('x))
@@ -160,7 +149,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary Logical Plans - Don't collapse aggregating expressions on empty plan") {
+  test("don't propagate empty relation through Aggregate with aggregate function") {
     val query = testRelation1
       .where(false)
       .groupBy('a)(count('a))
