@@ -47,7 +47,8 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * Returns an unordered array containing the keys of the map.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.")
+  usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.",
+  extended = " > SELECT _FUNC_(map(1, 'a', 2, 'b'));\n [1,2]")
 case class MapKeys(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -58,11 +59,11 @@ case class MapKeys(child: Expression)
   override def foldable: Boolean = child.foldable
 
   override def nullSafeEval(map: Any): Any = {
-    map.asInstanceOf[MapData].keyArray().copy()
+    map.asInstanceOf[MapData].keyArray()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).keyArray().copy();")
+    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).keyArray();")
   }
 
   override def prettyName: String = "map_keys"
@@ -72,7 +73,8 @@ case class MapKeys(child: Expression)
  * Returns an unordered array containing the values of the map.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.")
+  usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.",
+  extended = " > SELECT _FUNC_(map(1, 'a', 2, 'b'));\n [\"a\",\"b\"]")
 case class MapValues(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -83,11 +85,11 @@ case class MapValues(child: Expression)
   override def foldable: Boolean = child.foldable
 
   override def nullSafeEval(map: Any): Any = {
-    map.asInstanceOf[MapData].valueArray().copy()
+    map.asInstanceOf[MapData].valueArray()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).valueArray().copy();")
+    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).valueArray();")
   }
 
   override def prettyName: String = "map_values"
