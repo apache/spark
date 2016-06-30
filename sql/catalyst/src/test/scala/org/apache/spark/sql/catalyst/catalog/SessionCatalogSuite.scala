@@ -950,16 +950,16 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createFunction(newFunc("not_me", Some("db2")), ignoreIfExists = false)
     catalog.createTempFunction("func1", info1, tempFunc1, ignoreIfExists = false)
     catalog.createTempFunction("yes_me", info2, tempFunc2, ignoreIfExists = false)
-    assert(catalog.listFunctions("db1", "*").toSet ==
+    assert(catalog.listFunctions("db1", "*").map(_._1).toSet ==
       Set(FunctionIdentifier("func1"),
         FunctionIdentifier("yes_me")))
-    assert(catalog.listFunctions("db2", "*").toSet ==
+    assert(catalog.listFunctions("db2", "*").map(_._1).toSet ==
       Set(FunctionIdentifier("func1"),
         FunctionIdentifier("yes_me"),
         FunctionIdentifier("func1", Some("db2")),
         FunctionIdentifier("func2", Some("db2")),
         FunctionIdentifier("not_me", Some("db2"))))
-    assert(catalog.listFunctions("db2", "func*").toSet ==
+    assert(catalog.listFunctions("db2", "func*").map(_._1).toSet ==
       Set(FunctionIdentifier("func1"),
         FunctionIdentifier("func1", Some("db2")),
         FunctionIdentifier("func2", Some("db2"))))

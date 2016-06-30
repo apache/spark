@@ -27,6 +27,7 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import Row, StringType
 from pyspark.sql.utils import install_exception_handler
 
@@ -438,8 +439,12 @@ class SQLContext(object):
         .. note:: Experimental.
 
         :return: :class:`DataStreamReader`
+
+        >>> text_sdf = sqlContext.readStream.text(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> text_sdf.isStreaming
+        True
         """
-        return DataStreamReader(self._wrapped)
+        return DataStreamReader(self)
 
     @property
     @since(2.0)
@@ -515,6 +520,7 @@ class UDFRegistration(object):
 def _test():
     import os
     import doctest
+    import tempfile
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.context
@@ -523,6 +529,8 @@ def _test():
 
     globs = pyspark.sql.context.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    globs['tempfile'] = tempfile
+    globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
     globs['rdd'] = rdd = sc.parallelize(

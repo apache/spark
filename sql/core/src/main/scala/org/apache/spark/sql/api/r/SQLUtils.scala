@@ -71,6 +71,10 @@ private[sql] object SQLUtils extends Logging {
     }
   }
 
+  def getSessionConf(spark: SparkSession): JMap[String, String] = {
+    spark.conf.getAll.asJava
+  }
+
   def getJavaSparkContext(spark: SparkSession): JavaSparkContext = {
     new JavaSparkContext(spark.sparkContext)
   }
