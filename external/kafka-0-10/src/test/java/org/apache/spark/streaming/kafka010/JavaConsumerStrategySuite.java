@@ -50,8 +50,8 @@ public class JavaConsumerStrategySuite implements Serializable {
       JavaConverters.mapAsScalaMapConverter(offsets).asScala();
 
     // make sure constructors can be called from java
-    final ConsumerStrategy<String, String> sub0 =
-      Subscribe.<String, String>apply(topics, kafkaParams, offsets);
+    // final ConsumerStrategy<String, String> sub0 =          // does not compile in Scala 2.10
+    //   Subscribe.<String, String>apply(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub1 =
       Subscribe.<String, String>apply(sTopics, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> sub2 =
@@ -65,8 +65,8 @@ public class JavaConsumerStrategySuite implements Serializable {
       sub1.executorKafkaParams().get("bootstrap.servers"),
       sub3.executorKafkaParams().get("bootstrap.servers"));
 
-    final ConsumerStrategy<String, String> asn0 =
-      Assign.<String, String>apply(parts, kafkaParams, offsets);
+    // final ConsumerStrategy<String, String> asn0 =          // does not compile in Scala 2.10
+    //   Assign.<String, String>apply(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn1 =
       Assign.<String, String>apply(sParts, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> asn2 =
