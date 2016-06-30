@@ -2307,6 +2307,19 @@ class Dataset[T] private[sql](
   def distinct(): Dataset[T] = dropDuplicates()
 
   /**
+   * Refreshes the metadata and data cached in Spark for data associated with this Dataset.
+   * An example use case is to invalidate the file system metadata cached by Spark, when the
+   * underlying files have been updated by an external process.
+   *
+   * @group action
+   * @since 2.0.0
+   */
+  def refresh(): Unit = {
+    unpersist(false)
+    logicalPlan.refresh()
+  }
+
+  /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic

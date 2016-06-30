@@ -117,7 +117,19 @@ class FileScanRDD(
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
           InputFileNameHolder.setInputFileName(currentFile.filePath)
-          currentIterator = readFunction(currentFile)
+
+          try {
+            currentIterator = readFunction(currentFile)
+          } catch {
+            case e: java.io.FileNotFoundException =>
+              throw new java.io.FileNotFoundException(
+                e.getMessage + "\n" +
+                "It is possible the underlying files have been updated. " +
+                "You can explicitly invalidate the cache in Spark by " +
+                "running 'REFRESH TABLE tableName' command in SQL or " +
+                "by calling the refresh() function on a Dataset/DataFrame."
+              )
+          }
           hasNext
         } else {
           currentFile = null

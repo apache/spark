@@ -462,17 +462,15 @@ class SessionCatalog(
     }
   }
 
-  // TODO: It's strange that we have both refresh and invalidate here.
-
   /**
    * Refresh the cache entry for a metastore table, if any.
    */
-  def refreshTable(name: TableIdentifier): Unit = { /* no-op */ }
-
-  /**
-   * Invalidate the cache entry for a metastore table, if any.
-   */
-  def invalidateTable(name: TableIdentifier): Unit = { /* no-op */ }
+  def refreshTable(name: TableIdentifier): Unit = {
+    // Go through temporary tables and invalidate them.
+    if (name.database.isEmpty) {
+      tempTables.get(name.table).foreach(_.refresh())
+    }
+  }
 
   /**
    * Drop all existing temporary tables.
