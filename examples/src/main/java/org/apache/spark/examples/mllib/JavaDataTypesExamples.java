@@ -21,12 +21,49 @@ import java.util.Arrays;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.*;
-import org.apache.spark.mllib.linalg.distributed.*;
+
+// $example on:local_vector$
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+// $example off:local_vector$
+// $example on:labeled_point$
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.mllib.regression.LabeledPoint;
+// $example off:labeled_point$
+// $example on:libsvm$
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.api.java.JavaRDD;
+// $example off:libsvm$
+// $example on:local_matrix$
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.Matrices;
+// $example off:local_matrix$
+// $example on:row_matrix$
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.linalg.QRDecomposition;
+// $example off:row_matrix$
+// $example on:indexed_row_matrix$
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.IndexedRow;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+// $example off:indexed_row_matrix$
+// $example on:coordinate_matrix$
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
+// $example off:coordinate_matrix$
+// $example on:block_matrix$
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.BlockMatrix;
+import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
+import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
+// $example off:block_matrix$
 
 
 public class JavaDataTypesExamples {
