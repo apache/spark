@@ -36,42 +36,47 @@ import org.apache.spark.annotation.Experimental
 @Experimental
 sealed trait LocationStrategy
 
-/**
- *  :: Experimental ::
- * Use this only if your executors are on the same nodes as your Kafka brokers.
- */
-@Experimental
-case object PreferBrokers extends LocationStrategy {
-  def create: PreferBrokers.type = this
-}
+private case object PreferBrokers extends LocationStrategy
+
+private case object PreferConsistent extends LocationStrategy
+
+private case class PreferFixed(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
 
 /**
- *  :: Experimental ::
- * Use this in most cases, it will consistently distribute partitions across all executors.
+ * :: Experimental :: object to obtain instances of [[LocationStrategy]]
+ *
  */
 @Experimental
-case object PreferConsistent extends LocationStrategy {
-  def create: PreferConsistent.type = this
-}
+object LocationStrategies {
+  /**
+   *  :: Experimental ::
+   * Use this only if your executors are on the same nodes as your Kafka brokers.
+   */
+  @Experimental
+  def preferBrokers: LocationStrategy = PreferBrokers
 
-/**
- *  :: Experimental ::
- * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
- * Any TopicPartition not specified in the map will use a consistent location.
- */
-@Experimental
-case class PreferFixed private(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
+  /**
+   *  :: Experimental ::
+   * Use this in most cases, it will consistently distribute partitions across all executors.
+   */
+  @Experimental
+  def preferConsistent: LocationStrategy = PreferConsistent
 
-/**
- *  :: Experimental ::
- * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
- * Any TopicPartition not specified in the map will use a consistent location.
- */
-@Experimental
-object PreferFixed {
-  def apply(hostMap: collection.Map[TopicPartition, String]): PreferFixed = {
+  /**
+   *  :: Experimental ::
+   * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
+   * Any TopicPartition not specified in the map will use a consistent location.
+   */
+  @Experimental
+  def preferFixed(hostMap: collection.Map[TopicPartition, String]): LocationStrategy =
     PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))
-  }
-  def create(hostMap: ju.Map[TopicPartition, String]): PreferFixed =
+
+  /**
+   *  :: Experimental ::
+   * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
+   * Any TopicPartition not specified in the map will use a consistent location.
+   */
+  @Experimental
+  def preferFixed(hostMap: ju.Map[TopicPartition, String]): LocationStrategy =
     PreferFixed(hostMap)
 }

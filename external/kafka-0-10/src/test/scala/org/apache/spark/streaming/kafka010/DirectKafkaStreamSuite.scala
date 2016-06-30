@@ -93,7 +93,7 @@ class DirectKafkaStreamSuite
     kp
   }
 
-  val preferredHosts = PreferConsistent
+  val preferredHosts = LocationStrategies.preferConsistent
 
   test("basic stream receiving with multiple topics and smallest starting offset") {
     val topics = List("basic1", "basic2", "basic3")

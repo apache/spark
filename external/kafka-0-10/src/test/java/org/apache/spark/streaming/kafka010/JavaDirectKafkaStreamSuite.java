@@ -90,7 +90,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaInputDStream<ConsumerRecord<String, String>> istream1 = KafkaUtils.createDirectStream(
         ssc,
-        PreferConsistent.create(),
+        LocationStrategies.preferConsistent(),
         Subscribe.<String, String>create(Arrays.asList(topic1), kafkaParams)
     );
 
@@ -123,7 +123,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaInputDStream<ConsumerRecord<String, String>> istream2 = KafkaUtils.createDirectStream(
         ssc,
-        PreferConsistent.create(),
+        LocationStrategies.preferConsistent(),
         Subscribe.<String, String>create(Arrays.asList(topic2), kafkaParams2)
     );
 
