@@ -19,21 +19,14 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.{Matrices, Matrix}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
-import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 
 
 object DataTypesExamples {
 
   private def localVectorExample(): Unit = {
+    // $example on:local_vector$
     import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
-    // $example on:local_vector$
     // Create a dense vector (1.0, 0.0, 3.0).
     val dv: Vector = Vectors.dense(1.0, 0.0, 3.0)
     // Create a sparse vector (1.0, 0.0, 3.0) by specifying its indices and values corresponding to
@@ -46,6 +39,9 @@ object DataTypesExamples {
 
   private def labeledPointExample(): Unit = {
     // $example on:labeled_point$
+    import org.apache.spark.mllib.linalg.Vectors
+    import org.apache.spark.mllib.regression.LabeledPoint
+
     // Create a labeled point with a positive label and a dense feature vector.
     val pos = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
 
@@ -57,6 +53,10 @@ object DataTypesExamples {
   private def libsvmExample(): Unit = {
     val sc = SparkContext.getOrCreate()
     // $example on:libsvm$
+    import org.apache.spark.mllib.regression.LabeledPoint
+    import org.apache.spark.mllib.util.MLUtils
+    import org.apache.spark.rdd.RDD
+
     val examples: RDD[LabeledPoint] =
       MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
     // $example off:libsvm$
@@ -64,6 +64,8 @@ object DataTypesExamples {
 
   private def localMatrixExample(): Unit = {
     // $example on:local_matrix$
+    import org.apache.spark.mllib.linalg.{Matrix, Matrices}
+
     // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
     val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
 
@@ -75,6 +77,10 @@ object DataTypesExamples {
   private def rowMatrixExample(): Unit = {
     val sc = SparkContext.getOrCreate()
     // $example on:row_matrix$
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+    import org.apache.spark.mllib.linalg.distributed.RowMatrix
+    import org.apache.spark.rdd.RDD
+
     val v1 = Vectors.dense(1.0, 10.0, 100.0)
     val v2 = Vectors.dense(2.0, 20.0, 200.0)
     val v3 = Vectors.dense(3.0, 30.0, 300.0)
@@ -96,6 +102,10 @@ object DataTypesExamples {
     val sc = SparkContext.getOrCreate()
 
     // $example on:indexed_row_matrix$
+    import org.apache.spark.mllib.linalg.Vectors
+    import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
+    import org.apache.spark.rdd.RDD
+
     val r0 = IndexedRow(0, Vectors.dense(1, 2, 3))
     val r1 = IndexedRow(1, Vectors.dense(4, 5, 6))
     val r2 = IndexedRow(2, Vectors.dense(7, 8, 9))
@@ -118,6 +128,9 @@ object DataTypesExamples {
     val sc = SparkContext.getOrCreate()
 
     // $example on:coordinate_matrix$
+    import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
+    import org.apache.spark.rdd.RDD
+
     val me1 = MatrixEntry(0, 0, 1.2)
     val me2 = MatrixEntry(1, 0, 2.1)
     val me3 = MatrixEntry(6, 1, 3.7)
@@ -139,6 +152,9 @@ object DataTypesExamples {
     val sc = SparkContext.getOrCreate()
 
     // $example on:block_matrix$
+    import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
+    import org.apache.spark.rdd.RDD
+
     val me1 = MatrixEntry(0, 0, 1.2)
     val me2 = MatrixEntry(1, 0, 2.1)
     val me3 = MatrixEntry(6, 1, 3.7)
@@ -161,7 +177,7 @@ object DataTypesExamples {
   }
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("DataTypeExamples")
+    val conf = new SparkConf().setAppName("DataTypesExamples")
     val sc = new SparkContext(conf)
 
     localVectorExample()

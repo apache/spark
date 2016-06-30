@@ -17,10 +17,7 @@
 
 from __future__ import print_function
 
-from numpy import array
-
 from pyspark import SparkContext
-from pyspark.mllib.clustering import BisectingKMeans, BisectingKMeansModel
 
 
 def __local_vector_example():
@@ -54,6 +51,8 @@ def __labeled_point_example():
 
 
 def __libsvm_example():
+    sc = SparkContext.getOrCreate()
+
     # $example on:libsvm$
     from pyspark.mllib.util import MLUtils
 
@@ -74,6 +73,8 @@ def __local_matrix_example():
 
 
 def __row_matrix_example():
+    sc = SparkContext.getOrCreate()
+
     # $example on:row_matrix$
     from pyspark.mllib.linalg.distributed import RowMatrix
 
@@ -93,6 +94,8 @@ def __row_matrix_example():
 
 
 def __indexed_row_matrix_example():
+    sc = SparkContext.getOrCreate()
+
     # $example on:indexed_row_matrix$
     from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
 
@@ -122,12 +125,15 @@ def __indexed_row_matrix_example():
 
 
 def __coordinate_matrix_example():
+    sc = SparkContext.getOrCreate()
+
     # $example on:coordinate_matrix$
     from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
 
     # Create an RDD of coordinate entries.
     #   - This can be done explicitly with the MatrixEntry class:
-    entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(6, 1, 3.7)])
+    entries =\
+        sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(6, 1, 3.7)])
     #   - or using (long, long, float) tuples:
     entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 
@@ -153,6 +159,8 @@ def __coordinate_matrix_example():
 
 
 def __block_matrix():
+    sc = SparkContext.getOrCreate()
+
     # $example on:block_matrix$
     from pyspark.mllib.linalg import Matrices
     from pyspark.mllib.linalg.distributed import BlockMatrix
@@ -165,8 +173,8 @@ def __block_matrix():
     mat = BlockMatrix(blocks, 3, 2)
 
     # Get its size.
-    m = mat.numRows() # 6
-    n = mat.numCols() # 2
+    m = mat.numRows()  # 6
+    n = mat.numCols()  # 2
 
     # Get the blocks as an RDD of sub-matrix blocks.
     blocksRDD = mat.blocks

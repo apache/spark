@@ -170,7 +170,6 @@ public class JavaDataTypesExamples {
   }
 
   public static void main(String[] args) {
-
     SparkConf conf = new SparkConf().setAppName("JavaDataTypesExample");
     SparkContext sc = new SparkContext(conf);
 
