@@ -880,12 +880,13 @@ class LDA @Since("1.6.0") (
   }
 }
 
-
+@Since("2.0.0")
 object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  private[clustering] def getOldDataset(dataset: Dataset[_], featuresCol: String):
-      RDD[(Long, OldVector)] = {
+  private[clustering] def getOldDataset(
+       dataset: Dataset[_],
+       featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
