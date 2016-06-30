@@ -292,6 +292,14 @@ private object YarnClusterDriver extends Logging with Matchers {
       sc.stop()
     }
 
+    // Verify that the config archive is correctly placed in the classpath of all containers.
+    val confFile = "/" + Client.SPARK_CONF_FILE
+    assert(getClass().getResource(confFile) != null)
+    val configFromExecutors = sc.parallelize(1 to 4, 4)
+      .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
+      .collect()
+    assert(configFromExecutors.find(_ == null) === None)
+
     // verify log urls are present
     val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
     assert(listeners.size === 1)
@@ -304,7 +312,7 @@ private object YarnClusterDriver extends Logging with Matchers {
 
     // If we are running in yarn-cluster mode, verify that driver logs links and present and are
     // in the expected format.
-    if (conf.get("spark.master") == "yarn-cluster") {
+    if (conf.get("spark.submit.deployMode") == "cluster") {
       assert(listener.driverLogs.nonEmpty)
       val driverLogs = listener.driverLogs.get
       assert(driverLogs.size === 2)

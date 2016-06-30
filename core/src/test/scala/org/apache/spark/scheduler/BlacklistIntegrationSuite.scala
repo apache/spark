@@ -24,18 +24,19 @@ import org.apache.spark._
 class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
   val badHost = "host-0"
+  val duration = Duration(10, SECONDS)
 
   /**
    * This backend just always fails if the task is executed on a bad host, but otherwise succeeds
    * all tasks.
    */
   def badHostBackend(): Unit = {
-    val task = backend.beginTask()
-    val host = backend.executorIdToExecutor(task.executorId).host
+    val (taskDescription, _) = backend.beginTask()
+    val host = backend.executorIdToExecutor(taskDescription.executorId).host
     if (host == badHost) {
-      backend.taskFailed(task, new RuntimeException("I'm a bad host!"))
+      backend.taskFailed(taskDescription, new RuntimeException("I'm a bad host!"))
     } else {
-      backend.taskSuccess(task, 42)
+      backend.taskSuccess(taskDescription, 42)
     }
   }
 
@@ -45,10 +46,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 
@@ -65,10 +64,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
-      val duration = Duration(3, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 
@@ -88,8 +85,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 10).map { _ -> 42 }.toMap)
     assertDataStructuresEmpty(noFailure = true)

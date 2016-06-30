@@ -582,7 +582,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       "normal_parquet")
 
     sql( s"""
-      create temporary table partitioned_parquet
+      CREATE TEMPORARY VIEW partitioned_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDir.getCanonicalPath}'
@@ -590,7 +590,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      create temporary table partitioned_parquet_with_key
+      CREATE TEMPORARY VIEW partitioned_parquet_with_key
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithKey.getCanonicalPath}'
@@ -598,7 +598,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      create temporary table normal_parquet
+      CREATE TEMPORARY VIEW normal_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
@@ -606,7 +606,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      CREATE TEMPORARY TABLE partitioned_parquet_with_key_and_complextypes
+      CREATE TEMPORARY VIEW partitioned_parquet_with_key_and_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
@@ -614,7 +614,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      CREATE TEMPORARY TABLE partitioned_parquet_with_complextypes
+      CREATE TEMPORARY VIEW partitioned_parquet_with_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithComplexTypes.getCanonicalPath}'
@@ -671,6 +671,46 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
           checkAnswer(
             spark.read.parquet(path),
             Row("1st", "2nd", Seq(Row("val_a", "val_b"))))
+        }
+      }
+    }
+  }
+
+  test("Verify the PARQUET conversion parameter: CONVERT_METASTORE_PARQUET") {
+    withTempTable("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      Seq("true", "false").foreach { parquetConversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> parquetConversion) {
+          val tableName = "test_parquet_ctas"
+          withTable(tableName) {
+            sql(
+              s"""
+                 |CREATE TABLE $tableName STORED AS PARQUET
+                 |AS SELECT tmp.key, tmp.value FROM single tmp
+               """.stripMargin)
+
+            val df = spark.sql(s"SELECT * FROM $tableName WHERE key=0")
+            checkAnswer(df, singleRowDF)
+
+            val queryExecution = df.queryExecution
+            if (parquetConversion == "true") {
+              queryExecution.analyzed.collectFirst {
+                case _: LogicalRelation =>
+              }.getOrElse {
+                fail(s"Expecting the query plan to convert parquet to data sources, " +
+                  s"but got:\n$queryExecution")
+              }
+            } else {
+              queryExecution.analyzed.collectFirst {
+                case _: MetastoreRelation =>
+              }.getOrElse {
+                fail(s"Expecting no conversion from parquet to data sources, " +
+                  s"but got:\n$queryExecution")
+              }
+            }
+          }
         }
       }
     }

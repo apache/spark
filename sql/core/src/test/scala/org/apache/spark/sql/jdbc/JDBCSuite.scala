@@ -184,6 +184,16 @@ class JDBCSuite extends SparkFunSuite
       "insert into test.emp values ('kathy', null, null)").executeUpdate()
     conn.commit()
 
+    conn.prepareStatement(
+      "create table test.seq(id INTEGER)").executeUpdate()
+    (0 to 6).foreach { value =>
+      conn.prepareStatement(
+        s"insert into test.seq values ($value)").executeUpdate()
+    }
+    conn.prepareStatement(
+      "insert into test.seq values (null)").executeUpdate()
+    conn.commit()
+
     sql(
       s"""
          |CREATE TEMPORARY TABLE nullparts
@@ -371,6 +381,61 @@ class JDBCSuite extends SparkFunSuite
     assert(
       spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties)
         .collect().length === 4)
+  }
+
+  test("Partitioning on column where numPartitions is zero") {
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.seq",
+      columnName = "id",
+      lowerBound = 0,
+      upperBound = 4,
+      numPartitions = 0,
+      connectionProperties = new Properties
+    )
+    assert(res.count() === 8)
+  }
+
+  test("Partitioning on column where numPartitions are more than the number of total rows") {
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.seq",
+      columnName = "id",
+      lowerBound = 1,
+      upperBound = 5,
+      numPartitions = 10,
+      connectionProperties = new Properties
+    )
+    assert(res.count() === 8)
+  }
+
+  test("Partitioning on column where lowerBound is equal to upperBound") {
+    val res = spark.read.jdbc(
+      url = urlWithUserAndPass,
+      table = "TEST.seq",
+      columnName = "id",
+      lowerBound = 5,
+      upperBound = 5,
+      numPartitions = 4,
+      connectionProperties = new Properties
+    )
+    assert(res.count() === 8)
+  }
+
+  test("Partitioning on column where lowerBound is larger than upperBound") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.jdbc(
+        url = urlWithUserAndPass,
+        table = "TEST.seq",
+        columnName = "id",
+        lowerBound = 5,
+        upperBound = 1,
+        numPartitions = 3,
+        connectionProperties = new Properties
+      )
+    }.getMessage
+    assert(e.contains("Operation not allowed: the lower bound of partitioning column " +
+      "is larger than the upper bound. Lower bound: 5; Upper bound: 1"))
   }
 
   test("SELECT * on partitioned table with a nullable partition column") {
@@ -660,5 +725,31 @@ class JDBCSuite extends SparkFunSuite
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
+
+  private def assertEmptyQuery(sqlString: String): Unit = {
+    assert(sql(sqlString).collect().isEmpty)
+  }
+
+  test("SPARK-15916: JDBC filter operator push down should respect operator precedence") {
+    val TRUE = "NAME != 'non_exists'"
+    val FALSE1 = "THEID > 1000000000"
+    val FALSE2 = "THEID < -1000000000"
+
+    assertEmptyQuery(s"SELECT * FROM foobar WHERE ($TRUE OR $FALSE1) AND $FALSE2")
+    assertEmptyQuery(s"SELECT * FROM foobar WHERE $FALSE1 AND ($FALSE2 OR $TRUE)")
+
+    // Tests JDBCPartition whereClause clause push down.
+    withTempTable("tempFrame") {
+      val jdbcPartitionWhereClause = s"$FALSE1 OR $TRUE"
+      val df = spark.read.jdbc(
+        urlWithUserAndPass,
+        "TEST.PEOPLE",
+        predicates = Array[String](jdbcPartitionWhereClause),
+        new Properties)
+
+      df.createOrReplaceTempView("tempFrame")
+      assertEmptyQuery(s"SELECT * FROM tempFrame where $FALSE2")
+    }
   }
 }

@@ -52,7 +52,7 @@ abstract class AggregationIterator(
    * - PartialMerge (for single distinct)
    * - Partial and PartialMerge (for single distinct)
    * - Final
-   * - Complete (for SortBasedAggregate with functions that does not support Partial)
+   * - Complete (for SortAggregate with functions that does not support Partial)
    * - Final and Complete (currently not used)
    *
    * TODO: AggregateMode should have only two modes: Update and Merge, AggregateExpression

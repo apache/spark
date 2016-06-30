@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Options for the Parquet data source.
  */
-private[parquet] class ParquetOptions(
+private[sql] class ParquetOptions(
     @transient private val parameters: Map[String, String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
@@ -44,10 +44,21 @@ private[parquet] class ParquetOptions(
     }
     shortParquetCompressionCodecNames(codecName).name()
   }
+
+  /**
+   * Whether it merges schemas or not. When the given Parquet files have different schemas,
+   * the schemas can be merged.  By default use the value specified in SQLConf.
+   */
+  val mergeSchema: Boolean = parameters
+    .get(MERGE_SCHEMA)
+    .map(_.toBoolean)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 }
 
 
-private[parquet] object ParquetOptions {
+private[sql] object ParquetOptions {
+  private[sql] val MERGE_SCHEMA = "mergeSchema"
+
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
     "none" -> CompressionCodecName.UNCOMPRESSED,

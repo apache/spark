@@ -1139,6 +1139,46 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getSingle("a3").isDefined, "a3 was not in store")
   }
 
+  private def testReadWithLossOfOnDiskFiles(
+      storageLevel: StorageLevel,
+      readMethod: BlockManager => Option[_]): Unit = {
+    store = makeBlockManager(12000)
+    assert(store.putSingle("blockId", new Array[Byte](4000), storageLevel))
+    assert(store.getStatus("blockId").isDefined)
+    // Directly delete all files from the disk store, triggering failures when reading blocks:
+    store.diskBlockManager.getAllFiles().foreach(_.delete())
+    // The BlockManager still thinks that these blocks exist:
+    assert(store.getStatus("blockId").isDefined)
+    // Because the BlockManager's metadata claims that the block exists (i.e. that it's present
+    // in at least one store), the read attempts to read it and fails when the on-disk file is
+    // missing.
+    intercept[SparkException] {
+      readMethod(store)
+    }
+    // Subsequent read attempts will succeed; the block isn't present but we return an expected
+    // "block not found" response rather than a fatal error:
+    assert(readMethod(store).isEmpty)
+    // The reason why this second read succeeded is because the metadata entry for the missing
+    // block was removed as a result of the read failure:
+    assert(store.getStatus("blockId").isEmpty)
+  }
+
+  test("remove block if a read fails due to missing DiskStore files (SPARK-15736)") {
+    val storageLevels = Seq(
+      StorageLevel(useDisk = true, useMemory = false, deserialized = false),
+      StorageLevel(useDisk = true, useMemory = false, deserialized = true))
+    val readMethods = Map[String, BlockManager => Option[_]](
+      "getLocalBytes" -> ((m: BlockManager) => m.getLocalBytes("blockId")),
+      "getLocalValues" -> ((m: BlockManager) => m.getLocalValues("blockId"))
+    )
+    testReadWithLossOfOnDiskFiles(StorageLevel.DISK_ONLY, _.getLocalBytes("blockId"))
+    for ((readMethodName, readMethod) <- readMethods; storageLevel <- storageLevels) {
+      withClue(s"$readMethodName $storageLevel") {
+        testReadWithLossOfOnDiskFiles(storageLevel, readMethod)
+      }
+    }
+  }
+
   test("SPARK-13328: refresh block locations (fetch should fail after hitting a threshold)") {
     val mockBlockTransferService =
       new MockBlockTransferService(conf.getInt("spark.block.failures.beforeLocationRefresh", 5))

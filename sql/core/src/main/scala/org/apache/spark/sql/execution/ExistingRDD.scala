@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.commons.lang.StringUtils
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.Utils
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -86,10 +87,14 @@ private[sql] case class LogicalRDD(
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case _ => false
+    }
   }
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -121,7 +126,7 @@ private[sql] case class RDDScanExec(
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+    s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
   }
 }
 
@@ -184,7 +189,8 @@ private[sql] case class RowDataSourceScanExec(
       key + ": " + StringUtils.abbreviate(value, 100)
     }
 
-    s"$nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
+      s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -230,15 +236,18 @@ private[sql] case class BatchedDataSourceScanExec(
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException
+    // in the case of fallback, this batched scan should never fail because of:
+    // 1) only primitive types are supported
+    // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
+    WholeStageCodegenExec(this).execute()
   }
 
   override def simpleString: String = {
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
       key + ": " + StringUtils.abbreviate(value, 100)
     }
-    val metadataStr = metadataEntries.mkString(" ", ", ", "")
-    s"Batched$nodeName${output.mkString("[", ",", "]")}$metadataStr"
+    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
+    s"Batched$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

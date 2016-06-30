@@ -41,6 +41,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -288,8 +289,7 @@ class SparkHadoopUtil extends Logging {
       credentials: Credentials): Long = {
     val now = System.currentTimeMillis()
 
-    val renewalInterval =
-      sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
+    val renewalInterval = sparkConf.get(TOKEN_RENEWAL_INTERVAL).get
 
     credentials.getAllTokens.asScala
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)

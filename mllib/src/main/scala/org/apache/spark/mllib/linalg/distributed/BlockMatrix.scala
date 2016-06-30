@@ -288,7 +288,7 @@ class BlockMatrix @Since("1.3.0") (
 
       vectors.foreach { case (blockColIdx: Int, vec: BV[Double]) =>
         val offset = colsPerBlock * blockColIdx
-        wholeVector(offset until offset + colsPerBlock) := vec
+        wholeVector(offset until Math.min(cols, offset + colsPerBlock)) := vec
       }
       new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
     }

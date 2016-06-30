@@ -91,7 +91,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   }
 
-  test("big model load / save") {
+  ignore("big model load / save") {
     // create a model bigger than 32MB since 9000 * 1000 * 4 > 2^25
     val word2VecMap = Map((0 to 9000).map(i => s"$i" -> Array.fill(1000)(0.1f)): _*)
     val model = new Word2VecModel(word2VecMap)

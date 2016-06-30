@@ -23,7 +23,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
-import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
+import org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
 
@@ -355,13 +355,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val fileFormatClass = classOf[ParquetFileFormat]
 
       val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
-      val options = Map(
-        ParquetFileFormat.MERGE_SCHEMA -> mergeSchema.toString,
-        ParquetFileFormat.METASTORE_TABLE_NAME -> TableIdentifier(
-          relation.tableName,
-          Some(relation.databaseName)
-        ).unquotedString
-      )
+      val options = Map(ParquetOptions.MERGE_SCHEMA -> mergeSchema.toString)
 
       convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "parquet")
     }
@@ -446,103 +440,29 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
-        val schema = if (table.schema.nonEmpty) {
-          table.schema
+      case p @ CreateHiveTableAsSelectLogicalPlan(table, child, allowExisting) =>
+        val desc = if (table.storage.serde.isEmpty) {
+          // add default serde
+          table.withNewStorage(
+            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
         } else {
-          child.output.map { a =>
-            CatalogColumn(a.name, a.dataType.catalogString, a.nullable)
-          }
+          table
         }
 
-        val desc = table.copy(schema = schema)
+        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
-        if (sessionState.convertCTAS && table.storage.serde.isEmpty) {
-          // Do the conversion when spark.sql.hive.convertCTAS is true and the query
-          // does not specify any storage format (file format and storage handler).
-          if (table.identifier.database.isDefined) {
-            throw new AnalysisException(
-              "Cannot specify database name in a CTAS statement " +
-                "when spark.sql.hive.convertCTAS is set to true.")
-          }
-
-          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTableUsingAsSelect(
-            TableIdentifier(desc.identifier.table),
-            sessionState.conf.defaultDataSourceName,
-            temporary = false,
-            Array.empty[String],
-            bucketSpec = None,
-            mode,
-            options = Map.empty[String, String],
-            child
-          )
-        } else {
-          val desc = if (table.storage.serde.isEmpty) {
-            // add default serde
-            table.withNewStorage(
-              serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-          } else {
-            table
-          }
-
-          val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
-
-          execution.CreateTableAsSelectCommand(
-            desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
-            child,
-            allowExisting)
-        }
+        execution.CreateHiveTableAsSelectCommand(
+          desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
+          child,
+          allowExisting)
     }
   }
-
-  /**
-   * Casts input data to correct data types according to table definition before inserting into
-   * that table.
-   */
-  object PreInsertionCasts extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
-      // Wait until children are resolved.
-      case p: LogicalPlan if !p.childrenResolved => p
-
-      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _, _) =>
-        castChildOutput(p, table, child)
-    }
-
-    def castChildOutput(p: InsertIntoTable, table: MetastoreRelation, child: LogicalPlan)
-      : LogicalPlan = {
-      val childOutputDataTypes = child.output.map(_.dataType)
-      val numDynamicPartitions = p.partition.values.count(_.isEmpty)
-      val tableOutputDataTypes =
-        (table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions))
-          .take(child.output.length).map(_.dataType)
-
-      if (childOutputDataTypes == tableOutputDataTypes) {
-        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
-      } else if (childOutputDataTypes.size == tableOutputDataTypes.size &&
-        childOutputDataTypes.zip(tableOutputDataTypes)
-          .forall { case (left, right) => left.sameType(right) }) {
-        // If both types ignoring nullability of ArrayType, MapType, StructType are the same,
-        // use InsertIntoHiveTable instead of InsertIntoTable.
-        InsertIntoHiveTable(table, p.partition, p.child, p.overwrite, p.ifNotExists)
-      } else {
-        // Only do the casting when child output data types differ from table output data types.
-        val castedChildOutput = child.output.zip(table.output).map {
-          case (input, output) if input.dataType != output.dataType =>
-            Alias(Cast(input, output.dataType), input.name)()
-          case (input, _) => input
-        }
-
-        p.copy(child = logical.Project(castedChildOutput, child))
-      }
-    }
-  }
-
 }
 
 /**
  * An override of the standard HDFS listing based catalog, that overrides the partition spec with
  * the information from the metastore.
+ *
  * @param tableBasePath The default base path of the Hive metastore table
  * @param partitionSpec The partition specifications from Hive metastore
  */
@@ -581,7 +501,7 @@ private[hive] case class InsertIntoHiveTable(
     child: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean)
-  extends LogicalPlan {
+  extends LogicalPlan with Command {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty

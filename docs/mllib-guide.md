@@ -102,32 +102,54 @@ MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
 and the migration guide below will explain all changes between releases.
 
-## From 1.5 to 1.6
+## From 1.6 to 2.0
 
-There are no breaking API changes in the `spark.mllib` or `spark.ml` packages, but there are
-deprecations and changes of behavior.
+The deprecations and changes of behavior in the `spark.mllib` or `spark.ml` packages include:
 
 Deprecations:
 
-* [SPARK-11358](https://issues.apache.org/jira/browse/SPARK-11358):
- In `spark.mllib.clustering.KMeans`, the `runs` parameter has been deprecated.
-* [SPARK-10592](https://issues.apache.org/jira/browse/SPARK-10592):
- In `spark.ml.classification.LogisticRegressionModel` and
- `spark.ml.regression.LinearRegressionModel`, the `weights` field has been deprecated in favor of
- the new name `coefficients`.  This helps disambiguate from instance (row) "weights" given to
- algorithms.
+* [SPARK-14984](https://issues.apache.org/jira/browse/SPARK-14984):
+ In `spark.ml.regression.LinearRegressionSummary`, the `model` field has been deprecated.
+* [SPARK-13784](https://issues.apache.org/jira/browse/SPARK-13784):
+ In `spark.ml.regression.RandomForestRegressionModel` and `spark.ml.classification.RandomForestClassificationModel`,
+ the `numTrees` parameter has been deprecated in favor of `getNumTrees` method.
+* [SPARK-13761](https://issues.apache.org/jira/browse/SPARK-13761):
+ In `spark.ml.param.Params`, the `validateParams` method has been deprecated.
+ We move all functionality in overridden methods to the corresponding `transformSchema`.
+* [SPARK-14829](https://issues.apache.org/jira/browse/SPARK-14829):
+ In `spark.mllib` package, `LinearRegressionWithSGD`, `LassoWithSGD`, `RidgeRegressionWithSGD` and `LogisticRegressionWithSGD` have been deprecated.
+ We encourage users to use `spark.ml.regression.LinearRegresson` and `spark.ml.classification.LogisticRegresson`.
+* [SPARK-14900](https://issues.apache.org/jira/browse/SPARK-14900):
+ In `spark.mllib.evaluation.MulticlassMetrics`, the parameters `precision`, `recall` and `fMeasure` have been deprecated in favor of `accuracy`.
+* [SPARK-15644](https://issues.apache.org/jira/browse/SPARK-15644):
+ In `spark.ml.util.MLReader` and `spark.ml.util.MLWriter`, the `context` method has been deprecated in favor of `session`.
+* In `spark.ml.feature.ChiSqSelectorModel`, the `setLabelCol` method has been deprecated since it was not used by `ChiSqSelectorModel`.
 
 Changes of behavior:
 
-* [SPARK-7770](https://issues.apache.org/jira/browse/SPARK-7770):
- `spark.mllib.tree.GradientBoostedTrees`: `validationTol` has changed semantics in 1.6.
- Previously, it was a threshold for absolute change in error. Now, it resembles the behavior of
- `GradientDescent`'s `convergenceTol`: For large errors, it uses relative error (relative to the
- previous error); for small errors (`< 0.01`), it uses absolute error.
-* [SPARK-11069](https://issues.apache.org/jira/browse/SPARK-11069):
- `spark.ml.feature.RegexTokenizer`: Previously, it did not convert strings to lowercase before
- tokenizing. Now, it converts to lowercase by default, with an option not to. This matches the
- behavior of the simpler `Tokenizer` transformer.
+* [SPARK-7780](https://issues.apache.org/jira/browse/SPARK-7780):
+ `spark.mllib.classification.LogisticRegressionWithLBFGS` directly calls `spark.ml.classification.LogisticRegresson` for binary classification now.
+ This will introduce the following behavior changes for `spark.mllib.classification.LogisticRegressionWithLBFGS`:
+    * The intercept will not be regularized when training binary classification model with L1/L2 Updater.
+    * If users set without regularization, training with or without feature scaling will return the same solution by the same convergence rate.
+* [SPARK-13429](https://issues.apache.org/jira/browse/SPARK-13429):
+ In order to provide better and consistent result with `spark.ml.classification.LogisticRegresson`,
+ the default value of `spark.mllib.classification.LogisticRegressionWithLBFGS`: `convergenceTol` has been changed from 1E-4 to 1E-6.
+* [SPARK-12363](https://issues.apache.org/jira/browse/SPARK-12363):
+ Fix a bug of `PowerIterationClustering` which will likely change its result.
+* [SPARK-13048](https://issues.apache.org/jira/browse/SPARK-13048):
+ `LDA` using the `EM` optimizer will keep the last checkpoint by default, if checkpointing is being used.
+* [SPARK-12153](https://issues.apache.org/jira/browse/SPARK-12153):
+ `Word2Vec` now respects sentence boundaries. Previously, it did not handle them correctly.
+* [SPARK-10574](https://issues.apache.org/jira/browse/SPARK-10574):
+ `HashingTF` uses `MurmurHash3` as default hash algorithm in both `spark.ml` and `spark.mllib`.
+* [SPARK-14768](https://issues.apache.org/jira/browse/SPARK-14768):
+ The `expectedType` argument for PySpark `Param` was removed.
+* [SPARK-14931](https://issues.apache.org/jira/browse/SPARK-14931):
+ Some default `Param` values, which were mismatched between pipelines in Scala and Python, have been changed.
+* [SPARK-13600](https://issues.apache.org/jira/browse/SPARK-13600):
+ `QuantileDiscretizer` now uses `spark.sql.DataFrameStatFunctions.approxQuantile` to find splits (previously used custom sampling logic).
+ The output buckets will differ for same input data and params.
 
 ## Previous Spark versions
 

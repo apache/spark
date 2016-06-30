@@ -23,6 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -147,9 +148,9 @@ trait StreamSinkProvider {
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
-   * Creates a relation with the given parameters based on the contents of the given
-   * DataFrame. The mode specifies the expected behavior of createRelation when
-   * data already exists.
+   * Save the DataFrame to the destination and return a relation with the given parameters based on
+   * the contents of the given DataFrame. The mode specifies the expected behavior of createRelation
+   * when data already exists.
    * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
    * Append mode means that when saving a DataFrame to a data source, if data already exists,
    * contents of the DataFrame are expected to be appended to existing data.

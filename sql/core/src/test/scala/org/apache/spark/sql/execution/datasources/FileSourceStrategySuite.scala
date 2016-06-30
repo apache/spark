@@ -21,7 +21,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, RawLocalFileSystem}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkConf
@@ -340,6 +340,73 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("SPARK-15654 do not split non-splittable files") {
+    // Check if a non-splittable file is not assigned into partitions
+    Seq("gz", "snappy", "lz4").map { suffix =>
+       val table = createTable(
+        files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
+      )
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 2)
+          assert(partitions(0).files.size == 1)
+          assert(partitions(1).files.size == 2)
+        }
+      }
+    }
+
+    // Check if a splittable compressed file is assigned into multiple partitions
+    Seq("bz2").map { suffix =>
+       val table = createTable(
+         files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
+      )
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "2",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 3)
+          assert(partitions(0).files.size == 1)
+          assert(partitions(1).files.size == 2)
+          assert(partitions(2).files.size == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-14959: Do not call getFileBlockLocations on directories") {
+    // Setting PARALLEL_PARTITION_DISCOVERY_THRESHOLD to 2. So we will first
+    // list file statues at driver side and then for the level of p2, we will list
+    // file statues in parallel.
+    withSQLConf(
+      "fs.file.impl" -> classOf[MockDistributedFileSystem].getName,
+      SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2") {
+      withTempPath { path =>
+        val tempDir = path.getCanonicalPath
+
+        Seq("p1=1/p2=2/p3=3/file1", "p1=1/p2=3/p3=3/file1").foreach { fileName =>
+          val file = new File(tempDir, fileName)
+          assert(file.getParentFile.exists() || file.getParentFile.mkdirs())
+          util.stringToFile(file, fileName)
+        }
+
+        val fileCatalog = new ListingFileCatalog(
+          sparkSession = spark,
+          paths = Seq(new Path(tempDir)),
+          parameters = Map.empty[String, String],
+          partitionSchema = None)
+        // This should not fail.
+        fileCatalog.listLeafFiles(Seq(new Path(tempDir)))
+
+        // Also have an integration test.
+        checkAnswer(
+          spark.read.text(tempDir).select("p1", "p2", "p3", "value"),
+          Row(1, 2, 3, "p1=1/p2=2/p3=3/file1") :: Row(1, 3, 3, "p1=1/p2=3/p3=3/file1") :: Nil)
+      }
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -434,7 +501,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends FileFormat {
+class TestFileFormat extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 
@@ -490,7 +557,19 @@ class LocalityTestFileSystem extends RawLocalFileSystem {
 
   override def getFileBlockLocations(
       file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+    require(!file.isDirectory, "The file path can not be a directory.")
     val count = invocations.getAndAdd(1)
     Array(new BlockLocation(Array(s"host$count:50010"), Array(s"host$count"), 0, len))
+  }
+}
+
+// This file system is for SPARK-14959 (DistributedFileSystem will throw an exception
+// if we call getFileBlockLocations on a dir).
+class MockDistributedFileSystem extends RawLocalFileSystem {
+
+  override def getFileBlockLocations(
+      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+    require(!file.isDirectory, "The file path can not be a directory.")
+    super.getFileBlockLocations(file, start, len)
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 /**
  * This is a helper class to generate an append-only vectorized hash map that can act as a 'cache'
  * for extremely fast key-value lookups while evaluating aggregates (and fall back to the
- * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in TungstenAggregate to speed
+ * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in HashAggregate to speed
  * up aggregates w/ key.
  *
  * It is backed by a power-of-2-sized array for index lookups and a columnar batch that stores the
@@ -127,7 +127,7 @@ class VectorizedHashMapGenerator(
        |  public $generatedClassName() {
        |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
        |      org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
-       |    // TODO: Possibly generate this projection in TungstenAggregate directly
+       |    // TODO: Possibly generate this projection in HashAggregate directly
        |    aggregateBufferBatch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(
        |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
        |    for (int i = 0 ; i < aggregateBufferBatch.numCols(); i++) {

@@ -22,13 +22,16 @@ NULL
 
 setOldClass("jobj")
 
-#' @title S4 class that represents a GroupedData
-#' @description GroupedDatas can be created using groupBy() on a SparkDataFrame
+#' S4 class that represents a GroupedData
+#'
+#' GroupedDatas can be created using groupBy() on a SparkDataFrame
+#'
 #' @rdname GroupedData
 #' @seealso groupBy
 #'
 #' @param sgd A Java object reference to the backing Scala GroupedData
 #' @export
+#' @note GroupedData since 1.4.0
 setClass("GroupedData",
          slots = list(sgd = "jobj"))
 
@@ -44,6 +47,7 @@ groupedData <- function(sgd) {
 
 
 #' @rdname show
+#' @note show(GroupedData) since 1.4.0
 setMethod("show", "GroupedData",
           function(object) {
             cat("GroupedData\n")
@@ -56,12 +60,13 @@ setMethod("show", "GroupedData",
 #'
 #' @param x a GroupedData
 #' @return a SparkDataFrame
-#' @rdname agg
+#' @rdname count
 #' @export
 #' @examples
 #' \dontrun{
 #'   count(groupBy(df, "name"))
 #' }
+#' @note count since 1.4.0
 setMethod("count",
           signature(x = "GroupedData"),
           function(x) {
@@ -81,12 +86,14 @@ setMethod("count",
 #' @rdname summarize
 #' @name agg
 #' @family agg_funcs
+#' @export
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
 #'  df3 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
 #'  df4 <- summarize(df, ageSum = max(df$age))
 #' }
+#' @note agg since 1.4.0
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
@@ -114,6 +121,7 @@ setMethod("agg",
 
 #' @rdname summarize
 #' @name summarize
+#' @note summarize since 1.4.0
 setMethod("summarize",
           signature(x = "GroupedData"),
           function(x, ...) {
@@ -125,6 +133,49 @@ methods <- c("avg", "max", "mean", "min", "sum")
 
 # These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
 # "variance", "var_samp", "var_pop"
+
+#' Pivot a column of the GroupedData and perform the specified aggregation.
+#'
+#' Pivot a column of the GroupedData and perform the specified aggregation.
+#' There are two versions of pivot function: one that requires the caller to specify the list
+#' of distinct values to pivot on, and one that does not. The latter is more concise but less
+#' efficient, because Spark needs to first compute the list of distinct values internally.
+#'
+#' @param x a GroupedData object
+#' @param colname A column name
+#' @param values A value or a list/vector of distinct values for the output columns.
+#' @return GroupedData object
+#' @rdname pivot
+#' @name pivot
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(data.frame(
+#'     earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+#'     course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+#'     period = c("1H", "1H", "2H", "2H", "1H", "1H", "2H", "2H"),
+#'     year = c(2015, 2015, 2015, 2015, 2016, 2016, 2016, 2016)
+#' ))
+#' group_sum <- sum(pivot(groupBy(df, "year"), "course"), "earnings")
+#' group_min <- min(pivot(groupBy(df, "year"), "course", "R"), "earnings")
+#' group_max <- max(pivot(groupBy(df, "year"), "course", c("Python", "R")), "earnings")
+#' group_mean <- mean(pivot(groupBy(df, "year"), "course", list("Python", "R")), "earnings")
+#' }
+#' @note pivot since 2.0.0
+setMethod("pivot",
+          signature(x = "GroupedData", colname = "character"),
+          function(x, colname, values = list()){
+            stopifnot(length(colname) == 1)
+            if (length(values) == 0) {
+              result <- callJMethod(x@sgd, "pivot", colname)
+            } else {
+              if (length(values) > length(unique(values))) {
+                stop("Values are not unique")
+              }
+              result <- callJMethod(x@sgd, "pivot", colname, as.list(values))
+            }
+            groupedData(result)
+          })
 
 createMethod <- function(name) {
   setMethod(name,
@@ -142,3 +193,67 @@ createMethods <- function() {
 }
 
 createMethods()
+
+#' gapply
+#'
+#' Applies a R function to each group in the input GroupedData
+#'
+#' @param x a GroupedData
+#' @param func A function to be applied to each group partition specified by GroupedData.
+#'             The function `func` takes as argument a key - grouping columns and
+#'             a data frame - a local R data.frame.
+#'             The output of `func` is a local R data.frame.
+#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
+#'               The schema must match to output of `func`. It has to be defined for each
+#'               output column with preferred output column name and corresponding data type.
+#' @return a SparkDataFrame
+#' @rdname gapply
+#' @name gapply
+#' @export
+#' @examples
+#' \dontrun{
+#' Computes the arithmetic mean of the second column by grouping
+#' on the first and third columns. Output the grouping values and the average.
+#'
+#' df <- createDataFrame (
+#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
+#'   c("a", "b", "c", "d"))
+#'
+#' Here our output contains three columns, the key which is a combination of two
+#' columns with data types integer and string and the mean which is a double.
+#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#'   structField("avg", "double"))
+#' df1 <- gapply(
+#'   df,
+#'   list("a", "c"),
+#'   function(key, x) {
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#'   },
+#' schema)
+#' collect(df1)
+#'
+#' Result
+#' ------
+#' a c avg
+#' 3 3 3.0
+#' 1 1 1.5
+#' }
+#' @note gapply(GroupedData) since 2.0.0
+setMethod("gapply",
+          signature(x = "GroupedData"),
+          function(x, func, schema) {
+            try(if (is.null(schema)) stop("schema cannot be NULL"))
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                 connection = NULL)
+            broadcastArr <- lapply(ls(.broadcastNames),
+                              function(name) { get(name, .broadcastNames) })
+            sdf <- callJStatic(
+                     "org.apache.spark.sql.api.r.SQLUtils",
+                     "gapply",
+                     x@sgd,
+                     serialize(cleanClosure(func), connection = NULL),
+                     packageNamesArr,
+                     broadcastArr,
+                     schema$jobj)
+            dataFrame(sdf)
+          })

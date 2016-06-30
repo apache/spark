@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AnalysisException, OutputMode}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.IntegerType
 
 /** A dummy command for testing unsupported operations. */
@@ -52,12 +53,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   assertNotSupportedInBatchPlan(
     "streaming source",
     streamRelation,
-    Seq("with streaming source", "startStream"))
+    Seq("with streaming source", "start"))
 
   assertNotSupportedInBatchPlan(
     "select on streaming source",
     streamRelation.select($"count(*)"),
-    Seq("with streaming source", "startStream"))
+    Seq("with streaming source", "start"))
 
 
   /*
@@ -69,7 +70,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Batch plan in streaming query
   testError(
     "streaming plan - no streaming source",
-    Seq("without streaming source", "startStream")) {
+    Seq("without streaming source", "start")) {
     UnsupportedOperationChecker.checkForStreaming(batchRelation.select($"count(*)"), Append)
   }
 
@@ -80,7 +81,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = "commands" :: Nil)
 
-  // Multiple streaming aggregations not supported
+  // Aggregation: Multiple streaming aggregations not supported
   def aggExprs(name: String): Seq[NamedExpression] = Seq(Count("*").as(name))
 
   assertSupportedInStreamingPlan(
@@ -188,8 +189,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.intersect(_),
     streamStreamSupported = false)
 
-  // Unary operations
+  // Sort: supported only on batch subplans and on aggregation + complete output mode
   testUnaryOperatorInStreamingPlan("sort", Sort(Nil, true, _))
+  assertSupportedInStreamingPlan(
+    "sort - sort over aggregated data in Complete output mode",
+    streamRelation.groupBy()(Count("*")).sortBy(),
+    Complete)
+  assertNotSupportedInStreamingPlan(
+    "sort - sort over aggregated data in Update output mode",
+    streamRelation.groupBy()(Count("*")).sortBy(),
+    Update,
+    Seq("sort", "aggregat", "complete")) // sort on aggregations is supported on Complete mode only
+
+
+  // Other unary operations
   testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
@@ -298,6 +311,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       outputMode)
   }
 
+  /** Test output mode with and without aggregation in the streaming plan */
   def testOutputMode(
       outputMode: OutputMode,
       shouldSupportAggregation: Boolean): Unit = {

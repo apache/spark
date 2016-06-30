@@ -56,7 +56,6 @@ case class CreateTableUsing(
 case class CreateTableUsingAsSelect(
     tableIdent: TableIdentifier,
     provider: String,
-    temporary: Boolean,
     partitionColumns: Array[String],
     bucketSpec: Option[BucketSpec],
     mode: SaveMode,
@@ -65,9 +64,10 @@ case class CreateTableUsingAsSelect(
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
-case class CreateTempTableUsing(
+case class CreateTempViewUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
+    replace: Boolean,
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
@@ -85,38 +85,7 @@ case class CreateTempTableUsing(
     sparkSession.sessionState.catalog.createTempView(
       tableIdent.table,
       Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      overrideIfExists = true)
-
-    Seq.empty[Row]
-  }
-}
-
-case class CreateTempTableUsingAsSelectCommand(
-    tableIdent: TableIdentifier,
-    provider: String,
-    partitionColumns: Array[String],
-    mode: SaveMode,
-    options: Map[String, String],
-    query: LogicalPlan) extends RunnableCommand {
-
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
-  }
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val df = Dataset.ofRows(sparkSession, query)
-    val dataSource = DataSource(
-      sparkSession,
-      className = provider,
-      partitionColumns = partitionColumns,
-      bucketSpec = None,
-      options = options)
-    val result = dataSource.write(mode, df)
-    sparkSession.sessionState.catalog.createTempView(
-      tableIdent.table,
-      Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
-      overrideIfExists = true)
+      replace)
 
     Seq.empty[Row]
   }
@@ -129,6 +98,15 @@ case class RefreshTable(tableIdent: TableIdentifier)
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
     sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    Seq.empty[Row]
+  }
+}
+
+case class RefreshResource(path: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.catalog.refreshByPath(path)
     Seq.empty[Row]
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.util.Date
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
@@ -48,7 +49,26 @@ case class CatalogStorageFormat(
     outputFormat: Option[String],
     serde: Option[String],
     compressed: Boolean,
-    serdeProperties: Map[String, String])
+    serdeProperties: Map[String, String]) {
+
+  override def toString: String = {
+    val serdePropsToString =
+      if (serdeProperties.nonEmpty) {
+        s"Properties: " + serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+      } else {
+        ""
+      }
+    val output =
+      Seq(locationUri.map("Location: " + _).getOrElse(""),
+        inputFormat.map("InputFormat: " + _).getOrElse(""),
+        outputFormat.map("OutputFormat: " + _).getOrElse(""),
+        if (compressed) "Compressed" else "",
+        serde.map("Serde: " + _).getOrElse(""),
+        serdePropsToString)
+    output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
+  }
+
+}
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
@@ -65,8 +85,18 @@ case class CatalogColumn(
     // as a string due to issues in converting Hive varchars to and from SparkSQL strings.
     @Nullable dataType: String,
     nullable: Boolean = true,
-    comment: Option[String] = None)
+    comment: Option[String] = None) {
 
+  override def toString: String = {
+    val output =
+      Seq(s"`$name`",
+        dataType,
+        if (!nullable) "NOT NULL" else "",
+        comment.map("(" + _ + ")").getOrElse(""))
+    output.filter(_.nonEmpty).mkString(" ")
+  }
+
+}
 
 /**
  * A partition (Hive style) defined in the catalog.
@@ -138,6 +168,32 @@ case class CatalogTable(
       serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
       locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+  }
+
+  override def toString: String = {
+    val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+    val sortColumns = sortColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+    val bucketColumns = bucketColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+
+    val output =
+      Seq(s"Table: ${identifier.quotedString}",
+        if (owner.nonEmpty) s"Owner: $owner" else "",
+        s"Created: ${new Date(createTime).toString}",
+        s"Last Access: ${new Date(lastAccessTime).toString}",
+        s"Type: ${tableType.name}",
+        if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
+        if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else "",
+        if (numBuckets != -1) s"Num Buckets: $numBuckets" else "",
+        if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumns" else "",
+        if (sortColumnNames.nonEmpty) s"Sort Columns: $sortColumns" else "",
+        viewOriginalText.map("Original View: " + _).getOrElse(""),
+        viewText.map("View: " + _).getOrElse(""),
+        comment.map("Comment: " + _).getOrElse(""),
+        if (properties.nonEmpty) s"Properties: $tableProperties" else "",
+        s"$storage")
+
+    output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }
 
 }

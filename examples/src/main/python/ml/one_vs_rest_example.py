@@ -58,11 +58,11 @@ if __name__ == "__main__":
     predictions = ovrModel.transform(test)
 
     # obtain evaluator.
-    evaluator = MulticlassClassificationEvaluator(metricName="precision")
+    evaluator = MulticlassClassificationEvaluator(metricName="accuracy")
 
     # compute the classification error on test data.
-    precision = evaluator.evaluate(predictions)
-    print("Test Error : " + str(1 - precision))
+    accuracy = evaluator.evaluate(predictions)
+    print("Test Error : " + str(1 - accuracy))
     # $example off$
 
     spark.stop()

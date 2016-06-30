@@ -120,7 +120,13 @@ class FileStreamSource(
     val catalog = new ListingFileCatalog(sparkSession, globbedPaths, options, Some(new StructType))
     val files = catalog.allFiles().map(_.getPath.toUri.toString)
     val endTime = System.nanoTime
-    logInfo(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    val listingTimeMs = (endTime.toDouble - startTime) / 1000000
+    if (listingTimeMs > 2000) {
+      // Output a warning when listing files uses more than 2 seconds.
+      logWarning(s"Listed ${files.size} file(s) in $listingTimeMs ms")
+    } else {
+      logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
+    }
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     files
   }
@@ -128,4 +134,6 @@ class FileStreamSource(
   override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
 
   override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
+
+  override def stop() {}
 }

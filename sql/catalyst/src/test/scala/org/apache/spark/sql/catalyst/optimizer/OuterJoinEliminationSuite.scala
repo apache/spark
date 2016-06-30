@@ -30,7 +30,7 @@ class OuterJoinEliminationSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Outer Join Elimination", Once,
-        OuterJoinElimination,
+        EliminateOuterJoin,
         PushPredicateThroughJoin) :: Nil
   }
 

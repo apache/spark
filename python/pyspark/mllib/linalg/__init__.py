@@ -569,7 +569,7 @@ class SparseVector(Vector):
         if start == -1:
             raise ValueError("Tuple should start with '('")
         end = s.find(')')
-        if start == -1:
+        if end == -1:
             raise ValueError("Tuple should end with ')'")
         s = s[start + 1: end].strip()
 

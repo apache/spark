@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.{InternalOutputModes, OutputMode, SparkSession}
+import org.apache.spark.sql.{InternalOutputModes, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -36,6 +37,7 @@ class IncrementalExecution private[sql](
 
   // TODO: make this always part of planning.
   val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+    sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.

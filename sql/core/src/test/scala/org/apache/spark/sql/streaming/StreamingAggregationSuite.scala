@@ -20,19 +20,18 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, StreamTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
 
 object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StreamTest with SharedSQLContext with BeforeAndAfterAll {
+class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -103,6 +102,31 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
     Seq("append", "not supported").foreach { m =>
       assert(e.getMessage.toLowerCase.contains(m.toLowerCase))
     }
+  }
+
+  test("sort after aggregate in complete mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .toDF("value", "count")
+        .orderBy($"count".desc)
+        .as[(Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 3),
+      CheckLastBatch(isSorted = true, (3, 1)),
+      AddData(inputData, 2, 3),
+      CheckLastBatch(isSorted = true, (3, 2), (2, 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch(isSorted = true, (3, 3), (2, 2), (1, 1)),
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch(isSorted = true, (4, 4), (3, 3), (2, 2), (1, 1))
+    )
   }
 
   test("multiple keys") {

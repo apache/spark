@@ -32,6 +32,15 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
+
+  test("checkAnswer should compare map correctly") {
+    val data = Seq((1, "2", Map(1 -> 2, 2 -> 1)))
+    checkAnswer(
+      data.toDF(),
+      Seq(Row(1, "2", Map(2 -> 1, 1 -> 2))))
+  }
+
   test("toDS") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
     checkDataset(
@@ -95,12 +104,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
 
     assert(ds.repartition(10).rdd.partitions.length == 10)
-    checkDataset(
+    checkDatasetUnorderly(
       ds.repartition(10),
       data: _*)
 
     assert(ds.coalesce(1).rdd.partitions.length == 1)
-    checkDataset(
+    checkDatasetUnorderly(
       ds.coalesce(1),
       data: _*)
   }
@@ -163,7 +172,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         .map(c => ClassData(c.a, c.b + 1))
         .groupByKey(p => p).count()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds,
       (ClassData("one", 2), 1L), (ClassData("two", 3), 1L))
   }
@@ -204,7 +213,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("select 2, primitive and class, fields reordered") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    checkDecoding(
+    checkDataset(
       ds.select(
         expr("_1").as[String],
         expr("named_struct('b', _2, 'a', _1)").as[ClassData]),
@@ -223,6 +232,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.filter(_._1 == "b").select(expr("_1").as[String]),
       "b")
+  }
+
+  test("SPARK-15632: typed filter should preserve the underlying logical schema") {
+    val ds = spark.range(10)
+    val ds2 = ds.filter(_ > 3)
+    assert(ds.schema.equals(ds2.schema))
   }
 
   test("foreach") {
@@ -251,21 +266,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
       (1, 1), (2, 2))
-  }
-
-  test("joinWith, expression condition, outer join") {
-    val nullInteger = null.asInstanceOf[Integer]
-    val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassNullableData("a", 1),
-      ClassNullableData("c", 3)).toDS()
-    val ds2 = Seq(("a", new Integer(1)),
-      ("b", new Integer(2))).toDS()
-
-    checkDataset(
-      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassNullableData("a", 1), ("a", new Integer(1))),
-      (ClassNullableData("c", 3), (nullString, nullInteger)),
-      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
   }
 
   test("joinWith tuple with primitive, expression") {
@@ -300,7 +300,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
     val grouped = ds.groupByKey(v => (1, v._2))
-    checkDataset(
+    checkDatasetUnorderly(
       grouped.keys,
       (1, 1))
   }
@@ -310,7 +310,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val grouped = ds.groupByKey(v => (v._1, "word"))
     val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
-    checkDataset(
+    checkDatasetUnorderly(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
@@ -322,7 +322,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
-    checkDataset(
+    checkDatasetUnorderly(
       agged,
       "a", "30", "b", "3", "c", "1")
   }
@@ -331,7 +331,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq("abc", "xyz", "hello").toDS()
     val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
 
-    checkDataset(
+    checkDatasetUnorderly(
       agged,
       3 -> "abcxyz", 5 -> "hello")
   }
@@ -349,7 +349,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(sum("_2").as[Long]),
       ("a", 30L), ("b", 3L), ("c", 1L))
   }
@@ -357,7 +357,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
       ("a", 30L, 32L), ("b", 3L, 5L), ("c", 1L, 2L))
   }
@@ -365,7 +365,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: expr, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
       ("a", 30L, 32L, 2L), ("b", 3L, 5L, 2L), ("c", 1L, 2L, 1L))
   }
@@ -373,7 +373,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("typed aggregation: expr, expr, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_._1).agg(
         sum("_2").as[Long],
         sum($"_2" + 1).as[Long],
@@ -389,7 +389,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
     }
 
-    checkDataset(
+    checkDatasetUnorderly(
       cogrouped,
       1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
   }
@@ -401,7 +401,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Iterator(key -> (data1.map(_._2.a).mkString + data2.map(_._2.a).mkString))
     }
 
-    checkDataset(
+    checkDatasetUnorderly(
       cogrouped,
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
@@ -460,6 +460,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (KryoData(2), KryoData(2))))
   }
 
+  test("Kryo encoder: check the schema mismatch when converting DataFrame to Dataset") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val df = Seq((1)).toDF("a")
+    val e = intercept[AnalysisException] {
+      df.as[KryoData]
+    }.message
+    assert(e.contains("cannot cast IntegerType to BinaryType"))
+  }
+
   test("Java encoder") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
@@ -491,8 +500,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds1.joinWith(ds2, lit(true)),
       ((nullInt, "1"), (nullInt, "1")),
-      ((new java.lang.Integer(22), "2"), (nullInt, "1")),
       ((nullInt, "1"), (new java.lang.Integer(22), "2")),
+      ((new java.lang.Integer(22), "2"), (nullInt, "1")),
       ((new java.lang.Integer(22), "2"), (new java.lang.Integer(22), "2")))
   }
 
@@ -581,18 +590,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }.message
     assert(message ==
       "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: struct<a:string,b:int>\n" +
-        " - Target schema: struct<_1:string,_2:int,_3:bigint>")
+        "but failed as the number of fields does not line up.")
 
     val message2 = intercept[AnalysisException] {
       ds.as[Tuple1[String]]
     }.message
     assert(message2 ==
       "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: struct<a:string,b:int>\n" +
-        " - Target schema: struct<_1:string>")
+        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -725,7 +730,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
     val numRows = expected.split("\n").length - 4
-    val actual = ds.showString(numRows, truncate = true)
+    val actual = ds.showString(numRows, truncate = 20)
 
     if (expected != actual) {
       fail(
@@ -783,6 +788,62 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds.filter(_.b > 1).collect().toSeq
     }
   }
+
+  test("mapped dataset should resolve duplicated attributes for self join") {
+    val ds = Seq(1, 2, 3).toDS().map(_ + 1)
+    val ds1 = ds.as("d1")
+    val ds2 = ds.as("d2")
+
+    checkDatasetUnorderly(ds1.joinWith(ds2, $"d1.value" === $"d2.value"), (2, 2), (3, 3), (4, 4))
+    checkDatasetUnorderly(ds1.intersect(ds2), 2, 3, 4)
+    checkDatasetUnorderly(ds1.except(ds1))
+  }
+
+  test("SPARK-15441: Dataset outer join") {
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+    val result = joined.collect().toSet
+    assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
+  }
+
+  test("better error message when use java reserved keyword as field name") {
+    val e = intercept[UnsupportedOperationException] {
+      Seq(InvalidInJava(1)).toDS()
+    }
+    assert(e.getMessage.contains(
+      "`abstract` is a reserved keyword and cannot be used as field name"))
+  }
+
+  test("Dataset should support flat input object to be null") {
+    checkDataset(Seq("a", null).toDS(), "a", null)
+  }
+
+  test("Dataset should throw RuntimeException if non-flat input object is null") {
+    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level non-flat input object"))
+  }
+
+  test("dropDuplicates") {
+    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    checkDataset(
+      ds.dropDuplicates("_1"),
+      ("a", 1), ("b", 1))
+    checkDataset(
+      ds.dropDuplicates("_2"),
+      ("a", 1), ("a", 2))
+    checkDataset(
+      ds.dropDuplicates("_1", "_2"),
+      ("a", 1), ("a", 2), ("b", 1))
+  }
+
+  test("SPARK-16097: Encoders.tuple should handle null object correctly") {
+    val enc = Encoders.tuple(Encoders.tuple(Encoders.STRING, Encoders.STRING), Encoders.STRING)
+    val data = Seq((("a", "b"), "c"), (null, "d"))
+    val ds = spark.createDataset(data)(enc)
+    checkDataset(ds, (("a", "b"), "c"), (null, "d"))
+  }
 }
 
 case class Generic[T](id: T, value: Double)
@@ -805,6 +866,8 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
+
+case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

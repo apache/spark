@@ -33,9 +33,9 @@ object TypedAggregateExpression {
       aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
     val bufferEncoder = encoderFor[BUF]
     val bufferSerializer = bufferEncoder.namedExpressions
-    val bufferDeserializer = bufferEncoder.deserializer.transform {
-      case b: BoundReference => bufferSerializer(b.ordinal).toAttribute
-    }
+    val bufferDeserializer = UnresolvedDeserializer(
+      bufferEncoder.deserializer,
+      bufferSerializer.map(_.toAttribute))
 
     val outputEncoder = encoderFor[OUT]
     val outputType = if (outputEncoder.flat) {
@@ -127,7 +127,12 @@ case class TypedAggregateExpression(
 
     dataType match {
       case s: StructType =>
-        ReferenceToExpressions(CreateStruct(outputSerializer), resultObj :: Nil)
+        val objRef = outputSerializer.head.find(_.isInstanceOf[BoundReference]).get
+        val struct = If(
+          IsNull(objRef),
+          Literal.create(null, dataType),
+          CreateStruct(outputSerializer))
+        ReferenceToExpressions(struct, resultObj :: Nil)
       case _ =>
         assert(outputSerializer.length == 1)
         outputSerializer.head transform {

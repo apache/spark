@@ -107,11 +107,11 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       schema: Option[StructType] = None): DataFrame = {
     val reader =
       if (schema.isDefined) {
-        spark.read.format(format).schema(schema.get)
+        spark.readStream.format(format).schema(schema.get)
       } else {
-        spark.read.format(format)
+        spark.readStream.format(format)
       }
-    reader.stream(path)
+    reader.load(path)
   }
 
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
@@ -137,7 +137,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   val valueSchema = new StructType().add("value", StringType)
 }
 
-class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
 
@@ -153,14 +153,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       format: Option[String],
       path: Option[String],
       schema: Option[StructType] = None): StructType = {
-    val reader = spark.read
+    val reader = spark.readStream
     format.foreach(reader.format)
     schema.foreach(reader.schema)
     val df =
       if (path.isDefined) {
-        reader.stream(path.get)
+        reader.load(path.get)
       } else {
-        reader.stream()
+        reader.load()
       }
     df.queryExecution.analyzed
       .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
@@ -592,9 +592,45 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  test("explain") {
+    withTempDirs { case (src, tmp) =>
+      src.mkdirs()
+
+      val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_ + "-x")
+      // Test `explain` not throwing errors
+      df.explain()
+
+      val q = df.writeStream.queryName("file_explain").format("memory").start()
+        .asInstanceOf[StreamExecution]
+      try {
+        assert("N/A" === q.explainInternal(false))
+        assert("N/A" === q.explainInternal(true))
+
+        val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+        val finalFile = new File(src, tempFile.getName)
+        require(stringToFile(tempFile, "foo").renameTo(finalFile))
+
+        q.processAllAvailable()
+
+        val explainWithoutExtended = q.explainInternal(false)
+        // `extended = false` only displays the physical plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithoutExtended).size === 0)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithoutExtended).size === 1)
+
+        val explainWithExtended = q.explainInternal(true)
+        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+        // plan.
+        assert("Relation.*text".r.findAllMatchIn(explainWithExtended).size === 3)
+        assert("TextFileFormat".r.findAllMatchIn(explainWithExtended).size === 1)
+      } finally {
+        q.stop()
+      }
+    }
+  }
 }
 
-class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 
   import testImplicits._
 

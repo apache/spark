@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.ProcessingTime
+import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class ProcessingTimeExecutorSuite extends SparkFunSuite {
