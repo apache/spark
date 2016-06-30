@@ -52,7 +52,7 @@ class CollapseEmptyPlanSuite extends PlanTest {
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
   val testRelation3 = LocalRelation.fromExternalRows(Seq('c.int), data = Seq(Row(1)))
 
-  test("Binary(or Higher) Logical Plans - Collapse empty union") {
+  test("Binary Logical Plans - Collapse empty union") {
     val query = testRelation1
       .where(false)
       .union(testRelation2.where(false))

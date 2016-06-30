@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -39,10 +39,8 @@ object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  private def isDeclarativeAggregate(e: Expression): Boolean = e match {
-    case _: DeclarativeAggregate => true
-    case _: LeafExpression => false
-    case other => other.children.forall(isDeclarativeAggregate)
+  private def containsAggregateExpression(e: Expression): Boolean = {
+    e.collectFirst { case _: AggregateFunction => () }.isDefined
   }
 
   private def empty(plan: LogicalPlan) = LocalRelation(plan.output, data = Seq.empty)
@@ -53,6 +51,8 @@ object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
 
     case p @ Join(_, _, joinType, _) if p.children.exists(isEmptyLocalRelation) => joinType match {
       case Inner => empty(p)
+      // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
+      // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
       case LeftOuter | LeftSemi | LeftAnti if isEmptyLocalRelation(p.left) => empty(p)
       case RightOuter if isEmptyLocalRelation(p.right) => empty(p)
       case FullOuter if p.children.forall(isEmptyLocalRelation) => empty(p)
@@ -62,7 +62,9 @@ object CollapseEmptyPlan extends Rule[LogicalPlan] with PredicateHelper {
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) => p match {
       case _: Project | _: Filter | _: Sample | _: Sort | _: GlobalLimit | _: LocalLimit |
            _: Repartition | _: RepartitionByExpression => empty(p)
-      case Aggregate(_, ae, _) if !ae.exists(isDeclarativeAggregate) => empty(p)
+      // AggregateExpressions like COUNT(*) return their results like 0.
+      case Aggregate(_, ae, _) if !ae.exists(containsAggregateExpression) => empty(p)
+      // Generators like Hive-style UDTF may return their records within `close`.
       case Generate(_ : Explode, _, _, _, _, _) => empty(p)
       case _ => p
     }
