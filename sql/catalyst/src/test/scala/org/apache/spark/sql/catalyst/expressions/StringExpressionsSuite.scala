@@ -702,4 +702,43 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
     checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
   }
+
+  test("ParseUrl") {
+    def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
+      checkEvaluation(
+        ParseUrl(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType)),
+        expected)
+    }
+    def checkParseUrlWithKey(expected: String, urlStr: String,
+                      partToExtract: String, key: String): Unit = {
+      checkEvaluation(
+        ParseUrl(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType),
+                 Literal.create(key, StringType)), expected)
+    }
+
+    checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
+    checkParseUrl("/path", "http://spark.apache.org/path?query=1", "PATH")
+    checkParseUrl("query=1", "http://spark.apache.org/path?query=1", "QUERY")
+    checkParseUrl("Ref", "http://spark.apache.org/path?query=1#Ref", "REF")
+    checkParseUrl("http", "http://spark.apache.org/path?query=1", "PROTOCOL")
+    checkParseUrl("/path?query=1", "http://spark.apache.org/path?query=1", "FILE")
+    checkParseUrl("spark.apache.org:8080", "http://spark.apache.org:8080/path?query=1", "AUTHORITY")
+    checkParseUrl("jian", "http://jian@spark.apache.org/path?query=1", "USERINFO")
+    checkParseUrlWithKey("1", "http://spark.apache.org/path?query=1", "QUERY", "query")
+
+    // Null checking
+    checkParseUrl(null, null, "HOST")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", null)
+    checkParseUrl(null, null, null)
+    checkParseUrl(null, "test", "HOST")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", "NO")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "HOST", "query")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "quer")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", null)
+
+    // arguments checking
+    assert(ParseUrl(Literal("1")).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Literal("1"), Literal("2"),
+                    Literal("3"), Literal("4")).checkInputDataTypes().isFailure)
+  }
 }

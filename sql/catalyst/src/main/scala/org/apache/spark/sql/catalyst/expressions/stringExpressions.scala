@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.net.{MalformedURLException, URL}
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+
+import scala.util.matching.Regex
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -609,6 +613,100 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
   }
 
   override def prettyName: String = "rpad"
+}
+
+/**
+ * Extracts a part from a URL
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(url, partToExtract[, key]) - extracts a part from a URL",
+  extended = "Parts: HOST, PATH, QUERY, REF, PROTOCOL, AUTHORITY, FILE, USERINFO\n"
+  + "key specifies which query to extract\n"
+  + "Examples:\n"
+  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
+  + "'HOST') FROM src LIMIT 1;\n" + "  'spark.apache.org'\n"
+  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
+  + "'QUERY') FROM src LIMIT 1;\n"  + "  'query=1'\n"
+  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
+  + "'QUERY', 'query') FROM src LIMIT 1;\n" + "  '1'")
+case class ParseUrl(children: Expression*)
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = StringType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size > 3 || children.size < 2) {
+      TypeCheckResult.TypeCheckFailure("parse_url function requires two or three arguments")
+    } else {
+      super[ImplicitCastInputTypes].checkInputDataTypes()
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val urlStr = children(0).eval(input)
+    val part = children(1).eval(input)
+    if (urlStr == null || part == null) {
+      null
+    } else if (children.size == 2) {
+      try {
+        val url = new URL(urlStr.toString())
+        val partToExtract = part.toString()
+        if (partToExtract == "HOST") {
+          UTF8String.fromString(url.getHost())
+        } else if (partToExtract == "PATH") {
+          UTF8String.fromString(url.getPath())
+        } else if (partToExtract == "QUERY") {
+          UTF8String.fromString(url.getQuery())
+        } else if (partToExtract == "REF") {
+          UTF8String.fromString(url.getRef())
+        } else if (partToExtract == "PROTOCOL") {
+          UTF8String.fromString(url.getProtocol())
+        } else if (partToExtract == "FILE") {
+          UTF8String.fromString(url.getFile())
+        } else if (partToExtract == "AUTHORITY") {
+          UTF8String.fromString(url.getAuthority())
+        } else if (partToExtract == "USERINFO") {
+          UTF8String.fromString(url.getUserInfo())
+        } else {
+          null
+        }
+      } catch {
+        case ex: MalformedURLException => {
+          null
+        }
+      }
+    } else { // children.size == 3
+      val partToExtract = part.toString()
+      val key = children(2).eval(input)
+      if (key == null || partToExtract != "QUERY") {
+        null
+      } else {
+        try {
+          val url = new URL(urlStr.toString())
+          val query = url.getQuery()
+          if (query == null) {
+            null
+          } else {
+            val parttern = new Regex("[&^]?" + key.toString() + "=([^&]*)")
+            val parttern(value) = query
+            UTF8String.fromString(value)
+          }
+        } catch {
+          case ex: MalformedURLException => {
+            null
+          }
+          case ex: scala.MatchError => {
+            null
+          }
+        }
+      }
+    }
+  }
+
+  override def prettyName: String = "parse_url"
 }
 
 /**
