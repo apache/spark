@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{ util => ju }
+import java.{ util => ju, lang => jl }
 
 import scala.collection.JavaConverters._
 
@@ -68,9 +68,9 @@ trait ConsumerStrategy[K, V] {
  * auto.offset.reset will be used.
  */
 private case class Subscribe[K, V](
-    topics: ju.Collection[java.lang.String],
+    topics: ju.Collection[jl.String],
     kafkaParams: ju.Map[String, Object],
-    offsets: ju.Map[TopicPartition, Long]
+    offsets: ju.Map[TopicPartition, jl.Long]
   ) extends ConsumerStrategy[K, V] {
 
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
@@ -104,7 +104,7 @@ private case class Subscribe[K, V](
 private case class Assign[K, V](
     topicPartitions: ju.Collection[TopicPartition],
     kafkaParams: ju.Map[String, Object],
-    offsets: ju.Map[TopicPartition, Long]
+    offsets: ju.Map[TopicPartition, jl.Long]
   ) extends ConsumerStrategy[K, V] {
 
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
@@ -142,14 +142,14 @@ object ConsumerStrategies {
    * auto.offset.reset will be used.
    */
   @Experimental
-  def subscribe[K, V](
-      topics: Iterable[java.lang.String],
+  def Subscribe[K, V](
+      topics: Iterable[jl.String],
       kafkaParams: collection.Map[String, Object],
       offsets: collection.Map[TopicPartition, Long]): ConsumerStrategy[K, V] = {
-    Subscribe[K, V](
+    new Subscribe[K, V](
       new ju.ArrayList(topics.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, Long](offsets.asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
   }
 
   /**
@@ -164,13 +164,13 @@ object ConsumerStrategies {
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
   @Experimental
-  def subscribe[K, V](
-      topics: Iterable[java.lang.String],
+  def Subscribe[K, V](
+      topics: Iterable[jl.String],
       kafkaParams: collection.Map[String, Object]): ConsumerStrategy[K, V] = {
-    Subscribe[K, V](
+    new Subscribe[K, V](
       new ju.ArrayList(topics.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      ju.Collections.emptyMap[TopicPartition, Long]())
+      ju.Collections.emptyMap[TopicPartition, jl.Long]())
   }
 
   /**
@@ -188,11 +188,11 @@ object ConsumerStrategies {
    * auto.offset.reset will be used.
    */
   @Experimental
-  def subscribe[K, V](
-      topics: ju.Collection[java.lang.String],
+  def Subscribe[K, V](
+      topics: ju.Collection[jl.String],
       kafkaParams: ju.Map[String, Object],
-      offsets: ju.Map[TopicPartition, Long]): ConsumerStrategy[K, V] = {
-    Subscribe[K, V](topics, kafkaParams, offsets)
+      offsets: ju.Map[TopicPartition, jl.Long]): ConsumerStrategy[K, V] = {
+    new Subscribe[K, V](topics, kafkaParams, offsets)
   }
 
   /**
@@ -207,10 +207,10 @@ object ConsumerStrategies {
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
   @Experimental
-  def subscribe[K, V](
-      topics: ju.Collection[java.lang.String],
+  def Subscribe[K, V](
+      topics: ju.Collection[jl.String],
       kafkaParams: ju.Map[String, Object]): ConsumerStrategy[K, V] = {
-    Subscribe[K, V](topics, kafkaParams, ju.Collections.emptyMap[TopicPartition, Long]())
+    new Subscribe[K, V](topics, kafkaParams, ju.Collections.emptyMap[TopicPartition, jl.Long]())
   }
 
   /**
@@ -228,14 +228,14 @@ object ConsumerStrategies {
    * auto.offset.reset will be used.
    */
   @Experimental
-  def assign[K, V](
+  def Assign[K, V](
       topicPartitions: Iterable[TopicPartition],
       kafkaParams: collection.Map[String, Object],
       offsets: collection.Map[TopicPartition, Long]): ConsumerStrategy[K, V] = {
-    Assign[K, V](
+    new Assign[K, V](
       new ju.ArrayList(topicPartitions.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, Long](offsets.asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
   }
 
   /**
@@ -250,13 +250,13 @@ object ConsumerStrategies {
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
   @Experimental
-  def assign[K, V](
+  def Assign[K, V](
       topicPartitions: Iterable[TopicPartition],
       kafkaParams: collection.Map[String, Object]): ConsumerStrategy[K, V] = {
-    Assign[K, V](
+    new Assign[K, V](
       new ju.ArrayList(topicPartitions.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      ju.Collections.emptyMap[TopicPartition, Long]())
+      ju.Collections.emptyMap[TopicPartition, jl.Long]())
   }
 
   /**
@@ -274,11 +274,11 @@ object ConsumerStrategies {
    * auto.offset.reset will be used.
    */
   @Experimental
-  def assign[K, V](
+  def Assign[K, V](
       topicPartitions: ju.Collection[TopicPartition],
       kafkaParams: ju.Map[String, Object],
-      offsets: ju.Map[TopicPartition, Long]): ConsumerStrategy[K, V] = {
-    Assign[K, V](topicPartitions, kafkaParams, offsets)
+      offsets: ju.Map[TopicPartition, jl.Long]): ConsumerStrategy[K, V] = {
+    new Assign[K, V](topicPartitions, kafkaParams, offsets)
   }
 
   /**
@@ -293,10 +293,13 @@ object ConsumerStrategies {
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
   @Experimental
-  def assign[K, V](
+  def Assign[K, V](
       topicPartitions: ju.Collection[TopicPartition],
       kafkaParams: ju.Map[String, Object]): ConsumerStrategy[K, V] = {
-    Assign[K, V](topicPartitions, kafkaParams, ju.Collections.emptyMap[TopicPartition, Long]())
+    new Assign[K, V](
+      topicPartitions,
+      kafkaParams,
+      ju.Collections.emptyMap[TopicPartition, jl.Long]())
   }
 
 }

@@ -93,7 +93,7 @@ class DirectKafkaStreamSuite
     kp
   }
 
-  val preferredHosts = LocationStrategies.preferConsistent
+  val preferredHosts = LocationStrategies.PreferConsistent
 
   test("basic stream receiving with multiple topics and smallest starting offset") {
     val topics = List("basic1", "basic2", "basic3")
@@ -110,7 +110,7 @@ class DirectKafkaStreamSuite
       KafkaUtils.createDirectStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.subscribe[String, String](topics, kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](topics, kafkaParams.asScala))
     }
     val allReceived = new ConcurrentLinkedQueue[(String, String)]()
 
@@ -182,7 +182,7 @@ class DirectKafkaStreamSuite
       val s = new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala))
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -232,7 +232,7 @@ class DirectKafkaStreamSuite
       val s = new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.assign[String, String](
+        ConsumerStrategies.Assign[String, String](
           List(topicPartition),
           kafkaParams.asScala,
           Map(topicPartition -> 11L)))
@@ -275,7 +275,7 @@ class DirectKafkaStreamSuite
       KafkaUtils.createDirectStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala))
     }
     val keyedStream = kafkaStream.map { r => "key" -> r.value.toInt }
     val stateStream = keyedStream.updateStateByKey { (values: Seq[Int], state: Option[Int]) =>
@@ -370,7 +370,7 @@ class DirectKafkaStreamSuite
       val kafkaStream = KafkaUtils.createDirectStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala))
       kafkaStream.foreachRDD { (rdd: RDD[ConsumerRecord[String, String]], time: Time) =>
         val offsets = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
         val data = rdd.map(_.value).collect()
@@ -424,7 +424,7 @@ class DirectKafkaStreamSuite
       KafkaUtils.createDirectStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala))
     }
 
     val allReceived = new ConcurrentLinkedQueue[(String, String)]
@@ -500,7 +500,7 @@ class DirectKafkaStreamSuite
       new DirectKafkaInputDStream[String, String](
         ssc,
         preferredHosts,
-        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala)) {
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala)) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }.map(r => (r.key, r.value))

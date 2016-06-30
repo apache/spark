@@ -53,14 +53,16 @@ object LocationStrategies {
    * Use this only if your executors are on the same nodes as your Kafka brokers.
    */
   @Experimental
-  def preferBrokers: LocationStrategy = PreferBrokers
+  def PreferBrokers: LocationStrategy =
+    org.apache.spark.streaming.kafka010.PreferBrokers
 
   /**
    *  :: Experimental ::
    * Use this in most cases, it will consistently distribute partitions across all executors.
    */
   @Experimental
-  def preferConsistent: LocationStrategy = PreferConsistent
+  def PreferConsistent: LocationStrategy =
+    org.apache.spark.streaming.kafka010.PreferConsistent
 
   /**
    *  :: Experimental ::
@@ -68,8 +70,8 @@ object LocationStrategies {
    * Any TopicPartition not specified in the map will use a consistent location.
    */
   @Experimental
-  def preferFixed(hostMap: collection.Map[TopicPartition, String]): LocationStrategy =
-    PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))
+  def PreferFixed(hostMap: collection.Map[TopicPartition, String]): LocationStrategy =
+    new PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))
 
   /**
    *  :: Experimental ::
@@ -77,6 +79,6 @@ object LocationStrategies {
    * Any TopicPartition not specified in the map will use a consistent location.
    */
   @Experimental
-  def preferFixed(hostMap: ju.Map[TopicPartition, String]): LocationStrategy =
-    PreferFixed(hostMap)
+  def PreferFixed(hostMap: ju.Map[TopicPartition, String]): LocationStrategy =
+    new PreferFixed(hostMap)
 }
