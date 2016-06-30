@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.FileNotFoundException
 import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
