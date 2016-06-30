@@ -492,7 +492,7 @@ class HiveContext(SQLContext):
         confusing error messages.
         """
         jsc = sparkContext._jsc.sc()
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc)
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName):
