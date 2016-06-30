@@ -354,8 +354,7 @@ class DDLCommandSuite extends PlanTest {
     val expected = CreateTableUsing(
       TableIdentifier("my_tab"),
       Some(new StructType()
-        .add("a", IntegerType, nullable = true,
-          new MetadataBuilder().putString("comment", s"test").build())
+        .add("a", IntegerType, nullable = true, "test")
         .add("b", StringType)),
       "parquet",
       false,

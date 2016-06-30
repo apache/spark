@@ -648,10 +648,13 @@ class UserDefinedType(DataType):
         return cls._cached_sql_type
 
     def toInternal(self, obj):
-        return self._cachedSqlType().toInternal(self.serialize(obj))
+        if obj is not None:
+            return self._cachedSqlType().toInternal(self.serialize(obj))
 
     def fromInternal(self, obj):
-        return self.deserialize(self._cachedSqlType().fromInternal(obj))
+        v = self._cachedSqlType().fromInternal(obj)
+        if v is not None:
+            return self.deserialize(v)
 
     def serialize(self, obj):
         """

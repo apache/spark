@@ -1247,6 +1247,7 @@ setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.gl
 #' @export
 setGeneric("glm")
 
+#' predict
 #' @rdname predict
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
@@ -1271,6 +1272,7 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
+#' write.ml
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })

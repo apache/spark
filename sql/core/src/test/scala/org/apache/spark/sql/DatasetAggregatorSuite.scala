@@ -74,6 +74,16 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
 }
 
 
+object MapTypeBufferAgg extends Aggregator[Int, Map[Int, Int], Int] {
+  override def zero: Map[Int, Int] = Map.empty
+  override def reduce(b: Map[Int, Int], a: Int): Map[Int, Int] = b
+  override def finish(reduction: Map[Int, Int]): Int = 1
+  override def merge(b1: Map[Int, Int], b2: Map[Int, Int]): Map[Int, Int] = b1
+  override def bufferEncoder: Encoder[Map[Int, Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Int] = ExpressionEncoder()
+}
+
+
 object NameAgg extends Aggregator[AggData, String, String] {
   def zero: String = ""
   def reduce(b: String, a: AggData): String = a.b + b
@@ -289,5 +299,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkDatasetUnorderly(
       ds.groupByKey(_.a).agg(NullResultAgg.toColumn),
       1 -> AggData(1, "one"), 2 -> null)
+  }
+
+  test("SPARK-16100: use Map as the buffer type of Aggregator") {
+    val ds = Seq(1, 2, 3).toDS()
+    checkDataset(ds.select(MapTypeBufferAgg.toColumn), 1)
   }
 }
