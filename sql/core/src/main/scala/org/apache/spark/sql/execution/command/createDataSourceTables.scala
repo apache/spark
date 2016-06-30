@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.FileNotFoundException
 import java.util.regex.Pattern
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -97,21 +95,12 @@ case class CreateDataSourceTableCommand(
       }
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
-    try {
-      DataSource(
-        sparkSession = sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = provider,
-        bucketSpec = None,
-        options = optionsWithPath).resolveRelation(checkPathExist = false)
-    } catch {
-      // Note that since the table hasn't been created yet, ListingFileCatalog.refresh()
-      // (which gets called in ListingFileCatalog's constructor, invoked in resolveRelation)
-      // will fail with FileNotFoundException (or SparkException in the parallel version).
-      case e: FileNotFoundException =>  // Do nothing
-      case e: SparkException if e.getMessage.contains("FileNotFoundException") =>  // Do nothing
-      case e: Throwable => throw e
-    }
+    DataSource(
+      sparkSession = sparkSession,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      bucketSpec = None,
+      options = optionsWithPath).resolveRelation(checkPathExist = false)
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
