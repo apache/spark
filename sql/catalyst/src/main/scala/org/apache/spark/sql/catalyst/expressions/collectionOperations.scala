@@ -56,8 +56,6 @@ case class MapKeys(child: Expression)
 
   override def dataType: DataType = ArrayType(child.dataType.asInstanceOf[MapType].keyType)
 
-  override def foldable: Boolean = child.foldable
-
   override def nullSafeEval(map: Any): Any = {
     map.asInstanceOf[MapData].keyArray()
   }
@@ -81,8 +79,6 @@ case class MapValues(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
   override def dataType: DataType = ArrayType(child.dataType.asInstanceOf[MapType].valueType)
-
-  override def foldable: Boolean = child.foldable
 
   override def nullSafeEval(map: Any): Any = {
     map.asInstanceOf[MapData].valueArray()
