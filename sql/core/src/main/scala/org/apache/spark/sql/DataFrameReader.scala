@@ -551,7 +551,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
-  // Returns all option set in the `SparkConf`, the `SQLConf`, and a given `options`.
+  // Returns all option set in the `SparkConf`, the `SQLConf`, and a given data source `options`.
   // If the same keys exist, they are overridden with ones in the `options`.
   private def optionsOverriddenWith(options: Map[String, String]): Map[String, String] = {
     sparkSession.sparkContext.conf.getAllAsMap ++ sparkSession.conf.getAll ++ options

@@ -40,7 +40,8 @@ private[parquet] class ParquetOptions(
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
   val compressionCodecClassName: String = {
-    val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
+    val codecName = parameters.getOrElse("compression", parameters.getOrElse(
+      "spark.sql.parquet.compression.codec", sqlConf.parquetCompressionCodec)).toLowerCase
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +
@@ -55,8 +56,9 @@ private[parquet] class ParquetOptions(
    */
   val mergeSchema: Boolean = parameters
     .get(MERGE_SCHEMA)
-    .map(_.toBoolean)
-    .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
+     .map(_.toBoolean)
+    .getOrElse(parameters.get("spark.sql.parquet.mergeSchema").map(_.toBoolean)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED)))
 }
 
 
