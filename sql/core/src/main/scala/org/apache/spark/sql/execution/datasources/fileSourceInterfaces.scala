@@ -461,9 +461,7 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
-        // TODO: We need to avoid of using Try at here.
-        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter))
-          .getOrElse(Array.empty[FileStatus])
+        listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
       }
     }.map { status =>
       val blockLocations = status match {

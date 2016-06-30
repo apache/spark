@@ -47,8 +47,6 @@ class ListingFileCatalog(
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
-  refresh()
-
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
       cachedPartitionSpec = inferPartitioning()
@@ -58,10 +56,16 @@ class ListingFileCatalog(
   }
 
   override protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
+    if (cachedLeafFiles eq null) {
+      refresh()
+    }
     cachedLeafFiles
   }
 
   override protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
+    if (cachedLeafDirToChildrenFiles eq null) {
+      refresh()
+    }
     cachedLeafDirToChildrenFiles
   }
 
@@ -77,8 +81,10 @@ class ListingFileCatalog(
    * List leaf files of given paths. This method will submit a Spark job to do parallel
    * listing whenever there is a path having more files than the parallel partition discovery
    * discovery threshold.
+   *
+   * This is publicly visible for testing.
    */
-  protected[spark] def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+  def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
     } else {
@@ -96,8 +102,7 @@ class ListingFileCatalog(
         logTrace(s"Listing $path on driver")
 
         val childStatuses = {
-          // TODO: We need to avoid of using Try at here.
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
+          val stats = fs.listStatus(path)
           if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
         }
 
