@@ -437,7 +437,7 @@ class DataStreamReader(OptionUtils):
 
         :param paths: string, or list of strings, for input path(s).
 
-        >>> text_sdf = spark.readStream.text(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
         True
         >>> "value" in str(text_sdf.schema)
