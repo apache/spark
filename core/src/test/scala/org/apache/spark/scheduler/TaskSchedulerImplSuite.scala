@@ -281,6 +281,98 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
+  test("abort stage if executor loss results in unschedulability from previously failed tasks") {
+    // Make sure we can detect when a taskset becomes unschedulable from a blacklisting.  This
+    // test explores a particular corner case -- you may have one task fail, but still be
+    // schedulable on another executor.  However, that executor may fail later on, leaving the
+    // first task with no place to run.
+    val taskScheduler = setupScheduler(
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+    )
+
+    val taskSet = FakeTask.createTaskSet(2)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
+
+    val firstTaskAttempts = taskScheduler.resourceOffers(Seq(
+      new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1)
+    )).flatten
+    assert(Set("executor0", "executor1") === firstTaskAttempts.map(_.executorId).toSet)
+
+    // fail one of the tasks, but leave the other running
+    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
+    taskScheduler.handleFailedTask(tsm, failedTask.taskId, TaskState.FAILED, TaskResultLost)
+    // at this point, our failed task could run on the other executor, so don't give up the task
+    // set yet.
+    assert(!failedTaskSet)
+
+    // Now we fail our second executor.  The other task can still run on executor1, so make an offer
+    // on that executor, and make sure that the other task (not the failed one) is assigned there
+    taskScheduler.executorLost("executor1", SlaveLost("oops"))
+    val nextTaskAttempts =
+      taskScheduler.resourceOffers(Seq(new WorkerOffer("executor0", "host0", 1))).flatten
+    // Note: Its OK if some future change makes this already realize the taskset has become
+    // unschedulable at this point (though in the current implementation, we're sure it will not)
+    assert(nextTaskAttempts.size === 1)
+    assert(nextTaskAttempts.head.executorId === "executor0")
+    assert(nextTaskAttempts.head.attemptNumber === 1)
+    assert(nextTaskAttempts.head.index != failedTask.index)
+
+    // now we should definitely realize that our task set is unschedulable, because the only
+    // task left can't be scheduled on any executors due to the blacklist
+    taskScheduler.resourceOffers(Seq(new WorkerOffer("executor0", "host0", 1)))
+    sc.listenerBus.waitUntilEmpty(100000)
+    assert(tsm.isZombie)
+    assert(failedTaskSet)
+    val idx = failedTask.index
+    assert(failedTaskSetReason == s"Aborting TaskSet 0.0 because task $idx (partition $idx) has " +
+      s"already failed on executors (executor0), and no other executors are available.")
+  }
+
+  test("don't abort if there is an executor available, though it hasn't had scheduled tasks yet") {
+    // interaction of SPARK-15865 & SPARK-16106
+    // if we have a small number of tasks, we might be able to schedule them all on the first
+    // executor.  But if those tasks fail, we should still realize there is another executor
+    // available and not bail on the job
+
+    val taskScheduler = setupScheduler(
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+    )
+
+    val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
+
+    val offers = Seq(
+      // each offer has more than enough free cores for the entire task set, so when combined
+      // with the locality preferences, we schedule all tasks on one executor
+      new WorkerOffer("executor0", "host0", 4),
+      new WorkerOffer("executor1", "host1", 4)
+    )
+    val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
+    assert(firstTaskAttempts.size == 2)
+    firstTaskAttempts.foreach { taskAttempt => assert("executor0" === taskAttempt.executorId) }
+
+    // fail all the tasks on the bad executor
+    firstTaskAttempts.foreach { taskAttempt =>
+      taskScheduler.handleFailedTask(tsm, taskAttempt.taskId, TaskState.FAILED, TaskResultLost)
+    }
+
+    // Here is the main check of this test -- we have the same offers again, and we schedule it
+    // successfully.  Because the scheduler first tries to schedule with locality in mind, at first
+    // it won't schedule anything on executor1.  But despite that, we don't abort the job.  Then the
+    // scheduler tries for ANY locality, and successfully schedules tasks on executor1.
+    val secondTaskAttempts = taskScheduler.resourceOffers(offers).flatten
+    assert(secondTaskAttempts.size == 2)
+    secondTaskAttempts.foreach { taskAttempt => assert("executor1" === taskAttempt.executorId) }
+    assert(!failedTaskSet)
+  }
+
   test("SPARK-16106 locality levels updated if executor added to existing host") {
     val taskScheduler = setupScheduler()
 
