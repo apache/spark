@@ -144,9 +144,9 @@ class ValidatorParams(HasSeed):
 class CrossValidator(Estimator, ValidatorParams):
     """
 
-    CrossValidator begins by splitting the dataset into a set of folds which are 
-    used as separate training and test datasets e.g., with k=3 folds, CrossValidator 
-    will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data 
+    CrossValidator begins by splitting the dataset into a set of folds which are
+    used as separate training and test datasets e.g., with k=3 folds, CrossValidator
+    will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data
     for training and 1/3 for testing.
 
 
@@ -267,7 +267,7 @@ class CrossValidatorModel(Model, ValidatorParams):
     """
 
     CrossValidatorModel model returns the best set of estimators for your model.
-	
+
     .. versionadded:: 1.4.0
     """
 
