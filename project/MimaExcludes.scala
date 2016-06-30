@@ -34,6 +34,8 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
   def excludes(version: String) = version match {
+    case v if v.startsWith("2.1") =>
+      Seq()
     case v if v.startsWith("2.0") =>
       Seq(
         excludePackage("org.apache.spark.rpc"),
