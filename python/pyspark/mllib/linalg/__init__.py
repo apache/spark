@@ -39,6 +39,7 @@ else:
 import numpy as np
 
 from pyspark import since
+from pyspark.ml import linalg as newlinalg
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
@@ -247,6 +248,15 @@ class Vector(object):
         """
         raise NotImplementedError
 
+    def asML(self):
+        """
+        Convert this vector to the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        :return: :py:class:`pyspark.ml.linalg.Vector`
+        """
+        raise NotImplementedError
+
 
 class DenseVector(Vector):
     """
@@ -407,6 +417,23 @@ class DenseVector(Vector):
         Returns an numpy.ndarray
         """
         return self.array
+
+    def asML(self):
+        """
+        Convert this vector to the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        >>> mllibDV = Vectors.dense([1, 2, 3])
+        >>> mlDV1 = newlinalg.Vectors.dense([1, 2, 3])
+        >>> mlDV2 = mllibDV.asML()
+        >>> mlDV2 == mlDV1
+        True
+
+        :return: :py:class:`pyspark.ml.linalg.DenseVector`
+
+        .. versionadded:: 2.0.0
+        """
+        return newlinalg.DenseVector(self.array)
 
     @property
     def values(self):
@@ -737,6 +764,23 @@ class SparseVector(Vector):
         arr[self.indices] = self.values
         return arr
 
+    def asML(self):
+        """
+        Convert this vector to the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        >>> mllibSV = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        >>> mlSV1 = newlinalg.Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        >>> mlSV2 = mllibSV.asML()
+        >>> mlSV2 == mlSV1
+        True
+
+        :return: :py:class:`pyspark.ml.linalg.SparseVector`
+
+        .. versionadded:: 2.0.0
+        """
+        return newlinalg.SparseVector(self.size, self.indices, self.values)
+
     def __len__(self):
         return self.size
 
@@ -846,6 +890,33 @@ class Vectors(object):
         return DenseVector(elements)
 
     @staticmethod
+    def fromML(vec):
+        """
+        Convert a vector from the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        >>> mllibDV1 = Vectors.dense([1, 2, 3])
+        >>> mlDV = newlinalg.Vectors.dense([1, 2, 3])
+        >>> mllibDV2 = Vectors.fromML(mlDV)
+        >>> mllibDV1 == mllibDV2
+        True
+        >>> mllibSV1 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        >>> mlSV = newlinalg.Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        >>> mllibSV2 = Vectors.fromML(mlSV)
+        >>> mllibSV1 == mllibSV2
+        True
+
+        :param vec: a :py:class:`pyspark.ml.linalg.Vector`
+        :return: a :py:class:`pyspark.mllib.linalg.Vector`
+        """
+        if type(vec) == newlinalg.DenseVector:
+            return DenseVector(vec.array)
+        elif type(vec) == newlinalg.SparseVector:
+            return SparseVector(vec.size, vec.indices, vec.values)
+        else:
+            raise TypeError("Unsupported vector type %s" % type(vec))
+
+    @staticmethod
     def stringify(vector):
         """
         Converts a vector into a string, which can be recognized by
@@ -942,6 +1013,13 @@ class Matrix(object):
     def toArray(self):
         """
         Returns its elements in a NumPy ndarray.
+        """
+        raise NotImplementedError
+
+    def asML(self):
+        """
+        Convert this matrix to the new mllib-local representation.
+        This does NOT copy the data; it copies references.
         """
         raise NotImplementedError
 
@@ -1043,6 +1121,28 @@ class DenseMatrix(Matrix):
         rowIndices = indices % self.numRows
 
         return SparseMatrix(self.numRows, self.numCols, colPtrs, rowIndices, values)
+
+    def asML(self):
+        """
+        Convert this matrix to the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        >>> mllibDM = Matrices.dense(2, 2, [0, 1, 2, 3])
+        >>> mlDM1 = newlinalg.Matrices.dense(2, 2, [0, 1, 2, 3])
+        >>> mlDM2 = mllibDM.asML()
+        >>> mlDM2 == mlDM1
+        True
+        >>> mllibDMt = DenseMatrix(2, 2, [0, 1, 2, 3], True)
+        >>> mlDMt1 = newlinalg.DenseMatrix(2, 2, [0, 1, 2, 3], True)
+        >>> mlDMt2 = mllibDMt.asML()
+        >>> mlDMt2 == mlDMt1
+        True
+
+        :return: :py:class:`pyspark.ml.linalg.DenseMatrix`
+
+        .. versionadded:: 2.0.0
+        """
+        return newlinalg.DenseMatrix(self.numRows, self.numCols, self.values, self.isTransposed)
 
     def __getitem__(self, indices):
         i, j = indices
@@ -1216,6 +1316,29 @@ class SparseMatrix(Matrix):
         densevals = np.ravel(self.toArray(), order='F')
         return DenseMatrix(self.numRows, self.numCols, densevals)
 
+    def asML(self):
+        """
+        Convert this matrix to the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        >>> mllibSM = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> mlSM1 = newlinalg.Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> mlSM2 = mllibSM.asML()
+        >>> mlSM2 == mlSM1
+        True
+        >>> mllibSMt = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        >>> mlSMt1 = newlinalg.SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        >>> mlSMt2 = mllibSMt.asML()
+        >>> mlSMt2 == mlSMt1
+        True
+
+        :return: :py:class:`pyspark.ml.linalg.SparseMatrix`
+
+        .. versionadded:: 2.0.0
+        """
+        return newlinalg.SparseMatrix(self.numRows, self.numCols, self.colPtrs, self.rowIndices,
+                                      self.values, self.isTransposed)
+
     # TODO: More efficient implementation:
     def __eq__(self, other):
         return np.all(self.toArray() == other.toArray())
@@ -1235,6 +1358,44 @@ class Matrices(object):
         Create a SparseMatrix
         """
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
+
+    @staticmethod
+    def fromML(mat):
+        """
+        Convert a matrix from the new mllib-local representation.
+        This does NOT copy the data; it copies references.
+
+        >>> mllibDM1 = Matrices.dense(2, 2, [1, 2, 3, 4])
+        >>> mlDM = newlinalg.Matrices.dense(2, 2, [1, 2, 3, 4])
+        >>> mllibDM2 = Matrices.fromML(mlDM)
+        >>> mllibDM1 == mllibDM2
+        True
+        >>> mllibDMt1 = DenseMatrix(2, 2, [1, 2, 3, 4], True)
+        >>> mlDMt = newlinalg.DenseMatrix(2, 2, [1, 2, 3, 4], True)
+        >>> mllibDMt2 = Matrices.fromML(mlDMt)
+        >>> mllibDMt1 == mllibDMt2
+        True
+        >>> mllibSM1 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> mlSM = newlinalg.Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        >>> mllibSM2 = Matrices.fromML(mlSM)
+        >>> mllibSM1 == mllibSM2
+        True
+        >>> mllibSMt1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        >>> mlSMt = newlinalg.SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        >>> mllibSMt2 = Matrices.fromML(mlSMt)
+        >>> mllibSMt1 == mllibSMt2
+        True
+
+        :param vec: a :py:class:`pyspark.ml.linalg.Matrix`
+        :return: a :py:class:`pyspark.mllib.linalg.Matrix`
+        """
+        if type(mat) == newlinalg.DenseMatrix:
+            return DenseMatrix(mat.numRows, mat.numCols, mat.values, mat.isTransposed)
+        elif type(mat) == newlinalg.SparseMatrix:
+            return SparseMatrix(mat.numRows, mat.numCols, mat.colPtrs, mat.rowIndices,
+                                mat.values, mat.isTransposed)
+        else:
+            raise TypeError("Unsupported matrix type %s" % type(mat))
 
 
 class QRDecomposition(object):
