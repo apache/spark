@@ -53,26 +53,27 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
-#' Saves the machine learning model to the input path
+#' Saves the MLlib model to the input path
 #'
-#' Saves the machine learning model to the input path. For more information, see the specific
-#' machine learning model below.
+#' Saves the MLlib model to the input path. For more information, see the specific
+#' MLlib model below.
 #' @rdname write.ml
 #' @name write.ml
 #' @export
-#' @seealso \link{spark.glm}, \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{read.ml}
 NULL
 
-#' Predicted values based on a machine learning model
+#' Makes predictions from a MLlib model
 #'
-#' Predicted values based on a machine learning model. For more information, see the specific
-#' machine learning model below.
+#' Makes predictions from a MLlib model. For more information, see the specific
+#' MLlib model below.
 #' @rdname predict
 #' @name predict
 #' @export
-#' @seealso \link{spark.glm}, \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
-#' @seealso \link{read.ml}
+#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 NULL
 
 #' Generalized Linear Models
@@ -528,6 +529,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @rdname read.ml
 #' @name read.ml
 #' @export
+#' @seealso \link{write.ml}
 #' @examples
 #' \dontrun{
 #' path <- "path/to/model"
