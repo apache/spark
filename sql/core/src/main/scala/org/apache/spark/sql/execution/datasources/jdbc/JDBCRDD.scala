@@ -393,7 +393,7 @@ private[sql] class JDBCRDD(
     val fetchSize = properties.getProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(fetchSize >= 0,
       s"Invalid value `${fetchSize.toString}` for parameter " +
-      s"`${JdbcUtils.JDBC_BATCH_FETCH_SIZE}`. The minimum value is zero. When the value is zero, " +
+      s"`${JdbcUtils.JDBC_BATCH_FETCH_SIZE}`. The minimum value is 0. When the value is 0, " +
       "the JDBC driver ignores the value and does the estimates.")
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()

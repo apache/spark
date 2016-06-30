@@ -92,23 +92,22 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   test("Basic CREATE") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
-    df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties)
-    assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count())
+    df.write.jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count())
     assert(
-      2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+      2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).collect()(0).length)
   }
 
   test("Basic CREATE with illegal batchsize") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
     (-1 to 0).foreach { size =>
-      val properties = new Properties
+      val properties = new Properties()
       properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
       val e = intercept[SparkException] {
         df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
       }.getMessage
-      assert(e.contains(s"Invalid value `$size` for parameter `batchsize`. The minimum value " +
-        s"is one."))
+      assert(e.contains(s"Invalid value `$size` for parameter `batchsize`"))
     }
   }
 
@@ -116,10 +115,10 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
 
     (1 to 3).foreach { size =>
-      val properties = new Properties
+      val properties = new Properties()
       properties.setProperty(JdbcUtils.JDBC_BATCH_INSERT_SIZE, size.toString)
       df.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", properties)
-      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count())
+      assert(2 === spark.read.jdbc(url, "TEST.BASICCREATETEST", new Properties()).count())
     }
   }
 
@@ -140,10 +139,10 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
 
-    df.write.jdbc(url, "TEST.APPENDTEST", new Properties)
-    df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties)
-    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties).count())
-    assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties).collect()(0).length)
+    df.write.jdbc(url, "TEST.APPENDTEST", new Properties())
+    df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
+    assert(3 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).count())
+    assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
   }
 
   test("CREATE then INSERT to truncate") {
@@ -160,9 +159,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
-    df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
+    df.write.jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
     intercept[org.apache.spark.SparkException] {
-      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties)
+      df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
     }
   }
 
