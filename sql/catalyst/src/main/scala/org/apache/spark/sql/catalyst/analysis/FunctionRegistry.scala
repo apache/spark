@@ -267,6 +267,7 @@ object FunctionRegistry {
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
+    expression[Elt]("elt"),
     expression[Encode]("encode"),
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),

@@ -48,6 +48,20 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("a||b"))
   }
 
+  test("string elt") {
+    val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
+      .toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+      Row(null, "hello", null))
+
+    // check implicit type cast
+    checkAnswer(
+      df.selectExpr("elt(4, a, b, c, d)", "elt('2', a, b, c, d)"),
+      Row("15", "world"))
+  }
+
   test("string Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
