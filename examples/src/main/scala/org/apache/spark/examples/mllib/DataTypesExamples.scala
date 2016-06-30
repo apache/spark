@@ -20,9 +20,7 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
-// $example on:local-vector$
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-// $example off:local-vector$
 import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
 import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -32,8 +30,10 @@ import org.apache.spark.rdd.RDD
 
 object DataTypesExamples {
 
-  def localVectorExample(): Unit = {
-    // $example on:local-vector$
+  private def localVectorExample(): Unit = {
+    import org.apache.spark.mllib.linalg.{Vector, Vectors}
+
+    // $example on:local_vector$
     // Create a dense vector (1.0, 0.0, 3.0).
     val dv: Vector = Vectors.dense(1.0, 0.0, 3.0)
     // Create a sparse vector (1.0, 0.0, 3.0) by specifying its indices and values corresponding to
@@ -41,20 +41,20 @@ object DataTypesExamples {
     val sv1: Vector = Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0))
     // Create a sparse vector (1.0, 0.0, 3.0) by specifying its nonzero entries.
     val sv2: Vector = Vectors.sparse(3, Seq((0, 1.0), (2, 3.0)))
-    // $example off:local-vector$
+    // $example off:local_vector$
   }
 
-  def labeledPointExample(): Unit = {
-    // $example on:labeled-point$
+  private def labeledPointExample(): Unit = {
+    // $example on:labeled_point$
     // Create a labeled point with a positive label and a dense feature vector.
     val pos = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
 
     // Create a labeled point with a negative label and a sparse feature vector.
     val neg = LabeledPoint(0.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))
-    // $example off:labeled-point$
+    // $example off:labeled_point$
   }
 
-  def libsvmExample(): Unit = {
+  private def libsvmExample(): Unit = {
     val sc = SparkContext.getOrCreate()
     // $example on:libsvm$
     val examples: RDD[LabeledPoint] =
@@ -62,19 +62,19 @@ object DataTypesExamples {
     // $example off:libsvm$
   }
 
-  def localMatrixExample(): Unit = {
-    // $example on:local-matrix$
+  private def localMatrixExample(): Unit = {
+    // $example on:local_matrix$
     // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
     val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
 
     // Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
     val sm: Matrix = Matrices.sparse(3, 2, Array(0, 1, 3), Array(0, 2, 1), Array(9, 6, 8))
-    // $example off:local-matrix$
+    // $example off:local_matrix$
   }
 
-  def rowMatrixExample(): Unit = {
+  private def rowMatrixExample(): Unit = {
     val sc = SparkContext.getOrCreate()
-    // $example on:row-matrix$
+    // $example on:row_matrix$
     val v1 = Vectors.dense(1.0, 10.0, 100.0)
     val v2 = Vectors.dense(2.0, 20.0, 200.0)
     val v3 = Vectors.dense(3.0, 30.0, 300.0)
@@ -89,13 +89,13 @@ object DataTypesExamples {
 
     // QR decomposition
     val qrResult = mat.tallSkinnyQR(true)
-    // $example off:row-matrix$
+    // $example off:row_matrix$
   }
 
-  def indexedRowMatrixExample(): Unit = {
+  private def indexedRowMatrixExample(): Unit = {
     val sc = SparkContext.getOrCreate()
 
-    // $example on:indexed-row-matrix$
+    // $example on:indexed_row_matrix$
     val r0 = IndexedRow(0, Vectors.dense(1, 2, 3))
     val r1 = IndexedRow(1, Vectors.dense(4, 5, 6))
     val r2 = IndexedRow(2, Vectors.dense(7, 8, 9))
@@ -111,13 +111,13 @@ object DataTypesExamples {
 
     // Drop its row indices.
     val rowMat: RowMatrix = mat.toRowMatrix()
-    // $example off:indexed-row-matrix$
+    // $example off:indexed_row_matrix$
   }
 
-  def coordinateMatrixExample(): Unit = {
+  private def coordinateMatrixExample(): Unit = {
     val sc = SparkContext.getOrCreate()
 
-    // $example on:coordinate-row-matrix$
+    // $example on:coordinate_matrix$
     val me1 = MatrixEntry(0, 0, 1.2)
     val me2 = MatrixEntry(1, 0, 2.1)
     val me3 = MatrixEntry(6, 1, 3.7)
@@ -132,13 +132,13 @@ object DataTypesExamples {
 
     // Convert it to an IndexRowMatrix whose rows are sparse vectors.
     val indexedRowMatrix = mat.toIndexedRowMatrix()
-    // $example off:coordinate-row-matrix$
+    // $example off:coordinate_matrix$
   }
 
-  def blockMatrixExample(): Unit = {
+  private def blockMatrixExample(): Unit = {
     val sc = SparkContext.getOrCreate()
 
-    // $example on:block-matrix$
+    // $example on:block_matrix$
     val me1 = MatrixEntry(0, 0, 1.2)
     val me2 = MatrixEntry(1, 0, 2.1)
     val me3 = MatrixEntry(6, 1, 3.7)
@@ -157,7 +157,7 @@ object DataTypesExamples {
 
     // Calculate A^T A.
     val ata = matA.transpose.multiply(matA)
-    // $example off:block-matrix$
+    // $example off:block_matrix$
   }
 
   def main(args: Array[String]): Unit = {
