@@ -164,7 +164,7 @@ case class ConcatWs(children: Seq[Expression])
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(n, str1, str2, ...) - returns the n-th string",
+  usage = "_FUNC_(n, str1, str2, ...) - returns the n-th string, e.g. returns str2 when n is 2",
   extended = "> SELECT _FUNC_(1, 'scala', 'java') FROM src LIMIT 1;\n" + "'scala'")
 case class Elt(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes with CodegenFallback {
