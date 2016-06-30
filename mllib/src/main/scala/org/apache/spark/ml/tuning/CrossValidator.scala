@@ -55,10 +55,11 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 }
 
 /**
- * CrossValidator begins by splitting the dataset into a set of folds which are
- * used as separate training and test datasets e.g., with k=3 folds, CrossValidator
- * will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data
- * for training and 1/3 for testing.
+ * :: Experimental ::
+ * CrossValidator begins by splitting the dataset into a set of non-overlapping randomly
+ * partitioned folds which are used as separate training and test datasets e.g., with k=3 folds,
+ * CrossValidator will generate 3 (training, test) dataset pairs, each of which uses 2/3 of
+ * the data for training and 1/3 for testing. Each fold is used in the testing set exactly once.
  */
 @Since("1.2.0")
 class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
@@ -192,7 +193,8 @@ object CrossValidator extends MLReadable[CrossValidator] {
 
 /**
  * :: Experimental ::
- * CrossValidatorModel model returns the best set of estimators for your model.
+ * CrossValidatorModel contains the model that achieved the highest average cross-validation
+ * metric across number of folds.
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in

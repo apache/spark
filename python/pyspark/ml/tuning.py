@@ -144,10 +144,10 @@ class ValidatorParams(HasSeed):
 class CrossValidator(Estimator, ValidatorParams):
     """
 
-    CrossValidator begins by splitting the dataset into a set of folds which are
-    used as separate training and test datasets e.g., with k=3 folds, CrossValidator
-    will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data
-    for training and 1/3 for testing.
+    CrossValidator begins by splitting the dataset into a set of non-overlapping randomly
+    partitioned folds which are used as separate training and test datasets e.g., with k=3 folds,
+    CrossValidator will generate 3 (training, test) dataset pairs, each of which uses 2/3 of
+    the data for training and 1/3 for testing. Each fold is used in the testing set exactly once.
 
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -266,7 +266,8 @@ class CrossValidator(Estimator, ValidatorParams):
 class CrossValidatorModel(Model, ValidatorParams):
     """
 
-    CrossValidatorModel model returns the best set of estimators for your model.
+    CrossValidatorModel contains the model that achieved the highest average cross-validation
+    metric across folds.
 
     .. versionadded:: 1.4.0
     """
