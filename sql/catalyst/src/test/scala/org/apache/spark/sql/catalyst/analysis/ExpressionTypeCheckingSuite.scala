@@ -85,7 +85,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Subtract('booleanField, 'booleanField),
       "requires (numeric or calendarinterval) type")
     assertError(Multiply('booleanField, 'booleanField), "requires numeric type")
-    assertError(Divide('booleanField, 'booleanField), "requires numeric type")
+    assertError(Divide('booleanField, 'booleanField), "requires (double or decimal) type")
     assertError(Remainder('booleanField, 'booleanField), "requires numeric type")
 
     assertError(BitwiseAnd('booleanField, 'booleanField), "requires integral type")
@@ -192,7 +192,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       "values of function map should all be the same type")
   }
 
-  test("check types for ROUND") {
+  test("check types for ROUND/BROUND") {
     assertSuccess(Round(Literal(null), Literal(null)))
     assertSuccess(Round('intField, Literal(1)))
 
@@ -200,6 +200,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Round('intField, 'booleanField), "requires int type")
     assertError(Round('intField, 'mapField), "requires int type")
     assertError(Round('booleanField, 'intField), "requires numeric type")
+
+    assertSuccess(BRound(Literal(null), Literal(null)))
+    assertSuccess(BRound('intField, Literal(1)))
+
+    assertError(BRound('intField, 'intField), "Only foldable Expression is allowed")
+    assertError(BRound('intField, 'booleanField), "requires int type")
+    assertError(BRound('intField, 'mapField), "requires int type")
+    assertError(BRound('booleanField, 'intField), "requires numeric type")
   }
 
   test("check types for Greatest/Least") {

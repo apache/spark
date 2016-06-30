@@ -36,14 +36,10 @@ private[spark] class TaskContextImpl(
     override val taskMemoryManager: TaskMemoryManager,
     localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
-    initialAccumulators: Seq[Accumulator[_]] = InternalAccumulator.createAll())
+    // The default value is only used in tests.
+    override val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
-
-  /**
-   * Metrics associated with this task.
-   */
-  override val taskMetrics: TaskMetrics = new TaskMetrics(initialAccumulators)
 
   /** List of callback functions to execute when the task completes. */
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -126,7 +122,7 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = {
+  private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     taskMetrics.registerAccumulator(a)
   }
 

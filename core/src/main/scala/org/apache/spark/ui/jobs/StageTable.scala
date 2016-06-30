@@ -195,7 +195,7 @@ private[ui] class StageTableBase(
     <td class="progress-cell">
       {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
         completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
-        skipped = 0, total = s.numTasks)}
+        skipped = 0, killed = stageData.numKilledTasks, total = s.numTasks)}
     </td>
     <td sorttable_customkey={inputRead.toString}>{inputReadWithUnit}</td>
     <td sorttable_customkey={outputWrite.toString}>{outputWriteWithUnit}</td>

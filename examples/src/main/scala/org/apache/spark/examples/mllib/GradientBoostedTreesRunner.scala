@@ -120,11 +120,10 @@ object GradientBoostedTreesRunner {
         println(model) // Print model summary.
       }
       val trainAccuracy =
-        new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label)))
-          .precision
+        new MulticlassMetrics(training.map(lp => (model.predict(lp.features), lp.label))).accuracy
       println(s"Train accuracy = $trainAccuracy")
       val testAccuracy =
-        new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).precision
+        new MulticlassMetrics(test.map(lp => (model.predict(lp.features), lp.label))).accuracy
       println(s"Test accuracy = $testAccuracy")
     } else if (params.algo == "Regression") {
       val startTime = System.nanoTime()

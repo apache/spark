@@ -132,7 +132,7 @@ var graph: Graph[VertexProperty, String] = null
 
 Like RDDs, property graphs are immutable, distributed, and fault-tolerant.  Changes to the values or
 structure of the graph are accomplished by producing a new graph with the desired changes.  Note
-that substantial parts of the original graph (i.e., unaffected structure, attributes, and indicies)
+that substantial parts of the original graph (i.e., unaffected structure, attributes, and indices)
 are reused in the new graph reducing the cost of this inherently functional data structure.  The
 graph is partitioned across the executors using a range of vertex partitioning heuristics.  As with
 RDDs, each partition of the graph can be recreated on a different machine in the event of a failure.

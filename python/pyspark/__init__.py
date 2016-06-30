@@ -37,6 +37,7 @@ Public classes:
 
 """
 
+from functools import wraps
 import types
 
 from pyspark.conf import SparkConf
@@ -82,6 +83,20 @@ def copy_func(f, name=None, sinceversion=None, doc=None):
     if sinceversion is not None:
         fn = since(sinceversion)(fn)
     return fn
+
+
+def keyword_only(func):
+    """
+    A decorator that forces keyword arguments in the wrapped method
+    and saves actual input keyword arguments in `_input_kwargs`.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if len(args) > 1:
+            raise TypeError("Method %s forces keyword arguments." % func.__name__)
+        wrapper._input_kwargs = kwargs
+        return func(*args, **kwargs)
+    return wrapper
 
 
 # for back compatibility

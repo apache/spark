@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.vectorized
 
 import java.nio.charset.StandardCharsets
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -279,6 +281,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val buffer = new Array[Byte](16)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
+
+      if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
+        // Ensure array contains Liitle Endian doubles
+        var bb = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN)
+        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, bb.getDouble(0))
+        Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, bb.getDouble(8))
+      }
 
       column.putDoubles(idx, 1, buffer, 8)
       column.putDoubles(idx + 1, 1, buffer, 0)
@@ -586,30 +595,31 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   private def compareStruct(fields: Seq[StructField], r1: InternalRow, r2: Row, seed: Long) {
-    fields.zipWithIndex.foreach { v => {
-      assert(r1.isNullAt(v._2) == r2.isNullAt(v._2), "Seed = " + seed)
-      if (!r1.isNullAt(v._2)) {
-        v._1.dataType match {
-          case BooleanType => assert(r1.getBoolean(v._2) == r2.getBoolean(v._2), "Seed = " + seed)
-          case ByteType => assert(r1.getByte(v._2) == r2.getByte(v._2), "Seed = " + seed)
-          case ShortType => assert(r1.getShort(v._2) == r2.getShort(v._2), "Seed = " + seed)
-          case IntegerType => assert(r1.getInt(v._2) == r2.getInt(v._2), "Seed = " + seed)
-          case LongType => assert(r1.getLong(v._2) == r2.getLong(v._2), "Seed = " + seed)
-          case FloatType => assert(doubleEquals(r1.getFloat(v._2), r2.getFloat(v._2)),
+    fields.zipWithIndex.foreach { case (field: StructField, ordinal: Int) =>
+      assert(r1.isNullAt(ordinal) == r2.isNullAt(ordinal), "Seed = " + seed)
+      if (!r1.isNullAt(ordinal)) {
+        field.dataType match {
+          case BooleanType => assert(r1.getBoolean(ordinal) == r2.getBoolean(ordinal),
             "Seed = " + seed)
-          case DoubleType => assert(doubleEquals(r1.getDouble(v._2), r2.getDouble(v._2)),
+          case ByteType => assert(r1.getByte(ordinal) == r2.getByte(ordinal), "Seed = " + seed)
+          case ShortType => assert(r1.getShort(ordinal) == r2.getShort(ordinal), "Seed = " + seed)
+          case IntegerType => assert(r1.getInt(ordinal) == r2.getInt(ordinal), "Seed = " + seed)
+          case LongType => assert(r1.getLong(ordinal) == r2.getLong(ordinal), "Seed = " + seed)
+          case FloatType => assert(doubleEquals(r1.getFloat(ordinal), r2.getFloat(ordinal)),
+            "Seed = " + seed)
+          case DoubleType => assert(doubleEquals(r1.getDouble(ordinal), r2.getDouble(ordinal)),
             "Seed = " + seed)
           case t: DecimalType =>
-            val d1 = r1.getDecimal(v._2, t.precision, t.scale).toBigDecimal
-            val d2 = r2.getDecimal(v._2)
+            val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
+            val d2 = r2.getDecimal(ordinal)
             assert(d1.compare(d2) == 0, "Seed = " + seed)
           case StringType =>
-            assert(r1.getString(v._2) == r2.getString(v._2), "Seed = " + seed)
+            assert(r1.getString(ordinal) == r2.getString(ordinal), "Seed = " + seed)
           case CalendarIntervalType =>
-            assert(r1.getInterval(v._2) === r2.get(v._2).asInstanceOf[CalendarInterval])
+            assert(r1.getInterval(ordinal) === r2.get(ordinal).asInstanceOf[CalendarInterval])
           case ArrayType(childType, n) =>
-            val a1 = r1.getArray(v._2).array
-            val a2 = r2.getList(v._2).toArray
+            val a1 = r1.getArray(ordinal).array
+            val a2 = r2.getList(ordinal).toArray
             assert(a1.length == a2.length, "Seed = " + seed)
             childType match {
               case DoubleType =>
@@ -640,12 +650,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>
-            compareStruct(childFields, r1.getStruct(v._2, fields.length), r2.getStruct(v._2), seed)
+            compareStruct(childFields, r1.getStruct(ordinal, fields.length),
+              r2.getStruct(ordinal), seed)
           case _ =>
-            throw new NotImplementedError("Not implemented " + v._1.dataType)
+            throw new NotImplementedError("Not implemented " + field.dataType)
         }
       }
-    }}
+    }
   }
 
   test("Convert rows") {
@@ -678,9 +689,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
   def testRandomRows(flatSchema: Boolean, numFields: Int) {
     // TODO: Figure out why StringType doesn't work on jenkins.
     val types = Array(
-      BooleanType, ByteType, FloatType, DoubleType,
-      IntegerType, LongType, ShortType, DecimalType.IntDecimal, new DecimalType(30, 10),
-      CalendarIntervalType)
+      BooleanType, ByteType, FloatType, DoubleType, IntegerType, LongType, ShortType,
+      DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
+      DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
+      new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType)
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
@@ -756,8 +768,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
   test("mutable ColumnarBatch rows") {
     val NUM_ITERS = 10
     val types = Array(
-      BooleanType, FloatType, DoubleType,
-      IntegerType, LongType, ShortType, DecimalType.IntDecimal, new DecimalType(30, 10))
+      BooleanType, FloatType, DoubleType, IntegerType, LongType, ShortType,
+      DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
+      DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
+      new DecimalType(12, 2), new DecimalType(30, 10))
     for (i <- 0 to NUM_ITERS) {
       val random = new Random(System.nanoTime())
       val schema = RandomDataGenerator.randomSchema(random, numFields = 20, types)
@@ -771,6 +785,25 @@ class ColumnarBatchSuite extends SparkFunSuite {
         compareStruct(schema, columnarBatchRow, newRow, 0)
         batch.close()
       }
+    }
+  }
+
+  test("exceeding maximum capacity should throw an error") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val column = ColumnVector.allocate(1, ByteType, memMode)
+      column.MAX_CAPACITY = 15
+      column.appendBytes(5, 0.toByte)
+      // Successfully allocate twice the requested capacity
+      assert(column.capacity == 10)
+      column.appendBytes(10, 0.toByte)
+      // Allocated capacity doesn't exceed MAX_CAPACITY
+      assert(column.capacity == 15)
+      val ex = intercept[RuntimeException] {
+        // Over-allocating beyond MAX_CAPACITY throws an exception
+        column.appendBytes(10, 0.toByte)
+      }
+      assert(ex.getMessage.contains(s"Cannot reserve more than ${column.MAX_CAPACITY} bytes in " +
+        s"the vectorized reader"))
     }
   }
 }

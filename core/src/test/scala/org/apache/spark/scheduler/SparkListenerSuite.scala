@@ -266,18 +266,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0L)
         if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
-          taskMetrics.inputMetrics should not be ('defined)
-          taskMetrics.outputMetrics should not be ('defined)
-          taskMetrics.shuffleWriteMetrics should be ('defined)
-          taskMetrics.shuffleWriteMetrics.get.bytesWritten should be > (0L)
+          assert(taskMetrics.shuffleWriteMetrics.bytesWritten > 0L)
         }
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
-          taskMetrics.shuffleReadMetrics should be ('defined)
-          val sm = taskMetrics.shuffleReadMetrics.get
-          sm.totalBlocksFetched should be (2*numSlices)
-          sm.localBlocksFetched should be (2*numSlices)
-          sm.remoteBlocksFetched should be (0)
-          sm.remoteBytesRead should be (0L)
+          assert(taskMetrics.shuffleReadMetrics.totalBlocksFetched == 2 * numSlices)
+          assert(taskMetrics.shuffleReadMetrics.localBlocksFetched == 2 * numSlices)
+          assert(taskMetrics.shuffleReadMetrics.remoteBlocksFetched == 0)
+          assert(taskMetrics.shuffleReadMetrics.remoteBytesRead == 0L)
         }
       }
     }

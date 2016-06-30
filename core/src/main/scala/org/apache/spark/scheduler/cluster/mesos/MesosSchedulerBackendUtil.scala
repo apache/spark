@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 
 /**
  * A collection of utility functions which can be used by both the
- * MesosSchedulerBackend and the CoarseMesosSchedulerBackend.
+ * MesosSchedulerBackend and the [[MesosFineGrainedSchedulerBackend]].
  */
 private[mesos] object MesosSchedulerBackendUtil extends Logging {
   /**

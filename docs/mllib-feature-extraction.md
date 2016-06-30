@@ -10,6 +10,9 @@ displayTitle: Feature Extraction and Transformation - spark.mllib
 
 ## TF-IDF
 
+**Note** We recommend using the DataFrame-based API, which is detailed in the [ML user guide on 
+TF-IDF](ml-features.html#tf-idf).
+
 [Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
 Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
@@ -330,7 +333,7 @@ Details you can read at [dimensionality reduction](mllib-dimensionality-reductio
 
 The following code demonstrates how to compute principal components on a `Vector`
 and use them to project the vectors into a low-dimensional space while keeping associated labels
-for calculation a [Linear Regression]((mllib-linear-methods.html))
+for calculation a [Linear Regression](mllib-linear-methods.html)
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

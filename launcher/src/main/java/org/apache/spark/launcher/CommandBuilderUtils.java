@@ -325,7 +325,7 @@ class CommandBuilderUtils {
       return;
     }
     for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
+      if (arg.contains("-XX:MaxPermSize=")) {
         return;
       }
     }

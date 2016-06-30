@@ -23,8 +23,6 @@ import java.sql.Date;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.commons.lang.NotImplementedException;
-
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -112,7 +110,7 @@ public class ColumnVectorUtils {
       }
       return result;
     } else {
-      throw new NotImplementedException();
+      throw new UnsupportedOperationException();
     }
   }
 
@@ -142,9 +140,11 @@ public class ColumnVectorUtils {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
       } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType)t;
-        Decimal d = Decimal.apply((BigDecimal)o, dt.precision(), dt.scale());
-        if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        DecimalType dt = (DecimalType) t;
+        Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
+        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
+          dst.appendInt((int) d.toUnscaledLong());
+        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
           dst.appendLong(d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
@@ -159,7 +159,7 @@ public class ColumnVectorUtils {
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
-        throw new NotImplementedException("Type " + t);
+        throw new UnsupportedOperationException("Type " + t);
       }
     }
   }

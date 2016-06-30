@@ -33,13 +33,16 @@ import sys
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
-from pyspark.sql import SQLContext, Row
+from pyspark.sql import Row, SparkSession
 
 
-def getSqlContextInstance(sparkContext):
-    if ('sqlContextSingletonInstance' not in globals()):
-        globals()['sqlContextSingletonInstance'] = SQLContext(sparkContext)
-    return globals()['sqlContextSingletonInstance']
+def getSparkSessionInstance(sparkConf):
+    if ('sparkSessionSingletonInstance' not in globals()):
+        globals()['sparkSessionSingletonInstance'] = SparkSession\
+            .builder\
+            .config(conf=sparkConf)\
+            .getOrCreate()
+    return globals()['sparkSessionSingletonInstance']
 
 
 if __name__ == "__main__":
@@ -60,19 +63,19 @@ if __name__ == "__main__":
         print("========= %s =========" % str(time))
 
         try:
-            # Get the singleton instance of SQLContext
-            sqlContext = getSqlContextInstance(rdd.context)
+            # Get the singleton instance of SparkSession
+            spark = getSparkSessionInstance(rdd.context.getConf())
 
             # Convert RDD[String] to RDD[Row] to DataFrame
             rowRdd = rdd.map(lambda w: Row(word=w))
-            wordsDataFrame = sqlContext.createDataFrame(rowRdd)
+            wordsDataFrame = spark.createDataFrame(rowRdd)
 
-            # Register as table
-            wordsDataFrame.registerTempTable("words")
+            # Creates a temporary view using the DataFrame.
+            wordsDataFrame.createOrReplaceTempView("words")
 
             # Do word count on table using SQL and print it
             wordCountsDataFrame = \
-                sqlContext.sql("select word, count(*) as total from words group by word")
+                spark.sql("select word, count(*) as total from words group by word")
             wordCountsDataFrame.show()
         except:
             pass

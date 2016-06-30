@@ -29,7 +29,7 @@ abstract class BaseMutableProjection extends MutableProjection
  * It exposes a `target` method, which is used to set the row that will be updated.
  * The internal [[MutableRow]] object created internally is used only when `target` is not used.
  */
-object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
+object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableProjection] {
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -40,17 +40,17 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
   def generate(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean): (() => MutableProjection) = {
+      useSubexprElimination: Boolean): MutableProjection = {
     create(canonicalize(bind(expressions, inputSchema)), useSubexprElimination)
   }
 
-  protected def create(expressions: Seq[Expression]): (() => MutableProjection) = {
+  protected def create(expressions: Seq[Expression]): MutableProjection = {
     create(expressions, false)
   }
 
   private def create(
       expressions: Seq[Expression],
-      useSubexprElimination: Boolean): (() => MutableProjection) = {
+      useSubexprElimination: Boolean): MutableProjection = {
     val ctx = newCodeGenContext()
     val (validExpr, index) = expressions.zipWithIndex.filter {
       case (NoOp, _) => false
@@ -94,7 +94,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
-    val code = s"""
+    val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificMutableProjection(references);
       }
@@ -133,11 +133,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       }
     """
 
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
-    () => {
-      c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
-    }
+    c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
   }
 }

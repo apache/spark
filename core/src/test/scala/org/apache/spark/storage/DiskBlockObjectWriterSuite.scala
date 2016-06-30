@@ -53,13 +53,13 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(writeMetrics.recordsWritten === 1)
     // Metrics don't update on every write
     assert(writeMetrics.bytesWritten == 0)
-    // After 32 writes, metrics should update
-    for (i <- 0 until 32) {
+    // After 16384 writes, metrics should update
+    for (i <- 0 until 16384) {
       writer.flush()
       writer.write(Long.box(i), Long.box(i))
     }
     assert(writeMetrics.bytesWritten > 0)
-    assert(writeMetrics.recordsWritten === 33)
+    assert(writeMetrics.recordsWritten === 16385)
     writer.commitAndClose()
     assert(file.length() == writeMetrics.bytesWritten)
   }
@@ -75,13 +75,13 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(writeMetrics.recordsWritten === 1)
     // Metrics don't update on every write
     assert(writeMetrics.bytesWritten == 0)
-    // After 32 writes, metrics should update
-    for (i <- 0 until 32) {
+    // After 16384 writes, metrics should update
+    for (i <- 0 until 16384) {
       writer.flush()
       writer.write(Long.box(i), Long.box(i))
     }
     assert(writeMetrics.bytesWritten > 0)
-    assert(writeMetrics.recordsWritten === 33)
+    assert(writeMetrics.recordsWritten === 16385)
     writer.revertPartialWritesAndClose()
     assert(writeMetrics.bytesWritten == 0)
     assert(writeMetrics.recordsWritten == 0)

@@ -33,7 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.minBytesForPrecision
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -82,8 +82,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
-    val messageType = new CatalystSchemaConverter(configuration).convert(schema)
-    val metadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
+    val messageType = new ParquetSchemaConverter(configuration).convert(schema)
+    val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
     logInfo(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
@@ -427,7 +427,7 @@ private[parquet] object CatalystWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
-    schema.map(_.name).foreach(CatalystSchemaConverter.checkFieldName)
+    schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,

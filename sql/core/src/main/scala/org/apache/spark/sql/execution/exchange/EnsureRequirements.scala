@@ -160,7 +160,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
-        BroadcastExchange(mode, child)
+        BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
         ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
     }
@@ -237,7 +237,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
         if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          Sort(requiredOrdering, global = false, child = child)
+          SortExec(requiredOrdering, global = false, child = child)
         } else {
           child
         }

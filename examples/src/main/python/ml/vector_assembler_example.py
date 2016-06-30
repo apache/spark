@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.feature import VectorAssembler
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="VectorAssemblerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("VectorAssemblerExample")\
+        .getOrCreate()
 
     # $example on$
-    dataset = sqlContext.createDataFrame(
+    dataset = spark.createDataFrame(
         [(0, 18, 1.0, Vectors.dense([0.0, 10.0, 0.5]), 1.0)],
         ["id", "hour", "mobile", "userFeatures", "clicked"])
     assembler = VectorAssembler(
@@ -39,4 +40,4 @@ if __name__ == "__main__":
     print(output.select("features", "clicked").first())
     # $example off$
 
-    sc.stop()
+    spark.stop()

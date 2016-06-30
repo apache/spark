@@ -37,6 +37,11 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
   def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
 
+  def this(seqOrArray: Any) = this(seqOrArray match {
+    case seq: Seq[Any] => seq
+    case array: Array[_] => array.toSeq
+  })
+
   override def copy(): ArrayData = new GenericArrayData(array.clone())
 
   override def numElements(): Int = array.length

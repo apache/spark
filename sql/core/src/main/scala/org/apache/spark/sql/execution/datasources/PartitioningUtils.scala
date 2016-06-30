@@ -159,7 +159,7 @@ private[sql] object PartitioningUtils {
    *     Seq(
    *       Literal.create(42, IntegerType),
    *       Literal.create("hello", StringType),
-   *       Literal.create(3.14, FloatType)))
+   *       Literal.create(3.14, DoubleType)))
    * }}}
    * and the path when we stop the discovery is:
    * {{{
@@ -339,7 +339,7 @@ private[sql] object PartitioningUtils {
   private val upCastingOrder: Seq[DataType] =
     Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
 
-  def validatePartitionColumnDataTypes(
+  def validatePartitionColumn(
       schema: StructType,
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
@@ -350,6 +350,10 @@ private[sql] object PartitioningUtils {
         case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
       }
     }
+
+    if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
+      throw new AnalysisException(s"Cannot use all columns for partition columns")
+    }
   }
 
   def partitionColumnsSchema(
@@ -359,7 +363,7 @@ private[sql] object PartitioningUtils {
     val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
       schema.find(f => equality(f.name, col)).getOrElse {
-        throw new RuntimeException(s"Partition column $col not found in schema $schema")
+        throw new AnalysisException(s"Partition column $col not found in schema $schema")
       }
     }).asNullable
   }
@@ -424,7 +428,7 @@ private[sql] object PartitioningUtils {
     path.foreach { c =>
       if (needsEscaping(c)) {
         builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02x")
+        builder.append(f"${c.asInstanceOf[Int]}%02X")
       } else {
         builder.append(c)
       }
@@ -441,9 +445,9 @@ private[sql] object PartitioningUtils {
       val c = path.charAt(i)
       if (c == '%' && i + 2 < path.length) {
         val code: Int = try {
-          Integer.valueOf(path.substring(i + 1, i + 3), 16)
-        } catch { case e: Exception =>
-          -1: Integer
+          Integer.parseInt(path.substring(i + 1, i + 3), 16)
+        } catch {
+          case _: Exception => -1
         }
         if (code >= 0) {
           sb.append(code.asInstanceOf[Char])

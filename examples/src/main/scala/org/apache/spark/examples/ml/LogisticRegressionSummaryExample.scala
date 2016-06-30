@@ -18,23 +18,23 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.classification.{BinaryLogisticRegressionSummary, LogisticRegression}
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.max
 
 object LogisticRegressionSummaryExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LogisticRegressionSummaryExample")
-    val sc = new SparkContext(conf)
-    val sqlCtx = new SQLContext(sc)
-    import sqlCtx.implicits._
+    val spark = SparkSession
+      .builder
+      .appName("LogisticRegressionSummaryExample")
+      .getOrCreate()
+    import spark.implicits._
 
     // Load training data
-    val training = sqlCtx.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -71,7 +71,7 @@ object LogisticRegressionSummaryExample {
     lrModel.setThreshold(bestThreshold)
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

@@ -24,7 +24,8 @@ import java.security.PrivilegedExceptionAction
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import scala.collection.mutable.HashMap
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.reflect.runtime._
 import scala.util.Try
 
@@ -345,7 +346,7 @@ object YarnSparkHadoopUtil {
   val RM_REQUEST_PRIORITY = Priority.newInstance(1)
 
   def get: YarnSparkHadoopUtil = {
-    val yarnMode = java.lang.Boolean.valueOf(
+    val yarnMode = java.lang.Boolean.parseBoolean(
       System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (!yarnMode) {
       throw new SparkException("YarnSparkHadoopUtil is not available in non-YARN mode!")
@@ -405,6 +406,12 @@ object YarnSparkHadoopUtil {
   }
 
   /**
+   * Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
+   * Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
+   * an inconsistent state.
+   * TODO: If the OOM is not recoverable by rescheduling it on different node, then do
+   * 'something' to fail job ... akin to blacklisting trackers in mapred ?
+   *
    * The handler if an OOM Exception is thrown by the JVM must be configured on Windows
    * differently: the 'taskkill' command should be used, whereas Unix-based systems use 'kill'.
    *
@@ -415,14 +422,14 @@ object YarnSparkHadoopUtil {
    * the behavior of '%' in a .cmd file: it gets interpreted as an incomplete environment
    * variable. Windows .cmd files escape a '%' by '%%'. Thus, the correct way of writing
    * '%%p' in an escaped way is '%%%%p'.
-   *
-   * @return The correct OOM Error handler JVM option, platform dependent.
    */
-  def getOutOfMemoryErrorArgument: String = {
-    if (Utils.isWindows) {
-      escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
-    } else {
-      "-XX:OnOutOfMemoryError='kill %p'"
+  private[yarn] def addOutOfMemoryErrorArgument(javaOpts: ListBuffer[String]): Unit = {
+    if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
+      if (Utils.isWindows) {
+        javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
+      } else {
+        javaOpts += "-XX:OnOutOfMemoryError='kill %p'"
+      }
     }
   }
 
@@ -464,11 +471,15 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  // YARN/Hadoop acls are specified as user1,user2 group1,group2
+  // Users and groups are separated by a space and hence we need to pass the acls in same format
   def getApplicationAclsForYarn(securityMgr: SecurityManager)
       : Map[ApplicationAccessType, String] = {
     Map[ApplicationAccessType, String] (
-      ApplicationAccessType.VIEW_APP -> securityMgr.getViewAcls,
-      ApplicationAccessType.MODIFY_APP -> securityMgr.getModifyAcls
+      ApplicationAccessType.VIEW_APP -> (securityMgr.getViewAcls + " " +
+        securityMgr.getViewAclsGroups),
+      ApplicationAccessType.MODIFY_APP -> (securityMgr.getModifyAcls + " " +
+        securityMgr.getModifyAclsGroups)
     )
   }
 
@@ -509,7 +520,7 @@ object YarnSparkHadoopUtil {
       numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
       val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
-      val initialNumExecutors = conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS)
+      val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
       val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
         s"initial executor number $initialNumExecutors must between min executor number " +

@@ -228,4 +228,22 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
     checkErrorMessage(otherType, StringType, "Can't extract value from")
   }
+
+  test("ensure to preserve metadata") {
+    val metadata = new MetadataBuilder()
+      .putString("key", "value")
+      .build()
+
+    def checkMetadata(expr: Expression): Unit = {
+      assert(expr.dataType.asInstanceOf[StructType]("a").metadata === metadata)
+      assert(expr.dataType.asInstanceOf[StructType]("b").metadata === Metadata.empty)
+    }
+
+    val a = AttributeReference("a", IntegerType, metadata = metadata)()
+    val b = AttributeReference("b", IntegerType)()
+    checkMetadata(CreateStruct(Seq(a, b)))
+    checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
+    checkMetadata(CreateStructUnsafe(Seq(a, b)))
+    checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
+  }
 }

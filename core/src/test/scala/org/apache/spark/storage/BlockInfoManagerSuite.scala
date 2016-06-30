@@ -27,6 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.util.ThreadUtils
 
 
 class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -124,8 +125,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
     // After downgrading to a read lock, both threads should wake up and acquire the shared
     // read lock.
-    assert(!Await.result(lock1Future, 1.seconds))
-    assert(!Await.result(lock2Future, 1.seconds))
+    assert(!ThreadUtils.awaitResult(lock1Future, 1.seconds))
+    assert(!ThreadUtils.awaitResult(lock2Future, 1.seconds))
     assert(blockInfoManager.get("block").get.readerCount === 3)
   }
 
@@ -161,7 +162,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     withTaskId(winningTID) {
       blockInfoManager.unlock("block")
     }
-    assert(!Await.result(losingFuture, 1.seconds))
+    assert(!ThreadUtils.awaitResult(losingFuture, 1.seconds))
     assert(blockInfoManager.get("block").get.readerCount === 1)
   }
 
@@ -207,16 +208,14 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("cannot call lockForWriting while already holding a write lock") {
+  test("cannot grab a writer lock while already holding a write lock") {
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       blockInfoManager.unlock("block")
     }
     withTaskId(1) {
       assert(blockInfoManager.lockForWriting("block").isDefined)
-      intercept[IllegalStateException] {
-        blockInfoManager.lockForWriting("block")
-      }
+      assert(blockInfoManager.lockForWriting("block", false).isEmpty)
       blockInfoManager.assertBlockIsLockedForWriting("block")
     }
   }
@@ -262,8 +261,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     withTaskId(0) {
       blockInfoManager.unlock("block")
     }
-    assert(Await.result(get1Future, 1.seconds).isDefined)
-    assert(Await.result(get2Future, 1.seconds).isDefined)
+    assert(ThreadUtils.awaitResult(get1Future, 1.seconds).isDefined)
+    assert(ThreadUtils.awaitResult(get2Future, 1.seconds).isDefined)
     assert(blockInfoManager.get("block").get.readerCount === 2)
   }
 
@@ -288,13 +287,14 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       blockInfoManager.unlock("block")
     }
     assert(
-      Await.result(Future.firstCompletedOf(Seq(write1Future, write2Future)), 1.seconds).isDefined)
+      ThreadUtils.awaitResult(
+        Future.firstCompletedOf(Seq(write1Future, write2Future)), 1.seconds).isDefined)
     val firstWriteWinner = if (write1Future.isCompleted) 1 else 2
     withTaskId(firstWriteWinner) {
       blockInfoManager.unlock("block")
     }
-    assert(Await.result(write1Future, 1.seconds).isDefined)
-    assert(Await.result(write2Future, 1.seconds).isDefined)
+    assert(ThreadUtils.awaitResult(write1Future, 1.seconds).isDefined)
+    assert(ThreadUtils.awaitResult(write2Future, 1.seconds).isDefined)
   }
 
   test("removing a non-existent block throws IllegalArgumentException") {
@@ -344,8 +344,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     withTaskId(0) {
       blockInfoManager.removeBlock("block")
     }
-    assert(Await.result(getFuture, 1.seconds).isEmpty)
-    assert(Await.result(writeFuture, 1.seconds).isEmpty)
+    assert(ThreadUtils.awaitResult(getFuture, 1.seconds).isEmpty)
+    assert(ThreadUtils.awaitResult(writeFuture, 1.seconds).isEmpty)
   }
 
   test("releaseAllLocksForTask releases write locks") {

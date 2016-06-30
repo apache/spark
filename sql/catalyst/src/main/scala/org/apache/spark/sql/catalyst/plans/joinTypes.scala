@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
   def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
@@ -69,6 +70,14 @@ case object LeftAnti extends JoinType {
   override def sql: String = "LEFT ANTI"
 }
 
+case class ExistenceJoin(exists: Attribute) extends JoinType {
+  override def sql: String = {
+    // This join type is only used in the end of optimizer and physical plans, we will not
+    // generate SQL for this join type
+    throw new UnsupportedOperationException
+  }
+}
+
 case class NaturalJoin(tpe: JoinType) extends JoinType {
   require(Seq(Inner, LeftOuter, RightOuter, FullOuter).contains(tpe),
     "Unsupported natural join type " + tpe)
@@ -84,6 +93,7 @@ case class UsingJoin(tpe: JoinType, usingColumns: Seq[UnresolvedAttribute]) exte
 object LeftExistence {
   def unapply(joinType: JoinType): Option[JoinType] = joinType match {
     case LeftSemi | LeftAnti => Some(joinType)
+    case j: ExistenceJoin => Some(joinType)
     case _ => None
   }
 }

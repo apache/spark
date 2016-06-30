@@ -29,13 +29,14 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
@@ -57,8 +58,9 @@ class ReceivedBlockHandlerSuite
   val hadoopConf = new Configuration()
   val streamId = 1
   val securityMgr = new SecurityManager(conf)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf)
-  val shuffleManager = new HashShuffleManager(conf)
+  val broadcastManager = new BroadcastManager(true, conf, securityMgr)
+  val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
+  val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
   var serializerManager = new SerializerManager(serializer, conf)
   val manualClock = new ManualClock

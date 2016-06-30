@@ -25,10 +25,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
-/** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
+/**
+ * A catalog for looking up user defined functions, used by an [[Analyzer]].
+ *
+ * Note: The implementation should be thread-safe to allow concurrent access.
+ */
 trait FunctionRegistry {
 
   final def registerFunction(name: String, builder: FunctionBuilder): Unit = {
@@ -62,7 +67,7 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private[sql] val functionBuilders =
+  protected val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
   override def registerFunction(
@@ -97,7 +102,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
-  override def clear(): Unit = {
+  override def clear(): Unit = synchronized {
     functionBuilders.clear()
   }
 
@@ -161,13 +166,16 @@ object FunctionRegistry {
     expression[Greatest]("greatest"),
     expression[If]("if"),
     expression[IsNaN]("isnan"),
+    expression[IfNull]("ifnull"),
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[NaNvl]("nanvl"),
-    expression[Coalesce]("nvl"),
+    expression[NullIf]("nullif"),
+    expression[Nvl]("nvl"),
+    expression[Nvl2]("nvl2"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
@@ -179,6 +187,7 @@ object FunctionRegistry {
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
     expression[Bin]("bin"),
+    expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -240,6 +249,7 @@ object FunctionRegistry {
     expression[Average]("mean"),
     expression[Min]("min"),
     expression[Skewness]("skewness"),
+    expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
@@ -247,6 +257,8 @@ object FunctionRegistry {
     expression[VarianceSamp]("variance"),
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
+    expression[CollectList]("collect_list"),
+    expression[CollectSet]("collect_set"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -290,6 +302,7 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathBoolean]("xpath_boolean"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -328,6 +341,7 @@ object FunctionRegistry {
     expression[SortArray]("sort_array"),
 
     // misc functions
+    expression[AssertTrue]("assert_true"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Murmur3Hash]("hash"),
@@ -337,6 +351,7 @@ object FunctionRegistry {
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+    expression[CurrentDatabase]("current_database"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -360,6 +375,7 @@ object FunctionRegistry {
     expression[Not]("not"),
     expression[Or]("or"),
 
+    // comparison operators
     expression[EqualNullSafe]("<=>"),
     expression[EqualTo]("="),
     expression[EqualTo]("=="),
@@ -383,8 +399,10 @@ object FunctionRegistry {
     fr
   }
 
+  val functionSet: Set[String] = builtin.listFunction().toSet
+
   /** See usage above. */
-  def expression[T <: Expression](name: String)
+  private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // See if we can find a constructor that accepts Seq[Expression]
@@ -397,7 +415,7 @@ object FunctionRegistry {
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }
       } else {
-        // Otherwise, find an ctor method that matches the number of arguments, and use that.
+        // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>

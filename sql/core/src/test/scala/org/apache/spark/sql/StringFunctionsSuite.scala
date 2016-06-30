@@ -189,15 +189,15 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string locate function") {
-    val df = Seq(("aaads", "aa", "zz", 1)).toDF("a", "b", "c", "d")
+    val df = Seq(("aaads", "aa", "zz", 2)).toDF("a", "b", "c", "d")
 
     checkAnswer(
-      df.select(locate("aa", $"a"), locate("aa", $"a", 1)),
-      Row(1, 2))
+      df.select(locate("aa", $"a"), locate("aa", $"a", 2), locate("aa", $"a", 0)),
+      Row(1, 2, 0))
 
     checkAnswer(
-      df.selectExpr("locate(b, a)", "locate(b, a, d)"),
-      Row(1, 2))
+      df.selectExpr("locate(b, a)", "locate(b, a, d)", "locate(b, a, 3)"),
+      Row(1, 2, 0))
   }
 
   test("string padding functions") {
@@ -281,7 +281,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("number format function") {
-    val df = sqlContext.range(1)
+    val df = spark.range(1)
 
     checkAnswer(
       df.select(format_number(lit(5L), 4)),

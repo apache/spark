@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import StopWordsRemover
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="StopWordsRemoverExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("StopWordsRemoverExample")\
+        .getOrCreate()
 
     # $example on$
-    sentenceData = sqlContext.createDataFrame([
+    sentenceData = spark.createDataFrame([
         (0, ["I", "saw", "the", "red", "baloon"]),
         (1, ["Mary", "had", "a", "little", "lamb"])
     ], ["label", "raw"])
@@ -37,4 +38,4 @@ if __name__ == "__main__":
     remover.transform(sentenceData).show(truncate=False)
     # $example off$
 
-    sc.stop()
+    spark.stop()

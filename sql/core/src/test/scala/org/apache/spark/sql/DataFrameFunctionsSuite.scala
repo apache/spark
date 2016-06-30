@@ -152,12 +152,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("one", "not_one"))
   }
 
-  test("nvl function") {
-    checkAnswer(
-      sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
-      Row("x", "y", null))
-  }
-
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(

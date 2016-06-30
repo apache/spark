@@ -17,6 +17,8 @@
 
 package org.apache.spark.internal
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 
@@ -80,6 +82,11 @@ package object config {
     .doc("Name of the Kerberos principal.")
     .stringConf.createOptional
 
+  private[spark] val TOKEN_RENEWAL_INTERVAL = ConfigBuilder("spark.yarn.token.renewal.interval")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createOptional
+
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
     .createOptional
@@ -89,4 +96,11 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  // Note: This is a SQL config but needs to be in core because the REPL depends on it
+  private[spark] val CATALOG_IMPLEMENTATION = ConfigBuilder("spark.sql.catalogImplementation")
+    .internal()
+    .stringConf
+    .checkValues(Set("hive", "in-memory"))
+    .createWithDefault("in-memory")
 }

@@ -71,7 +71,7 @@ private[spark] case class SSLOptions(
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       keyStoreType.foreach(sslContextFactory.setKeyStoreType)
       if (needClientAuth) {
-        trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
+        trustStore.foreach(file => sslContextFactory.setTrustStorePath(file.getAbsolutePath))
         trustStorePassword.foreach(sslContextFactory.setTrustStorePassword)
         trustStoreType.foreach(sslContextFactory.setTrustStoreType)
       }

@@ -24,8 +24,9 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -52,7 +53,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   /**
    * Check the equality between result of expression and expected value, it will handle
-   * Array[Byte] and Spread[Double].
+   * Array[Byte], Spread[Double], and MapData.
    */
   protected def checkResult(result: Any, expected: Any): Boolean = {
     (result, expected) match {
@@ -60,7 +61,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         java.util.Arrays.equals(result, expected)
       case (result: Double, expected: Spread[Double @unchecked]) =>
         expected.asInstanceOf[Spread[Double]].isWithin(result)
-      case _ => result == expected
+      case (result: MapData, expected: MapData) =>
+        result.keyArray() == expected.keyArray() && result.valueArray() == expected.valueArray()
+      case _ =>
+        result == expected
     }
   }
 
@@ -110,7 +114,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
 
     val actual = plan(inputRow).get(0, expression.dataType)
@@ -153,7 +157,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
@@ -166,7 +170,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     checkEvaluationWithOptimization(expression, expected)
 
     var plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
@@ -259,7 +263,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
       expr)
     val codegen = plan(inputRow).get(0, expr.dataType)
 

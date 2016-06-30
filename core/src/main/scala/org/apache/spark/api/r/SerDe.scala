@@ -356,6 +356,13 @@ private[spark] object SerDe {
           writeInt(dos, v.length)
           v.foreach(elem => writeObject(dos, elem))
 
+        // Handle Properties
+        // This must be above the case java.util.Map below.
+        // (Properties implements Map<Object,Object> and will be serialized as map otherwise)
+        case v: java.util.Properties =>
+          writeType(dos, "jobj")
+          writeJObj(dos, value)
+
         // Handle map
         case v: java.util.Map[_, _] =>
           writeType(dos, "map")
@@ -452,7 +459,7 @@ private[spark] object SerDe {
 
 }
 
-private[r] object SerializationFormats {
+private[spark] object SerializationFormats {
   val BYTE = "byte"
   val STRING = "string"
   val ROW = "row"

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.types.AbstractDataType
 
 /**
- * An trait that gets mixin to define the expected input types of an expression.
+ * A trait that gets mixin to define the expected input types of an expression.
  *
  * This trait is typically used by operator expressions (e.g. [[Add]], [[Subtract]]) to define
  * expected input types without any implicit casting.

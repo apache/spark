@@ -21,8 +21,6 @@ package org.apache.spark.examples.ml;
 import java.util.Arrays;
 // $example off$
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 // $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
@@ -32,23 +30,23 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Java example for Estimator, Transformer, and Param.
  */
 public class JavaEstimatorTransformerParamExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("JavaEstimatorTransformerParamExample");
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sqlContext = new SQLContext(sc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaEstimatorTransformerParamExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean. Spark SQL can convert RDDs of JavaBeans into
     // DataFrames, where it uses the bean metadata to infer the schema.
-    Dataset<Row> training = sqlContext.createDataFrame(
+    Dataset<Row> training = spark.createDataFrame(
       Arrays.asList(
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
@@ -89,7 +87,7 @@ public class JavaEstimatorTransformerParamExample {
     System.out.println("Model 2 was fit using parameters: " + model2.parent().extractParamMap());
 
     // Prepare test documents.
-    Dataset<Row> test = sqlContext.createDataFrame(Arrays.asList(
+    Dataset<Row> test = spark.createDataFrame(Arrays.asList(
       new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
       new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))
@@ -107,6 +105,6 @@ public class JavaEstimatorTransformerParamExample {
     }
     // $example off$
 
-    sc.stop();
+    spark.stop();
   }
 }

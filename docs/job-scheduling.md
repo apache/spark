@@ -158,8 +158,9 @@ executors will fetch shuffle files from the service instead of from each other. 
 shuffle state written by an executor may continue to be served beyond the executor's lifetime.
 
 In addition to writing shuffle files, executors also cache data either on disk or in memory.
-When an executor is removed, however, all cached data will no longer be accessible. There is
-currently not yet a solution for this in Spark 1.2. In future releases, the cached data may be
+When an executor is removed, however, all cached data will no longer be accessible.  To mitigate this,
+by default executors containing cached data are never removed.  You can configure this behavior with
+`spark.dynamicAllocation.cachedExecutorIdleTimeout`.  In future releases, the cached data may be
 preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
 the external shuffle service.
 

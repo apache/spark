@@ -100,7 +100,7 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     val naturalPlan = r3.join(r4, NaturalJoin(FullOuter), None)
     val usingPlan = r3.join(r4, UsingJoin(FullOuter, Seq(UnresolvedAttribute("b"))), None)
     val expected = r3.join(r4, FullOuter, Some(EqualTo(bNotNull, bNotNull))).select(
-      Alias(Coalesce(Seq(bNotNull, bNotNull)), "b")(), a, c)
+      Alias(Coalesce(Seq(b, b)), "b")(), a, c)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
@@ -112,5 +112,35 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     }
     assert(error.message.contains(
       "using columns ['d] can not be resolved given input columns: [b, a, c]"))
+  }
+
+  test("using join with a case sensitive analyzer") {
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
+      checkAnalysis(usingPlan, expected, caseSensitive = true)
+    }
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("A"))), None)
+      assertAnalysisError(
+        usingPlan,
+        Seq("using columns ['A] can not be resolved given input columns: [b, a, c, a]"))
+    }
+  }
+
+  test("using join with a case insensitive analyzer") {
+    val expected = r1.join(r2, Inner, Some(EqualTo(a, a))).select(a, b, c)
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("a"))), None)
+      checkAnalysis(usingPlan, expected, caseSensitive = false)
+    }
+
+    {
+      val usingPlan = r1.join(r2, UsingJoin(Inner, Seq(UnresolvedAttribute("A"))), None)
+      checkAnalysis(usingPlan, expected, caseSensitive = false)
+    }
   }
 }

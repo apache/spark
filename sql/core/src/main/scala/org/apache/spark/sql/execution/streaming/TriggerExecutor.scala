@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.ProcessingTime
+import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {
@@ -65,8 +65,13 @@ case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock =
       s"${intervalMs} milliseconds, but spent ${realElapsedTimeMs} milliseconds")
   }
 
-  /** Return the next multiple of intervalMs */
+  /**
+   * Returns the start time in milliseconds for the next batch interval, given the current time.
+   * Note that a batch interval is inclusive with respect to its start time, and thus calling
+   * `nextBatchTime` with the result of a previous call should return the next interval. (i.e. given
+   * an interval of `100 ms`, `nextBatchTime(nextBatchTime(0)) = 200` rather than `0`).
+   */
   def nextBatchTime(now: Long): Long = {
-    (now - 1) / intervalMs * intervalMs + intervalMs
+    now / intervalMs * intervalMs + intervalMs
   }
 }

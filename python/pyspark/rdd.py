@@ -1040,7 +1040,7 @@ class RDD(object):
         If the elements in RDD do not vary (max == min) always returns
         a single bucket.
 
-        It will return an tuple of buckets and histogram.
+        It will return a tuple of buckets and histogram.
 
         >>> rdd = sc.parallelize(range(51))
         >>> rdd.histogram(2)
@@ -2211,7 +2211,7 @@ class RDD(object):
         return values.collect()
 
     def _to_java_object_rdd(self):
-        """ Return an JavaRDD of Object by unpickling
+        """ Return a JavaRDD of Object by unpickling
 
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.
@@ -2274,9 +2274,9 @@ class RDD(object):
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of
-        "HyperLogLog in Practice: Algorithmic Engineering of a State
-        of The Art Cardinality Estimation Algorithm", available
-        <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+        `"HyperLogLog in Practice: Algorithmic Engineering of a State
+        of The Art Cardinality Estimation Algorithm", available here
+        <http://dx.doi.org/10.1145/2452376.2452456>`_.
 
         :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.

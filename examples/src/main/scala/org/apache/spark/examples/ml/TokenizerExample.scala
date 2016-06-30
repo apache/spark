@@ -18,20 +18,20 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.{RegexTokenizer, Tokenizer}
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object TokenizerExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("TokenizerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("TokenizerExample")
+      .getOrCreate()
 
     // $example on$
-    val sentenceDataFrame = sqlContext.createDataFrame(Seq(
+    val sentenceDataFrame = spark.createDataFrame(Seq(
       (0, "Hi I heard about Spark"),
       (1, "I wish Java could use case classes"),
       (2, "Logistic,regression,models,are,neat")
@@ -48,7 +48,8 @@ object TokenizerExample {
     val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
     regexTokenized.select("words", "label").take(3).foreach(println)
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

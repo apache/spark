@@ -20,8 +20,10 @@ installed. Also install the following libraries:
     $ sudo pip install Pygments
     # Following is needed only for generating API docs
     $ sudo pip install sphinx
-    $ Rscript -e 'install.packages(c("knitr", "devtools"), repos="http://cran.stat.ucla.edu/")'
+    $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "roxygen2", "testthat"), repos="http://cran.stat.ucla.edu/")'
 ```
+(Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0)
+
 ## Generating the Documentation HTML
 
 We include the Spark documentation as part of the source (as opposed to using a hosted wiki, such as

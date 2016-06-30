@@ -26,9 +26,17 @@ package org.apache.spark.sql.catalyst
  */
 sealed trait IdentifierWithDatabase {
   val identifier: String
+
   def database: Option[String]
-  def quotedString: String = database.map(db => s"`$db`.`$identifier`").getOrElse(s"`$identifier`")
-  def unquotedString: String = database.map(db => s"$db.$identifier").getOrElse(identifier)
+
+  def quotedString: String = {
+    if (database.isDefined) s"`${database.get}`.`$identifier`" else s"`$identifier`"
+  }
+
+  def unquotedString: String = {
+    if (database.isDefined) s"${database.get}.$identifier" else identifier
+  }
+
   override def toString: String = quotedString
 }
 
@@ -36,7 +44,7 @@ sealed trait IdentifierWithDatabase {
 /**
  * Identifies a table in a database.
  * If `database` is not defined, the current database is used.
- * When we register a permenent function in the FunctionRegistry, we use
+ * When we register a permanent function in the FunctionRegistry, we use
  * unquotedString as the function name.
  */
 case class TableIdentifier(table: String, database: Option[String])
@@ -63,6 +71,8 @@ case class FunctionIdentifier(funcName: String, database: Option[String])
   override val identifier: String = funcName
 
   def this(funcName: String) = this(funcName, None)
+
+  override def toString: String = unquotedString
 }
 
 object FunctionIdentifier {

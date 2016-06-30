@@ -38,7 +38,6 @@ import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -137,7 +136,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    this.sparkSchema = new CatalystSchemaConverter(configuration).convert(requestedSchema);
+    this.sparkSchema = new ParquetSchemaConverter(configuration).convert(requestedSchema);
     this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
@@ -178,7 +177,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.set("spark.sql.parquet.writeLegacyFormat", "false");
 
     this.file = new Path(path);
-    long length = FileSystem.get(config).getFileStatus(this.file).getLen();
+    long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
     ParquetMetadata footer = readFooter(config, file, range(0, length));
 
     List<BlockMetaData> blocks = footer.getBlocks();
@@ -187,17 +186,21 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (columns == null) {
       this.requestedSchema = fileSchema;
     } else {
-      Types.MessageTypeBuilder builder = Types.buildMessage();
-      for (String s: columns) {
-        if (!fileSchema.containsField(s)) {
-          throw new IOException("Can only project existing columns. Unknown field: " + s +
-            " File schema:\n" + fileSchema);
+      if (columns.size() > 0) {
+        Types.MessageTypeBuilder builder = Types.buildMessage();
+        for (String s: columns) {
+          if (!fileSchema.containsField(s)) {
+            throw new IOException("Can only project existing columns. Unknown field: " + s +
+                    " File schema:\n" + fileSchema);
+          }
+          builder.addFields(fileSchema.getType(s));
         }
-        builder.addFields(fileSchema.getType(s));
+        this.requestedSchema = builder.named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
+      } else {
+        this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
-      this.requestedSchema = builder.named("spark_schema");
     }
-    this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
+    this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();

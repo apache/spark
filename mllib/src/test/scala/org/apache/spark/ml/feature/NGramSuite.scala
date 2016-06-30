@@ -22,7 +22,7 @@ import scala.beans.BeanInfo
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 @BeanInfo
 case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
@@ -34,7 +34,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
     val nGram = new NGram()
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array("Test", "for", "ngram", "."),
         Array("Test for", "for ngram", "ngram .")
@@ -47,7 +47,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
         Array("a b c d", "b c d e")
@@ -60,7 +60,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array(),
         Array()
@@ -73,7 +73,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRe
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(6)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
         Array()

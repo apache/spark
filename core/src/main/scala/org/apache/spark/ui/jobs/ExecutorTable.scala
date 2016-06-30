@@ -42,13 +42,13 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
     var hasShuffleWrite = false
     var hasShuffleRead = false
     var hasBytesSpilled = false
-    stageData.foreach(data => {
+    stageData.foreach { data =>
         hasInput = data.hasInput
         hasOutput = data.hasOutput
         hasShuffleRead = data.hasShuffleRead
         hasShuffleWrite = data.hasShuffleWrite
         hasBytesSpilled = data.hasBytesSpilled
-    })
+    }
 
     <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
@@ -57,6 +57,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         <th>Task Time</th>
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
+        <th>Killed Tasks</th>
         <th>Succeeded Tasks</th>
         {if (hasInput) {
           <th>
@@ -116,8 +117,9 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
             <td>{k}</td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
             <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
-            <td>{v.failedTasks + v.succeededTasks}</td>
+            <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
             <td>{v.failedTasks}</td>
+            <td>{v.killedTasks}</td>
             <td>{v.succeededTasks}</td>
             {if (stageData.hasInput) {
               <td sorttable_customkey={v.inputBytes.toString}>

@@ -251,12 +251,12 @@ object JdbcUtils extends Logging {
   def schemaString(df: DataFrame, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    df.schema.fields foreach { field => {
+    df.schema.fields foreach { field =>
       val name = field.name
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
-    }}
+    }
     if (sb.length < 2) "" else sb.substring(2)
   }
 

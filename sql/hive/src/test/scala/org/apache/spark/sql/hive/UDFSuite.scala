@@ -36,7 +36,7 @@ class UDFSuite
   with TestHiveSingleton
   with BeforeAndAfterEach {
 
-  import hiveContext.implicits._
+  import spark.implicits._
 
   private[this] val functionName = "myUPper"
   private[this] val functionNameUpper = "MYUPPER"
@@ -53,7 +53,7 @@ class UDFSuite
     sql("USE default")
 
     testDF = (1 to 10).map(i => s"sTr$i").toDF("value")
-    testDF.registerTempTable(testTableName)
+    testDF.createOrReplaceTempView(testTableName)
     expectedDF = (1 to 10).map(i => s"STR$i").toDF("value")
     super.beforeAll()
   }
@@ -64,12 +64,12 @@ class UDFSuite
   }
 
   test("UDF case insensitive") {
-    hiveContext.udf.register("random0", () => { Math.random() })
-    hiveContext.udf.register("RANDOM1", () => { Math.random() })
-    hiveContext.udf.register("strlenScala", (_: String).length + (_: Int))
-    assert(hiveContext.sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(hiveContext.sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
-    assert(hiveContext.sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
+    spark.udf.register("random0", () => { Math.random() })
+    spark.udf.register("RANDOM1", () => { Math.random() })
+    spark.udf.register("strlenScala", (_: String).length + (_: Int))
+    assert(sql("SELECT RANDOM0() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(sql("SELECT RANDOm1() FROM src LIMIT 1").head().getDouble(0) >= 0.0)
+    assert(sql("SELECT strlenscala('test', 1) FROM src LIMIT 1").head().getInt(0) === 5)
   }
 
   test("temporary function: create and drop") {

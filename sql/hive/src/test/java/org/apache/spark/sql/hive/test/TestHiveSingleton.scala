@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive.test
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SQLContext
 
 
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
-  protected val sqlContext: SQLContext = TestHive
+  protected val spark: SparkSession = TestHive.sparkSession
   protected val hiveContext: TestHiveContext = TestHive
 
   protected override def afterAll(): Unit = {
