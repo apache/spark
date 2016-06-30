@@ -85,10 +85,10 @@ module Jekyll
         .select { |l, i| l.include? "$example off#{@snippet_label}$" }
         .map { |l, i| i }
 
-      raise "Start indices amount is not equal to end indices amount, see #{@file}." \
+      raise "Start indices amount is not equal to end indices amount, see #{@file}, #{@snippet_label}." \
         unless startIndices.size == endIndices.size
 
-      raise "No code is selected by include_example, see #{@file}." \
+      raise "No code is selected by include_example, see #{@file}, #{@snippet_label}." \
         if startIndices.size == 0
 
       # Select and join code blocks together, with a space line between each of two continuous
@@ -96,9 +96,9 @@ module Jekyll
       lastIndex = -1
       result = ""
       startIndices.zip(endIndices).each do |start, endline|
-        raise "Overlapping between two example code blocks are not allowed, see #{@file}." \
+        raise "Overlapping between two example code blocks are not allowed, see #{@file}, #{@snippet_label}." \
             if start <= lastIndex
-        raise "$example on$ should not be in the same line with $example off$, see #{@file}." \
+        raise "$example on$ should not be in the same line with $example off$, see #{@file}, #{@snippet_label}." \
             if start == endline
         lastIndex = endline
         range = Range.new(start + 1, endline - 1)

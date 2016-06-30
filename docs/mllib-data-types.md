@@ -35,16 +35,7 @@ using the factory methods implemented in
 
 Refer to the [`Vector` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-
-// Create a dense vector (1.0, 0.0, 3.0).
-val dv: Vector = Vectors.dense(1.0, 0.0, 3.0)
-// Create a sparse vector (1.0, 0.0, 3.0) by specifying its indices and values corresponding to nonzero entries.
-val sv1: Vector = Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0))
-// Create a sparse vector (1.0, 0.0, 3.0) by specifying its nonzero entries.
-val sv2: Vector = Vectors.sparse(3, Seq((0, 1.0), (2, 3.0)))
-{% endhighlight %}
+{% include_example local_vector scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
 ***Note:***
 Scala imports `scala.collection.immutable.Vector` by default, so you have to import
@@ -127,16 +118,8 @@ A labeled point is represented by the case class
 
 Refer to the [`LabeledPoint` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.LabeledPoint
+{% include_example labeled_point scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-// Create a labeled point with a positive label and a dense feature vector.
-val pos = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
-
-// Create a labeled point with a negative label and a sparse feature vector.
-val neg = LabeledPoint(0.0, Vectors.sparse(3, Array(0, 2), Array(1.0, 3.0)))
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -201,13 +184,8 @@ examples stored in LIBSVM format.
 
 Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
+{% include_example libsvm scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-val examples: RDD[LabeledPoint] = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -266,15 +244,8 @@ matrices. Remember, local matrices in MLlib are stored in column-major order.
 
 Refer to the [`Matrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix) and [`Matrices` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.{Matrix, Matrices}
+{% include_example local_matrix scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-// Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
-val dm: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
-
-// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
-val sm: Matrix = Matrices.sparse(3, 2, Array(0, 1, 3), Array(0, 2, 1), Array(9, 6, 8))
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -369,21 +340,8 @@ For [singular value decomposition (SVD)](https://en.wikipedia.org/wiki/Singular_
 
 Refer to the [`RowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+{% include_example row_matrix scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-val rows: RDD[Vector] = ... // an RDD of local vectors
-// Create a RowMatrix from an RDD[Vector].
-val mat: RowMatrix = new RowMatrix(rows)
-
-// Get its size.
-val m = mat.numRows()
-val n = mat.numCols()
-
-// QR decomposition 
-val qrResult = mat.tallSkinnyQR(true)
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -456,20 +414,8 @@ its row indices.
 
 Refer to the [`IndexedRowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
+{% include_example indexed_row_matrix scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-val rows: RDD[IndexedRow] = ... // an RDD of indexed rows
-// Create an IndexedRowMatrix from an RDD[IndexedRow].
-val mat: IndexedRowMatrix = new IndexedRowMatrix(rows)
-
-// Get its size.
-val m = mat.numRows()
-val n = mat.numCols()
-
-// Drop its row indices.
-val rowMat: RowMatrix = mat.toRowMatrix()
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -562,20 +508,8 @@ with sparse rows by calling `toIndexedRowMatrix`.  Other computations for
 
 Refer to the [`CoordinateMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.CoordinateMatrix) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
+{% include_example coordinate_row_matrix scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-val entries: RDD[MatrixEntry] = ... // an RDD of matrix entries
-// Create a CoordinateMatrix from an RDD[MatrixEntry].
-val mat: CoordinateMatrix = new CoordinateMatrix(entries)
-
-// Get its size.
-val m = mat.numRows()
-val n = mat.numCols()
-
-// Convert it to an IndexRowMatrix whose rows are sparse vectors.
-val indexedRowMatrix = mat.toIndexedRowMatrix()
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -670,22 +604,8 @@ Users may change the block size by supplying the values through `toBlockMatrix(r
 
 Refer to the [`BlockMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.BlockMatrix) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.distributed.{BlockMatrix, CoordinateMatrix, MatrixEntry}
+{% include_example block_matrix scala/org/apache/spark/examples/mllib/DataTypesExamples.scala %}
 
-val entries: RDD[MatrixEntry] = ... // an RDD of (i, j, v) matrix entries
-// Create a CoordinateMatrix from an RDD[MatrixEntry].
-val coordMat: CoordinateMatrix = new CoordinateMatrix(entries)
-// Transform the CoordinateMatrix to a BlockMatrix
-val matA: BlockMatrix = coordMat.toBlockMatrix().cache()
-
-// Validate whether the BlockMatrix is set up properly. Throws an Exception when it is not valid.
-// Nothing happens if it is valid.
-matA.validate()
-
-// Calculate A^T A.
-val ata = matA.transpose.multiply(matA)
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
