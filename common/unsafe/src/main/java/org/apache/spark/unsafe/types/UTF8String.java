@@ -22,7 +22,10 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.text.BreakIterator;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -799,6 +802,49 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       res[i] = fromString(splits[i]);
     }
     return res;
+  }
+
+  /**
+   * Return a locale of the given language and country, or a default locale when failures occur.
+   */
+  private Locale getLocale(UTF8String language, UTF8String country) {
+    try {
+      return new Locale(language.toString(), country.toString());
+    } finally {
+      return Locale.getDefault();
+    }
+  }
+
+  /**
+   * Splits a string into arrays of sentences, where each sentence is an array of words.
+   */
+  public ArrayList<ArrayList<UTF8String>> sentences(UTF8String language, UTF8String country) {
+    String sentences = this.toString();
+    Locale locale = getLocale(language, country);
+
+    BreakIterator bi = BreakIterator.getSentenceInstance(locale);
+    bi.setText(sentences);
+    int idx = 0;
+    ArrayList<ArrayList<UTF8String>> result = new ArrayList<>();
+    while (bi.next() != BreakIterator.DONE) {
+      String sentence = sentences.substring(idx, bi.current());
+      idx = bi.current();
+
+      BreakIterator wi = BreakIterator.getWordInstance(locale);
+      int widx = 0;
+      wi.setText(sentence);
+      ArrayList<UTF8String> words = new ArrayList<>();
+      while(wi.next() != BreakIterator.DONE) {
+        String word = sentence.substring(widx, wi.current());
+        widx = wi.current();
+        if(Character.isLetterOrDigit(word.charAt(0))) {
+          words.add(UTF8String.fromString(word));
+        }
+      }
+      result.add(words);
+    }
+
+    return result;
   }
 
   // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes

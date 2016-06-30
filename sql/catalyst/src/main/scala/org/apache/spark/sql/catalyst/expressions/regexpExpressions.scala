@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.regex.{MatchResult, Pattern}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -198,6 +200,31 @@ case class StringSplit(str: Expression, pattern: Expression)
   override def prettyName: String = "split"
 }
 
+/**
+ * Splits a string into arrays of sentences, where each sentence is an array of words.
+ * The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(s) - Splits str into an array of array of words.")
+case class Sentences(
+    str: Expression,
+    language: Expression = Literal(""),
+    country: Expression = Literal(""))
+  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def dataType: DataType = ArrayType(ArrayType(StringType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = str :: language :: country :: Nil
+
+  override def nullSafeEval(string: Any, language: Any, country: Any): Any = {
+    val sentences = string.asInstanceOf[UTF8String].sentences(
+      language.asInstanceOf[UTF8String], country.asInstanceOf[UTF8String])
+    val result = ArrayBuffer.empty[GenericArrayData]
+    for (i <- 0 until sentences.size())
+      result += new GenericArrayData(sentences.get(i).toArray)
+    new GenericArrayData(result.toArray)
+  }
+}
 
 /**
  * Replace all substrings of str that match regexp with rep.
