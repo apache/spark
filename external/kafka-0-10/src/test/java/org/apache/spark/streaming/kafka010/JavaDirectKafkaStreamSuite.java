@@ -91,7 +91,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     JavaInputDStream<ConsumerRecord<String, String>> istream1 = KafkaUtils.createDirectStream(
         ssc,
         LocationStrategies.preferConsistent(),
-        Subscribe.<String, String>create(Arrays.asList(topic1), kafkaParams)
+        ConsumerStrategies.<String, String>subscribe(Arrays.asList(topic1), kafkaParams)
     );
 
     JavaDStream<String> stream1 = istream1.transform(
@@ -124,7 +124,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     JavaInputDStream<ConsumerRecord<String, String>> istream2 = KafkaUtils.createDirectStream(
         ssc,
         LocationStrategies.preferConsistent(),
-        Subscribe.<String, String>create(Arrays.asList(topic2), kafkaParams2)
+        ConsumerStrategies.<String, String>subscribe(Arrays.asList(topic2), kafkaParams2)
     );
 
     JavaDStream<String> stream2 = istream2.transform(

@@ -108,7 +108,9 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
-        ssc, preferredHosts, Subscribe[String, String](topics, kafkaParams.asScala))
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.subscribe[String, String](topics, kafkaParams.asScala))
     }
     val allReceived = new ConcurrentLinkedQueue[(String, String)]()
 
@@ -178,7 +180,9 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
       val s = new DirectKafkaInputDStream[String, String](
-        ssc, preferredHosts, Subscribe[String, String](List(topic), kafkaParams.asScala))
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -225,8 +229,10 @@ class DirectKafkaStreamSuite
     // Setup context and kafka stream with largest offset
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
-      val s = new DirectKafkaInputDStream[String, String](ssc, preferredHosts,
-        Assign[String, String](
+      val s = new DirectKafkaInputDStream[String, String](
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.assign[String, String](
           List(topicPartition),
           kafkaParams.asScala,
           Map(topicPartition -> 11L)))
@@ -267,7 +273,9 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(100))
     val kafkaStream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
-        ssc, preferredHosts, Subscribe[String, String](List(topic), kafkaParams.asScala))
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
     }
     val keyedStream = kafkaStream.map { r => "key" -> r.value.toInt }
     val stateStream = keyedStream.updateStateByKey { (values: Seq[Int], state: Option[Int]) =>
@@ -360,7 +368,9 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(100))
     withClue("Error creating direct stream") {
       val kafkaStream = KafkaUtils.createDirectStream[String, String](
-        ssc, preferredHosts, Subscribe[String, String](List(topic), kafkaParams.asScala))
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
       kafkaStream.foreachRDD { (rdd: RDD[ConsumerRecord[String, String]], time: Time) =>
         val offsets = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
         val data = rdd.map(_.value).collect()
@@ -412,7 +422,9 @@ class DirectKafkaStreamSuite
 
     val stream = withClue("Error creating direct stream") {
       KafkaUtils.createDirectStream[String, String](
-        ssc, preferredHosts, Subscribe[String, String](List(topic), kafkaParams.asScala))
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala))
     }
 
     val allReceived = new ConcurrentLinkedQueue[(String, String)]
@@ -486,7 +498,9 @@ class DirectKafkaStreamSuite
 
     val kafkaStream = withClue("Error creating direct stream") {
       new DirectKafkaInputDStream[String, String](
-        ssc, preferredHosts, Subscribe[String, String](List(topic), kafkaParams.asScala)) {
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.subscribe[String, String](List(topic), kafkaParams.asScala)) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }.map(r => (r.key, r.value))

@@ -53,28 +53,26 @@ public class JavaConsumerStrategySuite implements Serializable {
     // final ConsumerStrategy<String, String> sub0 =          // does not compile in Scala 2.10
     //   Subscribe.<String, String>apply(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub1 =
-      Subscribe.<String, String>apply(sTopics, sKafkaParams, sOffsets);
+      ConsumerStrategies.<String, String>subscribe(sTopics, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> sub2 =
-      Subscribe.<String, String>apply(sTopics, sKafkaParams);
+      ConsumerStrategies.<String, String>subscribe(sTopics, sKafkaParams);
     final ConsumerStrategy<String, String> sub3 =
-      Subscribe.<String, String>create(topics, kafkaParams, offsets);
+      ConsumerStrategies.<String, String>subscribe(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub4 =
-      Subscribe.<String, String>create(topics, kafkaParams);
+      ConsumerStrategies.<String, String>subscribe(topics, kafkaParams);
 
     Assert.assertEquals(
       sub1.executorKafkaParams().get("bootstrap.servers"),
       sub3.executorKafkaParams().get("bootstrap.servers"));
 
-    // final ConsumerStrategy<String, String> asn0 =          // does not compile in Scala 2.10
-    //   Assign.<String, String>apply(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn1 =
-      Assign.<String, String>apply(sParts, sKafkaParams, sOffsets);
+      ConsumerStrategies.<String, String>assign(sParts, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> asn2 =
-      Assign.<String, String>apply(sParts, sKafkaParams);
+      ConsumerStrategies.<String, String>assign(sParts, sKafkaParams);
     final ConsumerStrategy<String, String> asn3 =
-      Assign.<String, String>create(parts, kafkaParams, offsets);
+      ConsumerStrategies.<String, String>assign(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn4 =
-      Assign.<String, String>create(parts, kafkaParams);
+      ConsumerStrategies.<String, String>assign(parts, kafkaParams);
 
     Assert.assertEquals(
       asn1.executorKafkaParams().get("bootstrap.servers"),
