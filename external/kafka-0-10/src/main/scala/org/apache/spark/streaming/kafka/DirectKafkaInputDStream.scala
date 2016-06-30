@@ -37,7 +37,7 @@ import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 /**
- *  A stream of [[KafkaRDD]] where
+ *  A DStream where
  * each given Kafka topic/partition corresponds to an RDD partition.
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
@@ -49,10 +49,8 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * configuration parameters</a>.
  *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
- * @param driverConsumer zero-argument function for you to construct a Kafka Consumer,
- *  and subscribe topics or assign partitions.
- *  This consumer will be used on the driver to query for offsets only, not messages.
- *  See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Consumer doc</a>
+ * @param consumerStrategy In most cases, pass in [[Subscribe]],
+ *   see [[ConsumerStrategy]] for more details
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
