@@ -51,7 +51,7 @@ trait ConsumerStrategy[K, V] {
    * has successfully read.  Will be empty on initial start, possibly non-empty on restart from
    * checkpoint.
    */
-  def onStart(currentOffsets: Map[TopicPartition, Long]): Consumer[K, V]
+  def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V]
 }
 
 /**
@@ -75,7 +75,7 @@ private case class Subscribe[K, V](
 
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
-  def onStart(currentOffsets: Map[TopicPartition, Long]): Consumer[K, V] = {
+  def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
     val consumer = new KafkaConsumer[K, V](kafkaParams)
     consumer.subscribe(topics)
     if (currentOffsets.isEmpty) {
@@ -109,7 +109,7 @@ private case class Assign[K, V](
 
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
-  def onStart(currentOffsets: Map[TopicPartition, Long]): Consumer[K, V] = {
+  def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
     val consumer = new KafkaConsumer[K, V](kafkaParams)
     consumer.assign(topicPartitions)
     if (currentOffsets.isEmpty) {
@@ -126,6 +126,7 @@ private case class Assign[K, V](
  * :: Experimental ::
  * object for obtaining instances of [[ConsumerStrategy]]
  */
+@Experimental
 object ConsumerStrategies {
   /**
    *  :: Experimental ::

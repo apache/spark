@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka010
 
 import java.io.File
+import java.lang.{ Long => JLong }
 import java.util.{ Arrays, HashMap => JHashMap, Map => JMap }
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -566,7 +567,7 @@ class DirectKafkaStreamSuite
       preferredHosts,
       new ConsumerStrategy[String, String] {
         def executorKafkaParams = ekp
-        def onStart(currentOffsets: Map[TopicPartition, Long]): Consumer[String, String] = {
+        def onStart(currentOffsets: JMap[TopicPartition, JLong]): Consumer[String, String] = {
           val consumer = new KafkaConsumer[String, String](kafkaParams)
           val tps = List(new TopicPartition(topic, 0), new TopicPartition(topic, 1))
           consumer.assign(Arrays.asList(tps: _*))
