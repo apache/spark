@@ -1865,17 +1865,15 @@ private[spark] object Utils extends Logging {
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {
-      case NonFatal(_) | _: InterruptedException | _: NotImplementedError | _: ControlThrowable =>
+      case NonFatal(_) |
+           _: InterruptedException |
+           _: NotImplementedError |
+           _: ControlThrowable |
+           _: LinkageError =>
         false
       case _ =>
         true
     }
-  }
-
-  /** Returns true if the given exception is a linkage error. */
-  def isLinkageError(e: Throwable): Boolean = e match {
-    case _: java.lang.LinkageError => true
-    case _ => false
   }
 
   /**
