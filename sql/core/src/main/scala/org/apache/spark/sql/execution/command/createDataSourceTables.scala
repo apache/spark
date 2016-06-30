@@ -105,6 +105,9 @@ case class CreateDataSourceTableCommand(
         bucketSpec = None,
         options = optionsWithPath).resolveRelation(checkPathExist = false)
     } catch {
+      // Note that since the table hasn't been created yet, ListingFileCatalog.refresh()
+      // (which gets called in ListingFileCatalog's constructor, invoked in resolveRelation)
+      // will fail with FileNotFoundException (or SparkException in the parallel version).
       case e: FileNotFoundException =>  // Do nothing
       case e: SparkException if e.getMessage.contains("FileNotFoundException") =>  // Do nothing
       case e: Throwable => throw e
