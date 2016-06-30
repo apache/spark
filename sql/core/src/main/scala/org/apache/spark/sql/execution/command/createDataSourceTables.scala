@@ -105,10 +105,9 @@ case class CreateDataSourceTableCommand(
         bucketSpec = None,
         options = optionsWithPath).resolveRelation(checkPathExist = false)
     } catch {
-      case e: FileNotFoundException =>
-      case e: SparkException if e.getMessage.contains("FileNotFoundException") =>
-      case e: _ =>
-        throw e
+      case e: FileNotFoundException =>  // Do nothing
+      case e: SparkException if e.getMessage.contains("FileNotFoundException") =>  // Do nothing
+      case e: Throwable => throw e
     }
 
     CreateDataSourceTableUtils.createDataSourceTable(
