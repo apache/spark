@@ -161,7 +161,11 @@ object KafkaUtils extends Logging {
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
     // driver and executor should be in different consumer groups
-    val groupId = "spark-executor-" + kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
+    val originalGroupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
+    if (null == originalGroupId) {
+      logError(s"${ConsumerConfig.GROUP_ID_CONFIG} is null, you should probably set it")
+    }
+    val groupId = "spark-executor-" + originalGroupId
     logWarning(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
 
