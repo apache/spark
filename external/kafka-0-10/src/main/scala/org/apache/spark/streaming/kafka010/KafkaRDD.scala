@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
@@ -135,7 +135,7 @@ private[spark] class KafkaRDD[K, V](
       .sortWith(compareExecutors)
   }
 
-  protected[kafka] def compareExecutors(
+  protected[kafka010] def compareExecutors(
       a: ExecutorCacheTaskLocation,
       b: ExecutorCacheTaskLocation): Boolean =
     if (a.host == b.host) {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.kafka010
 
 import org.apache.kafka.clients.consumer.OffsetCommitCallback
 import org.apache.kafka.common.TopicPartition
@@ -144,10 +144,10 @@ object OffsetRange {
     new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
-  private[kafka]
+  private[kafka010]
   type OffsetRangeTuple = (String, Int, Long, Long)
 
-  private[kafka]
+  private[kafka010]
   def apply(t: OffsetRangeTuple) =
     new OffsetRange(t._1, t._2, t._3, t._4)
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
@@ -28,7 +28,7 @@ import org.apache.spark.Partition
  * @param fromOffset inclusive starting offset
  * @param untilOffset exclusive ending offset
  */
-private[kafka]
+private[kafka010]
 class KafkaRDDPartition(
   val index: Int,
   val topic: String,

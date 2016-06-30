@@ -16,6 +16,6 @@
  */
 
 /**
- * Spark Integration for Kafka
+ * Spark Integration for Kafka 0.10
  */
-package org.apache.spark.streaming.kafka;
+package org.apache.spark.streaming.kafka010;

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.kafka010
 
 import java.io.File
 import java.util.{ Arrays, HashMap => JHashMap, Map => JMap }

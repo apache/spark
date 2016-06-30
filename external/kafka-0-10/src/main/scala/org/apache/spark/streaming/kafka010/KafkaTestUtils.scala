@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.kafka010
 
 import java.io.File
 import java.lang.{Integer => JInt}
@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  *
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
-private[kafka] class KafkaTestUtils extends Logging {
+private[kafka010] class KafkaTestUtils extends Logging {
 
   // Zookeeper related configurations
   private val zkHost = "localhost"

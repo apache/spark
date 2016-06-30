@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
  * Underlying consumer is not threadsafe, so neither is this,
  * but processing the same topicpartition and group id in multiple threads is usually bad anyway.
  */
-private[kafka]
+private[kafka010]
 class CachedKafkaConsumer[K, V] private(
   val groupId: String,
   val topic: String,
@@ -104,7 +104,7 @@ class CachedKafkaConsumer[K, V] private(
 
 }
 
-private[kafka]
+private[kafka010]
 object CachedKafkaConsumer extends Logging {
 
   private case class CacheKey(groupId: String, topic: String, partition: Int)
