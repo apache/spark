@@ -53,6 +53,28 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
+#' Saves the machine learning model to the input path
+#'
+#' Saves the machine learning model to the input path. For more information, see the specific
+#' machine learning model below.
+#' @rdname write.ml
+#' @name write.ml
+#' @export
+#' @seealso \link{spark.glm}, \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{read.ml}
+NULL
+
+#' Predicted values based on a machine learning model
+#'
+#' Predicted values based on a machine learning model. For more information, see the specific
+#' machine learning model below.
+#' @rdname predict
+#' @name predict
+#' @export
+#' @seealso \link{spark.glm}, \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{read.ml}
+NULL
+
 #' Generalized Linear Models
 #'
 #' Fits generalized linear model against a Spark DataFrame. Users can print, make predictions on the
@@ -145,7 +167,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
-#'
+
 #' @param object A fitted generalized linear model
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
 #'         including at least the coefficients, null/residual deviance, null/residual degrees
@@ -185,7 +207,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           })
 
 #  Prints the summary of GeneralizedLinearRegressionModel
-#'
+
 #' @rdname spark.glm
 #' @param x Summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
@@ -343,7 +365,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
           })
 
 #  Get the summary of a k-means model
-#'
+
 #' @param object A fitted k-means model
 #' @return \code{summary} returns the model's coefficients, size and cluster
 #' @rdname spark.kmeans
@@ -370,7 +392,7 @@ setMethod("summary", signature(object = "KMeansModel"),
           })
 
 #  Predicted values based on a k-means model
-#'
+
 #' @return \code{predict} returns the predicted values based on a k-means model
 #' @rdname spark.kmeans
 #' @export
@@ -463,7 +485,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
           })
 
 #  Saves the generalized linear model to the input path.
-#'
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
@@ -481,7 +503,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
           })
 
 #  Save fitted MLlib model to the input path
-#'
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
