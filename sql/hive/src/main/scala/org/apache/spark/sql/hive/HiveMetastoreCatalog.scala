@@ -139,18 +139,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   def refreshTable(tableIdent: TableIdentifier): Unit = {
-    // refreshTable does not eagerly reload the cache. It just invalidate the cache.
-    // Next time when we use the table, it will be populated in the cache.
-    // Since we also cache ParquetRelations converted from Hive Parquet tables and
-    // adding converted ParquetRelations into the cache is not defined in the load function
-    // of the cache (instead, we add the cache entry in convertToParquetRelation),
-    // it is better at here to invalidate the cache to avoid confusing waring logs from the
-    // cache loader (e.g. cannot find data source provider, which is only defined for
-    // data source table.).
-    invalidateTable(tableIdent)
-  }
-
-  def invalidateTable(tableIdent: TableIdentifier): Unit = {
     cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
   }
 
