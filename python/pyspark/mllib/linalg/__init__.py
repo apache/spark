@@ -909,9 +909,9 @@ class Vectors(object):
         :param vec: a :py:class:`pyspark.ml.linalg.Vector`
         :return: a :py:class:`pyspark.mllib.linalg.Vector`
         """
-        if type(vec) == newlinalg.DenseVector:
+        if isinstance(vec, newlinalg.DenseVector):
             return DenseVector(vec.array)
-        elif type(vec) == newlinalg.SparseVector:
+        elif isinstance(vec, newlinalg.SparseVector):
             return SparseVector(vec.size, vec.indices, vec.values)
         else:
             raise TypeError("Unsupported vector type %s" % type(vec))
@@ -1389,9 +1389,9 @@ class Matrices(object):
         :param vec: a :py:class:`pyspark.ml.linalg.Matrix`
         :return: a :py:class:`pyspark.mllib.linalg.Matrix`
         """
-        if type(mat) == newlinalg.DenseMatrix:
+        if isinstance(mat, newlinalg.DenseMatrix):
             return DenseMatrix(mat.numRows, mat.numCols, mat.values, mat.isTransposed)
-        elif type(mat) == newlinalg.SparseMatrix:
+        elif isinstance(mat, newlinalg.SparseMatrix):
             return SparseMatrix(mat.numRows, mat.numCols, mat.colPtrs, mat.rowIndices,
                                 mat.values, mat.isTransposed)
         else:
