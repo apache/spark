@@ -102,7 +102,10 @@ module Jekyll
             if start == endline
         lastIndex = endline
         range = Range.new(start + 1, endline - 1)
-        result += trim_codeblock(lines[range]).join
+        trimmed = trim_codeblock(lines[range])
+        # Filter out possible example tags of overlapped labels.
+        taggs_filtered = trimmed.select { |l| !l.include? '$example ' }
+        result += taggs_filtered.join
         result += "\n"
       end
       result
