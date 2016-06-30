@@ -160,8 +160,8 @@ import org.apache.spark.sql.Dataset;
 Dataset<Row> convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF);
 Dataset<Row> convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF);
 // convert a single vector or matrix
-org.apache.spark.ml.linalg.Vector mlVec = mllibVec.asML;
-org.apache.spark.ml.linalg.Matrix mlMat = mllibMat.asML;
+org.apache.spark.ml.linalg.Vector mlVec = mllibVec.asML();
+org.apache.spark.ml.linalg.Matrix mlMat = mllibMat.asML();
 {% endhighlight %}
 
 Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.html) for further detail.
