@@ -47,6 +47,8 @@ class ListingFileCatalog(
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
+  refresh()
+
   override def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
       cachedPartitionSpec = inferPartitioning()
@@ -56,16 +58,10 @@ class ListingFileCatalog(
   }
 
   override protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
-    if (cachedLeafFiles eq null) {
-      refresh()
-    }
     cachedLeafFiles
   }
 
   override protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
-    if (cachedLeafDirToChildrenFiles eq null) {
-      refresh()
-    }
     cachedLeafDirToChildrenFiles
   }
 

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.FileNotFoundException
 import java.util.regex.Pattern
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -95,12 +97,19 @@ case class CreateDataSourceTableCommand(
       }
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
-    DataSource(
-      sparkSession = sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      bucketSpec = None,
-      options = optionsWithPath).resolveRelation(checkPathExist = false)
+    try {
+      DataSource(
+        sparkSession = sparkSession,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = provider,
+        bucketSpec = None,
+        options = optionsWithPath).resolveRelation(checkPathExist = false)
+    } catch {
+      case e: FileNotFoundException =>
+      case e: SparkException if e.getMessage.contains("FileNotFoundException") =>
+      case e: _ =>
+        throw e
+    }
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
