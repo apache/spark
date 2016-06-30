@@ -440,7 +440,7 @@ class SQLContext(object):
 
         :return: :class:`DataStreamReader`
 
-        >>> text_sdf = sqlContext.readStream.text(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> text_sdf = sqlContext.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
         True
         """
