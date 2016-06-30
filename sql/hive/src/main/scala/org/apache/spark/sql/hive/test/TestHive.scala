@@ -77,7 +77,7 @@ class TestHiveContext(
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
-  def this(sc: SparkContext, loadTestTables: Boolean = false) {
+  def this(sc: SparkContext, loadTestTables: Boolean = true) {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
   }
 
@@ -133,7 +133,7 @@ private[hive] class TestHiveSparkSession(
   // when we creating metadataHive. This flow is not easy to follow and can introduce
   // confusion when a developer is debugging an issue. We need to refactor this part
   // to just set the temp warehouse path in sc's conf.
-  def this(sc: SparkContext, loadTestTables: Boolean = false) {
+  def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
       Utils.createTempDir(namePrefix = "warehouse"),
