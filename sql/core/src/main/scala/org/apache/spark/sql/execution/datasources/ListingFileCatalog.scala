@@ -108,8 +108,7 @@ class ListingFileCatalog(
             try {
               fs.listStatus(path)
             } catch {
-              case e: FileNotFoundException if ignoreFileNotFound =>
-                Array.empty[FileStatus]
+              case e: FileNotFoundException if ignoreFileNotFound => Array.empty[FileStatus]
             }
           if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
         }
