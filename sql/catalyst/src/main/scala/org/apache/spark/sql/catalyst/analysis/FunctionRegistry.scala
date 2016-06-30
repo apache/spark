@@ -25,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -301,6 +302,7 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathBoolean]("xpath_boolean"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
