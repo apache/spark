@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
+import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import javax.annotation.concurrent.GuardedBy
@@ -52,7 +53,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   private var readThread: Thread = null
 
   @GuardedBy("this")
-  private var lines = new ArrayBuffer[(String, String)]
+  private var lines = new ArrayBuffer[(String, Timestamp)]
 
   initialize()
 
@@ -73,7 +74,9 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
             }
             TextSocketSource.this.synchronized {
               lines += ((line,
-                TextSocketSource.DATE_FORMAT.format(Calendar.getInstance().getTime())))
+                Timestamp.valueOf(
+                  TextSocketSource.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+                ))
             }
           }
         } catch {
@@ -100,8 +103,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
     val data = synchronized { lines.slice(startIdx, endIdx) }
     import sqlContext.implicits._
     if (includeTimestamp) {
-      val df = data.toDF("value", "timestamp")
-      df.select(df.col("value"), df.col("timestamp").cast(TimestampType))
+      data.toDF("value", "timestamp")
     } else {
       data.map(_._1).toDF("value")
     }
@@ -137,8 +139,13 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
     if (!parameters.contains("port")) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
-    ("textSocket", if (parameters.getOrElse("includeTimestamp", "false") == "true")
-      { TextSocketSource.SCHEMA_TIMESTAMP } else { TextSocketSource.SCHEMA_REGULAR })
+    val schema =
+      if (parameters.getOrElse("includeTimestamp", "false").toBoolean) {
+        TextSocketSource.SCHEMA_TIMESTAMP
+      } else {
+        TextSocketSource.SCHEMA_REGULAR
+      }
+    ("textSocket", schema)
   }
 
   override def createSource(

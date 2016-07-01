@@ -33,38 +33,41 @@ import java.util.List;
  * with a timestamp that is used to determine the windows into which it falls.
  *
  * Usage: JavaStructuredNetworkWordCountWindowed <hostname> <port> <window duration>
- *   <slide duration>
+ *   <optional slide duration>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <window duration> gives the size of window, specified as integer number of seconds
  * <slide duration> gives the amount of time successive windows are offset from one another,
  * given in the same units as above. <slide duration> should be less than or equal to
- * <window duration>. If the two are equal, successive windows have no overlap.
+ * <window duration>. If the two are equal, successive windows have no overlap. If
+ * <slide duration> is not provided, it defaults to <window duration>.
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.JavaStructuredNetworkWordCountWindowed
- *    localhost 9999 <window duration> <slide duration>`
+ *    localhost 9999 <window duration> <optional slide duration>`
  *
  * One recommended <window duration>, <slide duration> pair is 60, 30
  */
 public final class JavaStructuredNetworkWordCountWindowed {
 
   public static void main(String[] args) throws Exception {
-    if (args.length < 4) {
+    if (args.length < 3) {
       System.err.println("Usage: JavaStructuredNetworkWordCountWindowed <hostname> <port>" +
-        " <window duration in seconds> <slide duration in seconds>");
+        " <window duration in seconds> <optional slide duration in seconds>");
       System.exit(1);
     }
 
     String host = args[0];
     int port = Integer.parseInt(args[1]);
     int windowSize = Integer.parseInt(args[2]);
-    int slideSize = Integer.parseInt(args[3]);
+    int slideSize = (args.length == 3) ? windowSize : Integer.parseInt(args[3]);
     if (slideSize > windowSize) {
       System.err.println("<slide duration> must be less than or equal to <window duration>");
     }
+    String windowArg = windowSize + " seconds";
+    String slideArg = slideSize + " seconds";
 
     SparkSession spark = SparkSession
       .builder()
@@ -97,7 +100,7 @@ public final class JavaStructuredNetworkWordCountWindowed {
 
     // Group the data by window and word and compute the count of each group
     Dataset<Row> windowedCounts = words.groupBy(
-      functions.window(words.col("timestamp"), windowSize + " seconds", slideSize + " seconds"),
+      functions.window(words.col("timestamp"), windowArg, slideArg),
       words.col("word")
     ).count();
 

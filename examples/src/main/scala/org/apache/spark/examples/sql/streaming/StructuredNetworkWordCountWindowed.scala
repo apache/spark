@@ -28,38 +28,42 @@ import org.apache.spark.sql.functions._
  * sliding window of configurable duration. Each line from the network is tagged
  * with a timestamp that is used to determine the windows into which it falls.
  *
- * Usage: StructuredNetworkWordCountWindowed <hostname> <port> <window duration> <slide duration>
+ * Usage: StructuredNetworkWordCountWindowed <hostname> <port> <window duration>
+ *   <optional slide duration>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <window duration> gives the size of window, specified as integer number of seconds
  * <slide duration> gives the amount of time successive windows are offset from one another,
  * given in the same units as above. <slide duration> should be less than or equal to
- * <window duration>. If the two are equal, successive windows have no overlap.
+ * <window duration>. If the two are equal, successive windows have no overlap. If
+ * <slide duration> is not provided, it defaults to <window duration>.
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.StructuredNetworkWordCountWindowed
- *    localhost 9999 <window duration> <slide duration>`
+ *    localhost 9999 <window duration> <optional slide duration>`
  *
  * One recommended <window duration>, <slide duration> pair is 60, 30
  */
 object StructuredNetworkWordCountWindowed {
 
   def main(args: Array[String]) {
-    if (args.length < 4) {
+    if (args.length < 3) {
       System.err.println("Usage: StructuredNetworkWordCountWindowed <hostname> <port>" +
-        " <window duration in seconds> <slide duration in seconds>")
+        " <window duration in seconds> <optional slide duration in seconds>")
       System.exit(1)
     }
 
     val host = args(0)
     val port = args(1).toInt
     val windowSize = args(2).toInt
-    val slideSize = args(3).toInt
+    val slideSize = if (args.length == 3) windowSize else args(3).toInt
     if (slideSize > windowSize) {
       System.err.println("<slide duration> must be less than or equal to <window duration>")
     }
+    val windowArg = s"$windowSize seconds"
+    val slideArg = s"$slideSize seconds"
 
     val spark = SparkSession
       .builder
@@ -83,8 +87,7 @@ object StructuredNetworkWordCountWindowed {
 
     // Group the data by window and word and compute the count of each group
     val windowedCounts = words.groupBy(
-      window(words.col("timestamp"), s"$windowSize seconds", s"$slideSize seconds"),
-      words.col("word")
+      window($"timestamp", windowArg, slideArg), $"word"
     ).count()
 
     // Start running the query that prints the windowed word counts to the console
