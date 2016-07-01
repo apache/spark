@@ -104,9 +104,105 @@ and the migration guide below will explain all changes between releases.
 
 ## From 1.6 to 2.0
 
-The deprecations and changes of behavior in the `spark.mllib` or `spark.ml` packages include:
+### Breaking changes
 
-Deprecations:
+There were several breaking changes in Spark 2.0, which are outlined below.
+
+**Linear algebra classes for DataFrame-based APIs**
+
+Spark's linear algebra dependencies were moved to a new project, `mllib-local` 
+(see [SPARK-13944](https://issues.apache.org/jira/browse/SPARK-13944)). 
+As part of this change, the linear algebra classes were copied to a new package, `spark.ml.linalg`. 
+The DataFrame-based APIs in `spark.ml` now depend on the `spark.ml.linalg` classes, 
+leading to a few breaking changes, predominantly in various model classes 
+(see [SPARK-14810](https://issues.apache.org/jira/browse/SPARK-14810) for a full list).
+
+**Note:** the RDD-based APIs in `spark.mllib` continue to depend on the previous package `spark.mllib.linalg`.
+
+_Converting vectors and matrices_
+
+While most pipeline components support backward compatibility for loading, 
+some existing `DataFrames` and pipelines in Spark versions prior to 2.0, that contain vector or matrix 
+columns, may need to be migrated to the new `spark.ml` vector and matrix types. 
+Utilities for converting `DataFrame` columns from `spark.mllib.linalg` to `spark.ml.linalg` types
+(and vice versa) can be found in `spark.mllib.util.MLUtils`.
+
+There are also utility methods available for converting single instances of 
+vectors and matrices. Use the `asML` method on a `mllib.linalg.Vector` / `mllib.linalg.Matrix`
+for converting to `ml.linalg` types, and 
+`mllib.linalg.Vectors.fromML` / `mllib.linalg.Matrices.fromML` 
+for converting to `mllib.linalg` types.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import org.apache.spark.mllib.util.MLUtils
+
+// convert DataFrame columns
+val convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
+val convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
+// convert a single vector or matrix
+val mlVec: org.apache.spark.ml.linalg.Vector = mllibVec.asML
+val mlMat: org.apache.spark.ml.linalg.Matrix = mllibMat.asML
+{% endhighlight %}
+
+Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) for further detail.
+</div>
+
+<div data-lang="java" markdown="1">
+
+{% highlight java %}
+import org.apache.spark.mllib.util.MLUtils;
+import org.apache.spark.sql.Dataset;
+
+// convert DataFrame columns
+Dataset<Row> convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF);
+Dataset<Row> convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF);
+// convert a single vector or matrix
+org.apache.spark.ml.linalg.Vector mlVec = mllibVec.asML();
+org.apache.spark.ml.linalg.Matrix mlMat = mllibMat.asML();
+{% endhighlight %}
+
+Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.html) for further detail.
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+from pyspark.mllib.util import MLUtils
+
+# convert DataFrame columns
+convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
+convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
+# convert a single vector or matrix
+mlVec = mllibVec.asML()
+mlMat = mllibMat.asML()
+{% endhighlight %}
+
+Refer to the [`MLUtils` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.util.MLUtils) for further detail.
+</div>
+</div>
+
+**Deprecated methods removed**
+
+Several deprecated methods were removed in the `spark.mllib` and `spark.ml` packages:
+
+* `setScoreCol` in `ml.evaluation.BinaryClassificationEvaluator`
+* `weights` in `LinearRegression` and `LogisticRegression` in `spark.ml`
+* `setMaxNumIterations` in `mllib.optimization.LBFGS` (marked as `DeveloperApi`)
+* `treeReduce` and `treeAggregate` in `mllib.rdd.RDDFunctions` (these functions are available on `RDD`s directly, and were marked as `DeveloperApi`)
+* `defaultStategy` in `mllib.tree.configuration.Strategy`
+* `build` in `mllib.tree.Node`
+* libsvm loaders for multiclass and load/save labeledData methods in `mllib.util.MLUtils`
+
+A full list of breaking changes can be found at [SPARK-14810](https://issues.apache.org/jira/browse/SPARK-14810).
+
+### Deprecations and changes of behavior
+
+**Deprecations**
+
+Deprecations in the `spark.mllib` and `spark.ml` packages include:
 
 * [SPARK-14984](https://issues.apache.org/jira/browse/SPARK-14984):
  In `spark.ml.regression.LinearRegressionSummary`, the `model` field has been deprecated.
@@ -125,7 +221,9 @@ Deprecations:
  In `spark.ml.util.MLReader` and `spark.ml.util.MLWriter`, the `context` method has been deprecated in favor of `session`.
 * In `spark.ml.feature.ChiSqSelectorModel`, the `setLabelCol` method has been deprecated since it was not used by `ChiSqSelectorModel`.
 
-Changes of behavior:
+**Changes of behavior**
+
+Changes of behavior in the `spark.mllib` and `spark.ml` packages include:
 
 * [SPARK-7780](https://issues.apache.org/jira/browse/SPARK-7780):
  `spark.mllib.classification.LogisticRegressionWithLBFGS` directly calls `spark.ml.classification.LogisticRegresson` for binary classification now.

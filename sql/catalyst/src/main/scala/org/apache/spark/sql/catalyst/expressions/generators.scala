@@ -94,13 +94,10 @@ case class UserDefinedGenerator(
 }
 
 /**
- * Given an input array produces a sequence of rows for each value in the array.
+ * A base class for Explode and PosExplode
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of a map into multiple rows and columns.")
-// scalastyle:on line.size.limit
-case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+abstract class ExplodeBase(child: Expression, position: Boolean)
+  extends UnaryExpression with Generator with CodegenFallback with Serializable {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -115,9 +112,26 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(et, containsNull) => new StructType().add("col", et, containsNull)
+    case ArrayType(et, containsNull) =>
+      if (position) {
+        new StructType()
+          .add("pos", IntegerType, false)
+          .add("col", et, containsNull)
+      } else {
+        new StructType()
+          .add("col", et, containsNull)
+      }
     case MapType(kt, vt, valueContainsNull) =>
-      new StructType().add("key", kt, false).add("value", vt, valueContainsNull)
+      if (position) {
+        new StructType()
+          .add("pos", IntegerType, false)
+          .add("key", kt, false)
+          .add("value", vt, valueContainsNull)
+      } else {
+        new StructType()
+          .add("key", kt, false)
+          .add("value", vt, valueContainsNull)
+      }
   }
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
@@ -129,7 +143,7 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
         } else {
           val rows = new Array[InternalRow](inputArray.numElements())
           inputArray.foreach(et, (i, e) => {
-            rows(i) = InternalRow(e)
+            rows(i) = if (position) InternalRow(i, e) else InternalRow(e)
           })
           rows
         }
@@ -141,7 +155,7 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
           val rows = new Array[InternalRow](inputMap.numElements())
           var i = 0
           inputMap.foreach(kt, vt, (k, v) => {
-            rows(i) = InternalRow(k, v)
+            rows(i) = if (position) InternalRow(i, k, v) else InternalRow(k, v)
             i += 1
           })
           rows
@@ -149,3 +163,35 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
     }
   }
 }
+
+/**
+ * Given an input array produces a sequence of rows for each value in the array.
+ *
+ * {{{
+ *   SELECT explode(array(10,20)) ->
+ *   10
+ *   20
+ * }}}
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of map a into multiple rows and columns.",
+  extended = "> SELECT _FUNC_(array(10,20));\n  10\n  20")
+// scalastyle:on line.size.limit
+case class Explode(child: Expression) extends ExplodeBase(child, position = false)
+
+/**
+ * Given an input array produces a sequence of rows for each position and value in the array.
+ *
+ * {{{
+ *   SELECT posexplode(array(10,20)) ->
+ *   0  10
+ *   1  20
+ * }}}
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows with positions, or the elements of a map into multiple rows and columns with positions.",
+  extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
+// scalastyle:on line.size.limit
+case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)

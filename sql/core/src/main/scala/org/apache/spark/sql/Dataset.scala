@@ -463,8 +463,8 @@ class Dataset[T] private[sql](
   /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
-   * must be executed as a [[StreamingQuery]] using the `startStream()` method in
-   * [[DataFrameWriter]]. Methods that return a single answer, e.g. `count()` or
+   * must be executed as a [[StreamingQuery]] using the `start()` method in
+   * [[DataStreamWriter]]. Methods that return a single answer, e.g. `count()` or
    * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
@@ -1997,11 +1997,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def filter(func: T => Boolean): Dataset[T] = {
-    val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
-    val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
-    val condition = Invoke(function, "apply", BooleanType, deserializer :: Nil)
-    val filter = Filter(condition, logicalPlan)
-    withTypedPlan(filter)
+    withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
   /**
@@ -2014,11 +2010,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def filter(func: FilterFunction[T]): Dataset[T] = {
-    val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
-    val function = Literal.create(func, ObjectType(classOf[FilterFunction[T]]))
-    val condition = Invoke(function, "call", BooleanType, deserializer :: Nil)
-    val filter = Filter(condition, logicalPlan)
-    withTypedPlan(filter)
+    withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
   /**
@@ -2383,14 +2375,14 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
+   * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
    * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
-   * Returns the content of the Dataset as a [[JavaRDD]] of [[Row]]s.
+   * Returns the content of the Dataset as a [[JavaRDD]] of [[T]]s.
    * @group basic
    * @since 1.6.0
    */
