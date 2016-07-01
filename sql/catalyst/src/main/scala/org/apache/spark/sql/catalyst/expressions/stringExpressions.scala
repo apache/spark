@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.net.{MalformedURLException, URL}
 import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.util.regex.Pattern
 import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -650,6 +652,128 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
   }
 
   override def prettyName: String = "rpad"
+}
+
+/**
+ * Extracts a part from a URL
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(url, partToExtract[, key]) - extracts a part from a URL",
+  extended = "Parts: HOST, PATH, QUERY, REF, PROTOCOL, AUTHORITY, FILE, USERINFO\n"
+  + "key specifies which query to extract\n"
+  + "Examples:\n"
+  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
+  + "'HOST') FROM src LIMIT 1;\n" + "  'spark.apache.org'\n"
+  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
+  + "'QUERY') FROM src LIMIT 1;\n"  + "  'query=1'\n"
+  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
+  + "'QUERY', 'query') FROM src LIMIT 1;\n" + "  '1'")
+case class ParseUrl(children: Expression*)
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = StringType
+
+  private lazy val stringExprs = children.toArray
+  @transient private var lastUrlStr: UTF8String = _
+  @transient private var lastUrl: URL = _
+  // last key in string, we will update the pattern if key value changed.
+  @transient private var lastKey: UTF8String = _
+  // last regex pattern, we cache it for performance concern
+  @transient private var pattern: Pattern = _
+  private lazy val HOST: UTF8String = UTF8String.fromString("HOST")
+  private lazy val PATH: UTF8String = UTF8String.fromString("PATH")
+  private lazy val QUERY: UTF8String = UTF8String.fromString("QUERY")
+  private lazy val REF: UTF8String = UTF8String.fromString("REF")
+  private lazy val PROTOCOL: UTF8String = UTF8String.fromString("PROTOCOL")
+  private lazy val FILE: UTF8String = UTF8String.fromString("FILE")
+  private lazy val AUTHORITY: UTF8String = UTF8String.fromString("AUTHORITY")
+  private lazy val USERINFO: UTF8String = UTF8String.fromString("USERINFO")
+  private lazy val REGEXPREFIX: String = "[&^]?"
+  private lazy val REGEXSUBFIX: String = "=([^&]*)"
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size > 3 || children.size < 2) {
+      TypeCheckResult.TypeCheckFailure("parse_url function requires two or three arguments")
+    } else {
+      super[ImplicitCastInputTypes].checkInputDataTypes()
+    }
+  }
+
+  def parseUrlWithoutKey(url: Any, partToExtract: Any): Any = {
+    if (url == null || partToExtract == null) {
+      null
+    } else {
+      if (lastUrlStr == null || !url.equals(lastUrlStr)) {
+        try {
+          lastUrlStr = url.asInstanceOf[UTF8String].clone()
+          lastUrl = new URL(url.toString)
+        } catch {
+          case ex: MalformedURLException => return null
+        }
+      }
+
+      if (partToExtract.equals(HOST)) {
+        UTF8String.fromString(lastUrl.getHost)
+      } else if (partToExtract.equals(PATH)) {
+        UTF8String.fromString(lastUrl.getPath)
+      } else if (partToExtract.equals(QUERY)) {
+        UTF8String.fromString(lastUrl.getQuery)
+      } else if (partToExtract.equals(REF)) {
+        UTF8String.fromString(lastUrl.getRef)
+      } else if (partToExtract.equals(PROTOCOL)) {
+        UTF8String.fromString(lastUrl.getProtocol)
+      } else if (partToExtract.equals(FILE)) {
+        UTF8String.fromString(lastUrl.getFile)
+      } else if (partToExtract.equals(AUTHORITY)) {
+        UTF8String.fromString(lastUrl.getAuthority)
+      } else if (partToExtract.equals(USERINFO)) {
+        UTF8String.fromString(lastUrl.getUserInfo)
+      } else {
+        null
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val url = stringExprs(0).eval(input)
+    val partToExtract = stringExprs(1).eval(input)
+    if (children.size == 2) {
+      parseUrlWithoutKey(url, partToExtract)
+    } else { // children.size == 3
+      if (partToExtract == null || !partToExtract.equals(QUERY)) {
+        null
+      } else {
+        val query = parseUrlWithoutKey(url, partToExtract)
+        if (query == null) {
+          null
+        } else {
+          val key = stringExprs(2).eval(input)
+          if (key == null) {
+            null
+          } else {
+            if (!key.equals(lastKey)) {
+              lastKey = key.asInstanceOf[UTF8String].clone()
+              val sb = new StringBuilder()
+              sb.append(REGEXPREFIX).append(key.toString).append(REGEXSUBFIX)
+              pattern = Pattern.compile(sb.toString())
+            }
+
+            val m = pattern.matcher(query.toString)
+            if (m.find()) {
+              UTF8String.fromString(m.group(1))
+            } else {
+              null
+            }
+          }
+        }
+      }
+    }
+  }
+
+  override def prettyName: String = "parse_url"
 }
 
 /**
