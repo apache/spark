@@ -477,7 +477,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DoubleType => castToDoubleCode(from)
 
     case array: ArrayType =>
-      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
+      castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_]
@@ -823,8 +823,10 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) => s"$evPrim = (double) $c;"
   }
 
-  private[this] def castArrayCode(
-      fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
+  private[this] def castArrayCode(fromArrayType: ArrayType, toArrayType: ArrayType,
+      ctx: CodegenContext): CastFunction = {
+    val fromType = fromArrayType.elementType
+    val toType = toArrayType.elementType
     val elementCast = nullSafeCastFunction(fromType, toType, ctx)
     val arrayClass = classOf[GenericArrayData].getName
     val fromElementNull = ctx.freshName("feNull")
@@ -836,11 +838,14 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val values = ctx.freshName("values")
 
     val isPrimitiveFrom = ctx.isPrimitiveType(fromType)
+    val ArrayType(_, containsNullFrom) = fromArrayType
     val isPrimitiveTo = ctx.isPrimitiveType(toType)
+    val ArrayType(_, containsNullTo) = toArrayType
+    print(s"containsNullFrom=$containsNullFrom, containsNullTo=$containsNullTo\n")
 
     (c, evPrim, evNull) =>
-      if (isPrimitiveFrom && isPrimitiveTo) {
-        // ensure no null in input and output arrays
+      if (isPrimitiveFrom && !containsNullFrom && isPrimitiveTo && !containsNullTo) {
+        // ensure no null in input and output primitive arrays
         val javaDTFrom = ctx.javaType(fromType)
         val javaDTTo = ctx.javaType(toType)
         if (javaDTFrom == javaDTTo) {
@@ -889,8 +894,9 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext): CastFunction = {
-    val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
-    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
+    val keysCast = castArrayCode(ArrayType(from.keyType, false), ArrayType(to.keyType, false), ctx)
+    val valuesCast =
+      castArrayCode(ArrayType(from.valueType, true), ArrayType(to.valueType, true), ctx)
 
     val mapClass = classOf[ArrayBasedMapData].getName
 
