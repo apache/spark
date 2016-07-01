@@ -732,11 +732,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         ParseUrl(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType)),
         expected)
     }
-    def checkParseUrlWithKey(expected: String, urlStr: String,
-                      partToExtract: String, key: String): Unit = {
+    def checkParseUrlWithKey(
+        expected: String, urlStr: String,
+        partToExtract: String, key: String): Unit = {
       checkEvaluation(
         ParseUrl(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType),
-                 Literal.create(key, StringType)), expected)
+          Literal.create(key, StringType)), expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
@@ -746,7 +747,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkParseUrl("http", "http://spark.apache.org/path?query=1", "PROTOCOL")
     checkParseUrl("/path?query=1", "http://spark.apache.org/path?query=1", "FILE")
     checkParseUrl("spark.apache.org:8080", "http://spark.apache.org:8080/path?query=1", "AUTHORITY")
-    checkParseUrl("jian", "http://jian@spark.apache.org/path?query=1", "USERINFO")
+    checkParseUrl("userinfo", "http://userinfo@spark.apache.org/path?query=1", "USERINFO")
     checkParseUrlWithKey("1", "http://spark.apache.org/path?query=1", "QUERY", "query")
 
     // Null checking
@@ -758,10 +759,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "HOST", "query")
     checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "quer")
     checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", null)
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "")
 
     // arguments checking
     assert(ParseUrl(Literal("1")).checkInputDataTypes().isFailure)
-    assert(ParseUrl(Literal("1"), Literal("2"),
-                    Literal("3"), Literal("4")).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Literal("1"), Literal("2"), Literal("3"), Literal("4"))
+      .checkInputDataTypes().isFailure)
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.net.{MalformedURLException, URL}
+import java.net.URL
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.regex.Pattern
 import java.util.{HashMap, Locale, Map => JMap}
@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
+
+import scala.util.control.NonFatal
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -659,40 +661,37 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(url, partToExtract[, key]) - extracts a part from a URL",
-  extended = "Parts: HOST, PATH, QUERY, REF, PROTOCOL, AUTHORITY, FILE, USERINFO\n"
-  + "key specifies which query to extract\n"
-  + "Examples:\n"
-  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
-  + "'HOST') FROM src LIMIT 1;\n" + "  'spark.apache.org'\n"
-  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
-  + "'QUERY') FROM src LIMIT 1;\n"  + "  'query=1'\n"
-  + "  > SELECT _FUNC_('http://spark.apache.org/path?query=1', "
-  + "'QUERY', 'query') FROM src LIMIT 1;\n" + "  '1'")
+  extended = """Parts: HOST, PATH, QUERY, REF, PROTOCOL, AUTHORITY, FILE, USERINFO.
+    Key specifies which query to extract.
+    Examples:
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')\n 'spark.apache.org'
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')\n 'query=1'
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')\n '1'""")
 case class ParseUrl(children: Expression*)
   extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
-  override def nullable: Boolean = true
-
+  override def nullable = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
   override def dataType: DataType = StringType
 
-  private lazy val stringExprs = children.toArray
   @transient private var lastUrlStr: UTF8String = _
   @transient private var lastUrl: URL = _
   // last key in string, we will update the pattern if key value changed.
   @transient private var lastKey: UTF8String = _
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
-  private lazy val HOST: UTF8String = UTF8String.fromString("HOST")
-  private lazy val PATH: UTF8String = UTF8String.fromString("PATH")
-  private lazy val QUERY: UTF8String = UTF8String.fromString("QUERY")
-  private lazy val REF: UTF8String = UTF8String.fromString("REF")
-  private lazy val PROTOCOL: UTF8String = UTF8String.fromString("PROTOCOL")
-  private lazy val FILE: UTF8String = UTF8String.fromString("FILE")
-  private lazy val AUTHORITY: UTF8String = UTF8String.fromString("AUTHORITY")
-  private lazy val USERINFO: UTF8String = UTF8String.fromString("USERINFO")
-  private lazy val REGEXPREFIX: String = "[&^]?"
-  private lazy val REGEXSUBFIX: String = "=([^&]*)"
+
+  private lazy val stringExprs = children.toArray
+  private val HOST = UTF8String.fromString("HOST")
+  private val PATH = UTF8String.fromString("PATH")
+  private val QUERY = UTF8String.fromString("QUERY")
+  private val REF = UTF8String.fromString("REF")
+  private val PROTOCOL = UTF8String.fromString("PROTOCOL")
+  private val FILE = UTF8String.fromString("FILE")
+  private val AUTHORITY = UTF8String.fromString("AUTHORITY")
+  private val USERINFO = UTF8String.fromString("USERINFO")
+  private val REGEXPREFIX = "(&|^)"
+  private val REGEXSUBFIX = "=([^&]*)"
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size > 3 || children.size < 2) {
@@ -711,7 +710,7 @@ case class ParseUrl(children: Expression*)
           lastUrlStr = url.asInstanceOf[UTF8String].clone()
           lastUrl = new URL(url.toString)
         } catch {
-          case ex: MalformedURLException => return null
+          case NonFatal(_) => return null
         }
       }
 
@@ -740,9 +739,9 @@ case class ParseUrl(children: Expression*)
   override def eval(input: InternalRow): Any = {
     val url = stringExprs(0).eval(input)
     val partToExtract = stringExprs(1).eval(input)
-    if (children.size == 2) {
+    if (stringExprs.size == 2) {
       parseUrlWithoutKey(url, partToExtract)
-    } else { // children.size == 3
+    } else { // QUERY with key
       if (partToExtract == null || !partToExtract.equals(QUERY)) {
         null
       } else {
@@ -763,7 +762,7 @@ case class ParseUrl(children: Expression*)
 
             val m = pattern.matcher(query.toString)
             if (m.find()) {
-              UTF8String.fromString(m.group(1))
+              UTF8String.fromString(m.group(2))
             } else {
               null
             }
