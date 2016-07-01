@@ -215,6 +215,8 @@ abstract class Star extends LeafExpression with NamedExpression {
 case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevaluable {
 
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
+    // When the table does not have any column, the input LogicalPlan does not have any column
+    if (input.output.isEmpty) return Seq.empty[NamedExpression]
 
     // First try to expand assuming it is table.*.
     val expandedAttributes: Seq[Attribute] = target match {
