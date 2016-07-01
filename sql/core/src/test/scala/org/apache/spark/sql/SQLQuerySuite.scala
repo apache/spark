@@ -2117,8 +2117,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Star Expansion - table with zero column") {
     withTempTable("temp_table_no_cols") {
-      val rddNoCols = sqlContext.sparkContext.parallelize(1 to 10).map(_ => Row.empty)
-      val dfNoCols = sqlContext.createDataFrame(rddNoCols, StructType(Seq.empty))
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
       dfNoCols.createTempView("temp_table_no_cols")
 
       // ResolvedStar
