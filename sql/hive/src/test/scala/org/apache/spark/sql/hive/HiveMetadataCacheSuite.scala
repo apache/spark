@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
