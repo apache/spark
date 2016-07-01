@@ -30,6 +30,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Choice of how to create and configure underlying Kafka Consumers on driver and executors.
+ * See [[ConsumerStrategies]] to obtain instances.
  * Kafka 0.10 consumers can require additional, sometimes complex, setup after object
  *  instantiation. This interface encapsulates that process, and allows it to be checkpointed.
  * @tparam K type of Kafka message key
