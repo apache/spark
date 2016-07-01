@@ -841,7 +841,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val ArrayType(_, containsNullFrom) = fromArrayType
     val isPrimitiveTo = ctx.isPrimitiveType(toType)
     val ArrayType(_, containsNullTo) = toArrayType
-    print(s"containsNullFrom=$containsNullFrom, containsNullTo=$containsNullTo\n")
 
     (c, evPrim, evNull) =>
       if (isPrimitiveFrom && !containsNullFrom && isPrimitiveTo && !containsNullTo) {
