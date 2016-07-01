@@ -370,8 +370,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case null => null
       }
       if (changed) makeCopy(newArgs) else this
-    }
-    else {
+    } else {
       this
     }
   }
