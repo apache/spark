@@ -2761,22 +2761,6 @@ object functions {
   def size(e: Column): Column = withExpr { Size(e.expr) }
 
   /**
-   * Returns the key array of the map.
-   *
-   * @group collection_funcs
-   * @since 2.1.0
-   */
-  def map_keys(e: Column): Column = withExpr { MapKeys(e.expr) }
-
-  /**
-   * Returns the key array of the map.
-   *
-   * @group collection_funcs
-   * @since 2.1.0
-   */
-  def map_values(e: Column): Column = withExpr { MapValues(e.expr) }
-
-  /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
    *
