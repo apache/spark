@@ -39,7 +39,7 @@ import org.apache.spark.annotation.Experimental
 @Experimental
 abstract class ConsumerStrategy[K, V] {
   /**
-   * Kafka <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * Kafka <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on executors. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
@@ -59,7 +59,7 @@ abstract class ConsumerStrategy[K, V] {
  * Subscribe to a collection of topics.
  * @param topics collection of topics to subscribe
  * @param kafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+ * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
  * configuration parameters</a> to be used on driver. The same params will be used on executors,
  * with minor automatic modifications applied.
  *  Requires "bootstrap.servers" to be set
@@ -93,7 +93,7 @@ private case class Subscribe[K, V](
  * Assign a fixed collection of TopicPartitions
  * @param topicPartitions collection of TopicPartitions to assign
  * @param kafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+ * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
  * configuration parameters</a> to be used on driver. The same params will be used on executors,
  * with minor automatic modifications applied.
  *  Requires "bootstrap.servers" to be set
@@ -134,7 +134,7 @@ object ConsumerStrategies {
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -159,7 +159,7 @@ object ConsumerStrategies {
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -180,7 +180,7 @@ object ConsumerStrategies {
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -202,7 +202,7 @@ object ConsumerStrategies {
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -220,7 +220,7 @@ object ConsumerStrategies {
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -245,7 +245,7 @@ object ConsumerStrategies {
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -266,7 +266,7 @@ object ConsumerStrategies {
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set
@@ -288,7 +288,7 @@ object ConsumerStrategies {
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a> to be used on driver. The same params will be used on executors,
    * with minor automatic modifications applied.
    *  Requires "bootstrap.servers" to be set

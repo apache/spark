@@ -34,7 +34,7 @@ import org.apache.spark.streaming.dstream._
 
 /**
  * :: Experimental ::
- * Companion object for constructing Kafka streams and RDDs
+ * object for constructing Kafka streams and RDDs
  */
 @Experimental
 object KafkaUtils extends Logging {
@@ -44,7 +44,7 @@ object KafkaUtils extends Logging {
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
@@ -83,7 +83,7 @@ object KafkaUtils extends Logging {
    * @param keyClass Class of the keys in the Kafka records
    * @param valueClass Class of the values in the Kafka records
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
