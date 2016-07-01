@@ -66,9 +66,7 @@ fi
 option=$1
 shift
 command=$1
-shift
-instance=$1
-shift
+instance=$2
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
@@ -93,8 +91,6 @@ log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
 pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.pid"
 
 run_command() {
-  mode="$1"
-  shift
 
   mkdir -p "$SPARK_PID_DIR"
 
@@ -107,7 +103,7 @@ run_command() {
   fi
 
 
-  nohup "${SPARK_HOME}"/sbin/spark-daemon-run.sh $mode $command "$@" &
+  nohup "${SPARK_HOME}"/sbin/spark-daemon-run.sh "$@" >/dev/null </dev/null 2>/dev/null &
   newpid="$!"
 
   echo "$newpid" > "$pid"
