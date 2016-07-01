@@ -55,8 +55,9 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame. Users can print, make predictions on the
-#' produced model and save the model to the input path.
+#' Fits generalized linear model against a Spark DataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -270,7 +271,8 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' K-Means Clustering Model
 #'
 #' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
-#' Users can print, make predictions on the produced model and save the model to the input path.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
