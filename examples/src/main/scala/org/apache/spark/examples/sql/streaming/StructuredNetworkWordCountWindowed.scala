@@ -18,49 +18,42 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.streaming
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, TimestampType}
 
 /**
- * Computes the average signal from IoT device readings over a sliding window of
- * configurable duration. The readings are received over the network and must be
- * UTF8-encoded and separated by '\n'.
+ * Counts words in UTF8 encoded, '\n' delimited text received from the network over a
+ * sliding window of configurable duration. Each line from the network is tagged
+ * with a timestamp that is used to determine the windows into which it falls.
  *
- * A single reading should take the format
- * <device name (string)>, <reading (double)>
- *
- * Usage: EventTimeWindow <hostname> <port> <window duration>
- *   <slide duration>
- * <hostname> and <port> describe the TCP server that Structured Streaming would connect to
- * receive data.
+ * Usage: StructuredNetworkWordCountWindowed <hostname> <port> <window duration> <slide duration>
+ * <hostname> and <port> describe the TCP server that Structured Streaming
+ * would connect to receive data.
  * <window duration> gives the size of window, specified as integer number of seconds, minutes,
  * or days, e.g. "1 minute", "2 seconds"
  * <slide duration> gives the amount of time successive windows are offset from one another,
- * given in the same units as above
+ * given in the same units as above. <slide duration> should be less than or equal to
+ * <window duration>. If the two are equal, successive windows have no overlap.
  * (<window duration> and <slide duration> must be enclosed by quotes to ensure that
  * they are processed as individual arguments)
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ bin/run-example sql.streaming.EventTimeWindow
+ *    `$ bin/run-example sql.streaming.StructuredNetworkWordCountWindowed
  *    localhost 9999 <window duration> <slide duration>`
  *
- * Type device readings in the format given above into Netcat.
- *
- * An example sequence of device readings:
- * dev0,7.0
- * dev1,8.0
- * dev0,5.0
- * dev1,3.0
+ * One recommended <window duration>, <slide duration> pair is "1 minute",
+ * "30 seconds"
  */
-object EventTimeWindow {
+object StructuredNetworkWordCountWindowed {
 
   def main(args: Array[String]) {
     if (args.length < 4) {
-      System.err.println("Usage: EventTimeWindow <hostname> <port> <window duration>" +
-        " <slide duration>")
+      System.err.println("Usage: StructuredNetworkWordCountWindowed <hostname> <port>" +
+        " <window duration> <slide duration>")
       System.exit(1)
     }
 
@@ -71,37 +64,32 @@ object EventTimeWindow {
 
     val spark = SparkSession
       .builder
-      .appName("EventTimeWindow")
+      .appName("StructuredNetworkWordCountWindowed")
       .getOrCreate()
 
-    // Create DataFrame representing the stream of input readings from connection to host:port
+    import spark.implicits._
+
+    // Create DataFrame representing the stream of input lines from connection to host:port
     val lines = spark.readStream
       .format("socket")
       .option("host", host)
       .option("port", port)
       .option("includeTimestamp", true)
-      .load()
+      .load().as[(String, Timestamp)]
 
-    // Split the readings into their individual components
-    val splitLines = lines.select(
-      split(lines.col("value"), ",").alias("pieces"),
-      lines.col("timestamp")
+    // Split the lines into words, retaining timestamps
+    val words = lines.flatMap(line =>
+      line._1.split(" ")
+        .map(word => (word, line._2))
     )
 
-    // Place the different components of the readings into different columns and
-    // cast them appropriately
-    val formatted = splitLines.select(
-      trim(splitLines.col("pieces").getItem(0)).as("device"),
-      trim(splitLines.col("pieces").getItem(1)).cast(DoubleType).as("signal"),
-      splitLines.col("timestamp")
-    )
+    // Group the data by window and word and compute the count of each group
+    val windowedAvgs = words.groupBy(
+      window(words.col("_2"), windowSize, slideSize),
+      words.col("_1").as("word")
+    ).count()
 
-    // Group the readings into windows and compute the signal average within each window
-    val windowedAvgs = formatted.groupBy(
-      window(formatted.col("timestamp"), windowSize, slideSize)
-    ).avg("signal")
-
-    // Start running the query that prints the windowed averages to the console
+    // Start running the query that prints the windowed word counts to the console
     val query = windowedAvgs.writeStream
       .outputMode("complete")
       .format("console")

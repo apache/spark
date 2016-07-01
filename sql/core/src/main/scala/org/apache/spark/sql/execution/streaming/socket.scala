@@ -34,6 +34,7 @@ object TextSocketSource {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
+  val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 }
 
 /**
@@ -72,8 +73,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
             }
             TextSocketSource.this.synchronized {
               lines += ((line,
-                new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-                  .format(Calendar.getInstance().getTime())))
+                TextSocketSource.DATE_FORMAT.format(Calendar.getInstance().getTime())))
             }
           }
         } catch {
