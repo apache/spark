@@ -285,6 +285,7 @@ object FunctionRegistry {
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[FormatString]("printf"),
+    expression[ParseUrl]("parse_url"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
