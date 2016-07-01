@@ -1056,6 +1056,8 @@ private[spark] class Client(
             report.getFinalApplicationStatus match {
               case FinalApplicationStatus.FAILED =>
                 reportLauncherState(SparkAppHandle.State.FAILED)
+              case FinalApplicationStatus.KILLED =>
+                reportLauncherState(SparkAppHandle.State.KILLED)
               case _ =>
                 reportLauncherState(SparkAppHandle.State.FINISHED)
             }
