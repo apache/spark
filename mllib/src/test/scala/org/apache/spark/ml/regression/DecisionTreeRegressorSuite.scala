@@ -113,8 +113,10 @@ class DecisionTreeRegressorSuite
     dt.setMaxDepth(1)
       .setMaxBins(6)
       .setSeed(0)
-    val calculatedVariances = dt.fit(toyDF).transform(toyDF).select("variance").collect().map {
-      case Row(variance: Double) => variance }
+    val transformToyDF = dt.fit(toyDF).transform(toyDF)
+    val calculatedVariances = transformToyDF.select(dt.getVarianceCol).collect().map {
+      case Row(variance: Double) => variance
+    }
 
     // Since max depth is set to 1, the best split point is that which splits the data
     // into (0.0, 1.0, 2.0) and (10.0, 12.0, 14.0). The predicted variance for each
