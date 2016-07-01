@@ -15,62 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Test suite to handle metadata cache related.
  */
-class MetadataCacheSuite extends QueryTest with SharedSQLContext {
-
-  /** Removes one data file in the given directory. */
-  private def deleteOneFileInDirectory(dir: File): Unit = {
-    assert(dir.isDirectory)
-    val oneFile = dir.listFiles().find { file =>
-      !file.getName.startsWith("_") && !file.getName.startsWith(".")
-    }
-    assert(oneFile.isDefined)
-    oneFile.foreach(_.delete())
-  }
-
-  test("SPARK-16336 Suggest doing table refresh when encountering FileNotFoundException") {
-    withTempPath { (location: File) =>
-      // Create a Parquet directory
-      spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-        .write.parquet(location.getAbsolutePath)
-
-      // Read the directory in
-      val df = spark.read.parquet(location.getAbsolutePath)
-      assert(df.count() == 100)
-
-      // Delete a file
-      deleteOneFileInDirectory(location)
-
-      // Read it again and now we should see a FileNotFoundException
-      val e = intercept[SparkException] {
-        df.count()
-      }
-      assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("REFRESH"))
-    }
-  }
+class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-16337 temporary view refresh") {
-    withTempTable("view_refresh") { withTempPath { (location: File) =>
+    withTempTable("view_refresh") { withTable("view_table") {
       // Create a Parquet directory
-      spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
-        .write.parquet(location.getAbsolutePath)
+      spark.range(start = 0, end = 100, step = 1, numPartitions = 3).write.saveAsTable("view_table")
 
-      // Read the directory in
-      spark.read.parquet(location.getAbsolutePath).createOrReplaceTempView("view_refresh")
+      // Read the table in
+      spark.table("view_table").filter("id > -1").createOrReplaceTempView("view_refresh")
       assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
 
-      // Delete a file
-      deleteOneFileInDirectory(location)
+      // Delete a file using the Hadoop file system interface since the path returned by
+      // inputFiles is not recognizable by Java IO.
+      val p = new Path(spark.table("view_table").inputFiles.head)
+      assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, false))
 
       // Read it again and now we should see a FileNotFoundException
       val e = intercept[SparkException] {
