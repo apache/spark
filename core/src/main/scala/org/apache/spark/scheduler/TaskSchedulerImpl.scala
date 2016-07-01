@@ -269,9 +269,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    // This is an optimization -- the taskSet might contain a very long list of pending tasks.
-    // Rather than wasting time checking the offer against each task, and then realizing the
-    // executor is blacklisted, just filter out the bad executor immediately.
     val nodeBlacklist = blacklistTracker.nodeBlacklistForStage(taskSet.stageId)
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
