@@ -28,6 +28,7 @@ import shutil
 
 from pyspark.sql import SparkSession
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:
@@ -55,7 +56,8 @@ if __name__ == "__main__":
     labelSummary.show()
 
     # Convert features column to an RDD of vectors.
-    features = df.select("features").rdd.map(lambda r: r.features)
+    features = MLUtils.convertVectorColumnsFromML(df, "features") \
+        .select("features").rdd.map(lambda r: r.features)
     summary = Statistics.colStats(features)
     print("Selected features column with average values:\n" +
           str(summary.mean()))

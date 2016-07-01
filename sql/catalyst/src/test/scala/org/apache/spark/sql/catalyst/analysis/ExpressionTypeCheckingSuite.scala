@@ -166,6 +166,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
+    assertError(PosExplode('intField),
+      "input to function explode should be array or map type")
   }
 
   test("check types for CreateNamedStruct") {
