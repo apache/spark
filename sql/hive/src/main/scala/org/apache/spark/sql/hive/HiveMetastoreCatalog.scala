@@ -266,7 +266,17 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val partitionPaths = partitions.map(_.path.toString)
-      val paths = partitionPaths.padTo(1, metastoreRelation.hiveQlTable.getDataLocation.toString)
+
+      // By convention (for example, see MetaStorePartitionedTableFileCatalog), the definition of a
+      // partitioned table's paths depends on whether that table has any actual partitions.
+      // Partitioned tables without partitions use the location of the table's base path.
+      // Partitioned tables with partitions use the locations of those partitions' data locations,
+      // _omitting_ the table's base path.
+      val paths = if (partitionPaths.isEmpty) {
+        Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+      } else {
+        partitionPaths
+      }
 
       val cached = getCached(
         tableIdentifier,
