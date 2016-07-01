@@ -215,43 +215,35 @@ abstract class Star extends LeafExpression with NamedExpression {
 case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevaluable {
 
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = {
-    // When the table does not have any column, the input LogicalPlan does not have any column
-    if (input.output.isEmpty) return Seq.empty[NamedExpression]
-
-    // First try to expand assuming it is table.*.
-    val expandedAttributes: Seq[Attribute] = target match {
+    if (target.isEmpty) {
       // If there is no table specified, use all input attributes.
-      case None => input.output
+      input.output
+    } else if (target.get.size == 1) {
       // If there is a table, pick out attributes that are part of this table.
-      case Some(t) => if (t.size == 1) {
-        input.output.filter(_.qualifier.exists(resolver(_, t.head)))
-      } else {
-        List()
-      }
-    }
-    if (expandedAttributes.nonEmpty) return expandedAttributes
-
-    // Try to resolve it as a struct expansion. If there is a conflict and both are possible,
-    // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
-    require(target.isDefined)
-    val attribute = input.resolve(target.get, resolver)
-    if (attribute.isDefined) {
-      // This target resolved to an attribute in child. It must be a struct. Expand it.
-      attribute.get.dataType match {
-        case s: StructType => s.zipWithIndex.map {
-          case (f, i) =>
-            val extract = GetStructField(attribute.get, i)
-            Alias(extract, f.name)()
-        }
-
-        case _ =>
-          throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
-            target.get + "`")
-      }
+      input.output.filter(_.qualifier.exists(resolver(_, target.get.head)))
     } else {
-      val from = input.inputSet.map(_.name).mkString(", ")
-      val targetString = target.get.mkString(".")
-      throw new AnalysisException(s"cannot resolve '$targetString.*' give input columns '$from'")
+      // Try to resolve it as a struct expansion. If there is a conflict and both are possible,
+      // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
+      require(target.isDefined)
+      val attribute = input.resolve(target.get, resolver)
+      if (attribute.isDefined) {
+        // This target resolved to an attribute in child. It must be a struct. Expand it.
+        attribute.get.dataType match {
+          case s: StructType => s.zipWithIndex.map {
+            case (f, i) =>
+              val extract = GetStructField(attribute.get, i)
+              Alias(extract, f.name)()
+          }
+
+          case _ =>
+            throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
+              target.get + "`")
+        }
+      } else {
+        val from = input.inputSet.map(_.name).mkString(", ")
+        val targetString = target.get.mkString(".")
+        throw new AnalysisException(s"cannot resolve '$targetString.*' give input columns '$from'")
+      }
     }
   }
 
