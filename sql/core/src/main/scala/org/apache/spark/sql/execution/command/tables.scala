@@ -528,8 +528,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      val comment =
-        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+      val comment = column.getComment().getOrElse("")
       append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }

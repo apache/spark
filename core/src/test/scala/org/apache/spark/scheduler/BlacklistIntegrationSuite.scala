@@ -62,7 +62,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "With blacklist on, job will still fail if there are too many bad executors on bad host",
     extraConfs = Seq(
       "spark.scheduler.blacklist.enabled" -> "true",
-      // just set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
@@ -109,10 +110,11 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // Make sure that is we've failed on all executors, but haven't hit task.maxFailures yet, the job
   // doesn't hang
   testScheduler(
-    "Progress with fewer executors than maxTaskFailures",
+    "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
       "spark.scheduler.blacklist.enabled" -> "true",
-      // just set this to something much longer than the test duration
+      // set this to something much longer than the test duration so that executors don't get
+      // removed from the blacklist during the test
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
@@ -126,9 +128,10 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       Await.ready(jobFuture, duration)
-      val pattern = ("Aborting TaskSet 0.0 because Task .* " +
-        "cannot be scheduled on any executor due to blacklists").r
-      assert(pattern.findFirstIn(failure.getMessage).isDefined)
+      val pattern = ("Aborting TaskSet 0.0 because task .* " +
+        "already failed on executors \\(.*\\), and no other executors are available").r
+      assert(pattern.findFirstIn(failure.getMessage).isDefined,
+        s"Couldn't find $pattern in ${failure.getMessage()}")
     }
     assertDataStructuresEmpty(noFailure = false)
   }

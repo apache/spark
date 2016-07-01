@@ -269,9 +269,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    // This is an optimization -- the taskSet might contain a very long list of pending tasks.
-    // Rather than wasting time checking the offer against each task, and then realizing the
-    // executor is blacklisted, just filter out the bad executor immediately.
     val nodeBlacklist = blacklistTracker.nodeBlacklistForStage(taskSet.stageId)
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
@@ -299,57 +296,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }
     if (!launchedTask) {
-      val unschedulableTask = isTaskSetCompletelyBlacklisted(taskSet)
-      unschedulableTask.foreach { task =>
-        val partition = taskSet.tasks(task).partitionId
-        taskSet.abort(s"Aborting ${taskSet.taskSet} because Task $task (partition $partition) " +
-          s"cannot be scheduled on any executor due to blacklists.")
-      }
+      taskSet.abortIfCompletelyBlacklisted(executorsByHost, blacklistTracker)
     }
     return launchedTask
-  }
-
-  /**
-   * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
-   *
-   * It is possible that this taskset has become impossible to schedule *anywhere* due to the
-   * blacklist.  The most scenario would be if there are fewer executors than the
-   * spark.task.maxFailures.  In that case, we just fail the task set, otherwise the job
-   * will just hang.
-   *
-   * The check here is a balance between always catching this eventually, but not wasting
-   * too much time inside the scheduling loop.  Just check if the last task is schedulable
-   * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
-   * really be fast unless you've got a bunch of things blacklisted.
-   */
-  private[scheduler] def isTaskSetCompletelyBlacklisted(taskSet: TaskSetManager): Option[Int] = {
-    if (executorsByHost.nonEmpty) {
-      taskSet.pollPendingTask.flatMap { task =>
-        val stage = taskSet.stageId
-        val nodeBlacklist = blacklistTracker.nodeBlacklist()
-        executorsByHost.foreach { case (host, execs) =>
-          if (!nodeBlacklist.contains(host) &&
-            !blacklistTracker.nodeBlacklistForStage(stage).contains(host)) {
-            execs.foreach { exec =>
-              if (
-                !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
-                  !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = task)
-              ) {
-                // we've found some executor this task can run on.  Its possible that some *other*
-                // task isn't schedulable anywhere, but we will discover that in some later call,
-                // when that unschedulable task is the last task remaining.
-                return None
-              }
-            }
-          }
-        }
-        Some(task)
-      }
-    } else {
-      // If no executors have registered yet, don't abort the stage, just wait.  We probably
-      // got here because a task set was added before the executors registered.
-      None
-    }
   }
 
   private[scheduler] def areAllExecutorsBlacklisted(): Boolean = {

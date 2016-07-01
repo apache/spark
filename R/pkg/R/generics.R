@@ -1050,6 +1050,10 @@ setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
 #' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
 
+#' @rdname posexplode
+#' @export
+setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
+
 #' @rdname quarter
 #' @export
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
@@ -1247,6 +1251,7 @@ setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.gl
 #' @export
 setGeneric("glm")
 
+#' predict
 #' @rdname predict
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
@@ -1271,6 +1276,7 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
+#' write.ml
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })

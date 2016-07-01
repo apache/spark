@@ -60,8 +60,7 @@ private[spark] class BlacklistTracker(
     conf.getInt("spark.blacklist.maxFailedExecutorsPerNode", 2)
   private val MAX_FAILED_EXEC_PER_NODE_STAGE =
     conf.getInt("spark.blacklist.maxFailedExecutorsPerNodeStage", 2)
-  private[scheduler] val EXECUTOR_RECOVERY_MILLIS = conf.getTimeAsMs(
-    "spark.scheduler.blacklist.recoverPeriod", (60 * 60 * 1000).toString)
+  private[scheduler] val EXECUTOR_RECOVERY_MILLIS = BlacklistTracker.getBlacklistExpiryTime(conf)
 
   // a count of failed tasks for each executor.  Only counts failures after tasksets complete
   // successfully
@@ -319,6 +318,37 @@ private[scheduler] trait BlacklistCache extends Logging {
   protected def getNodeBlacklistForStageFromCache(stageId: Int): Option[Set[String]] =
     blacklistNodeForStageCache.get(stageId)
 
+}
+
+private[spark] object BlacklistTracker extends Logging {
+  val LEGACY_TIMEOUT_CONF = "spark.scheduler.executorTaskBlacklistTime"
+  val EXPIRY_TIMEOUT_CONF = "spark.scheduler.blacklist.recoverPeriod"
+  val ENABLED_CONF = "spark.scheduler.blacklist.enabled"
+
+  def isBlacklistEnabled(conf: SparkConf, localMode: Boolean): Boolean = {
+    val isEnabled = conf.get(ENABLED_CONF, null)
+    if (isEnabled == null) {
+      // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
+      // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
+      val legacyTimeout = conf.getLong(LEGACY_TIMEOUT_CONF, 0L)
+      if (legacyTimeout > 0) {
+        // mostly this is necessary just for tests, since real users that want the blacklist will
+        // get it anyway by default
+        logWarning(s"Turning on blacklisting due to legacy configuration: $LEGACY_TIMEOUT_CONF > 0")
+        true
+      } else {
+        !localMode
+      }
+    } else {
+      // always take whatever value is explicitly set by the user
+      isEnabled.toBoolean
+    }
+  }
+
+  def getBlacklistExpiryTime(conf: SparkConf): Long = {
+    conf.getTimeAsMs(BlacklistTracker.EXPIRY_TIMEOUT_CONF,
+      conf.get(BlacklistTracker.LEGACY_TIMEOUT_CONF, (60 * 60 * 1000).toString))
+  }
 }
 
 /**

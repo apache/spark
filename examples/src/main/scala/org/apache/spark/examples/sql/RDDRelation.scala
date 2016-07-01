@@ -18,7 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql
 
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.SaveMode
+// $example on:init_session$
+import org.apache.spark.sql.SparkSession
+// $example off:init_session$
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
 // names and types.
@@ -26,13 +29,16 @@ case class Record(key: Int, value: String)
 
 object RDDRelation {
   def main(args: Array[String]) {
+    // $example on:init_session$
     val spark = SparkSession
       .builder
-      .appName("RDDRelation")
+      .appName("Spark Examples")
+      .config("spark.some.config.option", "some-value")
       .getOrCreate()
 
     // Importing the SparkSession gives access to all the SQL functions and implicit conversions.
     import spark.implicits._
+    // $example off:init_session$
 
     val df = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
     // Any RDD containing case classes can be used to create a temporary view.  The schema of the

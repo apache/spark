@@ -1430,13 +1430,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-
-    // Add the comment to the metadata.
-    val builder = new MetadataBuilder
-    if (STRING != null) {
-      builder.putString("comment", string(STRING))
-    }
-
-    StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }
