@@ -121,7 +121,7 @@ if [ "$SPARK_MASTER" != "" ]; then
 fi
 
 spark_rotate_log "$log"
-echo "starting $command, logging to $log"
+echo "running $command, logging to $log"
 
 case "$mode" in
   (start)
