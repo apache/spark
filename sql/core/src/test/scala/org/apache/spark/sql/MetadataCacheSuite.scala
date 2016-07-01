@@ -77,7 +77,7 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
         sql("select count(*) from view_refresh").first()
       }
       assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("refresh()"))
+      assert(e.getMessage.contains("REFRESH"))
 
       // Refresh and we should be able to read it again.
       spark.catalog.refreshTable("view_refresh")

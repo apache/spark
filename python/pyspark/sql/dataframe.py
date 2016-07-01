@@ -387,15 +387,6 @@ class DataFrame(object):
         """
         self.rdd.foreachPartition(f)
 
-    @since(2.0)
-    def refresh(self):
-        """Refreshes the metadata and data cached in Spark for data associated with this DataFrame.
-
-        An example use case is to invalidate the file system metadata cached by Spark, when the
-        underlying files have been updated by an external process.
-        """
-        self._jdf.refresh()
-
     @since(1.3)
     def cache(self):
         """ Persists with the default storage level (C{MEMORY_ONLY}).
