@@ -85,7 +85,6 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
           <th>Shuffle Spill (Memory)</th>
           <th>Shuffle Spill (Disk)</th>
         }}
-        <th>Logs</th>
       </thead>
       <tbody>
         {createExecutorTable()}
@@ -115,7 +114,17 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
       case Some(stageData: StageUIData) =>
         stageData.executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
           <tr>
-            <td>{k}</td>
+            <td>
+              <div style="float: left">{k}</div>
+              <div style="float: right">
+              {
+                val logs = parent.executorsListener.executorToLogUrls.getOrElse(k, Map.empty)
+                logs.map {
+                  case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+                }
+              }
+              </div>
+            </td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
             <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
             <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
@@ -150,12 +159,6 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
                 {Utils.bytesToString(v.diskBytesSpilled)}
               </td>
             }}
-            <td>
-              {val logs = parent.executorsListener.executorToLogUrls.getOrElse(k, Map.empty)
-               logs.map {
-                case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
-              }}
-            </td>
           </tr>
         }
       case None =>

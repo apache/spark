@@ -1201,16 +1201,6 @@ private[ui] class TaskDataSource(
         override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
           Ordering.String.compare(x.error, y.error)
       }
-      case "Executor Logs" => new Ordering[TaskTableRowData] {
-        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
-          if (x.logs.isEmpty == y.logs.isEmpty) {
-            return 0
-          } else if (x.logs.isEmpty) {
-            return -1;
-          } else {
-            return 1;
-          }
-      }
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {
@@ -1317,8 +1307,7 @@ private[ui] class TaskPagedTable(
         } else {
           Nil
         }} ++
-        Seq(("Errors", "")) ++
-        Seq(("Executor Logs", ""))
+        Seq(("Errors", ""))
 
     if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
@@ -1362,7 +1351,16 @@ private[ui] class TaskPagedTable(
       <td>{if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString}</td>
       <td>{task.status}</td>
       <td>{task.taskLocality}</td>
-      <td>{task.executorIdAndHost}</td>
+      <td>
+        <div style="float: left">{task.executorIdAndHost}</div>
+        <div style="float: right">
+        {
+          task.logs.map {
+            case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+          }
+        }
+        </div>
+      </td>
       <td>{UIUtils.formatDate(new Date(task.launchTime))}</td>
       <td>{task.formatDuration}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
@@ -1412,11 +1410,6 @@ private[ui] class TaskPagedTable(
         <td>{task.bytesSpilled.get.diskBytesSpilledReadable}</td>
       }}
       {errorMessageCell(task.error)}
-      <td>
-      {task.logs.map {
-        case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
-      }}
-      </td>
     </tr>
   }
 
