@@ -179,18 +179,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") { testError() }
   }
 
-  test("FileStreamSource schema: path doesn't exist, no schema") {
-    val e = intercept[IllegalArgumentException] {
-      createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
+  test("FileStreamSource schema: path doesn't exist (without schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = None)
+      }
     }
-    assert(e.getMessage.toLowerCase.contains("schema")) // reason is schema absence, not the path
   }
 
-  test("FileStreamSource schema: path doesn't exist, with schema") {
-    val userSchema = new StructType().add(new StructField("value", IntegerType))
-    val schema = createFileStreamSourceAndGetSchema(
-      format = None, path = Some("/a/b/c"), schema = Some(userSchema))
-    assert(schema === userSchema)
+  test("FileStreamSource schema: path doesn't exist (with schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = Some(userSchema))
+      }
+    }
   }
 
 
@@ -224,20 +230,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   // =============== Parquet file stream schema tests ================
-
-  ignore("FileStreamSource schema: parquet, no existing files, no schema") {
-    withTempDir { src =>
-      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
-        val e = intercept[AnalysisException] {
-          createFileStreamSourceAndGetSchema(
-            format = Some("parquet"),
-            path = Some(new File(src, "1").getCanonicalPath),
-            schema = None)
-        }
-        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
-      }
-    }
-  }
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
