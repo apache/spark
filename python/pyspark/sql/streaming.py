@@ -382,7 +382,7 @@ class DataStreamReader(OptionUtils):
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
 
-        >>> json_sdf = spark.readStream.json(tempfile.mkdtemp()), schema = sdf_schema)
+        >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
         True
         >>> json_sdf.schema == sdf_schema
@@ -510,7 +510,7 @@ class DataStreamReader(OptionUtils):
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
-        >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp()), schema = sdf_schema)
+        >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
         True
         >>> csv_sdf.schema == sdf_schema
