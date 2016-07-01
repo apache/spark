@@ -90,7 +90,7 @@ if __name__ == "__main__":
     windowedCounts = words.groupBy(
         window(words.timestamp, windowArg, slideArg),
         words.word
-    ).count()
+    ).count().orderBy('window')
 
     # Start running the query that prints the windowed word counts to the console
     query = windowedCounts\

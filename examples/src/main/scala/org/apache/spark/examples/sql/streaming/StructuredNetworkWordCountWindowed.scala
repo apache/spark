@@ -88,7 +88,7 @@ object StructuredNetworkWordCountWindowed {
     // Group the data by window and word and compute the count of each group
     val windowedCounts = words.groupBy(
       window($"timestamp", windowArg, slideArg), $"word"
-    ).count()
+    ).count().orderBy("window")
 
     // Start running the query that prints the windowed word counts to the console
     val query = windowedCounts.writeStream

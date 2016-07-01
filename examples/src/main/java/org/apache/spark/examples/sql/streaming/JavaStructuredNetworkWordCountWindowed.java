@@ -102,7 +102,7 @@ public final class JavaStructuredNetworkWordCountWindowed {
     Dataset<Row> windowedCounts = words.groupBy(
       functions.window(words.col("timestamp"), windowArg, slideArg),
       words.col("word")
-    ).count();
+    ).count().orderBy("window");
 
     // Start running the query that prints the windowed word counts to the console
     StreamingQuery query = windowedCounts.writeStream()
