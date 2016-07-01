@@ -2424,17 +2424,15 @@ object SparkContext extends Logging {
 
   private def createBlacklistTracker(conf: SparkConf, master: String): BlacklistTracker = {
     import SparkMasterRegex._
-    val default = master match {
-      case "local" => false
-      case LOCAL_N_REGEX(_) => false
-      case LOCAL_N_FAILURES_REGEX(_, _) => false
+    val isLocalMode = master match {
+      case "local" => true
+      case LOCAL_N_REGEX(_) => true
+      case LOCAL_N_FAILURES_REGEX(_, _) => true
       case other =>
         // we *do* want the blacklist enabled in local-cluster mode, for testing
-        true
+       false
     }
-    val c = conf.getBoolean("spark.scheduler.blacklist.enabled", default)
-    logInfo(s"blacklistEnabled? = $c")
-    if (conf.getBoolean("spark.scheduler.blacklist.enabled", default)) {
+    if (BlacklistTracker.isBlacklistEnabled(conf, isLocalMode)) {
       new BlacklistTracker(conf)
     } else {
       new NoopBlacklistTracker(conf)

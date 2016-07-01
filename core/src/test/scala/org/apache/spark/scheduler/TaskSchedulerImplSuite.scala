@@ -473,8 +473,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskScheduler = setupScheduler(
       // set this to something much longer than the test duration so that executors don't get
       // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-      "spark.scheduler.blacklist.enabled" -> "true"
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
     )
 
     val taskSet = FakeTask.createTaskSet(2)
@@ -526,8 +525,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskScheduler = setupScheduler(
       // set this to something much longer than the test duration so that executors don't get
       // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-      "spark.scheduler.blacklist.enabled" -> "true"
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
     )
 
     val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
