@@ -115,16 +115,6 @@ if [ "$SPARK_NICENESS" = "" ]; then
     export SPARK_NICENESS=0
 fi
 
-mkdir -p "$SPARK_PID_DIR"
-
-if [ -f "$pid" ]; then
-  TARGET_ID="$(cat "$pid")"
-  if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
-    echo "$command running as process $TARGET_ID.  Stop it first."
-    exit 1
-  fi
-fi
-
 if [ "$SPARK_MASTER" != "" ]; then
   echo rsync from "$SPARK_MASTER"
   rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "${SPARK_HOME}"
@@ -134,7 +124,7 @@ spark_rotate_log "$log"
 echo "starting $command, logging to $log"
 
 case "$mode" in
-  (class)
+  (start)
     exec nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null
     ;;
 

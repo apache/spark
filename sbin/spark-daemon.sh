@@ -128,12 +128,8 @@ run_command() {
 
 case $option in
 
-  (submit)
-    run_command submit "$@"
-    ;;
-
-  (start)
-    run_command class "$@"
+  (submit|start)
+    run_command $option "$@"
     ;;
 
   (stop)
