@@ -1725,6 +1725,7 @@ test_that("mutate(), transform(), rename() and names()", {
 })
 
 test_that("read/write ORC files", {
+  setHiveContext(sc)
   df <- read.df(jsonPath, "json")
 
   # Test write.df and read.df
@@ -1741,6 +1742,7 @@ test_that("read/write ORC files", {
   expect_equal(count(orcDF), count(df))
 
   unlink(orcPath2)
+  unsetHiveContext()
 })
 
 test_that("read/write Parquet files", {
