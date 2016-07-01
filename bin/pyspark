@@ -31,12 +31,7 @@ export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 # and executor Python executables.
 
 # Determine the Python executable to use if PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON isn't set:
-if hash python2.7 2>/dev/null; then
-  # Attempt to use Python 2.7, if installed:
-  DEFAULT_PYTHON="python2.7"
-else
-  DEFAULT_PYTHON="python"
-fi
+DEFAULT_PYTHON="python"
 
 # Fail noisily if removed options are set
 if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
