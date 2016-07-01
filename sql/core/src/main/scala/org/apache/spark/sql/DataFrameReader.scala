@@ -45,7 +45,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def format(source: String): DataFrameReader = {
-    this.source = source
+    this.userSpecifiedSource = Option(source)
     this
   }
 
@@ -226,6 +226,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       parts: Array[Partition],
       connectionProperties: Properties): DataFrame = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input schema when reading tables from " +
+          s"JDBC connections. table: `$table`, schema: `${userSpecifiedSchema.get}`.")
+    }
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
       props.put(key, value)
@@ -453,6 +458,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
+    if (userSpecifiedSource.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input data source format when reading tables from " +
+        s"catalog. table: `$tableName`, format: `${userSpecifiedSource.get}`.")
+    }
+    if (userSpecifiedSchema.nonEmpty) {
+      throw new IllegalArgumentException(
+        "Operation not allowed: specifying the input schema when reading tables from " +
+        s"catalog. table: `$tableName`, schema: `${userSpecifiedSchema.get}`.")
+    }
+
     Dataset.ofRows(sparkSession,
       sparkSession.sessionState.catalog.lookupRelation(
         sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
@@ -530,7 +546,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
+  private def source: String =
+    userSpecifiedSource.getOrElse(sparkSession.sessionState.conf.defaultDataSourceName)
+
+  private var userSpecifiedSource: Option[String] = None
 
   private var userSpecifiedSchema: Option[StructType] = None
 

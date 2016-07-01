@@ -223,6 +223,33 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.parameters("doubleOpt") == "6.7")
   }
 
+  test("reading cataloged table") {
+    val schema = StructType(StructField("c1", IntegerType) :: Nil)
+    val format = "parquet"
+    val df = spark.createDataFrame(sparkContext.parallelize(Row(3) :: Nil), schema)
+
+    val tableName = "tab"
+    withTable(tableName) {
+      df.write.format(format).mode("overwrite").saveAsTable(tableName)
+      // correct way:
+      spark.read.table(tableName)
+
+      // not allowed to specify format.
+      var e = intercept[IllegalArgumentException] {
+        spark.read.format(format).table(tableName)
+      }.getMessage
+      assert(e.contains("Operation not allowed: specifying the input data source format " +
+        "when reading tables from catalog. table: `tab`, format: `parquet`"))
+
+      // not allowed to specify schema.
+      e = intercept[IllegalArgumentException] {
+        spark.read.schema(schema).table(tableName)
+      }.getMessage
+      assert(e.contains("Operation not allowed: specifying the input schema when reading tables " +
+        "from catalog. table: `tab`, schema: `StructType(StructField(c1,IntegerType,true))`"))
+    }
+  }
+
   test("check jdbc() does not support partitioning or bucketing") {
     val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 

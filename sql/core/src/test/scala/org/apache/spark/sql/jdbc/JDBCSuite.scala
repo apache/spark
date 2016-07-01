@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -348,14 +348,49 @@ class JDBCSuite extends SparkFunSuite
 
   test("Basic API") {
     assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties).count == 3)
   }
 
   test("Basic API with FetchSize") {
     val properties = new Properties
     properties.setProperty("fetchSize", "2")
     assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+      urlWithUserAndPass, "TEST.PEOPLE", properties).count == 3)
+  }
+
+  test("Option API with FetchSize") {
+    val dfUsingOption = spark.read.option("fetchSize", "2").jdbc(
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    assert(dfUsingOption.count == 3)
+    val logicalRelation =
+      dfUsingOption.queryExecution.analyzed.find(_.isInstanceOf[LogicalRelation])
+    assert(logicalRelation.isDefined)
+    val baseRelation = logicalRelation.get.asInstanceOf[LogicalRelation].relation
+    assert(baseRelation.isInstanceOf[JDBCRelation])
+    assert(baseRelation.asInstanceOf[JDBCRelation].properties.get("fetchSize") === "2")
+  }
+
+  test("load API") {
+    val dfUsingOption =
+      spark.read
+        .option("url", url)
+        .option("dbtable", "(SELECT * FROM TEST.PEOPLE)")
+        .option("user", "testUser")
+        .option("password", "testPass")
+        .format("jdbc")
+        .load()
+    assert(dfUsingOption.count == 3)
+  }
+
+  test("Using schema") {
+    // not allowed to specify schema.
+    val schema = StructType(StructField("c1", IntegerType) :: Nil)
+    val e = intercept[IllegalArgumentException] {
+      spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    }.getMessage
+    assert(e.contains("Operation not allowed: specifying the input schema when reading tables " +
+      "from JDBC connections. table: `TEST.PEOPLE`, schema: " +
+      "`StructType(StructField(c1,IntegerType,true))`"))
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
