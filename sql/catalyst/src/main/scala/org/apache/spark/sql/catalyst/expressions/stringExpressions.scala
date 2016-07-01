@@ -656,6 +656,19 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
   override def prettyName: String = "rpad"
 }
 
+object ParseUrl {
+  private val HOST = UTF8String.fromString("HOST")
+  private val PATH = UTF8String.fromString("PATH")
+  private val QUERY = UTF8String.fromString("QUERY")
+  private val REF = UTF8String.fromString("REF")
+  private val PROTOCOL = UTF8String.fromString("PROTOCOL")
+  private val FILE = UTF8String.fromString("FILE")
+  private val AUTHORITY = UTF8String.fromString("AUTHORITY")
+  private val USERINFO = UTF8String.fromString("USERINFO")
+  private val REGEXPREFIX = "(&|^)"
+  private val REGEXSUBFIX = "=([^&]*)"
+}
+
 /**
  * Extracts a part from a URL
  */
@@ -667,7 +680,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')\n 'spark.apache.org'
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')\n 'query=1'
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')\n '1'""")
-case class ParseUrl(children: Expression*)
+case class ParseUrl(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   override def nullable = true
@@ -682,16 +695,7 @@ case class ParseUrl(children: Expression*)
   @transient private var pattern: Pattern = _
 
   private lazy val stringExprs = children.toArray
-  private val HOST = UTF8String.fromString("HOST")
-  private val PATH = UTF8String.fromString("PATH")
-  private val QUERY = UTF8String.fromString("QUERY")
-  private val REF = UTF8String.fromString("REF")
-  private val PROTOCOL = UTF8String.fromString("PROTOCOL")
-  private val FILE = UTF8String.fromString("FILE")
-  private val AUTHORITY = UTF8String.fromString("AUTHORITY")
-  private val USERINFO = UTF8String.fromString("USERINFO")
-  private val REGEXPREFIX = "(&|^)"
-  private val REGEXSUBFIX = "=([^&]*)"
+  import ParseUrl._
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size > 3 || children.size < 2) {
@@ -707,8 +711,8 @@ case class ParseUrl(children: Expression*)
     } else {
       if (lastUrlStr == null || !url.equals(lastUrlStr)) {
         try {
-          lastUrlStr = url.asInstanceOf[UTF8String].clone()
           lastUrl = new URL(url.toString)
+          lastUrlStr = url.asInstanceOf[UTF8String].clone()
         } catch {
           case NonFatal(_) => return null
         }

@@ -729,15 +729,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ParseUrl") {
     def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
       checkEvaluation(
-        ParseUrl(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType)),
-        expected)
+        ParseUrl(Seq(Literal.create(urlStr, StringType),
+          Literal.create(partToExtract, StringType))), expected)
     }
     def checkParseUrlWithKey(
         expected: String, urlStr: String,
         partToExtract: String, key: String): Unit = {
       checkEvaluation(
-        ParseUrl(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType),
-          Literal.create(key, StringType)), expected)
+        ParseUrl(Seq(Literal.create(urlStr, StringType), Literal.create(partToExtract, StringType),
+          Literal.create(key, StringType))), expected)
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
@@ -762,8 +762,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "")
 
     // arguments checking
-    assert(ParseUrl(Literal("1")).checkInputDataTypes().isFailure)
-    assert(ParseUrl(Literal("1"), Literal("2"), Literal("3"), Literal("4"))
+    assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"), Literal("4")))
       .checkInputDataTypes().isFailure)
   }
 }
