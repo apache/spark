@@ -59,7 +59,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
  * CrossValidator begins by splitting the dataset into a set of non-overlapping randomly
  * partitioned folds which are used as separate training and test datasets e.g., with k=3 folds,
  * CrossValidator will generate 3 (training, test) dataset pairs, each of which uses 2/3 of
- * the data for training and 1/3 for testing. Each fold is used in the testing set exactly once.
+ * the data for training and 1/3 for testing. Each fold is used as the test set exactly once.
  */
 @Since("1.2.0")
 class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
