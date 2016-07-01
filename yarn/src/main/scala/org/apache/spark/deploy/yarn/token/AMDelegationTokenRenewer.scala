@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.yarn
+package org.apache.spark.deploy.yarn.token
 
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
@@ -25,6 +25,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -169,10 +170,9 @@ private[yarn] class AMDelegationTokenRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
-        hadoopUtil.obtainTokensForNamenodes(nns, freshHadoopConf, tempCreds)
-        hadoopUtil.obtainTokenForHiveMetastore(sparkConf, freshHadoopConf, tempCreds)
-        hadoopUtil.obtainTokenForHBase(sparkConf, freshHadoopConf, tempCreds)
+        import ConfigurableTokenManager._
+        hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(dst))
+        configurableTokenManager(sparkConf).obtainTokens(freshHadoopConf, tempCreds)
         null
       }
     })

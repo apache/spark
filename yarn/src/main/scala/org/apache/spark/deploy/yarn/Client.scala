@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException,
-  OutputStreamWriter}
+import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -35,7 +34,6 @@ import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -52,6 +50,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.token.ConfigurableTokenManager._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -129,6 +128,7 @@ private[spark] class Client(
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
+    configurableTokenManager(sparkConf).stop()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
   }
@@ -390,8 +390,8 @@ private[spark] class Client(
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
     val fs = destDir.getFileSystem(hadoopConf)
-    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + destDir
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(destDir))
+    configurableTokenManager(sparkConf).obtainTokens(hadoopConf, credentials)
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
@@ -400,8 +400,6 @@ private[spark] class Client(
     // same name but different path files are added multiple time, YARN will fail to launch
     // containers for the app with an internal error.
     val distributedNames = new HashSet[String]
-    YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-    YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
     if (credentials != null) {
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
@@ -717,28 +715,6 @@ private[spark] class Client(
   }
 
   /**
-   * Get the renewal interval for tokens.
-   */
-  private def getTokenRenewalInterval(stagingDirPath: Path): Long = {
-    // We cannot use the tokens generated above since those have renewer yarn. Trying to renew
-    // those will fail with an access control issue. So create new tokens with the logged in
-    // user as renewer.
-    val creds = new Credentials()
-    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
-      nns, hadoopConf, creds, sparkConf.get(PRINCIPAL))
-    val t = creds.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
-      .head
-    val newExpiration = t.renew(hadoopConf)
-    val identifier = new DelegationTokenIdentifier()
-    identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-    val interval = newExpiration - identifier.getIssueDate
-    logInfo(s"Renewal Interval set to $interval")
-    interval
-  }
-
-  /**
    * Set up the environment for launching our ApplicationMaster container.
    */
   private def setupLaunchEnv(
@@ -754,8 +730,11 @@ private[spark] class Client(
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
-      val renewalInterval = getTokenRenewalInterval(stagingDirPath)
-      sparkConf.set(TOKEN_RENEWAL_INTERVAL, renewalInterval)
+      hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(stagingDirPath))
+      sparkConf.get(PRINCIPAL).foreach(hdfsTokenProvider(sparkConf).setTokenRenewer(_))
+      val minTokenRenewalInterval =
+        configurableTokenManager(sparkConf).getMinTokenRenewalInterval(hadoopConf)
+      sparkConf.set(TOKEN_RENEWAL_INTERVAL, minTokenRenewalInterval)
     }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*

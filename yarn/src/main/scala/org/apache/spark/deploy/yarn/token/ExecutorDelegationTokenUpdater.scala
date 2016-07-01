@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.yarn
+package org.apache.spark.deploy.yarn.token
 
 import java.util.concurrent.{Executors, TimeUnit}
 
@@ -74,9 +74,8 @@ private[spark] class ExecutorDelegationTokenUpdater(
           return
         }
       }
-      val timeFromNowToRenewal =
-        SparkHadoopUtil.get.getTimeFromNowToRenewal(
-          sparkConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
+      val timeFromNowToRenewal = ConfigurableTokenManager.getTimeFromNowToRenewal(
+        sparkConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
       if (timeFromNowToRenewal <= 0) {
         // We just checked for new credentials but none were there, wait a minute and retry.
         // This handles the shutdown case where the staging directory may have been removed(see
