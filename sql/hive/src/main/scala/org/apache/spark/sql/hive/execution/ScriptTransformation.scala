@@ -313,6 +313,7 @@ private class ScriptTransformationWriterThread(
         }
       }
       threwException = false
+      outputStream.close()
     } catch {
       case NonFatal(e) =>
         // An error occurred while writing input, so kill the child process. According to the
@@ -325,7 +326,6 @@ private class ScriptTransformationWriterThread(
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }
-        outputStream.close()
       } catch {
         case NonFatal(exceptionFromFinallyBlock) =>
           if (!threwException) {
