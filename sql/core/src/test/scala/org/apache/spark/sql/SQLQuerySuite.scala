@@ -2132,10 +2132,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("SELECT * FROM temp_table_no_cols"))
       checkAnswer(
         dfNoCols,
-        sql("SELECT a.* FROM temp_table_no_cols a"))
-      checkAnswer(
-        dfNoCols,
         dfNoCols.select($"*"))
+
+      var e = intercept[AnalysisException] {
+        sql("SELECT a.* FROM temp_table_no_cols a")
+      }.getMessage
+      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+
+      e = intercept[AnalysisException] {
+        dfNoCols.select($"b.*")
+      }.getMessage
+      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
     }
   }
 
