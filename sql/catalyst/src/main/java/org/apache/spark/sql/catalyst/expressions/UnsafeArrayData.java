@@ -49,7 +49,6 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 
-// todo: there is a lof of duplicated code between UnsafeRow and UnsafeArrayData.
 public final class UnsafeArrayData extends ArrayData {
 
   public static int calculateHeaderPortionInBytes(int numFields) {
@@ -69,7 +68,7 @@ public final class UnsafeArrayData extends ArrayData {
   /** The width of the null tracking bit set plus `numElements`, in bytes */
   private int headerInBytes;
 
-  private long getFieldOffset(int ordinal, int elementSize) {
+  private long getElementOffset(int ordinal, int elementSize) {
     return baseOffset + headerInBytes + ordinal * elementSize;
   }
 
@@ -168,51 +167,48 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public boolean getBoolean(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getBoolean(baseObject, getFieldOffset(ordinal, 1));
+    return Platform.getBoolean(baseObject, getElementOffset(ordinal, 1));
   }
 
   @Override
   public byte getByte(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getByte(baseObject, getFieldOffset(ordinal, 1));
+    return Platform.getByte(baseObject, getElementOffset(ordinal, 1));
   }
 
   @Override
   public short getShort(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getShort(baseObject, getFieldOffset(ordinal, 2));
+    return Platform.getShort(baseObject, getElementOffset(ordinal, 2));
   }
 
   @Override
   public int getInt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getInt(baseObject, getFieldOffset(ordinal, 4));
+    return Platform.getInt(baseObject, getElementOffset(ordinal, 4));
   }
 
   @Override
   public long getLong(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getLong(baseObject, getFieldOffset(ordinal, 8));
+    return Platform.getLong(baseObject, getElementOffset(ordinal, 8));
   }
 
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getFloat(baseObject, getFieldOffset(ordinal, 4));
+    return Platform.getFloat(baseObject, getElementOffset(ordinal, 4));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getDouble(baseObject, getFieldOffset(ordinal, 8));
+    return Platform.getDouble(baseObject, getElementOffset(ordinal, 8));
   }
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    assertIndexIsValid(ordinal);
-    if (isNullAt(ordinal)) {
-      return null;
-    }
+    if (isNullAt(ordinal)) return null;
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.apply(getLong(ordinal), precision, scale);
     } else {
@@ -395,7 +391,7 @@ public final class UnsafeArrayData extends ArrayData {
     final int headerSize = calculateHeaderPortionInBytes(length);
     if (length > (Integer.MAX_VALUE - headerSize) / elementSize) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-              "it's too big.");
+        "it's too big.");
     }
 
     final int valueRegionSize = elementSize * length;
@@ -403,7 +399,7 @@ public final class UnsafeArrayData extends ArrayData {
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, length);
     Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
-            Platform.BYTE_ARRAY_OFFSET + headerSize, valueRegionSize);
+      Platform.BYTE_ARRAY_OFFSET + headerSize, valueRegionSize);
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, valueRegionSize + headerSize);
