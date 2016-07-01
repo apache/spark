@@ -151,8 +151,6 @@ case class HadoopFsRelation(
     })
   }
 
-  override def partitionColumnNames: Set[String] = partitionSchema.map(_.name.toLowerCase).toSet
-
   def partitionSchemaOption: Option[StructType] =
     if (partitionSchema.isEmpty) None else Some(partitionSchema)
   def partitionSpec: PartitionSpec = location.partitionSpec()

@@ -27,131 +27,107 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 
 /**
- * When scanning only partition columns, get results based on metadata without scanning files.
+ * When scanning only partition columns, get results based on partition data without scanning files.
  * It's used for operators that only need distinct values. Currently only [[Aggregate]] operator
  * which satisfy the following conditions are supported:
- * 1. aggregate expression is partition columns,
- *  e.g. SELECT col FROM tbl GROUP BY col, SELECT col FROM tbl GROUP BY cube(col).
- * 2. aggregate function on partition columns with DISTINCT,
+ * 1. aggregate expression is partition columns.
+ *  e.g. SELECT col FROM tbl GROUP BY col.
+ * 2. aggregate function on partition columns with DISTINCT.
  *  e.g. SELECT count(DISTINCT col) FROM tbl GROUP BY col.
- * 3. aggregate function on partition columns which have same result with DISTINCT keyword.
+ * 3. aggregate function on partition columns which have same result w or w/o DISTINCT keyword.
  *  e.g. SELECT Max(col2) FROM tbl GROUP BY col1.
  */
 case class MetadataOnlyOptimizer(
-      catalog: SessionCatalog,
-      conf: CatalystConf) extends Rule[LogicalPlan] {
-
-  private def canSupportMetadataOnly(a: Aggregate): Boolean = {
-    if (!a.references.forall(_.isMetadataColumn)) {
-      // Support for scanning only partition columns
-      false
-    } else {
-      val aggregateExpressions = a.aggregateExpressions.flatMap { expr =>
-        expr.collect {
-          case agg: AggregateExpression => agg
-        }
-      }.distinct
-      if (aggregateExpressions.isEmpty) {
-        // Support for aggregate that has no aggregateFunction when expressions are partition
-        // columns. example: select partitionCol from table group by partitionCol.
-        // Moreover, multiple-distinct has been rewritted into it by RewriteDistinctAggregates.
-        true
-      } else {
-        aggregateExpressions.forall { agg =>
-          if (agg.isDistinct) {
-            true
-          } else {
-            // If function can be evaluated on just the distinct values of a column, it can be used
-            // by metadata-only optimizer.
-            agg.aggregateFunction match {
-              case max: Max => true
-              case min: Min => true
-              case hyperLog: HyperLogLogPlusPlus => true
-              case _ => false
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private def convertLogicalToMetadataOnly(
-      filter: Option[Expression],
-      logical: LogicalRelation,
-      files: HadoopFsRelation): LogicalPlan = {
-    val attributeMap = logical.output.map(attr => (attr.name, attr)).toMap
-    val partitionColumns = files.partitionSchema.map { field =>
-      attributeMap.getOrElse(field.name, throw new AnalysisException(
-        s"Unable to resolve ${field.name} given [${logical.output.map(_.name).mkString(", ")}]"))
-    }
-    val selectedPartitions = files.location.listFiles(filter.map(Seq(_)).getOrElse(Seq.empty))
-    LocalRelation(partitionColumns, selectedPartitions.map(_.values))
-  }
-
-  private def convertCatalogToMetadataOnly(relation: CatalogRelation): LogicalPlan = {
-    val attributeMap = relation.output.map(attr => (attr.name, attr)).toMap
-    val partitionColumns = relation.catalogTable.partitionColumnNames.map { column =>
-      attributeMap.getOrElse(column, throw new AnalysisException(
-        s"Unable to resolve ${column} given [${relation.output.map(_.name).mkString(", ")}]"))
-    }
-    val partitionColumnDataTypes = partitionColumns.map(_.dataType)
-    val partitionValues = catalog.listPartitions(relation.catalogTable.identifier)
-      .map { p =>
-        InternalRow.fromSeq(
-          partitionColumns.map(a => p.spec(a.name)).zip(partitionColumnDataTypes).map {
-            case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
-          })
-      }
-    LocalRelation(partitionColumns, partitionValues)
-  }
-
-  /**
-   * When scanning only partition columns, convert LogicalRelation or CatalogRelation
-   * to LocalRelation. Now support logical plan:
-   *  Aggregate [Expand] Project [Filter] (LogicalRelation | CatalogRelation)
-   */
-  private def convertToMetadataOnly(plan: LogicalPlan): LogicalPlan = plan match {
-    case p @ Project(fields, child) if p.references.forall(_.isMetadataColumn) =>
-      child match {
-        case f @ Filter(condition, l @ LogicalRelation(files: HadoopFsRelation, _, _))
-          if files.partitionSchema.nonEmpty && f.references.forall(_.isMetadataColumn) =>
-          val plan = convertLogicalToMetadataOnly(Some(condition), l, files)
-          p.withNewChildren(f.withNewChildren(plan :: Nil) :: Nil)
-
-        case l @ LogicalRelation(files: HadoopFsRelation, _, _)
-          if files.partitionSchema.nonEmpty =>
-          val plan = convertLogicalToMetadataOnly(None, l, files)
-          p.withNewChildren(plan :: Nil)
-
-        case f @ Filter(condition, relation: CatalogRelation)
-          if relation.catalogTable.partitionColumnNames.nonEmpty &&
-            f.references.forall(_.isMetadataColumn) =>
-          val plan = convertCatalogToMetadataOnly(relation)
-          p.withNewChildren(f.withNewChildren(plan :: Nil) :: Nil)
-
-        case relation: CatalogRelation
-          if relation.catalogTable.partitionColumnNames.nonEmpty =>
-          val plan = convertCatalogToMetadataOnly(relation)
-          p.withNewChildren(plan :: Nil)
-
-        case other =>
-          other
-      }
-
-    case e: Expand =>
-      e.withNewChildren(e.children.map(convertToMetadataOnly(_)))
-
-    case other =>
-      other
-  }
+    catalog: SessionCatalog,
+    conf: CatalystConf) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.optimizerMetadataOnly) {
       return plan
     }
+
     plan.transform {
-      case a @ Aggregate(_, _, child) if canSupportMetadataOnly(a) =>
-        a.withNewChildren(convertToMetadataOnly(child) :: Nil)
+      case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(partAttrs, relation)) =>
+        if (a.references.subsetOf(partAttrs)) {
+          val aggFunctions = aggExprs.flatMap(_.collect {
+            case agg: AggregateExpression => agg
+          })
+          val isPartitionDataOnly = aggFunctions.isEmpty || aggFunctions.forall { agg =>
+            agg.isDistinct || (agg.aggregateFunction match {
+              case _: Max => true
+              case _: Min => true
+              case _ => false
+            })
+          }
+          if (isPartitionDataOnly) {
+            a.withNewChildren(Seq(usePartitionData(child, relation)))
+          } else {
+            a
+          }
+        } else {
+          a
+        }
+    }
+  }
+
+  private def usePartitionData(child: LogicalPlan, relation: LogicalPlan): LogicalPlan = {
+    child transform {
+      case plan if plan eq relation =>
+        relation match {
+          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
+            val partColumns = fsRelation.partitionSchema.map(_.name.toLowerCase).toSet
+            val partAttrs = l.output.filter(a => partColumns.contains(a.name.toLowerCase))
+            val partitionData = fsRelation.location.listFiles(Nil)
+            LocalRelation(partAttrs, partitionData.map(_.values))
+
+          case relation: CatalogRelation =>
+            val partColumns = relation.catalogTable.partitionColumnNames.map(_.toLowerCase).toSet
+            val partAttrs = relation.output.filter(a => partColumns.contains(a.name.toLowerCase))
+            val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
+              InternalRow.fromSeq(partAttrs.map { attr =>
+                Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
+              })
+            }
+            LocalRelation(partAttrs, partitionData)
+
+          case _ => throw new IllegalStateException()
+        }
+    }
+  }
+
+  object PartitionedRelation {
+    def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
+      case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)
+        if fsRelation.partitionSchema.nonEmpty =>
+        val partColumns = fsRelation.partitionSchema.map(_.name.toLowerCase).toSet
+        val partAttrs = l.output.filter(a => partColumns.contains(a.name.toLowerCase))
+        Some(AttributeSet(partAttrs), l)
+
+      case relation: CatalogRelation if relation.catalogTable.partitionColumnNames.nonEmpty =>
+        val partColumns = relation.catalogTable.partitionColumnNames.map(_.toLowerCase).toSet
+        val partAttrs = relation.output.filter(a => partColumns.contains(a.name.toLowerCase))
+        Some(AttributeSet(partAttrs), relation)
+
+      case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
+        unapply(child).flatMap {
+          case (partAttrs, relation) =>
+            if (p.references.subsetOf(partAttrs)) {
+              Some(p.outputSet, relation)
+            } else {
+              None
+            }
+        }
+
+      case f @ Filter(condition, child) if condition.deterministic =>
+        unapply(child).flatMap {
+          case (partAttrs, relation) =>
+            if (f.references.subsetOf(partAttrs)) {
+              Some(f.outputSet, relation)
+            } else {
+              None
+            }
+        }
+      case _ => None
     }
   }
 }
