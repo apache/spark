@@ -31,8 +31,8 @@ trait StreamingQuery {
 
   /**
    * Returns the name of the query. This name is unique across all active queries. This can be
-   * set in the[[org.apache.spark.sql.DataFrameWriter DataFrameWriter]] as
-   * `dataframe.write().queryName("query").startStream()`.
+   * set in the [[org.apache.spark.sql.DataStreamWriter DataStreamWriter]] as
+   * `dataframe.writeStream.queryName("query").start()`.
    * @since 2.0.0
    */
   def name: String
@@ -107,6 +107,7 @@ trait StreamingQuery {
    * method may block forever. Additionally, this method is only guaranteed to block until data that
    * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]
    * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
+   * @since 2.0.0
    */
   def processAllAvailable(): Unit
 
@@ -116,4 +117,18 @@ trait StreamingQuery {
    * @since 2.0.0
    */
   def stop(): Unit
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   * @since 2.0.0
+   */
+  def explain(): Unit
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   *
+   * @param extended whether to do extended explain or not
+   * @since 2.0.0
+   */
+  def explain(extended: Boolean): Unit
 }

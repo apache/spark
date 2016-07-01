@@ -52,6 +52,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -2309,19 +2310,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return whether dynamic allocation is enabled in the given conf
-   * Dynamic allocation and explicitly setting the number of executors are inherently
-   * incompatible. In environments where dynamic allocation is turned on by default,
-   * the latter should override the former (SPARK-9092).
+   * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    val numExecutor = conf.getInt("spark.executor.instances", 0)
     val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
-    if (numExecutor != 0 && dynamicAllocationEnabled) {
-      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
-    }
-    numExecutor == 0 && dynamicAllocationEnabled &&
+    dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
+  }
+
+  /**
+   * Return the initial number of executors for dynamic allocation.
+   */
+  def getDynamicAllocationInitialExecutors(conf: SparkConf): Int = {
+    Seq(
+      conf.get(DYN_ALLOCATION_MIN_EXECUTORS),
+      conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS),
+      conf.get(EXECUTOR_INSTANCES).getOrElse(0)).max
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {

@@ -1236,6 +1236,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>
     Initial number of executors to run if dynamic allocation is enabled.
+    <br /><br />
+    If `--num-executors` (or `spark.executor.instances`) is set and larger than this value, it will
+    be used as the initial number of executors.
   </td>
 </tr>
 <tr>

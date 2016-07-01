@@ -297,7 +297,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.vocabulary)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -308,7 +308,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
     override def load(path: String): CountVectorizerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
         .select("vocabulary")
         .head()
       val vocabulary = data.getAs[Seq[String]](0).toArray

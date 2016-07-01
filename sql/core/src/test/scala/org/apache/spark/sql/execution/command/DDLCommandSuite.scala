@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsing}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
 
 
 // TODO: merge this with DDLSuite (SPARK-14441)
@@ -349,10 +349,13 @@ class DDLCommandSuite extends PlanTest {
   }
 
   test("create table using - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
+    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
+      "USING parquet PARTITIONED BY (a)"
     val expected = CreateTableUsing(
       TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType)),
       "parquet",
       false,
       Map.empty,

@@ -208,6 +208,24 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
+test_that("read csv as DataFrame", {
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                   "1997,Ford,E350,\"Go get one now they are going fast\",",
+                   "2015,Chevy,Volt")
+  writeLines(mockLinesCsv, csvPath)
+
+  # default "header" is false
+  df <- read.df(csvPath, "csv", header = "true")
+  expect_equal(count(df), 3)
+  expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
+  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
+               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
+
+  unlink(csvPath)
+})
+
 test_that("convert NAs to null type in DataFrames", {
   rdd <- parallelize(sc, list(list(1L, 2L), list(NA, 4L)))
   df <- createDataFrame(rdd, list("a", "b"))
@@ -1582,7 +1600,15 @@ test_that("showDF()", {
                     "|  30|   Andy|\n",
                     "|  19| Justin|\n",
                     "+----+-------+\n", sep = "")
+  expected2 <- paste("+---+----+\n",
+                     "|age|name|\n",
+                     "+---+----+\n",
+                     "|nul| Mic|\n",
+                     "| 30| And|\n",
+                     "| 19| Jus|\n",
+                     "+---+----+\n", sep = "")
   expect_output(showDF(df), expected)
+  expect_output(showDF(df, truncate = 3), expected2)
 })
 
 test_that("isLocal()", {
@@ -2365,7 +2391,7 @@ test_that("randomSplit", {
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
 
-test_that("Change config on SparkSession", {
+test_that("Setting and getting config on SparkSession", {
   # first, set it to a random but known value
   conf <- callJMethod(sparkSession, "conf")
   property <- paste0("spark.testing.", as.character(runif(1)))
@@ -2378,17 +2404,17 @@ test_that("Change config on SparkSession", {
   names(l) <- property
   sparkR.session(sparkConfig = l)
 
-  conf <- callJMethod(sparkSession, "conf")
-  newValue <- callJMethod(conf, "get", property, "")
+  newValue <- unlist(sparkR.conf(property, ""), use.names = FALSE)
   expect_equal(value2, newValue)
 
   value <- as.character(runif(1))
   sparkR.session(spark.app.name = "sparkSession test", spark.testing.r.session.r = value)
-  conf <- callJMethod(sparkSession, "conf")
-  appNameValue <- callJMethod(conf, "get", "spark.app.name", "")
-  testValue <- callJMethod(conf, "get", "spark.testing.r.session.r", "")
+  allconf <- sparkR.conf()
+  appNameValue <- allconf[["spark.app.name"]]
+  testValue <- allconf[["spark.testing.r.session.r"]]
   expect_equal(appNameValue, "sparkSession test")
   expect_equal(testValue, value)
+  expect_error(sparkR.conf("completely.dummy"), "Config 'completely.dummy' is not set")
 })
 
 test_that("enableHiveSupport on SparkSession", {

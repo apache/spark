@@ -33,11 +33,11 @@ import org.apache.spark.sql.types.DataType
  * multiplier.
  */
 @Experimental
-@Since("2.0.0")
-class ElementwiseProduct @Since("2.0.0") (@Since("2.0.0") override val uid: String)
+@Since("1.4.0")
+class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, ElementwiseProduct] with DefaultParamsWritable {
 
-  @Since("2.0.0")
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("elemProd"))
 
   /**

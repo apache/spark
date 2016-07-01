@@ -100,9 +100,13 @@ test_that("rdd GC across sparkR.stop", {
 
 test_that("job group functions can be called", {
   sc <- sparkR.sparkContext()
-  setJobGroup(sc, "groupId", "job description", TRUE)
-  cancelJobGroup(sc, "groupId")
-  clearJobGroup(sc)
+  setJobGroup("groupId", "job description", TRUE)
+  cancelJobGroup("groupId")
+  clearJobGroup()
+
+  suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
+  suppressWarnings(cancelJobGroup(sc, "groupId"))
+  suppressWarnings(clearJobGroup(sc))
   sparkR.session.stop()
 })
 
