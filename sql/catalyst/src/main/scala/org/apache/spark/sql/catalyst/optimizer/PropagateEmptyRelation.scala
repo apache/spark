@@ -60,12 +60,18 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
     }
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) => p match {
-      case _: Project | _: Filter | _: Sample | _: Sort | _: GlobalLimit | _: LocalLimit |
-           _: Repartition | _: RepartitionByExpression => empty(p)
+      case _: Project => empty(p)
+      case _: Filter => empty(p)
+      case _: Sample => empty(p)
+      case _: Sort => empty(p)
+      case _: GlobalLimit => empty(p)
+      case _: LocalLimit => empty(p)
+      case _: Repartition => empty(p)
+      case _: RepartitionByExpression => empty(p)
       // AggregateExpressions like COUNT(*) return their results like 0.
       case Aggregate(_, ae, _) if !ae.exists(containsAggregateExpression) => empty(p)
       // Generators like Hive-style UDTF may return their records within `close`.
-      case Generate(_ : Explode, _, _, _, _, _) => empty(p)
+      case Generate(_: Explode, _, _, _, _, _) => empty(p)
       case _ => p
     }
   }
