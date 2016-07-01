@@ -61,7 +61,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   // Kafka broker related configurations
   private val brokerHost = "localhost"
-  private var brokerPort = 9092
+  private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
   // Kafka broker server
@@ -110,7 +110,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
       brokerConf = new KafkaConfig(brokerConfiguration, doLog = false)
       server = new KafkaServer(brokerConf)
       server.startup()
-      (server, port)
+      brokerPort = server.boundPort()
+      (server, brokerPort)
     }, new SparkConf(), "KafkaBroker")
 
     brokerReady = true

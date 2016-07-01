@@ -41,18 +41,19 @@ public class JavaLocationStrategySuite implements Serializable {
       JavaConverters.mapAsScalaMapConverter(hosts).asScala();
 
     // make sure constructors can be called from java
-    final LocationStrategy c1 = PreferConsistent.create();
-    final LocationStrategy c2 = PreferConsistent$.MODULE$;
-    Assert.assertEquals(c1, c2);
+    final LocationStrategy c1 = LocationStrategies.PreferConsistent();
+    final LocationStrategy c2 = LocationStrategies.PreferConsistent();
+    Assert.assertSame(c1, c2);
 
-    final LocationStrategy c3 = PreferBrokers.create();
-    final LocationStrategy c4 = PreferBrokers$.MODULE$;
-    Assert.assertEquals(c3, c4);
+    final LocationStrategy c3 = LocationStrategies.PreferBrokers();
+    final LocationStrategy c4 = LocationStrategies.PreferBrokers();
+    Assert.assertSame(c3, c4);
 
-    final LocationStrategy c5 = PreferFixed.create(hosts);
-    final LocationStrategy c6 = PreferFixed.apply(sHosts);
+    Assert.assertNotSame(c1, c3);
+
+    final LocationStrategy c5 = LocationStrategies.PreferFixed(hosts);
+    final LocationStrategy c6 = LocationStrategies.PreferFixed(sHosts);
     Assert.assertEquals(c5, c6);
-
   }
 
 }
