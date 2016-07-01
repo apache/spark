@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
@@ -221,16 +221,15 @@ case class Inline(child: Expression) extends UnaryExpression with Generator with
       })
   }
 
-  private lazy val ncol = elementSchema.fields.length
+  private lazy val numFields = elementSchema.fields.length
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = child.dataType match {
-    case ArrayType(et : StructType, _) =>
-      val inputArray = child.eval(input).asInstanceOf[ArrayData]
-      if (inputArray == null) {
-        Nil
-      } else {
-        for (i <- 0 until inputArray.numElements())
-          yield inputArray.getStruct(i, ncol)
-      }
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val inputArray = child.eval(input).asInstanceOf[ArrayData]
+    if (inputArray == null) {
+      Nil
+    } else {
+      for (i <- 0 until inputArray.numElements())
+        yield inputArray.getStruct(i, numFields)
+    }
   }
 }
