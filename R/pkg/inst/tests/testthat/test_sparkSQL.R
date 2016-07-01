@@ -208,6 +208,24 @@ test_that("create DataFrame from RDD", {
   unsetHiveContext()
 })
 
+test_that("read csv as DataFrame", {
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                   "1997,Ford,E350,\"Go get one now they are going fast\",",
+                   "2015,Chevy,Volt")
+  writeLines(mockLinesCsv, csvPath)
+
+  # default "header" is false
+  df <- read.df(csvPath, "csv", header = "true")
+  expect_equal(count(df), 3)
+  expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
+  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
+               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
+
+  unlink(csvPath)
+})
+
 test_that("convert NAs to null type in DataFrames", {
   rdd <- parallelize(sc, list(list(1L, 2L), list(NA, 4L)))
   df <- createDataFrame(rdd, list("a", "b"))
@@ -1047,7 +1065,7 @@ test_that("column functions", {
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
-  c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
+  c7 <- mean(c) + min(c) + month(c) + negate(c) + posexplode(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c) + monotonically_increasing_id()
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
@@ -1582,7 +1600,15 @@ test_that("showDF()", {
                     "|  30|   Andy|\n",
                     "|  19| Justin|\n",
                     "+----+-------+\n", sep = "")
+  expected2 <- paste("+---+----+\n",
+                     "|age|name|\n",
+                     "+---+----+\n",
+                     "|nul| Mic|\n",
+                     "| 30| And|\n",
+                     "| 19| Jus|\n",
+                     "+---+----+\n", sep = "")
   expect_output(showDF(df), expected)
+  expect_output(showDF(df, truncate = 3), expected2)
 })
 
 test_that("isLocal()", {

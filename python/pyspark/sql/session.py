@@ -31,7 +31,8 @@ from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.sql.catalog import Catalog
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.readwriter import DataFrameReader, DataStreamReader
+from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -165,6 +166,13 @@ class SparkSession(object):
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
                     sc = SparkContext.getOrCreate(sparkConf)
+                    # This SparkContext may be an existing one.
+                    for key, value in self._options.items():
+                        # we need to propagate the confs
+                        # before we create the SparkSession. Otherwise, confs like
+                        # warehouse path and metastore url will not be set correctly (
+                        # these confs cannot be changed once the SparkSession is created).
+                        sc._conf.set(key, value)
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session.conf.set(key, value)

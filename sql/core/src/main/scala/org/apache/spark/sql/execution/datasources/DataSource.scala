@@ -364,7 +364,8 @@ case class DataSource(
         }
 
         val fileCatalog =
-          new ListingFileCatalog(sparkSession, globbedPaths, options, partitionSchema)
+          new ListingFileCatalog(
+            sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality =

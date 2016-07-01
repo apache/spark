@@ -271,6 +271,33 @@ private[spark] class Client(
         appContext.setResource(capability)
     }
 
+    sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
+      try {
+        val logAggregationContext = Records.newRecord(
+          Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+          .asInstanceOf[Object]
+
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
+        sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+        }
+
+        val setLogAggregationContextMethod =
+          appContext.getClass.getMethod("setLogAggregationContext",
+            Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+        setLogAggregationContextMethod.invoke(appContext, logAggregationContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
+            s"does not support it", e)
+      }
+    }
+
     appContext
   }
 
