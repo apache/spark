@@ -58,6 +58,7 @@ if __name__ == "__main__":
 
     # Split the lines into words
     words = lines.select(
+        # explode turns each item in an array into a separate row
         explode(
             split(lines.value, ' ')
         ).alias('word')

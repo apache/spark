@@ -14,21 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.examples.sql.streaming;
 
-// scalastyle:off println
-package org.apache.spark.examples.sql.streaming
+import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.functions;
+import org.apache.spark.sql.streaming.StreamingQuery;
+import scala.Tuple2;
 
-import java.sql.Timestamp
-
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions._
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network over a
  * sliding window of configurable duration. Each line from the network is tagged
  * with a timestamp that is used to determine the windows into which it falls.
  *
- * Usage: StructuredNetworkWordCountWindowed <hostname> <port> <window duration> <slide duration>
+ * Usage: JavaStructuredNetworkWordCountWindowed <hostname> <port> <window duration>
+ *   <slide duration>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <window duration> gives the size of window, specified as integer number of seconds
@@ -39,62 +44,70 @@ import org.apache.spark.sql.functions._
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ bin/run-example sql.streaming.StructuredNetworkWordCountWindowed
+ *    `$ bin/run-example sql.streaming.JavaStructuredNetworkWordCountWindowed
  *    localhost 9999 <window duration> <slide duration>`
  *
  * One recommended <window duration>, <slide duration> pair is 60, 30
  */
-object StructuredNetworkWordCountWindowed {
+public final class JavaStructuredNetworkWordCountWindowed {
 
-  def main(args: Array[String]) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 4) {
-      System.err.println("Usage: StructuredNetworkWordCountWindowed <hostname> <port>" +
-        " <window duration in seconds> <slide duration in seconds>")
-      System.exit(1)
+      System.err.println("Usage: JavaStructuredNetworkWordCountWindowed <hostname> <port>" +
+        " <window duration in seconds> <slide duration in seconds>");
+      System.exit(1);
     }
 
-    val host = args(0)
-    val port = args(1).toInt
-    val windowSize = args(2).toInt
-    val slideSize = args(3).toInt
+    String host = args[0];
+    int port = Integer.parseInt(args[1]);
+    int windowSize = Integer.parseInt(args[2]);
+    int slideSize = Integer.parseInt(args[3]);
     if (slideSize > windowSize) {
-      System.err.println("<slide duration> must be less than or equal to <window duration>")
+      System.err.println("<slide duration> must be less than or equal to <window duration>");
     }
 
-    val spark = SparkSession
-      .builder
-      .appName("StructuredNetworkWordCountWindowed")
-      .getOrCreate()
-
-    import spark.implicits._
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaStructuredNetworkWordCountWindowed")
+      .getOrCreate();
 
     // Create DataFrame representing the stream of input lines from connection to host:port
-    val lines = spark.readStream
+    Dataset<Tuple2<String, Timestamp>> lines = spark
+      .readStream()
       .format("socket")
       .option("host", host)
       .option("port", port)
       .option("includeTimestamp", true)
-      .load().as[(String, Timestamp)]
+      .load().as(Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP()));
 
     // Split the lines into words, retaining timestamps
-    val words = lines.flatMap(line =>
-      line._1.split(" ").map(word => (word, line._2))
-    ).toDF("word", "timestamp")
+    Dataset<Row> words = lines.flatMap(
+      new FlatMapFunction<Tuple2<String, Timestamp>, Tuple2<String, Timestamp>>() {
+        @Override
+        public Iterator<Tuple2<String, Timestamp>> call(Tuple2<String, Timestamp> t) {
+          List<Tuple2<String, Timestamp>> result = new ArrayList<>();
+          for (String word : t._1.split(" ")) {
+            result.add(new Tuple2<>(word, t._2));
+          }
+          return result.iterator();
+        }
+      },
+      Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP())
+    ).toDF("word", "timestamp");
 
     // Group the data by window and word and compute the count of each group
-    val windowedCounts = words.groupBy(
-      window(words.col("timestamp"), s"$windowSize seconds", s"$slideSize seconds"),
+    Dataset<Row> windowedCounts = words.groupBy(
+      functions.window(words.col("timestamp"), windowSize + " seconds", slideSize + " seconds"),
       words.col("word")
-    ).count()
+    ).count();
 
     // Start running the query that prints the windowed word counts to the console
-    val query = windowedCounts.writeStream
+    StreamingQuery query = windowedCounts.writeStream()
       .outputMode("complete")
       .format("console")
       .option("truncate", "false")
-      .start()
+      .start();
 
-    query.awaitTermination()
+    query.awaitTermination();
   }
 }
-// scalastyle:on println

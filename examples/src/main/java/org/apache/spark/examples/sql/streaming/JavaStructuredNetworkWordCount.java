@@ -40,7 +40,7 @@ public final class JavaStructuredNetworkWordCount {
 
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
-      System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
+      System.err.println("Usage: JavaStructuredNetworkWordCount <hostname> <port>");
       System.exit(1);
     }
 
