@@ -1106,12 +1106,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
     // pushed beneath must satisfy the following two conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
-    // 2. Deterministic
+    // 2. Deterministic.
+    // 3. Placed before any non-deterministic predicates.
     case filter @ Filter(condition, w: Window)
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
+      var isPredicatePushdownAble = true
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references.subsetOf(partitionAttrs) && cond.deterministic &&
+        isPredicatePushdownAble = isPredicatePushdownAble && cond.deterministic
+        isPredicatePushdownAble && cond.references.subsetOf(partitionAttrs) &&
           // This is for ensuring all the partitioning expressions have been converted to alias
           // in Analyzer. Thus, we do not need to check if the expressions in conditions are
           // the same as the expressions used in partitioning columns.
@@ -1135,9 +1138,11 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
+      var isPredicatePushdownAble = true
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        replaced.references.subsetOf(aggregate.child.outputSet) && replaced.deterministic
+        isPredicatePushdownAble = isPredicatePushdownAble && replaced.deterministic
+        isPredicatePushdownAble && replaced.references.subsetOf(aggregate.child.outputSet)
       }
 
       if (pushDown.nonEmpty) {
@@ -1153,8 +1158,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
+      var isPredicatePushdownAble = true
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.deterministic
+        isPredicatePushdownAble = isPredicatePushdownAble && cond.deterministic
+        isPredicatePushdownAble
       }
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
@@ -1195,8 +1202,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
+    var isPredicatePushdownAble = true
     val (pushDown, stayUp) = splitConjunctivePredicates(filter.condition).partition { cond =>
-      cond.deterministic && cond.references.subsetOf(grandchild.outputSet)
+      isPredicatePushdownAble = isPredicatePushdownAble && cond.deterministic
+      isPredicatePushdownAble && cond.references.subsetOf(grandchild.outputSet)
     }
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
