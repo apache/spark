@@ -257,6 +257,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def simpleString: String = statePrefix + super.simpleString
 
+  override def verboseString: String = simpleString
+
   /**
    * All the subqueries of current plan.
    */
@@ -296,7 +298,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * All the attributes that are used for this plan.
    */
-  lazy val allAttributes: Seq[Attribute] = children.flatMap(_.output)
+  lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
 
   private def cleanExpression(e: Expression): Expression = e match {
     case a: Alias =>

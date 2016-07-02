@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
  * can be accessed in multiple threads. This is an external catalog because it is expected to
  * interact with external systems.
  *
- * Implementations should throw [[NoSuchDatabaseException]] when table or database don't exist.
+ * Implementations should throw [[NoSuchDatabaseException]] when databases don't exist.
  */
 abstract class ExternalCatalog {
   import CatalogTypes.TablePartitionSpec

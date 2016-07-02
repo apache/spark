@@ -73,7 +73,7 @@ object TypeCoercion {
       DoubleType)
 
   /**
-   * Case 1 type widening (see the classdoc comment above for HiveTypeCoercion).
+   * Case 1 type widening (see the classdoc comment above for TypeCoercion).
    *
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
@@ -132,7 +132,7 @@ object TypeCoercion {
   }
 
   /**
-   * Case 2 type widening (see the classdoc comment above for HiveTypeCoercion).
+   * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
    * loss of precision when widening decimal and double.
@@ -525,14 +525,16 @@ object TypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
-      case e if !e.resolved => e
+      case e if !e.childrenResolved => e
 
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-
-      case Divide(left, right) => Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+      case Divide(left, right) if isNumeric(left) && isNumeric(right) =>
+        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
+
+    private def isNumeric(ex: Expression): Boolean = ex.dataType.isInstanceOf[NumericType]
   }
 
   /**

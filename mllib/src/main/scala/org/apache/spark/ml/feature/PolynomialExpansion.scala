@@ -35,9 +35,11 @@ import org.apache.spark.sql.types.DataType
  * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
  */
 @Experimental
-class PolynomialExpansion(override val uid: String)
+@Since("1.4.0")
+class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, PolynomialExpansion] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("poly"))
 
   /**
@@ -45,15 +47,18 @@ class PolynomialExpansion(override val uid: String)
    * Default: 2
    * @group param
    */
+  @Since("1.4.0")
   val degree = new IntParam(this, "degree", "the polynomial degree to expand (>= 1)",
     ParamValidators.gtEq(1))
 
   setDefault(degree -> 2)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getDegree: Int = $(degree)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setDegree(value: Int): this.type = set(degree, value)
 
   override protected def createTransformFunc: Vector => Vector = { v =>
@@ -62,6 +67,7 @@ class PolynomialExpansion(override val uid: String)
 
   override protected def outputDataType: DataType = new VectorUDT()
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
 }
 

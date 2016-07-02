@@ -49,6 +49,7 @@ else:
     import unittest
 
 from pyspark import SparkContext
+import pyspark.ml.linalg as newlinalg
 from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
@@ -422,6 +423,74 @@ class VectorTests(MLlibTestCase):
 
         tmp = SparseVector(4, [0, 2], [3, 0])
         self.assertEqual(tmp.numNonzeros(), 1)
+
+    def test_ml_mllib_vector_conversion(self):
+        # to ml
+        # dense
+        mllibDV = Vectors.dense([1, 2, 3])
+        mlDV1 = newlinalg.Vectors.dense([1, 2, 3])
+        mlDV2 = mllibDV.asML()
+        self.assertEqual(mlDV2, mlDV1)
+        # sparse
+        mllibSV = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mlSV1 = newlinalg.Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mlSV2 = mllibSV.asML()
+        self.assertEqual(mlSV2, mlSV1)
+        # from ml
+        # dense
+        mllibDV1 = Vectors.dense([1, 2, 3])
+        mlDV = newlinalg.Vectors.dense([1, 2, 3])
+        mllibDV2 = Vectors.fromML(mlDV)
+        self.assertEqual(mllibDV1, mllibDV2)
+        # sparse
+        mllibSV1 = Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mlSV = newlinalg.Vectors.sparse(4, {1: 1.0, 3: 5.5})
+        mllibSV2 = Vectors.fromML(mlSV)
+        self.assertEqual(mllibSV1, mllibSV2)
+
+    def test_ml_mllib_matrix_conversion(self):
+        # to ml
+        # dense
+        mllibDM = Matrices.dense(2, 2, [0, 1, 2, 3])
+        mlDM1 = newlinalg.Matrices.dense(2, 2, [0, 1, 2, 3])
+        mlDM2 = mllibDM.asML()
+        self.assertEqual(mlDM2, mlDM1)
+        # transposed
+        mllibDMt = DenseMatrix(2, 2, [0, 1, 2, 3], True)
+        mlDMt1 = newlinalg.DenseMatrix(2, 2, [0, 1, 2, 3], True)
+        mlDMt2 = mllibDMt.asML()
+        self.assertEqual(mlDMt2, mlDMt1)
+        # sparse
+        mllibSM = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mlSM1 = newlinalg.Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mlSM2 = mllibSM.asML()
+        self.assertEqual(mlSM2, mlSM1)
+        # transposed
+        mllibSMt = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mlSMt1 = newlinalg.SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mlSMt2 = mllibSMt.asML()
+        self.assertEqual(mlSMt2, mlSMt1)
+        # from ml
+        # dense
+        mllibDM1 = Matrices.dense(2, 2, [1, 2, 3, 4])
+        mlDM = newlinalg.Matrices.dense(2, 2, [1, 2, 3, 4])
+        mllibDM2 = Matrices.fromML(mlDM)
+        self.assertEqual(mllibDM1, mllibDM2)
+        # transposed
+        mllibDMt1 = DenseMatrix(2, 2, [1, 2, 3, 4], True)
+        mlDMt = newlinalg.DenseMatrix(2, 2, [1, 2, 3, 4], True)
+        mllibDMt2 = Matrices.fromML(mlDMt)
+        self.assertEqual(mllibDMt1, mllibDMt2)
+        # sparse
+        mllibSM1 = Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mlSM = newlinalg.Matrices.sparse(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
+        mllibSM2 = Matrices.fromML(mlSM)
+        self.assertEqual(mllibSM1, mllibSM2)
+        # transposed
+        mllibSMt1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mlSMt = newlinalg.SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4], True)
+        mllibSMt2 = Matrices.fromML(mlSMt)
+        self.assertEqual(mllibSMt1, mllibSMt2)
 
 
 class ListTests(MLlibTestCase):

@@ -193,7 +193,7 @@ class CatalogSuite
 
   test("list functions with database") {
     assert(Set("+", "current_database", "window").subsetOf(
-      spark.catalog.listFunctions("default").collect().map(_.name).toSet))
+      spark.catalog.listFunctions().collect().map(_.name).toSet))
     createDatabase("my_db1")
     createDatabase("my_db2")
     createFunction("my_func1", Some("my_db1"))
