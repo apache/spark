@@ -241,7 +241,6 @@ test_that("read csv as DataFrame", {
   expect_equal(count(df2), 4)
   withoutna2 <- na.omit(df2, how = "any", cols = "year")
   expect_equal(count(withoutna2), 3)
-  print(collect(withoutna2))
   expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
   unlink(csvPath)
