@@ -261,19 +261,26 @@ public class UnsafeArrayWriter {
     holder.cursor += 16;
   }
 
+  private void writePrimitiveArray(Object input, int offset, int elementSize, int length)  {
+    // uncomment this if SPARK-16043 is merged
+    // Platform.copyMemory(input, offset, holder.buffer, startingOffset + headerInBytes,
+    //   elementSize * length);
+    Platform.copyMemory(input, offset, holder.buffer, holder.cursor, elementSize * length);
+    // remove the followings if SPARK-15962 is merged
+    for (int ordinal = 0; ordinal < length; ordinal++) {
+      Platform.putInt(holder.buffer, getElementOffset(ordinal),
+        (holder.cursor + ordinal * elementSize) - startingOffset);
+    }
+    holder.cursor += elementSize * length;
+  }
+
   public void writePrimitiveBooleanArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // boolean[] intput = ((GenericBooleanArrayData)arrayData).primitiveArray();
     boolean[] input = arrayData.toBooleanArray();
     int length = input.length;
-    Platform.copyMemory(input, Platform.INT_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int offset = Platform.BYTE_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 1, length);
   }
 
   public void writePrimitiveByteArray(ArrayData arrayData) {
@@ -281,88 +288,52 @@ public class UnsafeArrayWriter {
     // byte[] intput = ((GenericByteArrayData)arrayData).primitiveArray();
     byte[] input = arrayData.toByteArray();
     int length = input.length;
-    Platform.copyMemory(input, Platform.INT_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int offset = Platform.BYTE_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 1, length);
   }
 
   public void writePrimitiveShortArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // short[] input = ((GenericShortArrayData)arrayData).primitiveArray();
     short[] input = arrayData.toShortArray();
-    int length = input.length * 2;
-    Platform.copyMemory(input, Platform.INT_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal * 2) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int length = input.length;
+    int offset = Platform.SHORT_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 2, length);
   }
 
   public void writePrimitiveIntArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // int[] input = ((GenericIntArrayData)arrayData).primitiveArray();
     int[] input = arrayData.toIntArray();
-    int length = input.length * 4;
-    Platform.copyMemory(input, Platform.INT_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal * 4) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int length = input.length;
+    int offset = Platform.INT_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 4, length);
   }
 
   public void writePrimitiveLongArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // long[] input = ((GenericLongArrayData)arrayData).primitiveArray();
     long[] input = arrayData.toLongArray();
-    int length = input.length * 8;
-    Platform.copyMemory(input, Platform.LONG_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal * 8) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int length = input.length;
+    int offset = Platform.LONG_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 8, length);
   }
 
   public void writePrimitiveFloatArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // float[] input = ((GenericFloatArrayData)arrayData).primitiveArray();
     float[] input = arrayData.toFloatArray();
-    int length = input.length * 4;
-    Platform.copyMemory(input, Platform.FLOAT_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal * 4) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int length = input.length;
+    int offset = Platform.FLOAT_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 4, length);
   }
 
   public void writePrimitiveDoubleArray(ArrayData arrayData) {
     // uncomment this if SPARK-16043 is merged
     // double[] input = ((GenericDoubleArrayData)arrayData).primitiveArray();
     double[] input = arrayData.toDoubleArray();
-    int length = input.length * 8;
-    Platform.copyMemory(input, Platform.DOUBLE_ARRAY_OFFSET,
-            holder.buffer, holder.cursor, length);
-    // remove the followings if SPARK-15962 is merged
-    for (int ordinal = 0; ordinal < input.length; ordinal++) {
-      final int relativeOffset = (holder.cursor + ordinal * 8) - startingOffset;
-      Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
-    }
-    holder.cursor += length;
+    int length = input.length;
+    int offset = Platform.DOUBLE_ARRAY_OFFSET;
+    writePrimitiveArray(input, offset, 8, length);
   }
 }
