@@ -101,10 +101,10 @@ private[spark] abstract class YarnSchedulerBackend(
    * attempts. Applications run in client mode will not have attempt IDs.
    * This attempt ID only includes attempt counter, like "1", "2".
    *
-   * @return The application attempt id, if available.
+   * @return The application attempt id, if not available, will return "1".
    */
   override def applicationAttemptId(): Option[String] = {
-    attemptId.map(_.getAttemptId.toString)
+    Some(attemptId.map(_.getAttemptId.toString).getOrElse("1"))
   }
 
   /**
