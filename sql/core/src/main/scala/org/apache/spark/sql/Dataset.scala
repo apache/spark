@@ -2478,6 +2478,7 @@ class Dataset[T] private[sql](
     val rowSchema = this.schema
     val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
+      // create the Generator without separator inserted between 2 records
       val gen = new JacksonGenerator(rowSchema, writer)
 
       new Iterator[String] {
