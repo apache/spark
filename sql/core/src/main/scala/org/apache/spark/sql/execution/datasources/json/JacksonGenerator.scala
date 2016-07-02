@@ -112,6 +112,10 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
             writeMapData(row.getMap(ordinal), mt, valueWriter)
           }
 
+       // For UDT values, they should be in the SQL type's corresponding value type.
+       // We should not see values in the user-defined class at here.
+       // For example, VectorUDT's SQL type is an array of double. So, we should expect that v is
+       // an ArrayData at here, instead of a Vector.
       case t: UserDefinedType[_] =>
         makeWriter(t.sqlType)
 
