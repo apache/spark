@@ -105,8 +105,8 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
         }
 
     case mt: MapType =>
+      val valueWriter = makeWriter(mt.valueType)
       (row: SpecializedGetters, ordinal: Int) =>
-        val valueWriter = makeWriter(mt.valueType)
         writeObject {
           writeMapData(row.getMap(ordinal), mt, valueWriter)
         }
