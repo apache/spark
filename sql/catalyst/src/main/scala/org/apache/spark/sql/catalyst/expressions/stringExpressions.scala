@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.net.URL
 import java.text.{DecimalFormat, DecimalFormatSymbols}
-import java.util.regex.Pattern
 import java.util.{HashMap, Locale, Map => JMap}
+import java.util.regex.Pattern
+
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -28,8 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
-
-import scala.util.control.NonFatal
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -677,22 +677,33 @@ object ParseUrl {
   extended = """Parts: HOST, PATH, QUERY, REF, PROTOCOL, AUTHORITY, FILE, USERINFO.
     Key specifies which query to extract.
     Examples:
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')\n 'spark.apache.org'
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')\n 'query=1'
-      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')\n '1'""")
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')
+      'spark.apache.org'
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY')
+      'query=1'
+      > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')
+      '1'""")
 case class ParseUrl(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
-  override def nullable = true
+  override def nullable: Boolean = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
   override def dataType: DataType = StringType
+  override def prettyName: String = "parse_url"
 
-  @transient private var lastUrlStr: UTF8String = _
-  @transient private var lastUrl: URL = _
-  // last key in string, we will update the pattern if key value changed.
-  @transient private var lastKey: UTF8String = _
-  // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  // If the url is a constant, cache the URL object so that we don't need to convert url
+  // from UTF8String to String to URL for every row.
+  @transient private lazy val cachedUrl = stringExprs(0) match {
+    case Literal(url: UTF8String, _) => getUrl(url)
+    case _ => null
+  }
+
+  // If the key is a constant, cache the Pattern object so that we don't need to convert key
+  // from UTF8String to String to StringBuilder to String to Pattern for every row.
+  @transient private lazy val cachedPattern = stringExprs(2) match {
+    case Literal(key: UTF8String, _) => getPattern(key)
+    case _ => null
+  }
 
   private lazy val stringExprs = children.toArray
   import ParseUrl._
@@ -705,38 +716,70 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  def parseUrlWithoutKey(url: Any, partToExtract: Any): Any = {
-    if (url == null || partToExtract == null) {
-      null
+  private def getPattern(key: Any): Pattern = {
+    if (key != null) {
+      val sb = new StringBuilder()
+      sb.append(REGEXPREFIX).append(key.toString).append(REGEXSUBFIX)
+      Pattern.compile(sb.toString())
     } else {
-      if (lastUrlStr == null || !url.equals(lastUrlStr)) {
-        try {
-          lastUrl = new URL(url.toString)
-          lastUrlStr = url.asInstanceOf[UTF8String].clone()
-        } catch {
-          case NonFatal(_) => return null
+      null
+    }
+  }
+
+  private def getUrl(url: Any): URL = {
+    try {
+      new URL(url.toString)
+    } catch {
+      case NonFatal(_) => null
+    }
+  }
+
+
+  private def extractValueFromQuery(query: Any, pattern: Pattern): Any = {
+    val m = pattern.matcher(query.toString)
+    if (m.find()) {
+      UTF8String.fromString(m.group(2))
+    } else {
+      null
+    }
+  }
+
+  private def extractFromUrl(url: URL, partToExtract: Any): Any = {
+    if (partToExtract.equals(HOST)) {
+      UTF8String.fromString(url.getHost)
+    } else if (partToExtract.equals(PATH)) {
+      UTF8String.fromString(url.getPath)
+    } else if (partToExtract.equals(QUERY)) {
+      UTF8String.fromString(url.getQuery)
+    } else if (partToExtract.equals(REF)) {
+      UTF8String.fromString(url.getRef)
+    } else if (partToExtract.equals(PROTOCOL)) {
+      UTF8String.fromString(url.getProtocol)
+    } else if (partToExtract.equals(FILE)) {
+      UTF8String.fromString(url.getFile)
+    } else if (partToExtract.equals(AUTHORITY)) {
+      UTF8String.fromString(url.getAuthority)
+    } else if (partToExtract.equals(USERINFO)) {
+      UTF8String.fromString(url.getUserInfo)
+    } else {
+      null
+    }
+  }
+
+  private def parseUrlWithoutKey(url: Any, partToExtract: Any): Any = {
+    if (url != null && partToExtract != null) {
+      if (cachedUrl ne null) {
+        extractFromUrl(cachedUrl, partToExtract)
+      } else {
+        val currentUrl = getUrl(url)
+        if (currentUrl ne null) {
+          extractFromUrl(currentUrl, partToExtract)
+        } else {
+          null
         }
       }
-
-      if (partToExtract.equals(HOST)) {
-        UTF8String.fromString(lastUrl.getHost)
-      } else if (partToExtract.equals(PATH)) {
-        UTF8String.fromString(lastUrl.getPath)
-      } else if (partToExtract.equals(QUERY)) {
-        UTF8String.fromString(lastUrl.getQuery)
-      } else if (partToExtract.equals(REF)) {
-        UTF8String.fromString(lastUrl.getRef)
-      } else if (partToExtract.equals(PROTOCOL)) {
-        UTF8String.fromString(lastUrl.getProtocol)
-      } else if (partToExtract.equals(FILE)) {
-        UTF8String.fromString(lastUrl.getFile)
-      } else if (partToExtract.equals(AUTHORITY)) {
-        UTF8String.fromString(lastUrl.getAuthority)
-      } else if (partToExtract.equals(USERINFO)) {
-        UTF8String.fromString(lastUrl.getUserInfo)
-      } else {
-        null
-      }
+    } else {
+      null
     }
   }
 
@@ -746,37 +789,28 @@ case class ParseUrl(children: Seq[Expression])
     if (stringExprs.size == 2) {
       parseUrlWithoutKey(url, partToExtract)
     } else { // QUERY with key
-      if (partToExtract == null || !partToExtract.equals(QUERY)) {
-        null
-      } else {
+      if (QUERY.equals(partToExtract)) {
         val query = parseUrlWithoutKey(url, partToExtract)
-        if (query == null) {
-          null
-        } else {
-          val key = stringExprs(2).eval(input)
-          if (key == null) {
-            null
+        if (query != null) {
+          if (cachedPattern ne null) {
+            extractValueFromQuery(query, cachedPattern)
           } else {
-            if (!key.equals(lastKey)) {
-              lastKey = key.asInstanceOf[UTF8String].clone()
-              val sb = new StringBuilder()
-              sb.append(REGEXPREFIX).append(key.toString).append(REGEXSUBFIX)
-              pattern = Pattern.compile(sb.toString())
-            }
-
-            val m = pattern.matcher(query.toString)
-            if (m.find()) {
-              UTF8String.fromString(m.group(2))
+            val key = stringExprs(2).eval(input)
+            val pattern = getPattern(key)
+            if (pattern ne null) {
+              extractValueFromQuery(query, pattern)
             } else {
               null
             }
           }
+        } else {
+          null
         }
+      } else {
+        null
       }
     }
   }
-
-  override def prettyName: String = "parse_url"
 }
 
 /**

@@ -761,6 +761,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", null)
     checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "")
 
+    // exceptional cases
+    intercept[java.util.regex.PatternSyntaxException] {
+      evaluate(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
+        Literal("QUERY"), Literal("???"))))
+    }
+
     // arguments checking
     assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes().isFailure)
     assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"), Literal("4")))
