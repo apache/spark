@@ -37,94 +37,92 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
-  private def makeWriter(dataType: DataType): ValueWriter = {
-    dataType match {
-      case NullType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNull()
+  private def makeWriter(dataType: DataType): ValueWriter = dataType match {
+    case NullType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNull()
 
-      case BooleanType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeBoolean(row.getBoolean(ordinal))
+    case BooleanType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeBoolean(row.getBoolean(ordinal))
 
-      case ByteType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getByte(ordinal))
+    case ByteType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getByte(ordinal))
 
-      case ShortType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getShort(ordinal))
+    case ShortType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getShort(ordinal))
 
-      case IntegerType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getInt(ordinal))
+    case IntegerType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getInt(ordinal))
 
-      case LongType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getLong(ordinal))
+    case LongType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getLong(ordinal))
 
-      case FloatType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getFloat(ordinal))
+    case FloatType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getFloat(ordinal))
 
-      case DoubleType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getDouble(ordinal))
+    case DoubleType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getDouble(ordinal))
 
-      case StringType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeString(row.getUTF8String(ordinal).toString)
+    case StringType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(row.getUTF8String(ordinal).toString)
 
-      case TimestampType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeString(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)).toString)
+    case TimestampType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)).toString)
 
-      case DateType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeString(DateTimeUtils.toJavaDate(row.getInt(ordinal)).toString)
+    case DateType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeString(DateTimeUtils.toJavaDate(row.getInt(ordinal)).toString)
 
-      case BinaryType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeBinary(row.getBinary(ordinal))
+    case BinaryType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeBinary(row.getBinary(ordinal))
 
-      case dt: DecimalType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          gen.writeNumber(row.getDecimal(ordinal, dt.precision, dt.scale).toJavaBigDecimal)
+    case dt: DecimalType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        gen.writeNumber(row.getDecimal(ordinal, dt.precision, dt.scale).toJavaBigDecimal)
 
-      case st: StructType =>
-        val fieldWriters = st.map(_.dataType).map(makeWriter)
-        (row: SpecializedGetters, ordinal: Int) =>
-          writeObject {
-            writeFields(row.getStruct(ordinal, st.length), st, fieldWriters)
-          }
+    case st: StructType =>
+      val fieldWriters = st.map(_.dataType).map(makeWriter)
+      (row: SpecializedGetters, ordinal: Int) =>
+        writeObject {
+          writeFields(row.getStruct(ordinal, st.length), st, fieldWriters)
+        }
 
-      case ArrayType(ty, _) =>
-        val elementWriter = makeWriter(ty)
-        (row: SpecializedGetters, ordinal: Int) =>
-          writeArray {
-            writeArrayData(row.getArray(ordinal), elementWriter)
-          }
+    case at: ArrayType =>
+      val elementWriter = makeWriter(at.elementType)
+      (row: SpecializedGetters, ordinal: Int) =>
+        writeArray {
+          writeArrayData(row.getArray(ordinal), elementWriter)
+        }
 
-      case mt: MapType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          val valueWriter = makeWriter(mt.valueType)
-          writeObject {
-            writeMapData(row.getMap(ordinal), mt, valueWriter)
-          }
+    case mt: MapType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val valueWriter = makeWriter(mt.valueType)
+        writeObject {
+          writeMapData(row.getMap(ordinal), mt, valueWriter)
+        }
 
-       // For UDT values, they should be in the SQL type's corresponding value type.
-       // We should not see values in the user-defined class at here.
-       // For example, VectorUDT's SQL type is an array of double. So, we should expect that v is
-       // an ArrayData at here, instead of a Vector.
-      case t: UserDefinedType[_] =>
-        makeWriter(t.sqlType)
+    // For UDT values, they should be in the SQL type's corresponding value type.
+    // We should not see values in the user-defined class at here.
+    // For example, VectorUDT's SQL type is an array of double. So, we should expect that v is
+    // an ArrayData at here, instead of a Vector.
+    case t: UserDefinedType[_] =>
+      makeWriter(t.sqlType)
 
-      case _ =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          val v = row.get(ordinal, dataType)
-          sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
-              s"with the type of $dataType to JSON.")
-    }
+    case _ =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val v = row.get(ordinal, dataType)
+        sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
+          s"with the type of $dataType to JSON.")
   }
 
   private def writeObject(f: => Unit): Unit = {
