@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.CharArrayWriter
+import java.io.Writer
 
 import com.fasterxml.jackson.core._
 
@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
-private[sql] class JacksonGenerator(schema: StructType, writer: CharArrayWriter) {
+private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
