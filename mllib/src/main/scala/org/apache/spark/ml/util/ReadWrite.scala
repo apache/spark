@@ -122,6 +122,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   protected val supportedFormats = List("native")
 
   protected var source = "native"
+
   /**
    * Specifies the underlying output data format. Default is "native" with some models also
    * supporting "pmml".
@@ -157,6 +158,36 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 /**
  * :: Experimental ::
  *
+ * Abstract class for utility classes that can save ML instances in both native Spark and PMML.
+ */
+@Experimental
+@Since("1.6.0")
+abstract class PMMLWriter extends MLWriter {
+  protected override val supportedFormats = List("pmml", "native")
+
+  /**
+   * Specifies the underlying output data format as PMML
+   */
+  def pmmml(): MLWriter = {
+    this.source = "pmml"
+    this
+  }
+
+  override protected def saveImpl(path: String): Unit = {
+    source match {
+      case "native" => saveNative(path)
+      case "pmml" => savePMML(path)
+    }
+  }
+
+  protected def savePMML(path: String): Unit
+
+  protected def saveNative(path: String): Unit
+}
+
+/**
+ * :: Experimental ::
+ *
  * Trait for classes that provide [[MLWriter]].
  */
 @Experimental
@@ -186,9 +217,17 @@ trait MLWritable {
 @Since("2.1.0")
 trait PMMLWritable extends MLWritable {
   /**
+   * Returns an [[PMMLWriter]] instance for this ML instance capable of saving to both native Spark
+   * and PMML.
+   */
+  @Since("2.1.0")
+  override def write: PMMLWriter
+
+  /**
    * Save this ML instance to the input path in PMML format. A shortcut of
    * `write.format("pmml").save(path)`.
    */
+  @Since("2.1.0")
   def toPMML(path: String): Unit = {
     write.format("pmml").save(path)
   }

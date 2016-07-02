@@ -156,7 +156,7 @@ class KMeansModel private[ml] (
    *
    */
   @Since("1.6.0")
-  override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
+  override def write: PMMLWriter = new KMeansModel.KMeansModelWriter(this)
 
   private var trainingSummary: Option[KMeansSummary] = None
 
@@ -201,22 +201,13 @@ object KMeansModel extends MLReadable[KMeansModel] {
   private case class OldData(clusterCenters: Array[OldVector])
 
   /** [[MLWriter]] instance for [[KMeansModel]] */
-  private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
+  private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends PMMLWriter {
 
-    override val supportedFormats = List("native", "pmml")
-
-    override protected def saveImpl(path: String): Unit = {
-      source match {
-        case "native" => saveNative(path)
-        case "pmml" => savePMML(path)
-      }
-    }
-
-    private def savePMML(path: String): Unit = {
+    override protected def savePMML(path: String): Unit = {
       instance.parentModel.toPMML(sc, path)
     }
 
-    private def saveNative(path: String): Unit = {
+    override protected def saveNative(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: cluster centers
