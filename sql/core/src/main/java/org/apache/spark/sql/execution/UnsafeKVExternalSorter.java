@@ -57,7 +57,8 @@ public final class UnsafeKVExternalSorter {
       SerializerManager serializerManager,
       long pageSizeBytes,
       long numElementsForSpillThreshold) throws IOException {
-    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes, numElementsForSpillThreshold, null);
+    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
+      numElementsForSpillThreshold, null);
   }
 
   public UnsafeKVExternalSorter(
