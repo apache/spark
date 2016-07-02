@@ -215,10 +215,7 @@ case class Inline(child: Expression) extends UnaryExpression with Generator with
   }
 
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(et : StructType, _) =>
-      StructType(et.fields.zipWithIndex.map {
-        case (field, index) => StructField(field.name, field.dataType, nullable = field.nullable)
-      })
+    case ArrayType(et : StructType, _) => et
   }
 
   private lazy val numFields = elementSchema.fields.length

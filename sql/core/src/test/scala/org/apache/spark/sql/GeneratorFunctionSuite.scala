@@ -90,7 +90,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       Row(3) :: Nil)
   }
 
-  test("inline raises exception on empty array") {
+  test("inline raises exception on array of null type") {
     val m = intercept[AnalysisException] {
       spark.range(2).selectExpr("inline(array())")
     }.getMessage
