@@ -229,6 +229,22 @@ test_that("read csv as DataFrame", {
   expect_equal(count(withoutna), 3)
 
   unlink(csvPath)
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                   "1997,Ford,E350,\"Go get one now they are going fast\",",
+                   "2015,Chevy,Volt",
+                   "Empty,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.string = "Empty")
+  expect_equal(count(df2), 4)
+  withoutna2 <- na.omit(df2, how = "any", cols = "year")
+  expect_equal(count(withoutna2), 3)
+  print(collect(withoutna2))
+  expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
+
+  unlink(csvPath)
 })
 
 test_that("convert NAs to null type in DataFrames", {

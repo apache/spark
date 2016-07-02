@@ -721,6 +721,7 @@ dropTempView <- function(viewName) {
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
+#' @param na.strings Default string value for NA when source is "csv"
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
@@ -737,7 +738,7 @@ dropTempView <- function(viewName) {
 #' @name read.df
 #' @method read.df default
 #' @note read.df since 1.4.0
-read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
+read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
@@ -747,7 +748,7 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
     source <- getDefaultSqlSource()
   }
   if (source == "csv" && is.null(options[["nullValue"]])) {
-    options[["nullValue"]] <- "NA"
+    options[["nullValue"]] <- na.strings
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")
