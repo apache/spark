@@ -43,8 +43,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  * In the `values or offset` region, we store the content of elements. For fields that hold
  * fixed-length primitive types, such as long, double, or int, we store the value directly
  * in the field. For fields with non-primitive or variable-length values, we store a relative
- * offset (w.r.t. the base address of the row) that points to the beginning of the variable-length
- * field, and length (they are combined into a long).
+ * offset (w.r.t. the base address of the array) that points to the beginning of
+ * the variable-length field, and length (they are combined into a long).
  *
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
@@ -301,6 +301,7 @@ public final class UnsafeArrayData extends ArrayData {
     }
     return false;
   }
+
   public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
@@ -387,50 +388,52 @@ public final class UnsafeArrayData extends ArrayData {
     return values;
   }
 
-  private static UnsafeArrayData fromPrimitiveArray(Object arr, int length, final int elementSize) {
-    final int headerSize = calculateHeaderPortionInBytes(length);
-    if (length > (Integer.MAX_VALUE - headerSize) / elementSize) {
+  private static UnsafeArrayData fromPrimitiveArray(
+       Object arr, int offset, int length, int elementSize) {
+    final long headerSize = calculateHeaderPortionInBytes(length);
+    final long valueRegionSize = (long)elementSize * (long)length;
+    final long allocationSize = (headerSize + valueRegionSize + 7) / 8;
+    if (allocationSize > (long)Integer.MAX_VALUE) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "it's too big.");
     }
 
-    final int valueRegionSize = elementSize * length;
-    final byte[] data = new byte[valueRegionSize + headerSize];
+    final long[] data = new long[(int)allocationSize];
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, length);
     Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
       Platform.BYTE_ARRAY_OFFSET + headerSize, valueRegionSize);
 
     UnsafeArrayData result = new UnsafeArrayData();
-    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, valueRegionSize + headerSize);
+    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, (int)allocationSize * 8);
     return result;
   }
 
   public static UnsafeArrayData fromPrimitiveArray(boolean[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 1);
+    return fromPrimitiveArray(arr, Platform.BYTE_ARRAY_OFFSET, arr.length, 1);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(byte[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 1);
+    return fromPrimitiveArray(arr, Platform.BYTE_ARRAY_OFFSET, arr.length, 1);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(short[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 2);
+    return fromPrimitiveArray(arr, Platform.SHORT_ARRAY_OFFSET, arr.length, 2);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 4);
+    return fromPrimitiveArray(arr, Platform.INT_ARRAY_OFFSET, arr.length, 4);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(long[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 8);
+    return fromPrimitiveArray(arr, Platform.LONG_ARRAY_OFFSET, arr.length, 8);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(float[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 4);
+    return fromPrimitiveArray(arr, Platform.FLOAT_ARRAY_OFFSET, arr.length, 4);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
-    return fromPrimitiveArray(arr, arr.length, 8);
+    return fromPrimitiveArray(arr, Platform.DOUBLE_ARRAY_OFFSET, arr.length, 8);
   }
 }

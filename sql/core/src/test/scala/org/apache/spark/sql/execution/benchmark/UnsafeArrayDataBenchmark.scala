@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter}
 import org.apache.spark.unsafe.Platform
@@ -32,11 +33,6 @@ import org.apache.spark.util.Benchmark
  */
 class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
-  new SparkConf()
-    .setMaster("local[1]")
-    .setAppName("microbenchmark")
-    .set("spark.driver.memory", "3g")
-
   def calculateHeaderPortionInBytes(count: Int) : Int = {
     // Use this assignment for SPARK-15962
     // val size = 4 + 4 * count
@@ -47,12 +43,11 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
   def readUnsafeArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 16
 
-    val intUnsafeArray = new UnsafeArrayData
     var intResult: Int = 0
-    val intSize = calculateHeaderPortionInBytes(count) + 4 * count
-    val intBuffer = new Array[Byte](intSize)
-    Platform.putInt(intBuffer, Platform.BYTE_ARRAY_OFFSET, count)
-    intUnsafeArray.pointTo(intBuffer, Platform.BYTE_ARRAY_OFFSET, intSize)
+    val intBuffer = new Array[Int](count)
+    val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
+    val intInternalRow = intEncoder.toRow(intBuffer)
+    val intUnsafeArray = intInternalRow.getArray(0)
     val readIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
@@ -68,12 +63,11 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
       }
     }
 
-    val doubleUnsafeArray = new UnsafeArrayData
     var doubleResult: Double = 0
-    val doubleSize = calculateHeaderPortionInBytes(count) + 8 * count
-    val doubleBuffer = new Array[Byte](doubleSize)
-    Platform.putInt(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, count)
-    doubleUnsafeArray.pointTo(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, doubleSize)
+    val doubleBuffer = new Array[Double](count)
+    val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
+    val doubleInternalRow = doubleEncoder.toRow(doubleBuffer)
+    val doubleUnsafeArray = doubleInternalRow.getArray(0)
     val readDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
@@ -94,16 +88,6 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(readDoubleArray)
     benchmark.run
     /*
-    Without SPARK-15962
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Read UnsafeArrayData:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            370 /  471        454.0           2.2       1.0X
-    Double                                         351 /  466        477.5           2.1       1.1X
-    */
-    /*
-    With SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Read UnsafeArrayData:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
@@ -161,16 +145,6 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(writeDoubleArray)
     benchmark.run
     /*
-    Without SPARK-15962
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            337 /  407        498.0           2.0       1.0X
-    Double                                         458 /  496        366.2           2.7       0.7X
-    */
-    /*
-    With SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
@@ -216,16 +190,6 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(readDoubleArray)
     benchmark.run
     /*
-    Without SPARK-15962
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            218 /  256        288.1           3.5       1.0X
-    Double                                         318 /  539        198.0           5.1       0.7X
-    */
-    /*
-    With SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
@@ -263,16 +227,6 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(createDoubleArray)
     benchmark.run
     /*
-    Without SPARK-15962
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)   Rate(M/s)  Per Row(ns) Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            343 /  437        183.6           5.4       1.0X
-    Double                                         322 /  505        195.6           5.1       1.1X
-    */
-    /*
-    With SPARK-15962
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Create UnsafeArrayData from primitive array: Best/Avg Time(ms)   Rate(M/s)  Per Row(ns) Relative
