@@ -98,11 +98,13 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
     }
   }
 
-  ignore("foreach() with `complete` output mode") {
+  test("foreach() with `complete` output mode") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
 
-      val query = input.toDS().groupBy().min().as[Int].writeStream
+      val query = input.toDS()
+        .groupBy().count().as[Long].map(_.toInt)
+        .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .outputMode("complete")
         .foreach(new TestForeachWriter())
@@ -116,7 +118,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       assert(allEvents.size === 1)
       var expectedEvents = Seq(
         ForeachSinkSuite.Open(partition = 0, version = 0),
-        ForeachSinkSuite.Process(value = 1),
+        ForeachSinkSuite.Process(value = 4),
         ForeachSinkSuite.Close(None)
       )
       assert(allEvents === Seq(expectedEvents))
@@ -131,7 +133,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       assert(allEvents.size === 1)
       expectedEvents = Seq(
         ForeachSinkSuite.Open(partition = 0, version = 1),
-        ForeachSinkSuite.Process(value = 1),
+        ForeachSinkSuite.Process(value = 8),
         ForeachSinkSuite.Close(None)
       )
       assert(allEvents === Seq(expectedEvents))

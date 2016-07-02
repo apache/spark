@@ -155,7 +155,7 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @transient val queryExecution: QueryExecution,
-    encoder: Encoder[T])
+    val encoder: Encoder[T])
   extends Serializable {
 
   queryExecution.assertAnalyzed()
