@@ -1007,15 +1007,15 @@ PageRank measures the importance of each vertex in a graph, assuming an edge fro
 
 GraphX comes with static and dynamic implementations of PageRank as methods on the [`PageRank` object][PageRank]. Static PageRank runs for a fixed number of iterations, while dynamic PageRank runs until the ranks converge (i.e., stop changing by more than a specified tolerance). [`GraphOps`][GraphOps] allows calling these algorithms directly as methods on `Graph`.
 
-GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We compute the PageRank of each user as follows:
+GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `data/graphx/users.txt`, and a set of relationships between users is given in `data/graphx/followers.txt`. We compute the PageRank of each user as follows:
 
 {% highlight scala %}
 // Load the edges as a graph
-val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
+val graph = GraphLoader.edgeListFile(sc, "data/graphx/followers.txt")
 // Run PageRank
 val ranks = graph.pageRank(0.0001).vertices
 // Join the ranks with the usernames
-val users = sc.textFile("graphx/data/users.txt").map { line =>
+val users = sc.textFile("data/graphx/users.txt").map { line =>
   val fields = line.split(",")
   (fields(0).toLong, fields(1))
 }
@@ -1032,11 +1032,11 @@ The connected components algorithm labels each connected component of the graph 
 
 {% highlight scala %}
 // Load the graph as in the PageRank example
-val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
+val graph = GraphLoader.edgeListFile(sc, "data/graphx/followers.txt")
 // Find the connected components
 val cc = graph.connectedComponents().vertices
 // Join the connected components with the usernames
-val users = sc.textFile("graphx/data/users.txt").map { line =>
+val users = sc.textFile("data/graphx/users.txt").map { line =>
   val fields = line.split(",")
   (fields(0).toLong, fields(1))
 }
@@ -1053,11 +1053,11 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 
 {% highlight scala %}
 // Load the edges in canonical order and partition the graph for triangle count
-val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt", true).partitionBy(PartitionStrategy.RandomVertexCut)
+val graph = GraphLoader.edgeListFile(sc, "data/graphx/followers.txt", true).partitionBy(PartitionStrategy.RandomVertexCut)
 // Find the triangle count for each vertex
 val triCounts = graph.triangleCount().vertices
 // Join the triangle counts with the usernames
-val users = sc.textFile("graphx/data/users.txt").map { line =>
+val users = sc.textFile("data/graphx/users.txt").map { line =>
   val fields = line.split(",")
   (fields(0).toLong, fields(1))
 }
@@ -1081,11 +1081,11 @@ all of this in just a few lines with GraphX:
 val sc = new SparkContext("spark://master.amplab.org", "research")
 
 // Load my user data and parse into tuples of user id and attribute list
-val users = (sc.textFile("graphx/data/users.txt")
+val users = (sc.textFile("data/graphx/users.txt")
   .map(line => line.split(",")).map( parts => (parts.head.toLong, parts.tail) ))
 
 // Parse the edge data which is already in userId -> userId format
-val followerGraph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
+val followerGraph = GraphLoader.edgeListFile(sc, "data/graphx/followers.txt")
 
 // Attach the user attributes
 val graph = followerGraph.outerJoinVertices(users) {
