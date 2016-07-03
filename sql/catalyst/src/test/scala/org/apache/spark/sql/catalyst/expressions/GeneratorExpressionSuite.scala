@@ -19,53 +19,48 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types._
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
-  private def checkTuple(actual: ExplodeBase, expected: Seq[InternalRow]): Unit = {
-    assert(actual.eval(null).toSeq === expected)
+  private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
+    assert(actual.eval(null).asInstanceOf[TraversableOnce[InternalRow]].toSeq === expected)
   }
 
-  private final val int_array = Seq(1, 2, 3)
-  private final val str_array = Seq("a", "b", "c")
+  private final val empty_array = CreateArray(Seq.empty)
+  private final val int_array = CreateArray(Seq(1, 2, 3).map(Literal(_)))
+  private final val str_array = CreateArray(Seq("a", "b", "c").map(Literal(_)))
 
   test("explode") {
-    val int_correct_answer = Seq(Seq(1), Seq(2), Seq(3))
-    val str_correct_answer = Seq(
-      Seq(UTF8String.fromString("a")),
-      Seq(UTF8String.fromString("b")),
-      Seq(UTF8String.fromString("c")))
+    val int_correct_answer = Seq(create_row(1), create_row(2), create_row(3))
+    val str_correct_answer = Seq(create_row("a"), create_row("b"), create_row("c"))
 
-    checkTuple(
-      Explode(CreateArray(Seq.empty)),
-      Seq.empty)
-
-    checkTuple(
-      Explode(CreateArray(int_array.map(Literal(_)))),
-      int_correct_answer.map(InternalRow.fromSeq(_)))
-
-    checkTuple(
-      Explode(CreateArray(str_array.map(Literal(_)))),
-      str_correct_answer.map(InternalRow.fromSeq(_)))
+    checkTuple(Explode(empty_array), Seq.empty)
+    checkTuple(Explode(int_array), int_correct_answer)
+    checkTuple(Explode(str_array), str_correct_answer)
   }
 
   test("posexplode") {
-    val int_correct_answer = Seq(Seq(0, 1), Seq(1, 2), Seq(2, 3))
-    val str_correct_answer = Seq(
-      Seq(0, UTF8String.fromString("a")),
-      Seq(1, UTF8String.fromString("b")),
-      Seq(2, UTF8String.fromString("c")))
+    val int_correct_answer = Seq(create_row(0, 1), create_row(1, 2), create_row(2, 3))
+    val str_correct_answer = Seq(create_row(0, "a"), create_row(1, "b"), create_row(2, "c"))
+
+    checkTuple(PosExplode(CreateArray(Seq.empty)), Seq.empty)
+    checkTuple(PosExplode(int_array), int_correct_answer)
+    checkTuple(PosExplode(str_array), str_correct_answer)
+  }
+
+  test("inline") {
+    val correct_answer = Seq(create_row(0, "a"), create_row(1, "b"), create_row(2, "c"))
 
     checkTuple(
-      PosExplode(CreateArray(Seq.empty)),
+      Inline(Literal.create(Array(), ArrayType(new StructType().add("id", LongType)))),
       Seq.empty)
 
     checkTuple(
-      PosExplode(CreateArray(int_array.map(Literal(_)))),
-      int_correct_answer.map(InternalRow.fromSeq(_)))
-
-    checkTuple(
-      PosExplode(CreateArray(str_array.map(Literal(_)))),
-      str_correct_answer.map(InternalRow.fromSeq(_)))
+      Inline(CreateArray(Seq(
+        CreateStruct(Seq(Literal(0), Literal("a"))),
+        CreateStruct(Seq(Literal(1), Literal("b"))),
+        CreateStruct(Seq(Literal(2), Literal("c")))
+      ))),
+      correct_answer)
   }
 }
