@@ -400,12 +400,12 @@ public final class UnsafeArrayData extends ArrayData {
 
     final long[] data = new long[(int)allocationSize];
 
-    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, length);
-    Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
-      Platform.BYTE_ARRAY_OFFSET + headerSize, valueRegionSize);
+    Platform.putInt(data, Platform.LONG_ARRAY_OFFSET, length);
+    Platform.copyMemory(arr, offset, data,
+      Platform.LONG_ARRAY_OFFSET + headerSize, valueRegionSize);
 
     UnsafeArrayData result = new UnsafeArrayData();
-    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, (int)allocationSize * 8);
+    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)allocationSize * 8);
     return result;
   }
 
