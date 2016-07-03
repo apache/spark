@@ -771,5 +771,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes().isFailure)
     assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"), Literal("4")))
       .checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("http://spark.apache.org/path?"), Literal("QUERY"),
+      Literal("???"))).checkInputDataTypes().isFailure)
   }
 }

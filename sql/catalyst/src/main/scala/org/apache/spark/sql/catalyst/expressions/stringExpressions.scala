@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.net.URL
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
-import java.util.regex.Pattern
+import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.util.control.NonFatal
 
@@ -710,8 +710,20 @@ case class ParseUrl(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size > 3 || children.size < 2) {
-      TypeCheckResult.TypeCheckFailure("parse_url function requires two or three arguments")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName function requires two or three arguments")
     } else {
+      if (children.size == 3) {
+        children(2) match {
+          case Literal(key: UTF8String, _) => // Literal key validation in Driver side
+            try {
+              getPattern(key)
+            } catch {
+              case e: PatternSyntaxException =>
+                return TypeCheckResult.TypeCheckFailure(s"invalid key '${key.toString}'")
+            }
+          case _ =>
+        }
+      }
       super[ImplicitCastInputTypes].checkInputDataTypes()
     }
   }
