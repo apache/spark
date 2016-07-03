@@ -216,6 +216,7 @@ case class Divide(left: Expression, right: Expression)
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
+  override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
