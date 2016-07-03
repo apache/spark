@@ -398,17 +398,17 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
  * Creates a map after splitting the input text into key/value pairs using delimeters
  */
 @ExpressionDescription(
-  usage = """_FUNC_(text[, delimiter1, delimiter2]) - Creates a map after splitting the text into
-    key/value pairs using delimeters.
-    Default delimiters are ',' for delimiter1 and '=' for delimiter2.""")
-case class StringToMap(child: Expression, delimiter1: Expression, delimiter2: Expression)
+  usage = """_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into
+    key/value pairs using delimiters.
+    Default delimiters are ',' for pairDelim and '=' for keyValueDelim.""")
+case class StringToMap(child: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes {
 
   def this(child: Expression) = {
     this(child, Literal(","), Literal("="))
   }
 
-  override def children: Seq[Expression] = Seq(child, delimiter1, delimiter2)
+  override def children: Seq[Expression] = Seq(child, pairDelim, keyValueDelim)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
