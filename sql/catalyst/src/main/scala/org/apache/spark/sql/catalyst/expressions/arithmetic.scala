@@ -291,7 +291,7 @@ case class IntegerDivide(left: Expression, right: Expression)
 
   override def inputType: AbstractDataType = IntegralType
 
-  override def symbol: String = "/"
+  override def symbol: String = "div"
   override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
 
