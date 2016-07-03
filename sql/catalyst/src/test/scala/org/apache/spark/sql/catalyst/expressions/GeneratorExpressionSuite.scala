@@ -63,4 +63,16 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       ))),
       correct_answer)
   }
+
+  test("stack") {
+    checkTuple(Stack(Seq(1).map(Literal(_))), Seq(create_row()))
+    checkTuple(Stack(Seq(1, 1).map(Literal(_))), Seq(create_row(1)))
+    checkTuple(Stack(Seq(1, 1, 2).map(Literal(_))), Seq(create_row(1, 2)))
+    checkTuple(Stack(Seq(2, 1, 2).map(Literal(_))), Seq(create_row(1), create_row(2)))
+    checkTuple(Stack(Seq(2, 1, 2, 3).map(Literal(_))), Seq(create_row(1, 2), create_row(3, null)))
+
+    checkTuple(
+      Stack(Seq(2, "a", "b", "c").map(Literal(_))),
+      Seq(create_row("a", "b"), create_row("c", null)))
+  }
 }
