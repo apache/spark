@@ -25,6 +25,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -170,11 +171,14 @@ object FunctionRegistry {
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
     expression[CreateMap]("map"),
+    expression[MapKeys]("map_keys"),
+    expression[MapValues]("map_values"),
     expression[CreateNamedStruct]("named_struct"),
     expression[NaNvl]("nanvl"),
     expression[NullIf]("nullif"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
+    expression[PosExplode]("posexplode"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
@@ -248,6 +252,7 @@ object FunctionRegistry {
     expression[Average]("mean"),
     expression[Min]("min"),
     expression[Skewness]("skewness"),
+    expression[StddevSamp]("std"),
     expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
@@ -264,6 +269,7 @@ object FunctionRegistry {
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
+    expression[Elt]("elt"),
     expression[Encode]("encode"),
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
@@ -300,6 +306,7 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathBoolean]("xpath_boolean"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -396,6 +403,8 @@ object FunctionRegistry {
     fr
   }
 
+  val functionSet: Set[String] = builtin.listFunction().toSet
+
   /** See usage above. */
   private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
@@ -410,7 +419,7 @@ object FunctionRegistry {
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }
       } else {
-        // Otherwise, find an ctor method that matches the number of arguments, and use that.
+        // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>

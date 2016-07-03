@@ -58,15 +58,37 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
-      StringUtils.filterPattern(spark.sessionState.functionRegistry.listFunction(), pattern)
+      StringUtils.filterPattern(
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName), pattern)
         .map(Row(_))
     }
+
+    def createFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
+      }
+    }
+
+    def dropFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.sessionState.catalog.dropTempFunction(name, false)
+      }
+    }
+
+    val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
+      "isize", "ispace", "to_datei", "date_addi", "current_datei")
+
+    createFunction(functions)
+
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    assert(sql("SHOW functions").collect().size > 200)
+
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
       // For '*', we need to replace it to '.*'.
       checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
+    dropFunction(functions)
   }
 
   test("describe functions") {
@@ -246,12 +268,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.sparkPlan
-      .collect { case _: aggregate.TungstenAggregate => true }
+      .collect { case _: aggregate.HashAggregateExec => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
         s"""
-           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
+           |Codegen is enabled, but query $sqlText does not have HashAggregate in the plan.
            |${df.queryExecution.simpleString}
          """.stripMargin)
     }
@@ -1838,20 +1860,61 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df)
     })
 
-    val e1 = intercept[AnalysisException] {
+    var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view not found"))
 
-    val e2 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view not found"))
 
-    val e3 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("Path does not exist"))
+    assert(e.message.contains("Path does not exist"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
+    }
+    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
+      "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
+
+    // data source type is case insensitive
+    e = intercept[AnalysisException] {
+      sql(s"select id from Avro.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
+      "http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from avro.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
+      "http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
+    }
+    assert(e.message.contains("Table or view not found: " +
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `Jdbc`.`file_path`")
+    }
+    assert(e.message.contains("Unsupported data source type for direct query on files: Jdbc"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
+    }
+    assert(e.message.contains("Unsupported data source type for direct query on files: " +
+      "org.apache.spark.sql.execution.datasources.jdbc"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
@@ -2052,6 +2115,37 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("Star Expansion - table with zero column") {
+    withTempTable("temp_table_no_cols") {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.createTempView("temp_table_no_cols")
+
+      // ResolvedStar
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select(dfNoCols.col("*")))
+
+      // UnresolvedStar
+      checkAnswer(
+        dfNoCols,
+        sql("SELECT * FROM temp_table_no_cols"))
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select($"*"))
+
+      var e = intercept[AnalysisException] {
+        sql("SELECT a.* FROM temp_table_no_cols a")
+      }.getMessage
+      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+
+      e = intercept[AnalysisException] {
+        dfNoCols.select($"b.*")
+      }.getMessage
+      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
+    }
+  }
+
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
@@ -2067,9 +2161,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
 
       // Identity udf that tracks the number of times it is called.
-      val countAcc = sparkContext.accumulator(0, "CallCount")
+      val countAcc = sparkContext.longAccumulator("CallCount")
       spark.udf.register("testUdf", (x: Int) => {
-        countAcc.++=(1)
+        countAcc.add(1)
         x
       })
 
@@ -2077,7 +2171,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // is correct.
       def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
         countAcc.setValue(0)
-        checkAnswer(df, expectedResult)
+        QueryTest.checkAnswer(
+          df, Seq(expectedResult), checkToRDD = false /* avoid duplicate exec */)
         assert(countAcc.value == expectedCount)
       }
 
@@ -2092,7 +2187,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
 
       val testUdf = functions.udf((x: Int) => {
-        countAcc.++=(1)
+        countAcc.add(1)
         x
       })
       verifyCallCount(
@@ -2480,6 +2575,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
           Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
+    }
+  }
+
+  test("SPARK-15327: fail to compile generated code with complex data structure") {
+    withTempDir{ dir =>
+      val json =
+        """
+          |{"h": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "d": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"c": {"b": {"c": [{"e": "adfgd"}], "a": [{"count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "a": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"e": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "g": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"f": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "b": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}}}'
+          |
+        """.stripMargin
+      val rdd = sparkContext.parallelize(Array(json))
+      spark.read.json(rdd).write.mode("overwrite").parquet(dir.toString)
+      spark.read.parquet(dir.toString).collect()
     }
   }
 

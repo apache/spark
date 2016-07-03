@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchPartitionException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -252,6 +252,19 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("desc table for parquet data source table using in-memory catalog") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(s"CREATE TABLE $tabName(a int comment 'test') USING parquet ")
+
+      checkAnswer(
+        sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
+        Row("a", "int", "test")
+      )
+    }
+  }
+
   test("Alter/Describe Database") {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
@@ -422,6 +435,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("create temporary view using") {
+    val csvFile = Thread.currentThread().getContextClassLoader.getResource("cars.csv").toString()
+    withView("testview") {
+      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1: String, c2: String)  USING " +
+        "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+        s"OPTIONS (PATH '$csvFile')")
+
+      checkAnswer(
+        sql("select c1, c2 from testview order by c1 limit 1"),
+          Row("1997", "Ford") :: Nil)
+
+      // Fails if creating a new view with the same name
+      intercept[TempTableAlreadyExistsException] {
+        sql(s"CREATE TEMPORARY VIEW testview USING " +
+          s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
+      }
+    }
+  }
+
   test("alter table: rename") {
     val catalog = spark.sessionState.catalog
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
@@ -444,6 +476,24 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
     }
+  }
+
+  test("alter table: rename cached table") {
+    import testImplicits._
+    sql("CREATE TABLE students (age INT, name STRING) USING parquet")
+    val df = (1 to 2).map { i => (i, i.toString) }.toDF("age", "name")
+    df.write.insertInto("students")
+    spark.catalog.cacheTable("students")
+    assume(spark.table("students").collect().toSeq == df.collect().toSeq, "bad test: wrong data")
+    assume(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
+    sql("ALTER TABLE students RENAME TO teachers")
+    sql("CREATE TABLE students (age INT, name STRING) USING parquet")
+    // Now we have both students and teachers.
+    // The cached data for the old students table should not be read by the new students table.
+    assert(!spark.catalog.isCached("students"))
+    assert(spark.catalog.isCached("teachers"))
+    assert(spark.table("students").collect().isEmpty)
+    assert(spark.table("teachers").collect().toSeq == df.collect().toSeq)
   }
 
   test("rename temporary table - destination table with database name") {
@@ -671,11 +721,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("show databases") {
-    sql("CREATE DATABASE showdb1A")
     sql("CREATE DATABASE showdb2B")
+    sql("CREATE DATABASE showdb1A")
 
-    assert(
-      sql("SHOW DATABASES").count() >= 2)
+    // check the result as well as its order
+    checkDataset(sql("SHOW DATABASES"), Row("default"), Row("showdb1a"), Row("showdb2b"))
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),
@@ -1179,11 +1229,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var message = intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
       }.getMessage
-      assert(message.contains("Please enable Hive support when inserting the regular tables"))
+      assert(message.contains("Hive support is required to insert into the following tables"))
       message = intercept[AnalysisException] {
         sql(s"SELECT * FROM $tabName")
       }.getMessage
-      assert(message.contains("Please enable Hive support when selecting the regular tables"))
+      assert(message.contains("Hive support is required to select over the following tables"))
     }
   }
 
@@ -1205,11 +1255,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         var message = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
         }.getMessage
-        assert(message.contains("Please enable Hive support when inserting the regular tables"))
+        assert(message.contains("Hive support is required to insert into the following tables"))
         message = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tabName")
         }.getMessage
-        assert(message.contains("Please enable Hive support when selecting the regular tables"))
+        assert(message.contains("Hive support is required to select over the following tables"))
       }
     }
   }
@@ -1243,17 +1293,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   test("truncate table - datasource table") {
     import testImplicits._
     val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
-    data.write.saveAsTable("rectangles")
-    spark.catalog.cacheTable("rectangles")
-    assume(spark.table("rectangles").collect().nonEmpty, "bad test; table was empty to begin with")
-    assume(spark.catalog.isCached("rectangles"), "bad test; table was not cached to begin with")
-    sql("TRUNCATE TABLE rectangles")
-    assert(spark.table("rectangles").collect().isEmpty)
-    assert(!spark.catalog.isCached("rectangles"))
+
+    // Test both a Hive compatible and incompatible code path.
+    Seq("json", "parquet").foreach { format =>
+      withTable("rectangles") {
+        data.write.format(format).saveAsTable("rectangles")
+        assume(spark.table("rectangles").collect().nonEmpty,
+          "bad test; table was empty to begin with")
+        sql("TRUNCATE TABLE rectangles")
+        assert(spark.table("rectangles").collect().isEmpty)
+      }
+    }
+
     // truncating partitioned data source tables is not supported
-    data.write.partitionBy("length").saveAsTable("rectangles2")
-    assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
-    assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    withTable("rectangles", "rectangles2") {
+      data.write.saveAsTable("rectangles")
+      data.write.partitionBy("length").saveAsTable("rectangles2")
+      assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
+      assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    }
   }
 
   test("truncate table - external table, temporary table, view (not allowed)") {
@@ -1272,4 +1330,59 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
   }
 
+  test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
+    import testImplicits._
+    val df = Seq((1, 2, 3)).toDF("a", "b", "c")
+    withTable("partitionedTable") {
+      df.write.mode("overwrite").partitionBy("a", "b").saveAsTable("partitionedTable")
+      // Misses some partition columns
+      intercept[AnalysisException] {
+        df.write.mode("append").partitionBy("a").saveAsTable("partitionedTable")
+      }
+      // Wrong order
+      intercept[AnalysisException] {
+        df.write.mode("append").partitionBy("b", "a").saveAsTable("partitionedTable")
+      }
+      // Partition columns not specified
+      intercept[AnalysisException] {
+        df.write.mode("append").saveAsTable("partitionedTable")
+      }
+      assert(sql("select * from partitionedTable").collect().size == 1)
+      // Inserts new data successfully when partition columns are correctly specified in
+      // partitionBy(...).
+      // TODO: Right now, partition columns are always treated in a case-insensitive way.
+      // See the write method in DataSource.scala.
+      Seq((4, 5, 6)).toDF("a", "B", "c")
+        .write
+        .mode("append")
+        .partitionBy("a", "B")
+        .saveAsTable("partitionedTable")
+
+      Seq((7, 8, 9)).toDF("a", "b", "c")
+        .write
+        .mode("append")
+        .partitionBy("a", "b")
+        .saveAsTable("partitionedTable")
+
+      checkAnswer(
+        sql("select a, b, c from partitionedTable"),
+        Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
+      )
+    }
+  }
+
+  test("show functions") {
+    withUserDefinedFunction("add_one" -> true) {
+      val numFunctions = FunctionRegistry.functionSet.size.toLong
+      assert(sql("show functions").count() === numFunctions)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions)
+      assert(sql("show user functions").count() === 0L)
+      spark.udf.register("add_one", (x: Long) => x + 1)
+      assert(sql("show functions").count() === numFunctions + 1L)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions + 1L)
+      assert(sql("show user functions").count() === 1L)
+    }
+  }
 }

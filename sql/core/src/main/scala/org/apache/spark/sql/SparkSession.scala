@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -40,8 +40,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
@@ -109,7 +110,7 @@ class SparkSession private(
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
    */
   @transient
-  private[sql] val sqlContext: SQLContext = new SQLContext(this)
+  private[spark] val sqlContext: SQLContext = new SQLContext(this)
 
   /**
    * Runtime configuration interface for Spark.
@@ -118,7 +119,6 @@ class SparkSession private(
    * configurations that are relevant to Spark SQL. When getting the value of a config,
    * this defaults to the value set in the underlying [[SparkContext]], if any.
    *
-   * @group config
    * @since 2.0.0
    */
   @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
@@ -128,7 +128,6 @@ class SparkSession private(
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    *
-   * @group basic
    * @since 2.0.0
    */
   @Experimental
@@ -139,7 +138,6 @@ class SparkSession private(
    * A collection of methods that are considered experimental, but can be used to hook into
    * the query planner for advanced functionality.
    *
-   * @group basic
    * @since 2.0.0
    */
   @Experimental
@@ -174,21 +172,19 @@ class SparkSession private(
    *       DataTypes.StringType);
    * }}}
    *
-   * @group basic
    * @since 2.0.0
    */
   def udf: UDFRegistration = sessionState.udf
 
   /**
    * :: Experimental ::
-   * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this`.
+   * Returns a [[StreamingQueryManager]] that allows managing all the
+   * [[StreamingQuery StreamingQueries]] active on `this`.
    *
-   * @group basic
    * @since 2.0.0
    */
   @Experimental
-  def streams: ContinuousQueryManager = sessionState.continuousQueryManager
+  def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered
@@ -199,7 +195,6 @@ class SparkSession private(
    * and child sessions are set up with the same shared state. If the underlying catalog
    * implementation is Hive, this will initialize the metastore, which may take some time.
    *
-   * @group basic
    * @since 2.0.0
    */
   def newSession(): SparkSession = {
@@ -214,7 +209,6 @@ class SparkSession private(
   /**
    * Returns a [[DataFrame]] with no rows or columns.
    *
-   * @group dataframes
    * @since 2.0.0
    */
   @transient
@@ -238,7 +232,6 @@ class SparkSession private(
    * :: Experimental ::
    * Creates a [[DataFrame]] from an RDD of Product (e.g. case classes, tuples).
    *
-   * @group dataframes
    * @since 2.0.0
    */
   @Experimental
@@ -254,7 +247,6 @@ class SparkSession private(
    * :: Experimental ::
    * Creates a [[DataFrame]] from a local Seq of Product.
    *
-   * @group dataframes
    * @since 2.0.0
    */
   @Experimental
@@ -294,7 +286,6 @@ class SparkSession private(
    *  sparkSession.sql("select name from people").collect.foreach(println)
    * }}}
    *
-   * @group dataframes
    * @since 2.0.0
    */
   @DeveloperApi
@@ -304,11 +295,10 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
-   * @group dataframes
    * @since 2.0.0
    */
   @DeveloperApi
@@ -318,11 +308,10 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
-   * @group dataframes
    * @since 2.0.0
    */
   @DeveloperApi
@@ -336,7 +325,6 @@ class SparkSession private(
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    * SELECT * queries will return the columns in an undefined order.
    *
-   * @group dataframes
    * @since 2.0.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
@@ -356,7 +344,6 @@ class SparkSession private(
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    * SELECT * queries will return the columns in an undefined order.
    *
-   * @group dataframes
    * @since 2.0.0
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
@@ -364,11 +351,10 @@ class SparkSession private(
   }
 
   /**
-   * Applies a schema to an List of Java Beans.
+   * Applies a schema to a List of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
-   * @group dataframes
    * @since 1.6.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
@@ -381,7 +367,6 @@ class SparkSession private(
   /**
    * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
    *
-   * @group dataframes
    * @since 2.0.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
@@ -419,7 +404,6 @@ class SparkSession private(
    * }}}
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
@@ -438,7 +422,6 @@ class SparkSession private(
    * created explicitly by calling static methods on [[Encoders]].
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
@@ -464,7 +447,6 @@ class SparkSession private(
    * }}}
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
@@ -474,10 +456,9 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from 0 to `end` (exclusive) with step value 1.
+   * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def range(end: Long): Dataset[java.lang.Long] = range(0, end)
@@ -485,10 +466,9 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with step value 1.
+   * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
@@ -498,10 +478,9 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value.
+   * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
@@ -511,11 +490,10 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
    * @since 2.0.0
-   * @group dataset
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
@@ -556,15 +534,14 @@ class SparkSession private(
   }
 
 
-  /* ------------------------ *
-   |  Catalog-related methods |
-   * ----------------- ------ */
+  /* ------------------------- *
+   |  Catalog-related methods  |
+   * ------------------------- */
 
   /**
    * Interface through which the user may create, drop, alter or query underlying
    * databases, tables, functions etc.
    *
-   * @group ddl_ops
    * @since 2.0.0
    */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
@@ -572,7 +549,6 @@ class SparkSession private(
   /**
    * Returns the specified table as a [[DataFrame]].
    *
-   * @group ddl_ops
    * @since 2.0.0
    */
   def table(tableName: String): DataFrame = {
@@ -591,7 +567,6 @@ class SparkSession private(
    * Executes a SQL query using Spark, returning the result as a [[DataFrame]].
    * The dialect that is used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
-   * @group basic
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
@@ -599,16 +574,29 @@ class SparkSession private(
   }
 
   /**
-   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * [[DataFrame]].
    * {{{
    *   sparkSession.read.parquet("/path/to/file.parquet")
    *   sparkSession.read.schema(schema).json("/path/to/file.json")
    * }}}
    *
-   * @group genericdata
    * @since 2.0.0
    */
   def read: DataFrameReader = new DataFrameReader(self)
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a [[DataFrame]].
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def readStream: DataStreamReader = new DataStreamReader(self)
 
 
   // scalastyle:off
@@ -623,7 +611,6 @@ class SparkSession private(
    *   import sparkSession.implicits._
    * }}}
    *
-   * @group basic
    * @since 2.0.0
    */
   @Experimental
@@ -694,7 +681,7 @@ object SparkSession {
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
-    private[sql] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+    private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
       userSuppliedContext = Option(sparkContext)
       this
     }

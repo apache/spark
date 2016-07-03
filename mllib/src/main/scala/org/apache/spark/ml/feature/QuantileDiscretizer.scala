@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.{DoubleType, StructType}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasInputCol with HasOutputCol with HasSeed {
+  with HasInputCol with HasOutputCol {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -74,26 +74,30 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * covering all real values.
  */
 @Experimental
-final class QuantileDiscretizer(override val uid: String)
+@Since("1.6.0")
+final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
+  @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
   /** @group setParam */
+  @Since("2.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setNumBuckets(value: Int): this.type = set(numBuckets, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
-
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     val inputFields = schema.fields
@@ -115,6 +119,7 @@ final class QuantileDiscretizer(override val uid: String)
     copyValues(bucketizer.setParent(this))
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 }
 

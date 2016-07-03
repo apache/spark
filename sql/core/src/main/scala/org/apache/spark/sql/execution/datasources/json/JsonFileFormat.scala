@@ -38,7 +38,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-class JsonFileFormat extends FileFormat with DataSourceRegister {
+class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "json"
 

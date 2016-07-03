@@ -396,11 +396,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
       .map(_.ceil.toLong)
       .getOrElse(0L)
 
-    val content = listener.receivedRecordRateWithBatchTime.toList.sortBy(_._1).map {
+    val content: Seq[Node] = listener.receivedRecordRateWithBatchTime.toList.sortBy(_._1).flatMap {
       case (streamId, recordRates) =>
         generateInputDStreamRow(
           jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated)
-    }.foldLeft[Seq[Node]](Nil)(_ ++ _)
+    }
 
     // scalastyle:off
     <table class="table table-bordered" style="width: auto">

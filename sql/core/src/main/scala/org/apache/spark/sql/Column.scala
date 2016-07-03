@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -158,6 +159,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case explode: Explode => MultiAlias(explode, Nil)
+    case explode: PosExplode => MultiAlias(explode, Nil)
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
@@ -1093,6 +1095,22 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 1.4.0
    */
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
+
+  /**
+   * Define a empty analytic clause. In this case the analytic function is applied
+   * and presented for all rows in the result set.
+   *
+   * {{{
+   *   df.select(
+   *     sum("price").over(),
+   *     avg("price").over()
+   *   )
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def over(): Column = over(Window.spec)
 
 }
 

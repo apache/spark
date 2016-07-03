@@ -19,15 +19,13 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from py4j.java_collections import JavaArray
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.common import inherit_doc
 
 __all__ = ['Binarizer',
            'Bucketizer',
@@ -151,7 +149,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
 
-    .. versionadded:: 1.3.0
+    .. versionadded:: 1.4.0
     """
 
     splits = \
@@ -159,9 +157,9 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               "Split points for mapping continuous features into buckets. With n+1 splits, " +
               "there are n buckets. A bucket defined by splits x,y holds values in the " +
               "range [x,y) except the last bucket, which also includes y. The splits " +
-              "should be strictly increasing. Values at -inf, inf must be explicitly " +
-              "provided to cover all Double values; otherwise, values outside the splits " +
-              "specified will be treated as errors.",
+              "should be of length >= 3 and strictly increasing. Values at -inf, inf must be " +
+              "explicitly provided to cover all Double values; otherwise, values outside the " +
+              "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
     @keyword_only
@@ -488,14 +486,14 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @since("1.5.0")
+    @since("2.0.0")
     def setScalingVec(self, value):
         """
         Sets the value of :py:attr:`scalingVec`.
         """
         return self._set(scalingVec=value)
 
-    @since("1.5.0")
+    @since("2.0.0")
     def getScalingVec(self):
         """
         Gets the value of scalingVec or its default value.
@@ -587,6 +585,8 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
     >>> model = idf.fit(df)
+    >>> model.idf
+    DenseVector([0.0, 0.0])
     >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
@@ -659,6 +659,14 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.4.0
     """
+
+    @property
+    @since("2.0.0")
+    def idf(self):
+        """
+        Returns the IDF vector.
+        """
+        return self._call_java("idf")
 
 
 @inherit_doc
@@ -1171,8 +1179,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable,
-                          JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1186,9 +1193,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
 
     >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", seed=123, relativeError=0.01)
-    >>> qds.getSeed()
-    123
+    ...     inputCol="values", outputCol="buckets", relativeError=0.01)
     >>> qds.getRelativeError()
     0.01
     >>> bucketizer = qds.fit(df)
@@ -1220,9 +1225,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
                           typeConverter=TypeConverters.toFloat)
 
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None, relativeError=0.001):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None, relativeError=0.001)
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -1233,11 +1238,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None,
-                  relativeError=0.001):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None, \
-                  relativeError=0.001)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
@@ -1481,6 +1484,10 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
 
+    The "unit std" is computed using the `corrected sample standard deviation \
+    <https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation>`_,
+    which is computed as the square root of the unbiased sample variance.
+
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
@@ -1577,7 +1584,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def std(self):
         """
         Standard deviation of the StandardScalerModel.
@@ -1585,7 +1592,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("std")
 
     @property
-    @since("1.5.0")
+    @since("2.0.0")
     def mean(self):
         """
         Mean of the StandardScalerModel.
@@ -2237,28 +2244,33 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     windowSize = Param(Params._dummy(), "windowSize",
                        "the window size (context words from [-window, window]). Default value is 5",
                        typeConverter=TypeConverters.toInt)
+    maxSentenceLength = Param(Params._dummy(), "maxSentenceLength",
+                              "Maximum length (in words) of each sentence in the input data. " +
+                              "Any sentence longer than this threshold will " +
+                              "be divided into chunks up to the size.",
+                              typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                 seed=None, inputCol=None, outputCol=None, windowSize=5):
+                 seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000):
         """
         __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
-                 seed=None, inputCol=None, outputCol=None, windowSize=5)
+                 seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000)
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
         self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                         seed=None, windowSize=5)
+                         windowSize=5, maxSentenceLength=1000)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                  seed=None, inputCol=None, outputCol=None, windowSize=5):
+                  seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000):
         """
         setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=None, \
-                 inputCol=None, outputCol=None, windowSize=5)
+                 inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000)
         Sets params for this Word2Vec.
         """
         kwargs = self.setParams._input_kwargs
@@ -2319,6 +2331,20 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         Gets the value of windowSize or its default value.
         """
         return self.getOrDefault(self.windowSize)
+
+    @since("2.0.0")
+    def setMaxSentenceLength(self, value):
+        """
+        Sets the value of :py:attr:`maxSentenceLength`.
+        """
+        return self._set(maxSentenceLength=value)
+
+    @since("2.0.0")
+    def getMaxSentenceLength(self):
+        """
+        Gets the value of maxSentenceLength or its default value.
+        """
+        return self.getOrDefault(self.maxSentenceLength)
 
     def _create_model(self, java_model):
         return Word2VecModel(java_model)
@@ -2502,6 +2528,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     True
     >>> loadedRF.getLabelCol() == rf.getLabelCol()
     True
+    >>> str(loadedRF)
+    'RFormula(y ~ x + s) (uid=...)'
     >>> modelPath = temp_path + "/rFormulaModel"
     >>> model.save(modelPath)
     >>> loadedModel = RFormulaModel.load(modelPath)
@@ -2516,6 +2544,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     |0.0|0.0|  a|[0.0,1.0]|  0.0|
     +---+---+---+---------+-----+
     ...
+    >>> str(loadedModel)
+    'RFormulaModel(ResolvedRFormula(label=y, terms=[x,s], hasIntercept=true)) (uid=...)'
 
     .. versionadded:: 1.5.0
     """
@@ -2560,6 +2590,10 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     def _create_model(self, java_model):
         return RFormulaModel(java_model)
 
+    def __str__(self):
+        formulaStr = self.getFormula() if self.isDefined(self.formula) else ""
+        return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
+
 
 class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
@@ -2570,6 +2604,10 @@ class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.5.0
     """
+
+    def __str__(self):
+        resolvedFormula = self._call_java("resolvedFormula")
+        return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
 @inherit_doc

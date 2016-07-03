@@ -32,6 +32,7 @@
 #'   ws <- window.partitionBy(df$key1, df$key2)
 #'   df1 <- select(df, over(lead("value", 1), ws))
 #' }
+#' @note window.partitionBy(character) since 2.0.0
 setMethod("window.partitionBy",
           signature(col = "character"),
           function(col, ...) {
@@ -45,6 +46,7 @@ setMethod("window.partitionBy",
 #' @rdname window.partitionBy
 #' @name window.partitionBy
 #' @export
+#' @note window.partitionBy(Column) since 2.0.0
 setMethod("window.partitionBy",
           signature(col = "Column"),
           function(col, ...) {
@@ -72,6 +74,7 @@ setMethod("window.partitionBy",
 #'   ws <- window.orderBy(df$key1, df$key2)
 #'   df1 <- select(df, over(lead("value", 1), ws))
 #' }
+#' @note window.orderBy(character) since 2.0.0
 setMethod("window.orderBy",
           signature(col = "character"),
           function(col, ...) {
@@ -85,6 +88,7 @@ setMethod("window.orderBy",
 #' @rdname window.orderBy
 #' @name window.orderBy
 #' @export
+#' @note window.orderBy(Column) since 2.0.0
 setMethod("window.orderBy",
           signature(col = "Column"),
           function(col, ...) {

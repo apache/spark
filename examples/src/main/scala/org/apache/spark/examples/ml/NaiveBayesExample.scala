@@ -49,9 +49,9 @@ object NaiveBayesExample {
     val evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("label")
       .setPredictionCol("prediction")
-      .setMetricName("precision")
-    val precision = evaluator.evaluate(predictions)
-    println("Precision:" + precision)
+      .setMetricName("accuracy")
+    val accuracy = evaluator.evaluate(predictions)
+    println("Accuracy: " + accuracy)
     // $example off$
 
     spark.stop()

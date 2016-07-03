@@ -110,9 +110,12 @@ isRDD <- function(name, env) {
 #' @return the hash code as an integer
 #' @export
 #' @examples
+#'\dontrun{
 #' hashCode(1L) # 1
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
+#'}
+#' @note hashCode since 1.4.0
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
@@ -315,6 +318,15 @@ convertEnvsToList <- function(keys, vals) {
          })
 }
 
+# Utility function to merge 2 environments with the second overriding values in the first
+# env1 is changed in place
+overrideEnvs <- function(env1, env2) {
+  lapply(ls(env2),
+         function(name) {
+           env1[[name]] <- env2[[name]]
+         })
+}
+
 # Utility function to capture the varargs into environment object
 varargsToEnv <- function(...) {
   # Based on http://stackoverflow.com/a/3057419/4577954
@@ -489,7 +501,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be
 #               considered as a "name"-to-"list of functions" mapping.
 # return value
-#   a new version of func that has an correct environment (closure).
+#   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
@@ -672,4 +684,12 @@ launchScript <- function(script, combinedArgs, capture = FALSE) {
   } else {
     system2(script, combinedArgs, wait = capture, stdout = capture)
   }
+}
+
+getSparkContext <- function() {
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    stop("SparkR has not been initialized. Please call sparkR.session()")
+  }
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc
 }

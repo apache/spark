@@ -201,7 +201,7 @@ case class DropTableCommand(
         case _ =>
       })
       try {
-        sparkSession.sharedState.cacheManager.tryUncacheQuery(
+        sparkSession.sharedState.cacheManager.uncacheQuery(
           sparkSession.table(tableName.quotedString))
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)

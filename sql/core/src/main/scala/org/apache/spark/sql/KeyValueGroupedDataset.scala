@@ -42,17 +42,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
-  // Similar to [[Dataset]], we use unresolved encoders for later composition and resolved encoders
-  // when constructing new logical plans that will operate on the output of the current
-  // queryexecution.
-
-  private implicit val unresolvedKEncoder = encoderFor(kEncoder)
-  private implicit val unresolvedVEncoder = encoderFor(vEncoder)
-
-  private val resolvedKEncoder =
-    unresolvedKEncoder.resolve(groupingAttributes, OuterScopes.outerScopes)
-  private val resolvedVEncoder =
-    unresolvedVEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
+  // Similar to [[Dataset]], we turn the passed in encoder to `ExpressionEncoder` explicitly.
+  private implicit val kExprEnc = encoderFor(kEncoder)
+  private implicit val vExprEnc = encoderFor(vEncoder)
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
@@ -67,7 +59,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
     new KeyValueGroupedDataset(
       encoderFor[L],
-      unresolvedVEncoder,
+      vExprEnc,
       queryExecution,
       dataAttributes,
       groupingAttributes)
@@ -187,7 +179,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
 
-    implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedVEncoder)
+    implicit val resultEncoder = ExpressionEncoder.tuple(kExprEnc, vExprEnc)
     flatMapGroups(func)
   }
 
@@ -209,8 +201,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(unresolvedVEncoder.deserializer, dataAttributes).named)
-    val keyColumn = if (resolvedKEncoder.flat) {
+      columns.map(_.withInputType(vExprEnc.deserializer, dataAttributes).named)
+    val keyColumn = if (kExprEnc.flat) {
       assert(groupingAttributes.length == 1)
       groupingAttributes.head
     } else {
@@ -222,7 +214,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     new Dataset(
       sparkSession,
       execution,
-      ExpressionEncoder.tuple(unresolvedKEncoder +: encoders))
+      ExpressionEncoder.tuple(kExprEnc +: encoders))
   }
 
   /**
@@ -287,7 +279,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    implicit val uEncoder = other.unresolvedVEncoder
+    implicit val uEncoder = other.vExprEnc
     Dataset[R](
       sparkSession,
       CoGroup(

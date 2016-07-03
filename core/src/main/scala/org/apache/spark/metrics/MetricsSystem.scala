@@ -28,7 +28,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
-import org.apache.spark.metrics.source.Source
+import org.apache.spark.metrics.source.{Source, StaticSources}
 import org.apache.spark.util.Utils
 
 /**
@@ -96,6 +96,7 @@ private[spark] class MetricsSystem private (
   def start() {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
+    StaticSources.allSources.foreach(registerSource)
     registerSources()
     registerSinks()
     sinks.foreach(_.start)

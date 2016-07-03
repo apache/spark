@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -65,6 +66,34 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tmp"), ignoreIfNotExists = true)
+  }
+
+  test("SPARK-15678: not use cache on overwrite") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("overwrite").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("overwrite").parquet(path)
+      assert(df.count() == 1000)
+      spark.catalog.refreshByPath(path)
+      assert(df.count() == 10)
+      assert(spark.read.parquet(path).count() == 10)
+    }
+  }
+
+  test("SPARK-15678: not use cache on append") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("append").parquet(path)
+      val df = spark.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      spark.range(10).write.mode("append").parquet(path)
+      assert(df.count() == 1000)
+      spark.catalog.refreshByPath(path)
+      assert(df.count() == 1010)
+      assert(spark.read.parquet(path).count() == 1010)
+    }
   }
 
   test("self-join") {
@@ -148,13 +177,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
+      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+    ) {
       testSchemaMerging(2)
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
+    ) {
       testSchemaMerging(3)
     }
   }
@@ -540,7 +574,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new NestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new NestedStructUDT().sqlType, nullable = true)
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in ArrayType") {
@@ -558,7 +592,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         containsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("expand UDT in MapType") {
@@ -578,7 +612,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         valueContainsNull = false),
       nullable = true)
 
-    assert(CatalystReadSupport.expandUDT(schema) === expected)
+    assert(ParquetReadSupport.expandUDT(schema) === expected)
   }
 
   test("returning batch for wide table") {
@@ -601,6 +635,36 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
           df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
           "Should return batch")
         checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
+
+  test("SPARK-15719: disable writing summary files by default") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).write.parquet(path)
+
+      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val files = fs.listFiles(new Path(path), true)
+
+      while (files.hasNext) {
+        val file = files.next
+        assert(!file.getPath.getName.contains("_metadata"))
+      }
+    }
+  }
+
+  test("SPARK-15804: write out the metadata to parquet file") {
+    val df = Seq((1, "abc"), (2, "hello")).toDF("a", "b")
+    val md = new MetadataBuilder().putString("key", "value").build()
+    val dfWithmeta = df.select('a, 'b.as("b", md))
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      dfWithmeta.write.parquet(path)
+
+      readParquetFile(path) { df =>
+        assert(df.schema.last.metadata.getString("key") == "value")
       }
     }
   }

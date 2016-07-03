@@ -170,10 +170,6 @@ which contains the computed clustering assignments.
 Refer to the [`PowerIterationClustering` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.PowerIterationClusteringModel) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala %}
-
-A full example that produces the experiment described in the PIC paper can be found under
-[`examples/`](https://github.com/apache/spark/blob/master/examples/src/main/scala/org/apache/spark/examples/mllib/PowerIterationClusteringExample.scala).
-
 </div>
 
 <div data-lang="java" markdown="1">

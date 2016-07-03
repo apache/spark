@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
@@ -193,7 +193,7 @@ class CatalogSuite
 
   test("list functions with database") {
     assert(Set("+", "current_database", "window").subsetOf(
-      spark.catalog.listFunctions("default").collect().map(_.name).toSet))
+      spark.catalog.listFunctions().collect().map(_.name).toSet))
     createDatabase("my_db1")
     createDatabase("my_db2")
     createFunction("my_func1", Some("my_db1"))
@@ -207,6 +207,14 @@ class CatalogSuite
     assert(!funcNames2.contains("my_func1"))
     assert(funcNames2.contains("my_func2"))
     assert(funcNames2.contains("my_temp_func"))
+
+    // Make sure database is set properly.
+    assert(
+      spark.catalog.listFunctions("my_db1").collect().map(_.database).toSet == Set("my_db1", null))
+    assert(
+      spark.catalog.listFunctions("my_db2").collect().map(_.database).toSet == Set("my_db2", null))
+
+    // Remove the function and make sure they no longer appear.
     dropFunction("my_func1", Some("my_db1"))
     dropTempFunction("my_temp_func")
     val funcNames1b = spark.catalog.listFunctions("my_db1").collect().map(_.name).toSet
@@ -248,9 +256,11 @@ class CatalogSuite
   }
 
   test("Function.toString") {
-    assert(new Function("nama", "commenta", "classNameAh", isTemporary = true).toString ==
-      "Function[name='nama', description='commenta', className='classNameAh', isTemporary='true']")
-    assert(new Function("nama", null, "classNameAh", isTemporary = false).toString ==
+    assert(
+      new Function("nama", "databasa", "commenta", "classNameAh", isTemporary = true).toString ==
+      "Function[name='nama', database='databasa', description='commenta', " +
+        "className='classNameAh', isTemporary='true']")
+    assert(new Function("nama", null, null, "classNameAh", isTemporary = false).toString ==
       "Function[name='nama', className='classNameAh', isTemporary='false']")
   }
 
@@ -268,7 +278,7 @@ class CatalogSuite
   test("catalog classes format in Dataset.show") {
     val db = new Database("nama", "descripta", "locata")
     val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
-    val function = new Function("nama", "descripta", "classa", isTemporary = false)
+    val function = new Function("nama", "databasa", "descripta", "classa", isTemporary = false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
     val dbFields = ScalaReflection.getConstructorParameterValues(db)
@@ -277,7 +287,7 @@ class CatalogSuite
     val columnFields = ScalaReflection.getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "descripta", "locata"))
     assert(tableFields == Seq("nama", "databasa", "descripta", "typa", false))
-    assert(functionFields == Seq("nama", "descripta", "classa", false))
+    assert(functionFields == Seq("nama", "databasa", "descripta", "classa", false))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
     val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
     val tableString = CatalogImpl.makeDataset(Seq(table), spark).showString(10)

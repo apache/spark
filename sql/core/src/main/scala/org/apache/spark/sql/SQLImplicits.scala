@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
 /**
- * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
+ * A collection of implicit methods for converting common Scala objects into [[Dataset]]s.
  *
  * @since 1.6.0
  */
@@ -33,7 +33,7 @@ abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
 
   /**
-   * Converts $"col name" into an [[Column]].
+   * Converts $"col name" into a [[Column]].
    *
    * @since 2.0.0
    */

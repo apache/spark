@@ -291,6 +291,7 @@ private[spark] object JettyUtils extends Logging {
 
       val errorHandler = new ErrorHandler()
       errorHandler.setShowStacks(true)
+      errorHandler.setServer(server)
       server.addBean(errorHandler)
       server.setHandler(collection)
       try {

@@ -20,15 +20,20 @@ from __future__ import print_function
 import os
 import sys
 
+# $example on:init_session$
 from pyspark.sql import SparkSession
+# $example off:init_session$
 from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType
 
 
 if __name__ == "__main__":
+    # $example on:init_session$
     spark = SparkSession\
         .builder\
         .appName("PythonSQL")\
+        .config("spark.some.config.option", "some-value")\
         .getOrCreate()
+    # $example off:init_session$
 
     # A list of Rows. Infer schema from the first row, create a DataFrame and print the schema
     rows = [Row(name="John", age=19), Row(name="Smith", age=23), Row(name="Sarah", age=18)]

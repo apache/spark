@@ -121,10 +121,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
     requireDatabaseExists(dbName)
-    val functions = sessionCatalog.listFunctions(dbName).map { funcIdent =>
+    val functions = sessionCatalog.listFunctions(dbName).map { case (funcIdent, _) =>
       val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
       new Function(
         name = funcIdent.identifier,
+        database = funcIdent.database.orNull,
         description = null, // for now, this is always undefined
         className = metadata.getClassName,
         isTemporary = funcIdent.database.isEmpty)
@@ -291,7 +292,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Unit = {
-    sparkSession.sharedState.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
     sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
@@ -322,7 +323,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(query = sparkSession.table(tableName))
   }
 
   /**
@@ -366,12 +367,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // TODO: Use uncacheTable once it supports database name.
       val df = Dataset.ofRows(sparkSession, logicalPlan)
       // Uncache the logicalPlan.
-      sparkSession.sharedState.cacheManager.tryUncacheQuery(df, blocking = true)
+      sparkSession.sharedState.cacheManager.uncacheQuery(df, blocking = true)
       // Cache it again.
       sparkSession.sharedState.cacheManager.cacheQuery(df, Some(tableIdent.table))
     }
   }
 
+  /**
+   * Refresh the cache entry and the associated metadata for all dataframes (if any), that contain
+   * the given data source path.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshByPath(resourcePath: String): Unit = {
+    sparkSession.sharedState.cacheManager.invalidateCachedPath(sparkSession, resourcePath)
+  }
 }
 
 

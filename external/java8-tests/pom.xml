@@ -106,6 +106,7 @@
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
         <configuration>
+          <useZincServer>${useZincForJdk8}</useZincServer>
           <javacArgs>
             <javacArg>-source</javacArg>
             <javacArg>1.8</javacArg>
