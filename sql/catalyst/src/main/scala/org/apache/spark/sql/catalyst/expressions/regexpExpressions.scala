@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
@@ -205,12 +206,16 @@ case class StringSplit(str: Expression, pattern: Expression)
  * The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(s) - Splits str into an array of array of words.")
+  usage = "_FUNC_(str, lang, country) - Splits str into an array of array of words.",
+  extended = "> SELECT _FUNC_('Hi there! Good morning.');\n  [['Hi','there'], ['Good','morning']]")
 case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
   extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
+  def this(str: Expression) = this(str, Literal(""), Literal(""))
+  def this(str: Expression, language: Expression) = this(str, language, Literal(""))
 
   override def dataType: DataType = ArrayType(ArrayType(StringType))
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
