@@ -18,27 +18,110 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
+import org.apache.spark.unsafe.Platform
 
 class UnsafeArraySuite extends SparkFunSuite {
 
-  test("from primitive int array") {
-    val array = Array(1, 10, 100)
-    val unsafe = UnsafeArrayData.fromPrimitiveArray(array)
-    assert(unsafe.numElements == 3)
-    assert(unsafe.getSizeInBytes == 4 + scala.math.ceil(3/64.toDouble) * 8 + 4 * 3)
-    assert(unsafe.getInt(0) == 1)
-    assert(unsafe.getInt(1) == 10)
-    assert(unsafe.getInt(2) == 100)
+  val booleanArray = Array(false, true)
+  val shortArray = Array(1.toShort, 10.toShort, 100.toShort)
+  val intArray = Array(1, 10, 100)
+  val longArray = Array(1.toLong, 10.toLong, 100.toLong)
+  val floatArray = Array(1.1.toFloat, 2.2.toFloat, 3.3.toFloat)
+  val doubleArray = Array(1.1, 2.2, 3.3)
+
+  test("read array") {
+    val unsafeBoolean = ExpressionEncoder[Array[Boolean]].resolveAndBind().
+      toRow(booleanArray).getArray(0)
+    assert(unsafeBoolean.isInstanceOf[UnsafeArrayData])
+    assert(unsafeBoolean.numElements == 2)
+    booleanArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeBoolean.getBoolean(i) == e)
+    }
+
+    val unsafeShort = ExpressionEncoder[Array[Short]].resolveAndBind().
+      toRow(shortArray).getArray(0)
+    assert(unsafeShort.isInstanceOf[UnsafeArrayData])
+    assert(unsafeShort.numElements == 3)
+    shortArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeShort.getShort(i) == e)
+    }
+
+    val unsafeInt = ExpressionEncoder[Array[Int]].resolveAndBind().
+      toRow(intArray).getArray(0)
+    assert(unsafeInt.isInstanceOf[UnsafeArrayData])
+    assert(unsafeInt.numElements == 3)
+    intArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeInt.getInt(i) == e)
+    }
+
+    val unsafeLong = ExpressionEncoder[Array[Long]].resolveAndBind().
+      toRow(longArray).getArray(0)
+    assert(unsafeLong.isInstanceOf[UnsafeArrayData])
+    assert(unsafeLong.numElements == 3)
+    longArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeLong.getLong(i) == e)
+    }
+
+    val unsafeFloat = ExpressionEncoder[Array[Float]].resolveAndBind().
+      toRow(floatArray).getArray(0)
+    assert(unsafeFloat.isInstanceOf[UnsafeArrayData])
+    assert(unsafeFloat.numElements == 3)
+    floatArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeFloat.getFloat(i) == e)
+    }
+
+    val unsafeDouble = ExpressionEncoder[Array[Double]].resolveAndBind().
+      toRow(doubleArray).getArray(0)
+    assert(unsafeDouble.isInstanceOf[UnsafeArrayData])
+    assert(unsafeDouble.numElements == 3)
+    doubleArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeDouble.getDouble(i) == e)
+    }
   }
 
-  test("from primitive double array") {
-    val array = Array(1.1, 2.2, 3.3)
-    val unsafe = UnsafeArrayData.fromPrimitiveArray(array)
-    assert(unsafe.numElements == 3)
-    assert(unsafe.getSizeInBytes == 4 + scala.math.ceil(3/64.toDouble) * 8 + 8 * 3)
-    assert(unsafe.getDouble(0) == 1.1)
-    assert(unsafe.getDouble(1) == 2.2)
-    assert(unsafe.getDouble(2) == 3.3)
+  test("from primitive array") {
+    val unsafeInt = UnsafeArrayData.fromPrimitiveArray(intArray)
+    assert(unsafeInt.numElements == 3)
+    assert(unsafeInt.getSizeInBytes ==
+      ((4 + scala.math.ceil(3/64.toDouble) * 8 + 4 * 3 + 7).toInt / 8) * 8)
+    intArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeInt.getInt(i) == e)
+    }
+
+    val unsafeDouble = UnsafeArrayData.fromPrimitiveArray(doubleArray)
+    assert(unsafeDouble.numElements == 3)
+    assert(unsafeDouble.getSizeInBytes ==
+      ((4 + scala.math.ceil(3/64.toDouble) * 8 + 8 * 3 + 7).toInt / 8) * 8)
+    doubleArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeDouble.getDouble(i) == e)
+    }
+  }
+
+  test("to primitive array") {
+    val intCount = intArray.length
+    val intUnsafeArray = new UnsafeArrayData
+    val intHeader = UnsafeArrayData.calculateHeaderPortionInBytes(intCount)
+    val intSize = intHeader + 4 * intCount
+    val intBuffer = new Array[Byte](intSize)
+    Platform.putInt(intBuffer, Platform.BYTE_ARRAY_OFFSET, intCount)
+    intUnsafeArray.pointTo(intBuffer, Platform.BYTE_ARRAY_OFFSET, intSize)
+    intArray.zipWithIndex.map { case (e, i) =>
+      Platform.putInt(intBuffer, Platform.BYTE_ARRAY_OFFSET + intHeader + 4 * i, e)
+    }
+    assert(intUnsafeArray.toIntArray.sameElements(intArray))
+
+    val doubleCount = doubleArray.length
+    val doubleUnsafeArray = new UnsafeArrayData
+    val doubleHeader = UnsafeArrayData.calculateHeaderPortionInBytes(doubleCount)
+    val doubleSize = doubleHeader + 4 * doubleCount
+    val doubleBuffer = new Array[Byte](doubleSize)
+    Platform.putInt(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, doubleCount)
+    doubleUnsafeArray.pointTo(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, doubleSize)
+    doubleArray.zipWithIndex.map { case (e, i) =>
+      Platform.putDouble(intBuffer, Platform.BYTE_ARRAY_OFFSET + doubleHeader + 8 * i, e)
+    }
+    assert(intUnsafeArray.toDoubleArray.sameElements(doubleArray))
   }
 }
