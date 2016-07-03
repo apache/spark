@@ -445,7 +445,7 @@ private[parquet] class ParquetSchemaConverter(
         //     repeated <element-type> array;
         //   }
         // }
-        ConversionPatterns.listType(
+        ConversionPatterns.listOfElements(
           repetition,
           field.name,
           Types
@@ -461,7 +461,7 @@ private[parquet] class ParquetSchemaConverter(
         // <list-repetition> group <name> (LIST) {
         //   repeated <element-type> element;
         // }
-        ConversionPatterns.listType(
+        ConversionPatterns.listOfElements(
           repetition,
           field.name,
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
