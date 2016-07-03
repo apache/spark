@@ -201,7 +201,7 @@ case class PosExplode(child: Expression) extends ExplodeBase(child, position = t
  */
 @ExpressionDescription(
   usage = "_FUNC_(a) - Explodes an array of structs into a table.",
-  extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n [1,a]\n[2,b]")
+  extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
 case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
   override def children: Seq[Expression] = child :: Nil
@@ -211,7 +211,7 @@ case class Inline(child: Expression) extends UnaryExpression with Generator with
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
-        s"input to function inline should be array of struct type, not ${child.dataType}")
+        s"input to function $prettyName should be array of struct type, not ${child.dataType}")
   }
 
   override def elementSchema: StructType = child.dataType match {
