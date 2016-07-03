@@ -140,14 +140,14 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   // By fixing SPARK-15776, Divide's inputType is required to be DoubleType of DecimalType.
   // TODO: in future release, we should add a IntegerDivide to support integral types.
-  ignore("/ (Divide) for integral type") {
-    checkEvaluation(Divide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
-    checkEvaluation(Divide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
-    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
-    checkEvaluation(Divide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
-    checkEvaluation(Divide(positiveShortLit, negativeShortLit), 0.toShort)
-    checkEvaluation(Divide(positiveIntLit, negativeIntLit), 0)
-    checkEvaluation(Divide(positiveLongLit, negativeLongLit), 0L)
+  test("/ (Divide) for integral type") {
+    checkEvaluation(IntegerDivide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
+    checkEvaluation(IntegerDivide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
+    checkEvaluation(IntegerDivide(Literal(1), Literal(2)), 0)
+    checkEvaluation(IntegerDivide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
+    checkEvaluation(IntegerDivide(positiveShortLit, negativeShortLit), 0.toShort)
+    checkEvaluation(IntegerDivide(positiveIntLit, negativeIntLit), 0)
+    checkEvaluation(IntegerDivide(positiveLongLit, negativeLongLit), 0L)
   }
 
   test("% (Remainder)") {

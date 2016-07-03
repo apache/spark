@@ -957,7 +957,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.PERCENT =>
         Remainder(left, right)
       case SqlBaseParser.DIV =>
-        Cast(Divide(left, right), LongType)
+        IntegerDivide(left, right)
       case SqlBaseParser.PLUS =>
         Add(left, right)
       case SqlBaseParser.MINUS =>

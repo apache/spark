@@ -216,7 +216,6 @@ case class Divide(left: Expression, right: Expression)
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
-  override def decimalMethod: String = "$div"
   override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
@@ -254,6 +253,75 @@ case class Divide(left: Expression, right: Expression)
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    if (!left.nullable && !right.nullable) {
+      ev.copy(code = s"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        if ($isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          ${ev.value} = $divide;
+        }""")
+    } else {
+      ev.copy(code = s"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        if (${eval2.isNull} || $isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          if (${eval1.isNull}) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = $divide;
+          }
+        }""")
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1")
+case class IntegerDivide(left: Expression, right: Expression)
+  extends BinaryArithmetic with NullIntolerant {
+
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "/"
+  override def decimalMethod: String = "$div"
+  override def nullable: Boolean = true
+
+  private lazy val div: (Any, Any) => Any = dataType match {
+    case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        div(input1, input2)
+      }
+    }
+  }
+
+  /**
+   * Special case handling due to division by 0 => null.
+   */
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+    val isZero = s"${eval2.value} == 0"
+    val javaType = ctx.javaType(dataType)
+    val divide = s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval2.code}
