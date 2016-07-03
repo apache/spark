@@ -168,7 +168,7 @@ abstract class PMMLWriter extends MLWriter {
   /**
    * Specifies the underlying output data format as PMML
    */
-  def pmmml(): MLWriter = {
+  def pmml(): MLWriter = {
     this.source = "pmml"
     this
   }
