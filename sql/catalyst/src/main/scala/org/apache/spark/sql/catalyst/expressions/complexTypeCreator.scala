@@ -442,14 +442,14 @@ case class StringToMap(child: Expression, delimiter1: Expression, delimiter2: Ex
       val i = ctx.freshName("i")
 
       s"""
-        UTF8String[] $tempArray = ($text).split(UTF8String.fromString("$delim1"), -1);
+        UTF8String[] $tempArray = ($text).split($delim1, -1);
 
         $keyArray = new UTF8String[$tempArray.length];
         $valueArray = new UTF8String[$tempArray.length];
 
         for (int $i = 0; $i < $tempArray.length; $i ++) {
           UTF8String[] $keyValue =
-            ($tempArray[$i]).split(UTF8String.fromString("$delim2"), 2);
+            ($tempArray[$i]).split($delim2, 2);
           $keyArray[$i] = $keyValue[0];
           $valueArray[$i] = $keyValue[1];
         }
