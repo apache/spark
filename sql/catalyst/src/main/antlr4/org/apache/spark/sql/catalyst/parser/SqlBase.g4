@@ -45,11 +45,11 @@ statement
     | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
-        (OPTIONS optionParameterList)?
+        (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec?                                                    #createTableUsing
     | createTableHeader tableProvider
-        (OPTIONS optionParameterList)?
+        (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec? AS? query                                          #createTableUsing
     | createTableHeader ('(' columns=colTypeList ')')?
@@ -244,7 +244,7 @@ tablePropertyList
     ;
 
 tableProperty
-    : key=tablePropertyKey (EQ? value=STRING)?
+    : key=tablePropertyKey (EQ? value=tablePropertyValue)?
     ;
 
 tablePropertyKey
@@ -252,15 +252,7 @@ tablePropertyKey
     | STRING
     ;
 
-optionParameterList
-    : '(' optionParameter (',' optionParameter)* ')'
-    ;
-
-optionParameter
-    : key=tablePropertyKey (EQ? value=optionValue)?
-    ;
-
-optionValue
+tablePropertyValue
     : INTEGER_VALUE
     | DECIMAL_VALUE
     | booleanValue

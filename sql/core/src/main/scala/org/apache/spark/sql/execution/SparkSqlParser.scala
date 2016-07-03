@@ -303,9 +303,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (external) {
       throw operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.optionParameterList)
-      .map(visitOptionParameterList)
-      .getOrElse(Map.empty)
+    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
     val partitionColumnNames =
       Option(ctx.partitionColumnNames)
@@ -386,7 +384,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.tableProperty.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
-      val value = Option(property.value).map(string).orNull
+      val value = visitTablePropertyValue(property.value)
       key -> value
     }
     // Check for duplicate property names.
@@ -434,34 +432,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Parse a key-value map from a [[OptionParameterListContext]], assuming all values are
-   * specified. This allows string, boolean, decimal and integer literals which are converted
-   * to strings.
+   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * the property value based on whether its a string, integer, boolean or decimal literal.
    */
-  override def visitOptionParameterList(ctx: OptionParameterListContext): Map[String, String] = {
-    // TODO: Currently it does not treat null. Hive does not allow null for metadata and
-    // throws an exception.
-    val properties = ctx.optionParameter.asScala.map { property =>
-      val key = visitTablePropertyKey(property.key)
-      val value = if (property.value.STRING != null) {
-        string(property.value.STRING)
-      } else if (property.value.booleanValue != null) {
-        property.value.getText.toLowerCase
-      } else {
-        property.value.getText
-      }
-      key -> value
+  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+    if (value == null) {
+      null
+    } else if (value.STRING != null) {
+      string(value.STRING)
+    } else if (value.booleanValue != null) {
+      value.getText.toLowerCase
+    } else {
+      value.getText
     }
-
-    // Check for duplicate property names.
-    checkDuplicateKeys(properties, ctx)
-    val props = properties.toMap
-    val badKeys = props.collect { case (key, null) => key }
-    if (badKeys.nonEmpty) {
-      throw operationNotAllowed(
-        s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
-    }
-    props
   }
 
   /**
