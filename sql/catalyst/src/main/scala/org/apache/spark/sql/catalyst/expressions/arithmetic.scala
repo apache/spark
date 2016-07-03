@@ -293,7 +293,7 @@ case class IntegerDivide(left: Expression, right: Expression)
   override def inputType: AbstractDataType = IntegralType
 
   override def symbol: String = "div"
-  override def decimalMethod: String = "$div"
+  override def decimalMethod: String = "/"
   override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
@@ -322,7 +322,7 @@ case class IntegerDivide(left: Expression, right: Expression)
     val eval2 = right.genCode(ctx)
     val isZero = s"${eval2.value} == 0"
     val javaType = ctx.javaType(dataType)
-    val divide = s"($javaType)(${eval1.value}/(${eval2.value}))"
+    val divide = s"($javaType)(${eval1.value} $decimalMethod (${eval2.value}))"
     if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval2.code}
