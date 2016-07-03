@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -392,4 +392,74 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   }
 
   override def prettyName: String = "named_struct_unsafe"
+}
+
+/**
+ * Creates a map after splitting the input text into key/value pairs using delimeters
+ */
+@ExpressionDescription(
+  usage = """_FUNC_(text[, delimiter1, delimiter2]) - Creates a map after splitting the text into
+    key/value pairs using delimeters.
+    Default delimiters are ',' for delimiter1 and '=' for delimiter2.""")
+case class StringToMap(child: Expression, delimiter1: Expression, delimiter2: Expression)
+  extends TernaryExpression with ExpectsInputTypes {
+
+  def this(child: Expression) = {
+    this(child, Literal(","), Literal("="))
+  }
+
+  override def children: Seq[Expression] = Seq(child, delimiter1, delimiter2)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+
+  override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
+
+  override def foldable: Boolean = child.foldable
+
+  override def nullSafeEval(str: Any, delim1: Any, delim2: Any): Any = {
+    val array = str.asInstanceOf[UTF8String]
+      .split(delim1.asInstanceOf[UTF8String], -1)
+      .map{_.split(delim2.asInstanceOf[UTF8String], 2)}
+
+    ArrayBasedMapData(array.map(_(0)), array.map(_(1))).asInstanceOf[MapData]
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    nullSafeCodeGen(ctx, ev, (text, delim1, delim2) => {
+      val arrayClass = classOf[GenericArrayData].getName
+      val mapClass = classOf[ArrayBasedMapData].getName
+      val keyArray = ctx.freshName("keyArray")
+      val valueArray = ctx.freshName("valueArray")
+      ctx.addMutableState("UTF8String[]", keyArray, s"this.$keyArray = null;")
+      ctx.addMutableState("UTF8String[]", valueArray, s"this.$valueArray = null;")
+
+      val keyData = s"new $arrayClass($keyArray)"
+      val valueData = s"new $arrayClass($valueArray)"
+
+      val tempArray = ctx.freshName("tempArray")
+      val keyValue = ctx.freshName("keyValue")
+      val i = ctx.freshName("i")
+
+      s"""
+        UTF8String[] $tempArray = ($text).split(UTF8String.fromString("$delim1"), -1);
+
+        $keyArray = new UTF8String[$tempArray.length];
+        $valueArray = new UTF8String[$tempArray.length];
+
+        for (int $i = 0; $i < $tempArray.length; $i ++) {
+          UTF8String[] $keyValue =
+            ($tempArray[$i]).split(UTF8String.fromString("$delim2"), 2);
+          $keyArray[$i] = $keyValue[0];
+          $valueArray[$i] = $keyValue[1];
+        }
+
+        ${ev.value} = new $mapClass($keyData, $valueData);
+        this.$keyArray = null;
+        this.$valueArray = null;
+      """
+    })
+  }
+
+  override def prettyName: String = "str_to_map"
 }

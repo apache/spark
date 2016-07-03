@@ -2471,6 +2471,24 @@ object functions {
   def second(e: Column): Column = withExpr { Second(e.expr) }
 
   /**
+   * Extracts key, values from input string using ',' as delimiter1 and '=' as delimiter2
+   * and creates a new map column.
+   * @group normal_funcs
+   * @since 2.1.0
+   */
+  def str_to_map(e: Column): Column = withExpr { new StringToMap(e.expr) }
+
+  /**
+   * Extracts key, values from input string using delimiter1 and delimiter2
+   * and creates a new map column.
+   * @group normal_funcs
+   * @since 2.1.0
+   */
+  def str_to_map(e: Column, delimiter1: String, delimiter2: String): Column = withExpr {
+    StringToMap(e.expr, Literal(delimiter1), Literal(delimiter2))
+  }
+
+  /**
    * Extracts the week number as an integer from a given date/timestamp/string.
    * @group datetime_funcs
    * @since 1.5.0

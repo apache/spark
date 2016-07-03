@@ -246,4 +246,17 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkMetadata(CreateStructUnsafe(Seq(a, b)))
     checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
   }
+
+  test("StringToMap") {
+    val s0 = Literal("a:1,b:2,c:3")
+    val m0 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+    val s1 = Literal("a: ,b:2")
+    val m1 = Map("a" -> " ", "b" -> "2")
+    val s2 = Literal("a=1,b=2,c=3")
+    val m2 = Map("a" -> "1", "b" -> "2", "c" -> "3")
+
+    checkEvaluation(StringToMap(s0, Literal(","), Literal(":")), m0)
+    checkEvaluation(StringToMap(s1, Literal(","), Literal(":")), m1)
+    checkEvaluation(new StringToMap(s2), m2)
+  }
 }
