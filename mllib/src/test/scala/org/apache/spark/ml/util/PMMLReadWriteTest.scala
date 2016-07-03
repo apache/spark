@@ -43,8 +43,11 @@ trait PMMLReadWriteTest extends TempDirectory { self: Suite =>
     val path = new File(subdir, uid).getPath
 
     instance.toPMML(path)
-    intercept[IOException] {
+     intercept[IOException] {
       instance.toPMML(path)
+     }
+    intercept[IOException] {
+      instance.write.pmml().save(path)
     }
     instance.write.format("pmml").overwrite().save(path)
     val pmmlStr = sc.textFile(path).collect.mkString("\n")
