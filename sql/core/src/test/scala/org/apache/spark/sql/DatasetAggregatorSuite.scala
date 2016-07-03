@@ -306,12 +306,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkDataset(ds.select(MapTypeBufferAgg.toColumn), 1)
   }
 
-  test("spark-15204 improve nullability inference for Aggregator") {
+  test("SPARK-15204 improve nullability inference for Aggregator") {
     val ds1 = Seq(1, 3, 2, 5).toDS()
     assert(ds1.select(typed.sum((i: Int) => i)).schema.head.nullable === false)
     val ds2 = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
-    assert(ds2.groupByKey(_.b).agg(SeqAgg.toColumn).schema(1).nullable === true)
+    assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
-    assert(ds3.groupByKey(_.a).agg(NameAgg.toColumn).schema(1).nullable === true)
+    assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
   }
 }
