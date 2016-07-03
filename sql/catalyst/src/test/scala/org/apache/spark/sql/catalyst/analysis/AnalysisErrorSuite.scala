@@ -353,6 +353,12 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "num_rows in limit clause must be equal to or greater than 0",
+    listRelation.limit(-1),
+    "number_rows in limit clause must be equal to or greater than 0. number_rows:-1" :: Nil
+  )
+
+  errorTest(
     "more than one generators in SELECT",
     listRelation.select(Explode('list), Explode('list)),
     "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil

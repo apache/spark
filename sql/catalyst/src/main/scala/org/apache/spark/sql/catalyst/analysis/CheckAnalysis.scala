@@ -251,6 +251,22 @@ trait CheckAnalysis extends PredicateHelper {
                 s"but one table has '${firstError.output.length}' columns and another table has " +
                 s"'${s.children.head.output.length}' columns")
 
+          case l: GlobalLimit =>
+            val numRows = l.limitExpr.eval().asInstanceOf[Int]
+            if (numRows < 0) {
+              failAnalysis(
+                s"number_rows in limit clause must be equal to or greater than 0. " +
+                  s"number_rows:$numRows")
+            }
+
+          case l: LocalLimit =>
+            val numRows = l.limitExpr.eval().asInstanceOf[Int]
+            if (numRows < 0) {
+              failAnalysis(
+                s"number_rows in limit clause must be equal to or greater than 0. " +
+                  s"number_rows:$numRows")
+            }
+
           case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
             p match {
               case _: Filter | _: Aggregate | _: Project => // Ok

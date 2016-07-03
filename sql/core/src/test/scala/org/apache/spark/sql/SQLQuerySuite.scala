@@ -592,6 +592,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("negative in LIMIT or TABLESAMPLE") {
+    val expected = "number_rows in limit clause must be equal to or greater than 0. number_rows:-1"
+    var e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData TABLESAMPLE (-1 rows)")
+    }.getMessage
+    assert(e.contains(expected))
+
+    e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData LIMIT -1")
+    }.getMessage
+    assert(e.contains(expected))
+  }
+
   test("aggregates with nulls") {
     checkAnswer(
       sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
