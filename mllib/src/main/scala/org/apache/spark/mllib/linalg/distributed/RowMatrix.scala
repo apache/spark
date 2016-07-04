@@ -538,20 +538,29 @@ class RowMatrix @Since("1.0.0") (
     val col = numCols().toInt
     // split rows horizontally into smaller matrices, and compute QR for each of them
     val blockQRs = rows.glom().map { partRows =>
-      val bdm = BDM.zeros[Double](partRows.length, col)
-      var i = 0
-      partRows.foreach { row =>
-        bdm(i, ::) := row.asBreeze.t
-        i += 1
+      if (partRows.length == 0) {
+        None
+      } else {
+        val bdm = BDM.zeros[Double](partRows.length, col)
+        var i = 0
+        partRows.foreach { row =>
+          bdm(i, ::) := row.asBreeze.t
+          i += 1
+        }
+        Some(breeze.linalg.qr.reduced(bdm).r)
       }
-      breeze.linalg.qr.reduced(bdm).r
     }
 
     // combine the R part from previous results vertically into a tall matrix
-    val combinedR = blockQRs.treeReduce{ (r1, r2) =>
-      val stackedR = BDM.vertcat(r1, r2)
-      breeze.linalg.qr.reduced(stackedR).r
-    }
+    val combinedR = blockQRs.treeReduce {
+      case (Some(r1), Some(r2)) =>
+        val stackedR = BDM.vertcat(r1, r2)
+        Some(breeze.linalg.qr.reduced(stackedR).r)
+      case (Some(r1), None) => Some(r1)
+      case (None, Some(r2)) => Some(r2)
+      case _ => None
+    }.get
+
     val finalR = Matrices.fromBreeze(combinedR.toDenseMatrix)
     val finalQ = if (computeQ) {
       try {
