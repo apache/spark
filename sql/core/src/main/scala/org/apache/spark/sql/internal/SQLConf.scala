@@ -508,6 +508,12 @@ object SQLConf {
       .intConf
       .createWithDefault(40)
 
+  val SHUFFLE_CLEANUP_ENABLED =
+    SQLConfigBuilder("spark.sql.shuffle.cleanupEnabled")
+      .doc("Whether to remove shuffle files just after jobs finished.")
+      .booleanConf
+      .createWithDefault(true)
+
   val VECTORIZED_AGG_MAP_MAX_COLUMNS =
     SQLConfigBuilder("spark.sql.codegen.aggregate.map.columns.max")
       .internal()
@@ -689,6 +695,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
+
+  def shuffleCleanupEnabled: Boolean = getConf(SHUFFLE_CLEANUP_ENABLED)
 
   def warehousePath: String = {
     getConf(WAREHOUSE_PATH).replace("${system:user.dir}", System.getProperty("user.dir"))

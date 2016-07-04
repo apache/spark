@@ -122,6 +122,10 @@ case class ShuffleExchange(
           val shuffleDependency = prepareShuffleDependency()
           preparePostShuffleRDD(shuffleDependency)
       }
+      // Register shuffle ids to clean up just after jobs finished
+      if (sqlContext.conf.shuffleCleanupEnabled) {
+        sqlContext.sessionState.shuffleIdsToCleanup.add(cachedShuffleRDD.dependency.shuffleId)
+      }
     }
     cachedShuffleRDD
   }
