@@ -840,7 +840,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3, expected3)
   }
 
-  test("support for other types as option in DBPROPERTIES") {
+  test("support for other types in DBPROPERTIES") {
     val sql =
       """
         |CREATE DATABASE database_name
@@ -858,7 +858,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
-  test("support for other types as option in TBLPROPERTIES") {
+  test("support for other types in TBLPROPERTIES") {
     val sql =
       """
         |ALTER TABLE table_name
@@ -873,7 +873,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
-  test("support for other types as option in OPTIONS") {
+  test("support for other types in OPTIONS") {
     val sql =
       """
         |CREATE TABLE table_name USING json
