@@ -2240,6 +2240,46 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |drop table if exists union_date_2;
     """.stripMargin)
 
+  createQueryTest("varchar_2",
+    """
+      |drop table if exists varchar_2;
+      |
+      |create table varchar_2 (
+      |  key varchar(10),
+      |  value varchar(20)
+      |);
+      |
+      |insert overwrite table varchar_2 select * from src;
+      |
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from src
+      |group by value
+      |order by value asc
+      |limit 5;
+      |
+      |-- should match the query from src
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from varchar_2
+      |group by value
+      |order by value asc
+      |limit 5;
+      |
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from src
+      |group by value
+      |order by value desc
+      |limit 5;
+      |
+      |-- should match the query from src
+      |select value, sum(cast(key as int)), count(*) numrows
+      |from varchar_2
+      |group by value
+      |order by value desc
+      |limit 5;
+      |
+      |drop table if exists varchar_2;
+    """.stripMargin)
+
   // scalastyle:on
 }
 
