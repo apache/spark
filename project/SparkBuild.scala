@@ -723,7 +723,6 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
-    // Javadoc options: create a window title
     javacOptions in (JavaUnidoc, unidoc) := Seq(
       "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
       "-public",
