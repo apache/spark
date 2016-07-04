@@ -1508,14 +1508,23 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |drop table if exists date_serde_orc;
     """.stripMargin)
 
-  createQueryTest("test",
+  createQueryTest("insert_compressed",
     """
+      |set hive.exec.compress.output=true;
       |
-    """.stripMargin)
-
-  createQueryTest("test11",
-    """
+      |drop table if exists insert_compressed;
+      |create table insert_compressed (key int, value string);
       |
+      |insert overwrite table insert_compressed select * from src;
+      |select count(*) from insert_compressed;
+      |
+      |insert into table insert_compressed select * from src;
+      |select count(*) from insert_compressed;
+      |
+      |insert into table insert_compressed select * from src;
+      |select count(*) from insert_compressed;
+      |
+      |drop table if exists insert_compressed;
     """.stripMargin)
 
   // scalastyle:on
