@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPOutputStream
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, PathFilter, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -487,6 +487,50 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("filter out invalid files in a driver") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[MockDistributedFileSystem].getName,
+      SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "3") {
+      val table =
+        createTable(
+          files = Seq(
+            "p1=1/file1" -> 1,
+            "p1=1/file2" -> 1,
+            "p1=2/file3" -> 1,
+            "p1=2/.temp" -> 1,
+            "p1=2/_temp" -> 1,
+            "p1=2/temp._COPYING_" -> 1,
+            "p1=2/invalid_file" -> 1))
+
+      checkScan(table.select('c1)) { partitions =>
+        assert(partitions.size == 1)
+        assert(partitions.head.files.size == 3)
+      }
+    }
+  }
+
+  test("filter out invalid files in parallel") {
+    withSQLConf(
+      "fs.file.impl" -> classOf[MockDistributedFileSystem].getName,
+      SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "2") {
+      val table =
+        createTable(
+          files = Seq(
+            "p1=1/file1" -> 1,
+            "p1=1/file2" -> 1,
+            "p1=2/file3" -> 1,
+            "p1=2/.temp" -> 1,
+            "p1=2/_temp" -> 1,
+            "p1=2/temp._COPYING_" -> 1,
+            "p1=2/invalid_file" -> 1))
+
+      checkScan(table.select('c1)) { partitions =>
+        assert(partitions.size == 1)
+        assert(partitions.head.files.size == 3)
+      }
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -599,6 +643,14 @@ class TestFileFormat extends TextBasedFileFormat {
       StructType(Nil)
           .add("c1", IntegerType)
           .add("c2", IntegerType))
+
+  override def getPathFilter(options: Map[String, String]): PathFilter = {
+    new PathFilter {
+      override def isDataPath(path: Path): Boolean = {
+        PathFilter.defaultPathFilter.isDataPath(path) && !path.getName.startsWith("invalid_")
+      }
+    }
+  }
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can

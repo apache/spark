@@ -46,6 +46,7 @@ abstract class PartitioningAwareFileIndex(
     sparkSession: SparkSession,
     parameters: Map[String, String],
     userPartitionSchema: Option[StructType],
+    pathFilter: PathFilter,
     fileStatusCache: FileStatusCache = NoopCache) extends FileIndex with Logging {
   import PartitioningAwareFileIndex.BASE_PATH_PARAM
 
@@ -237,9 +238,14 @@ abstract class PartitioningAwareFileIndex(
 
   // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
   // counted as data files, so that they shouldn't participate partition discovery.
-  private def isDataPath(path: Path): Boolean = {
-    val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
+  private def isDataPath(path: Path): Boolean = pathFilter.isDataPath(path)
+
+  private def mergePathFilter(
+      filter: PathFilter,
+      subFilter: Option[org.apache.hadoop.fs.PathFilter])
+    : Path => Boolean = subFilter match {
+    case Some(sf) => (path: Path) => filter.accept(path) && sf.accept(path)
+    case None => (path: Path) => filter.accept(path)
   }
 
   /**
@@ -261,9 +267,9 @@ abstract class PartitioningAwareFileIndex(
           pathsToFetch += path
       }
     }
-    val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
+    val hadoopFilter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = PartitioningAwareFileIndex.bulkListLeafFiles(
-      pathsToFetch, hadoopConf, filter, sparkSession)
+      pathsToFetch, hadoopConf, mergePathFilter(pathFilter, Option(hadoopFilter)), sparkSession)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -305,7 +311,7 @@ object PartitioningAwareFileIndex extends Logging {
   private def bulkListLeafFiles(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      filter: PathFilter,
+      filter: Path => Boolean,
       sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
@@ -392,11 +398,10 @@ object PartitioningAwareFileIndex extends Logging {
   private def listLeafFiles(
       path: Path,
       hadoopConf: Configuration,
-      filter: PathFilter,
+      filter: Path => Boolean,
       sessionOpt: Option[SparkSession]): Seq[FileStatus] = {
     logTrace(s"Listing $path")
     val fs = path.getFileSystem(hadoopConf)
-    val name = path.getName.toLowerCase
 
     // [SPARK-17599] Prevent InMemoryFileIndex from failing if path doesn't exist
     // Note that statuses only include FileStatus for the files and dirs directly under path,
@@ -407,7 +412,7 @@ object PartitioningAwareFileIndex extends Logging {
         Array.empty[FileStatus]
     }
 
-    val filteredStatuses = statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
+    val filteredStatuses = statuses.filter(status => filter(status.getPath))
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
@@ -418,10 +423,10 @@ object PartitioningAwareFileIndex extends Logging {
           dirs.flatMap(dir => listLeafFiles(dir.getPath, hadoopConf, filter, sessionOpt))
       }
       val allFiles = topLevelFiles ++ nestedFiles
-      if (filter != null) allFiles.filter(f => filter.accept(f.getPath)) else allFiles
+      if (filter != null) allFiles.filter(f => filter(f.getPath)) else allFiles
     }
 
-    allLeafStatuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
+    allLeafStatuses.filter(status => filter(status.getPath)).map {
       case f: LocatedFileStatus =>
         f
 
@@ -446,19 +451,5 @@ object PartitioningAwareFileIndex extends Logging {
         }
         lfs
     }
-  }
-
-  /** Checks if we should filter out this path name. */
-  def shouldFilterOut(pathName: String): Boolean = {
-    // We filter follow paths:
-    // 1. everything that starts with _ and ., except _common_metadata and _metadata
-    // because Parquet needs to find those metadata files from leaf files returned by this method.
-    // We should refactor this logic to not mix metadata files with data files.
-    // 2. everything that ends with `._COPYING_`, because this is a intermediate state of file. we
-    // should skip this file in case of double reading.
-    val exclude = (pathName.startsWith("_") && !pathName.contains("=")) ||
-      pathName.startsWith(".") || pathName.endsWith("._COPYING_")
-    val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
-    exclude && !include
   }
 }

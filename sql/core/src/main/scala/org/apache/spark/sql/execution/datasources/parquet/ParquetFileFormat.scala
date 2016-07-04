@@ -255,7 +255,7 @@ class ParquetFileFormat
 
   private def isSummaryFile(file: Path): Boolean = {
     file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
-        file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
+      file.getName == ParquetFileWriter.PARQUET_METADATA_FILE
   }
 
   /**
@@ -273,6 +273,13 @@ class ParquetFileFormat
       options: Map[String, String],
       path: Path): Boolean = {
     true
+  }
+
+  override def getPathFilter(options: Map[String, String]): PathFilter = {
+    new PathFilter {
+      override def isDataPath(path: Path): Boolean = PathFilter.defaultPathFilter.isDataPath(path)
+      override def isMetaDataPath(path: Path): Boolean = isSummaryFile(path)
+    }
   }
 
   override def buildReaderWithPartitionValues(

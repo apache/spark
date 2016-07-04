@@ -39,9 +39,10 @@ class InMemoryFileIndex(
     override val rootPaths: Seq[Path],
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
+    pathFilter: PathFilter = PathFilter.defaultPathFilter,
     fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
-    sparkSession, parameters, partitionSchema, fileStatusCache) {
+    sparkSession, parameters, partitionSchema, pathFilter, fileStatusCache) {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _

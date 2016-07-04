@@ -31,6 +31,34 @@ import org.apache.spark.sql.types.StructType
 
 
 /**
+ * A filter class to list up qualified paths in parallel.
+ */
+abstract class PathFilter extends Serializable {
+  final def accept(path: Path): Boolean = isDataPath(path) || isMetaDataPath(path)
+  def isDataPath(path: Path): Boolean = false
+  def isMetaDataPath(path: Path): Boolean = false
+}
+
+object PathFilter {
+
+  /** A default path filter to pass through all input paths. */
+  val defaultPathFilter = new PathFilter {
+
+    override def isDataPath(path: Path): Boolean = {
+      // We filter follow paths:
+      // 1. everything that starts with _ and ., except _common_metadata and _metadata
+      // because Parquet needs to find those metadata files from leaf files returned by this method.
+      // We should refactor this logic to not mix metadata files with data files.
+      // 2. everything that ends with `._COPYING_`, because this is a intermediate state of file. we
+      // should skip this file in case of double reading.
+      val name = path.getName
+      !((name.startsWith("_") && !name.contains("=")) || name.startsWith(".") ||
+        name.endsWith("._COPYING_"))
+    }
+  }
+}
+
+/**
  * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
 trait FileFormat {
@@ -72,6 +100,13 @@ trait FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     false
+  }
+
+  /**
+   * Return a serializable `PathFilter` class to filter qualified files for this format.
+   */
+  def getPathFilter(options: Map[String, String]): PathFilter = {
+    PathFilter.defaultPathFilter
   }
 
   /**
