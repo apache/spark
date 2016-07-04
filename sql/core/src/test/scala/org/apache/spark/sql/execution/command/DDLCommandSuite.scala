@@ -866,7 +866,7 @@ class DDLCommandSuite extends PlanTest {
       """.stripMargin
     val parsed = parser.parsePlan(sql)
     val expected = AlterTableSetPropertiesCommand(
-      TableIdentifier("table_name", None),
+      TableIdentifier("table_name"),
       Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
       isView = false)
 
