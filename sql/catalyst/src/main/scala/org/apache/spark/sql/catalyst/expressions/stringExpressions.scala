@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.net.URL
+import java.net.{MalformedURLException, URL}
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
-import java.util.regex.{Pattern, PatternSyntaxException}
-
-import scala.util.control.NonFatal
+import java.util.regex.Pattern
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -716,7 +714,7 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  private def getPattern(key: Any): Pattern = {
+  private def getPattern(key: UTF8String): Pattern = {
     if (key != null) {
       val sb = new StringBuilder()
       sb.append(REGEXPREFIX).append(key.toString).append(REGEXSUBFIX)
@@ -726,11 +724,11 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  private def getUrl(url: Any): URL = {
+  private def getUrl(url: UTF8String): URL = {
     try {
       new URL(url.toString)
     } catch {
-      case NonFatal(_) => null
+      case e: MalformedURLException => null
     }
   }
 
@@ -771,7 +769,7 @@ case class ParseUrl(children: Seq[Expression])
       if (cachedUrl ne null) {
         extractFromUrl(cachedUrl, partToExtract)
       } else {
-        val currentUrl = getUrl(url)
+        val currentUrl = getUrl(url.asInstanceOf[UTF8String])
         if (currentUrl ne null) {
           extractFromUrl(currentUrl, partToExtract)
         } else {
@@ -796,7 +794,7 @@ case class ParseUrl(children: Seq[Expression])
             extractValueFromQuery(query, cachedPattern)
           } else {
             val key = stringExprs(2).eval(input)
-            val pattern = getPattern(key)
+            val pattern = getPattern(key.asInstanceOf[UTF8String])
             if (pattern ne null) {
               extractValueFromQuery(query, pattern)
             } else {
