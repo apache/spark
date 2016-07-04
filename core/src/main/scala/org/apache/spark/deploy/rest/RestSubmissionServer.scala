@@ -94,13 +94,14 @@ private[spark] abstract class RestSubmissionServer(
     contextToServlet.foreach { case (prefix, servlet) =>
       mainHandler.addServlet(new ServletHolder(servlet), prefix)
     }
-    // Add a filter for CSRF protection.
-    val csrfFilterHolder: FilterHolder = new FilterHolder()
-    csrfFilterHolder.setHeldClass(classOf[RestCsrfPreventionFilter])
-    mainHandler.addFilter(csrfFilterHolder, "/*", java.util.EnumSet.of(
-      DispatcherType.ASYNC, DispatcherType.ERROR, DispatcherType.FORWARD,
-      DispatcherType.INCLUDE, DispatcherType.REQUEST))
-
+    if(masterConf.getBoolean("spark.rest.csrf.enable", false)) {
+      // Add a filter for CSRF protection.
+      val csrfFilterHolder: FilterHolder = new FilterHolder()
+      csrfFilterHolder.setHeldClass(classOf[RestCsrfPreventionFilter])
+      mainHandler.addFilter(csrfFilterHolder, "/*", java.util.EnumSet.of(
+        DispatcherType.ASYNC, DispatcherType.ERROR, DispatcherType.FORWARD,
+        DispatcherType.INCLUDE, DispatcherType.REQUEST))
+    }
     server.setHandler(mainHandler)
     server.start()
     val boundPort = connector.getLocalPort
