@@ -716,9 +716,7 @@ case class ParseUrl(children: Seq[Expression])
 
   private def getPattern(key: UTF8String): Pattern = {
     if (key != null) {
-      val sb = new StringBuilder()
-      sb.append(REGEXPREFIX).append(key.toString).append(REGEXSUBFIX)
-      Pattern.compile(sb.toString())
+      Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
     } else {
       null
     }
