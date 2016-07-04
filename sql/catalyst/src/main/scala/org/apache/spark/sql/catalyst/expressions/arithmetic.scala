@@ -207,96 +207,11 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
-@ExpressionDescription(
-  usage = "a _FUNC_ b - Divides a by b.",
-  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
-case class Divide(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
-
-  override def symbol: String = "/"
-  override def decimalMethod: String = "$div"
+abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val input2 = right.eval(input)
-    if (input2 == null || input2 == 0) {
-      null
-    } else {
-      val input1 = left.eval(input)
-      if (input1 == null) {
-        null
-      } else {
-        div(input1, input2)
-      }
-    }
-  }
-
-  /**
-   * Special case handling due to division by 0 => null.
-   */
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval1 = left.genCode(ctx)
-    val eval2 = right.genCode(ctx)
-    val isZero = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval2.value}.isZero()"
-    } else {
-      s"${eval2.value} == 0"
-    }
-    val javaType = ctx.javaType(dataType)
-    val divide = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
-    } else {
-      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
-    }
-    if (!left.nullable && !right.nullable) {
-      ev.copy(code = s"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        if ($isZero) {
-          ${ev.isNull} = true;
-        } else {
-          ${eval1.code}
-          ${ev.value} = $divide;
-        }""")
-    } else {
-      ev.copy(code = s"""
-        ${eval2.code}
-        boolean ${ev.isNull} = false;
-        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        if (${eval2.isNull} || $isZero) {
-          ${ev.isNull} = true;
-        } else {
-          ${eval1.code}
-          if (${eval1.isNull}) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = $divide;
-          }
-        }""")
-    }
-  }
-}
-
-@ExpressionDescription(
-  usage = "a _FUNC_ b - Divides a by b.",
-  extended = "> SELECT 3 _FUNC_ 2;\n 1")
-case class IntegerDivide(left: Expression, right: Expression)
-  extends BinaryArithmetic with NullIntolerant {
-
-  override def inputType: AbstractDataType = IntegralType
-
-  override def symbol: String = "div"
-  override def decimalMethod: String = "/"
-  override def nullable: Boolean = true
-
-  private lazy val div: (Any, Any) => Any = dataType match {
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
   }
 
@@ -314,42 +229,96 @@ case class IntegerDivide(left: Expression, right: Expression)
     }
   }
 
+  // Used by doGenCode
+  def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String
+  def isZero(eval2: ExprCode): String
+
   /**
    * Special case handling due to division by 0 => null.
    */
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
-    val isZero = s"${eval2.value} == 0"
+    val isZeroCheck = isZero(eval2)
     val javaType = ctx.javaType(dataType)
-    val divide = s"($javaType)(${eval1.value} $decimalMethod (${eval2.value}))"
+    val division = divide(eval1, eval2, javaType)
     if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        if ($isZero) {
+        if ($isZeroCheck) {
           ${ev.isNull} = true;
         } else {
           ${eval1.code}
-          ${ev.value} = $divide;
+          ${ev.value} = $division;
         }""")
     } else {
       ev.copy(code = s"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        if (${eval2.isNull} || $isZero) {
+        if (${eval2.isNull} || $isZeroCheck) {
           ${ev.isNull} = true;
         } else {
           ${eval1.code}
           if (${eval1.isNull}) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = $divide;
+            ${ev.value} = $division;
           }
         }""")
     }
+  }
+}
+
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
+case class Divide(left: Expression, right: Expression)
+    extends DivisionArithmetic {
+
+  override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
+
+  override def symbol: String = "/"
+  override def decimalMethod: String = "$div"
+
+  // Used by doGenCode
+  override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
+    if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.value}.$decimalMethod(${eval2.value})"
+    } else {
+      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
+    }
+  }
+
+  override def isZero(eval2: ExprCode): String = {
+    if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1")
+case class IntegerDivide(left: Expression, right: Expression)
+  extends DivisionArithmetic {
+
+  override def inputType: AbstractDataType = IntegralType
+
+  override def symbol: String = "div"
+  override def decimalMethod: String = "/"
+
+  // Used by doGenCode
+  override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
+    s"($javaType)(${eval1.value} $decimalMethod (${eval2.value}))"
+  }
+
+  override def isZero(eval2: ExprCode): String = {
+    s"${eval2.value} == 0"
   }
 }
 
