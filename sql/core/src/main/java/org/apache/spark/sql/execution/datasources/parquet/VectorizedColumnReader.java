@@ -670,8 +670,6 @@ public class VectorizedColumnReader {
               repCount = reptitionMap.get(1);
             }
             reptitionMap.put(1, repCount + 1);
-            // insertArrayForRepetition(column, rowIds, offsets, reptitionMap, total,
-            //  0, 1);
             insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, maxRepLevel - 1);
           } else {
             // Repeated values. We increase repetition count.
