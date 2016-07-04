@@ -48,7 +48,7 @@ public class UnsafeArrayWriter {
     assert index < numElements : "index (" + index + ") should < " + numElements;
   }
 
-  public void initialize(BufferHolder holder, int numElements, int fixedElementSize) {
+  public void initialize(BufferHolder holder, int numElements, int elementSize) {
     // We need 4 bytes to store numElements in header
     this.numElements = numElements;
     this.headerInBytes = calculateHeaderPortionInBytes(numElements);
@@ -57,14 +57,14 @@ public class UnsafeArrayWriter {
     this.startingOffset = holder.cursor;
 
     // Grows the global buffer ahead for header and fixed size data.
-    holder.grow(headerInBytes + fixedElementSize * numElements);
+    holder.grow(headerInBytes + elementSize * numElements);
 
-    // Initialize information in header
+    // Write numElements and clear out null bits to header
     Platform.putInt(holder.buffer, startingOffset, numElements);
     for (int i = 4; i < headerInBytes; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
-    holder.cursor += (headerInBytes + fixedElementSize * numElements);
+    holder.cursor += (headerInBytes + elementSize * numElements);
   }
 
   private long getElementOffset(int ordinal, int elementSize) {
@@ -75,7 +75,8 @@ public class UnsafeArrayWriter {
     final long relativeOffset = currentCursor - startingOffset;
     final long offsetAndSize = (relativeOffset << 32) | size;
 
-    write(ordinal, offsetAndSize);
+    //write(ordinal, offsetAndSize);
+    write(ordinal, (int)relativeOffset);
   }
 
   private void setNullBit(int ordinal) {

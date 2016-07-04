@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import org.apache.spark.SparkConf
+import scala.util.Random
+
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter}
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Benchmark
 
 /**
  * Benchmark [[UnsafeArrayDataBenchmark]] for UnsafeArrayData
  * To run this:
- *  build/sbt "sql/test-only *benchmark.UnsafeArrayDataBenchmark"
+ *  1. replace ignore(...) with test(...)
+ *  2. build/sbt "sql/test-only *benchmark.UnsafeArrayDataBenchmark"
  *
  * Benchmarks in this file are skipped in normal builds.
  */
@@ -42,9 +43,10 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
   def readUnsafeArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 16
+    val rand = new Random(42)
 
     var intResult: Int = 0
-    val intBuffer = new Array[Int](count)
+    val intBuffer = Array.fill[Int](count) { rand.nextInt }
     val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
     val intInternalRow = intEncoder.toRow(intBuffer)
     val intUnsafeArray = intInternalRow.getArray(0)
@@ -64,7 +66,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     }
 
     var doubleResult: Double = 0
-    val doubleBuffer = new Array[Double](count)
+    val doubleBuffer = Array.fill[Double](count) { rand.nextDouble }
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
     val doubleInternalRow = doubleEncoder.toRow(doubleBuffer)
     val doubleUnsafeArray = doubleInternalRow.getArray(0)
@@ -93,8 +95,8 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
     Read UnsafeArrayData:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Int                                            281 /  296        597.5           1.7       1.0X
-    Double                                         298 /  301        562.3           1.8       0.9X
+    Int                                            279 /  294        600.4           1.7       1.0X
+    Double                                         296 /  303        567.0           1.8       0.9X
     */
   }
 
@@ -151,38 +153,37 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
     Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    Int                                             82 /   85       2056.9           0.5       1.0X
-    Double                                         139 /  144       1207.1           0.8       0.6X
+    Int                                             79 /   86       2124.2           0.5       1.0X
+    Double                                         140 /  147       1201.0           0.8       0.6X
     */
   }
 
   def getPrimitiveArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 12
+    val rand = new Random(42)
 
-    val intUnsafeArray = new UnsafeArrayData
-    val intSize = calculateHeaderPortionInBytes(count) + 4 * count
-    val intBuffer = new Array[Byte](intSize)
-    Platform.putInt(intBuffer, Platform.BYTE_ARRAY_OFFSET, count)
-    intUnsafeArray.pointTo(intBuffer, Platform.BYTE_ARRAY_OFFSET, intSize)
-    var intPrimitiveArray: Array[Int] = null
+    var intTotalLength: Int = 0
+    val intBuffer = Array.fill[Int](count) { rand.nextInt }
+    val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
+    val intInternalRow = intEncoder.toRow(intBuffer)
+    val intUnsafeArray = intInternalRow.getArray(0)
     val readIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        intPrimitiveArray = intUnsafeArray.toIntArray
+        intTotalLength += intUnsafeArray.toIntArray.length
         n += 1
       }
     }
 
-    val doubleUnsafeArray = new UnsafeArrayData
-    val doubleSize = calculateHeaderPortionInBytes(count) + 8 * count
-    val doubleBuffer = new Array[Byte](doubleSize)
-    Platform.putInt(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, count)
-    doubleUnsafeArray.pointTo(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, doubleSize)
-    var doublePrimitiveArray: Array[Double] = null
+    var doubleTotalLength: Int = 0
+    val doubleBuffer = Array.fill[Double](count) { rand.nextDouble }
+    val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
+    val doubleInternalRow = doubleEncoder.toRow(doubleBuffer)
+    val doubleUnsafeArray = doubleInternalRow.getArray(0)
     val readDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        doublePrimitiveArray = doubleUnsafeArray.toDoubleArray
+        doubleTotalLength += doubleUnsafeArray.toDoubleArray.length
         n += 1
       }
     }
@@ -195,17 +196,18 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
 
-    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
     ------------------------------------------------------------------------------------------------
-    Int                                            100 /  176        632.1           1.6       1.0X
-    Double                                         267 /  334        236.0           4.2       0.4X
+    Int                                             80 /  151        783.4           1.3       1.0X
+    Double                                         208 /  366        302.8           3.3       0.4X
     */
   }
 
   def putPrimitiveArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 12
+    val rand = new Random(42)
 
-    val intPrimitiveArray: Array[Int] = new Array[Int](count)
+    val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt }
     var intUnsafeArray: UnsafeArrayData = null
     val createIntArray = { i: Int =>
       var n = 0
@@ -215,7 +217,7 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
       }
     }
 
-    val doublePrimitiveArray: Array[Double] = new Array[Double](count)
+    val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble }
     var doubleUnsafeArray: UnsafeArrayData = null
     val createDoubleArray = { i: Int =>
       var n = 0
@@ -233,21 +235,14 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
 
-    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Create UnsafeArrayData from primitive array: Best/Avg Time(ms)  Rate(M/s)  Per Row(ns)  Relative
     ------------------------------------------------------------------------------------------------
-    Int                                             69 /  168        911.5           1.1       1.0X
-    Double                                         298 /  328        210.8           4.7       0.2X
+    Int                                             68 /  144        920.4           1.1       1.0X
+    Double                                         240 /  302        261.7           3.8       0.3X
     */
   }
 
   ignore("Benchmark UnsafeArrayData") {
-    readUnsafeArray(10)
-    writeUnsafeArray(10)
-    getPrimitiveArray(5)
-    putPrimitiveArray(5)
-  }
-
-  def main(args: Array[String]): Unit = {
     readUnsafeArray(10)
     writeUnsafeArray(10)
     getPrimitiveArray(5)

@@ -44,7 +44,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * fixed-length primitive types, such as long, double, or int, we store the value directly
  * in the field. For fields with non-primitive or variable-length values, we store a relative
  * offset (w.r.t. the base address of the array) that points to the beginning of
- * the variable-length field, and length (they are combined into a long).
+ * the variable-length field into int. its length can be got by subtracting 2 adjacent offsets
  *
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
@@ -112,6 +112,14 @@ public final class UnsafeArrayData extends ArrayData {
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
     this.headerInBytes = calculateHeaderPortionInBytes(numElements);
+  }
+
+  private int getSize(int ordinal) {
+    if (ordinal != numElements) {
+      return getInt(ordinal + 1) - getInt(ordinal);
+    } else {
+      return sizeInBytes - getInt(ordinal);
+    }
   }
 
   @Override
@@ -231,9 +239,8 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public byte[] getBinary(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
+    final int offset = getInt(ordinal);
+    final int size = getSize(ordinal);
     final byte[] bytes = new byte[size];
     Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
     return bytes;
@@ -243,7 +250,7 @@ public final class UnsafeArrayData extends ArrayData {
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
+    final int offset = getInt(ordinal);
     final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, microseconds);
@@ -252,9 +259,8 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeRow getStruct(int ordinal, int numFields) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
+    final int offset = getInt(ordinal);
+    final int size = getSize(ordinal);
     final UnsafeRow row = new UnsafeRow(numFields);
     row.pointTo(baseObject, baseOffset + offset, size);
     return row;
@@ -263,9 +269,8 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeArrayData getArray(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
+    final int offset = getInt(ordinal);
+    final int size = getSize(ordinal);
     final UnsafeArrayData array = new UnsafeArrayData();
     array.pointTo(baseObject, baseOffset + offset, size);
     return array;
@@ -274,9 +279,8 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeMapData getMap(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
+    final int offset = getInt(ordinal);
+    final int size = getSize(ordinal);
     final UnsafeMapData map = new UnsafeMapData();
     map.pointTo(baseObject, baseOffset + offset, size);
     return map;
@@ -330,7 +334,7 @@ public final class UnsafeArrayData extends ArrayData {
     int size = numElements();
     boolean[] values = new boolean[size];
     Platform.copyMemory(
-      baseObject, baseOffset + headerInBytes, values, Platform.BYTE_ARRAY_OFFSET, size);
+      baseObject, baseOffset + headerInBytes, values, Platform.BOOLEAN_ARRAY_OFFSET, size);
     return values;
   }
 
@@ -390,27 +394,27 @@ public final class UnsafeArrayData extends ArrayData {
 
   private static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
-    final long headerSize = calculateHeaderPortionInBytes(length);
-    final long valueRegionSize = (long)elementSize * (long)length;
-    final long allocationSize = (headerSize + valueRegionSize + 7) / 8;
-    if (allocationSize > (long)Integer.MAX_VALUE) {
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = (long)elementSize * (long)length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    if (totalSizeInLongs * 8> Integer.MAX_VALUE) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "it's too big.");
     }
 
-    final long[] data = new long[(int)allocationSize];
+    final long[] data = new long[(int)totalSizeInLongs];
 
     Platform.putInt(data, Platform.LONG_ARRAY_OFFSET, length);
     Platform.copyMemory(arr, offset, data,
-      Platform.LONG_ARRAY_OFFSET + headerSize, valueRegionSize);
+      Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
 
     UnsafeArrayData result = new UnsafeArrayData();
-    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)allocationSize * 8);
+    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
     return result;
   }
 
   public static UnsafeArrayData fromPrimitiveArray(boolean[] arr) {
-    return fromPrimitiveArray(arr, Platform.BYTE_ARRAY_OFFSET, arr.length, 1);
+    return fromPrimitiveArray(arr, Platform.BOOLEAN_ARRAY_OFFSET, arr.length, 1);
   }
 
   public static UnsafeArrayData fromPrimitiveArray(byte[] arr) {

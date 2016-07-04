@@ -100,28 +100,14 @@ class UnsafeArraySuite extends SparkFunSuite {
   }
 
   test("to primitive array") {
-    val intCount = intArray.length
-    val intUnsafeArray = new UnsafeArrayData
-    val intHeader = UnsafeArrayData.calculateHeaderPortionInBytes(intCount)
-    val intSize = intHeader + 4 * intCount
-    val intBuffer = new Array[Byte](intSize)
-    Platform.putInt(intBuffer, Platform.BYTE_ARRAY_OFFSET, intCount)
-    intUnsafeArray.pointTo(intBuffer, Platform.BYTE_ARRAY_OFFSET, intSize)
-    intArray.zipWithIndex.map { case (e, i) =>
-      Platform.putInt(intBuffer, Platform.BYTE_ARRAY_OFFSET + intHeader + 4 * i, e)
-    }
+    val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
+    val intInternalRow = intEncoder.toRow(intArray)
+    val intUnsafeArray = intInternalRow.getArray(0)
     assert(intUnsafeArray.toIntArray.sameElements(intArray))
 
-    val doubleCount = doubleArray.length
-    val doubleUnsafeArray = new UnsafeArrayData
-    val doubleHeader = UnsafeArrayData.calculateHeaderPortionInBytes(doubleCount)
-    val doubleSize = doubleHeader + 4 * doubleCount
-    val doubleBuffer = new Array[Byte](doubleSize)
-    Platform.putInt(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, doubleCount)
-    doubleUnsafeArray.pointTo(doubleBuffer, Platform.BYTE_ARRAY_OFFSET, doubleSize)
-    doubleArray.zipWithIndex.map { case (e, i) =>
-      Platform.putDouble(intBuffer, Platform.BYTE_ARRAY_OFFSET + doubleHeader + 8 * i, e)
-    }
-    assert(intUnsafeArray.toDoubleArray.sameElements(doubleArray))
+    val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
+    val doubleInternalRow = doubleEncoder.toRow(doubleArray)
+    val doubleUnsafeArray = doubleInternalRow.getArray(0)
+    assert(doubleUnsafeArray.toDoubleArray.sameElements(doubleArray))
   }
 }
