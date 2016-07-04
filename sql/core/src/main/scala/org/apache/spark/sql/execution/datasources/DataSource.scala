@@ -203,6 +203,18 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+
+        // Check whether the path exists if it is not a glob pattern.
+        // For glob pattern, we do not check it because the glob pattern might only make sense
+        // once the streaming job starts and some upstream source starts dropping data.
+        val hdfsPath = new Path(path)
+        if (!SparkHadoopUtil.get.isGlobPath(hdfsPath)) {
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+          if (!fs.exists(hdfsPath)) {
+            throw new AnalysisException(s"Path does not exist: $path")
+          }
+        }
+
         val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         // If the schema inference is disabled, only text sources require schema to be specified
