@@ -39,7 +39,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -184,7 +183,9 @@ class Dataset[T] private[sql](
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
-      case Union(children) if children.forall(hasSideEffects) =>
+      case Union(children) if children.exists(hasSideEffects) =>
+        LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
+      case Distinct(Union(children)) if children.exists(hasSideEffects) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
       case _ =>
         queryExecution.analyzed
