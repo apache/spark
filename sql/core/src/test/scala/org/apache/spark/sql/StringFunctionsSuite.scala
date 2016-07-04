@@ -239,11 +239,6 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
         "parse_url(url, 'QUERY', 'query')"),
       Row("spark.apache.org", "/path", "query=1", "Ref",
         "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
-
-    // Invalid Literal key
-    intercept[AnalysisException] {
-      df.selectExpr("parse_url('http://spark.apache.org/path?', 'QUERY', '???')")
-    }
   }
 
   test("string repeat function") {

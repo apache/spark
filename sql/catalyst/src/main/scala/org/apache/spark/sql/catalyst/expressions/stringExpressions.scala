@@ -712,18 +712,6 @@ case class ParseUrl(children: Seq[Expression])
     if (children.size > 3 || children.size < 2) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName function requires two or three arguments")
     } else {
-      if (children.size == 3) {
-        children(2) match {
-          case Literal(key: UTF8String, _) => // Literal key validation in Driver side
-            try {
-              getPattern(key)
-            } catch {
-              case e: PatternSyntaxException =>
-                return TypeCheckResult.TypeCheckFailure(s"invalid key '${key.toString}'")
-            }
-          case _ =>
-        }
-      }
       super[ImplicitCastInputTypes].checkInputDataTypes()
     }
   }
