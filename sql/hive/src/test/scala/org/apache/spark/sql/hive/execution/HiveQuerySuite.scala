@@ -1608,6 +1608,20 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |drop table if exists y;
       |drop table if exists z;
     """.stripMargin)
+
+  createQueryTest("nomore_ambiguous_table_col",
+    """
+      |-- was negative/ambiguous_table_col.q
+      |
+      |drop table if exists ambiguous;
+      |create table ambiguous (key string, value string);
+      |
+      |FROM src key
+      |INSERT OVERWRITE TABLE ambiguous SELECT key.key, key.value WHERE key.value < 'val_100';
+      |
+      |drop table if exists ambiguous;
+    """.stripMargin)
+
   // scalastyle:on
 }
 
