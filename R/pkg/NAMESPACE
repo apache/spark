@@ -10,6 +10,7 @@ export("sparkR.session")
 export("sparkR.init")
 export("sparkR.stop")
 export("sparkR.session.stop")
+export("sparkR.conf")
 export("print.jobj")
 
 export("sparkRSQL.init",
@@ -68,6 +69,7 @@ exportMethods("arrange",
               "first",
               "freqItems",
               "gapply",
+              "gapplyCollect",
               "group_by",
               "groupBy",
               "head",
@@ -233,6 +235,7 @@ exportMethods("%in%",
               "over",
               "percent_rank",
               "pmod",
+              "posexplode",
               "quarter",
               "rand",
               "randn",

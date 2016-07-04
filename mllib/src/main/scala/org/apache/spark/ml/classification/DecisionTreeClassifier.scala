@@ -243,7 +243,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(nodeData).write.parquet(dataPath)
+      sparkSession.createDataFrame(nodeData).write.parquet(dataPath)
     }
   }
 
@@ -258,7 +258,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-      val root = loadTreeNodes(path, metadata, sqlContext)
+      val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeClassificationModel(metadata.uid, root, numFeatures, numClasses)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

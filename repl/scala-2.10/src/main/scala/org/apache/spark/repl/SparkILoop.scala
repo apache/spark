@@ -943,8 +943,6 @@ class SparkILoop(
       })
 
   private def process(settings: Settings): Boolean = savingContextLoader {
-    if (getMaster() == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
-
     this.settings = settings
     createInterpreter()
 

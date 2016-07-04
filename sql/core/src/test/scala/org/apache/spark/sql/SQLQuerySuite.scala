@@ -21,10 +21,8 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.catalog.{CatalogTestUtils, ExternalCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{ExpressionDescription, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
@@ -61,7 +59,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
       StringUtils.filterPattern(
-        spark.sessionState.catalog.listFunctions("default").map(_.funcName), pattern)
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName), pattern)
         .map(Row(_))
     }
 
@@ -80,13 +78,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
       "isize", "ispace", "to_datei", "date_addi", "current_datei")
 
-    assert(sql("SHOW functions").collect().isEmpty)
-
     createFunction(functions)
 
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    assert(sql("SHOW functions").collect().size === functions.size)
-    assert(sql("SHOW functions").collect().toSet === functions.map(Row(_)).toSet)
+    assert(sql("SHOW functions").collect().size > 200)
 
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
@@ -2117,6 +2112,37 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         testData2.groupBy($"a", $"b").agg($"*"),
         sql("SELECT * FROM testData2 group by a, b"))
+    }
+  }
+
+  test("Star Expansion - table with zero column") {
+    withTempTable("temp_table_no_cols") {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.createTempView("temp_table_no_cols")
+
+      // ResolvedStar
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select(dfNoCols.col("*")))
+
+      // UnresolvedStar
+      checkAnswer(
+        dfNoCols,
+        sql("SELECT * FROM temp_table_no_cols"))
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select($"*"))
+
+      var e = intercept[AnalysisException] {
+        sql("SELECT a.* FROM temp_table_no_cols a")
+      }.getMessage
+      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+
+      e = intercept[AnalysisException] {
+        dfNoCols.select($"b.*")
+      }.getMessage
+      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
     }
   }
 

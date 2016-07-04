@@ -847,7 +847,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE jsonTableSQL
+        |CREATE TEMPORARY VIEW jsonTableSQL
         |USING org.apache.spark.sql.json
         |OPTIONS (
         |  path '$path'

@@ -27,7 +27,7 @@ object CountVectorizerExample {
   def main(args: Array[String]) {
     val spark = SparkSession
       .builder
-      .appName("CounterVectorizerExample")
+      .appName("CountVectorizerExample")
       .getOrCreate()
 
     // $example on$

@@ -244,7 +244,7 @@ To use a custom metrics.properties for the application master and executors, upd
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
-    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
+    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
   </td>
 </tr>
 <tr>
@@ -470,6 +470,30 @@ To use a custom metrics.properties for the application master and executors, upd
   application being run.
   <p/>
   Currently supported services are: <code>hive</code>, <code>hbase</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.includePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined include pattern
+  and those log files will be aggregated in a rolling fashion.
+  This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
+  <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
+  configured in yarn-site.xml.
+  This feature can only be used with Hadoop 2.6.1+. The Spark log4j appender needs be changed to use
+  FileAppender or another appender that can handle the files being removed while its running. Based
+  on the file name configured in the log4j configuration (like spark.log), the user should set the
+  regex (spark*) to include all the log files that need to be aggregated.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.excludePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined exclude pattern
+  and those log files will not be aggregated in a rolling fashion. If the log file
+  name matches both the include and the exclude pattern, this file will be excluded eventually.
   </td>
 </tr>
 </table>

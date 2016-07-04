@@ -582,7 +582,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
       "normal_parquet")
 
     sql( s"""
-      create temporary table partitioned_parquet
+      CREATE TEMPORARY VIEW partitioned_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDir.getCanonicalPath}'
@@ -590,7 +590,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      create temporary table partitioned_parquet_with_key
+      CREATE TEMPORARY VIEW partitioned_parquet_with_key
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithKey.getCanonicalPath}'
@@ -598,7 +598,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      create temporary table normal_parquet
+      CREATE TEMPORARY VIEW normal_parquet
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
@@ -606,7 +606,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      CREATE TEMPORARY TABLE partitioned_parquet_with_key_and_complextypes
+      CREATE TEMPORARY VIEW partitioned_parquet_with_key_and_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithKeyAndComplexTypes.getCanonicalPath}'
@@ -614,7 +614,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     """)
 
     sql( s"""
-      CREATE TEMPORARY TABLE partitioned_parquet_with_complextypes
+      CREATE TEMPORARY VIEW partitioned_parquet_with_complextypes
       USING org.apache.spark.sql.parquet
       OPTIONS (
         path '${partitionedTableDirWithComplexTypes.getCanonicalPath}'

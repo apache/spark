@@ -138,7 +138,7 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def coefficients(self):
         """
         Model coefficients.
@@ -511,6 +511,7 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
+    @since("2.0.0")
     def boundaries(self):
         """
         Boundaries in increasing order for which predictions are known.
@@ -518,6 +519,7 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return self._call_java("boundaries")
 
     @property
+    @since("2.0.0")
     def predictions(self):
         """
         Predictions associated with the boundaries at the same index, monotone because of isotonic
@@ -1248,7 +1250,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def coefficients(self):
         """
         Model coefficients.
@@ -1271,12 +1273,14 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("scale")
 
+    @since("2.0.0")
     def predictQuantiles(self, features):
         """
         Predicted Quantiles
         """
         return self._call_java("predictQuantiles", features)
 
+    @since("2.0.0")
     def predict(self, features):
         """
         Predicted value
