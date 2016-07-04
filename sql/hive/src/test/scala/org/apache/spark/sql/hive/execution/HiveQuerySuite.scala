@@ -1539,6 +1539,32 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |select count(val) from (select a.key as key, b.value as array_val from src a join array_valued_src b on a.key=b.key) i lateral view explode (array_val) c as val;
     """.stripMargin)
 
+  createQueryTest("leftsemijoin",
+    """
+      |drop table if exists sales;
+      |drop table if exists things;
+      |
+      |set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
+      |
+      |CREATE TABLE sales (name STRING, id INT)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |CREATE TABLE things (id INT, name STRING) partitioned by (ds string)
+      |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+      |
+      |load data local inpath '../../data/files/sales.txt' INTO TABLE sales;
+      |load data local inpath '../../data/files/things.txt' INTO TABLE things partition(ds='2011-10-23');
+      |load data local inpath '../../data/files/things2.txt' INTO TABLE things partition(ds='2011-10-24');
+      |
+      |SELECT name,id FROM sales ORDER BY name ASC, id ASC;
+      |
+      |SELECT id,name FROM things ORDER BY id ASC, name ASC;
+      |
+      |SELECT name,id FROM sales LEFT SEMI JOIN things ON (sales.id = things.id) ORDER BY name ASC, id ASC;
+      |
+      |drop table if exists sales;
+      |drop table if exists things;
+    """.stripMargin)
   // scalastyle:on
 }
 
