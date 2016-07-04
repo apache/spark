@@ -18,6 +18,7 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
+from pyspark.sql import SQLContext
 
 
 def __local_vector_example():
@@ -95,6 +96,7 @@ def __row_matrix_example():
 
 def __indexed_row_matrix_example():
     sc = SparkContext.getOrCreate()
+    sqlContext = SQLContext.getOrCreate(sc)
 
     # $example on:indexed_row_matrix$
     from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
