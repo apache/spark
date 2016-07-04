@@ -50,7 +50,7 @@ class RowMatrix @Since("1.0.0") (
 
   /** Alternative constructor leaving matrix dimensions to be determined automatically. */
   @Since("1.0.0")
-  def this(rows: RDD[Vector]) = this(rows, 0L, 0)
+  def this(rows: RDD[Vector]) = this(rows.retag(classOf[Vector]), 0L, 0)
 
   /** Gets or computes the number of columns. */
   @Since("1.0.0")
