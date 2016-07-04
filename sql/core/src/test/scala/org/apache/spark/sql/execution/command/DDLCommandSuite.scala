@@ -876,7 +876,8 @@ class DDLCommandSuite extends PlanTest {
 
   test("support for other types as option in OPTIONS") {
     val sql =
-      """CREATE TABLE table_name USING json
+      """
+        |CREATE TABLE table_name USING json
         |OPTIONS (a 1, b 0.1, c TRUE)
       """.stripMargin
     val expected = CreateTableUsing(
