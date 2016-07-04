@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._

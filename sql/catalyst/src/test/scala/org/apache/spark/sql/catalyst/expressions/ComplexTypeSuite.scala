@@ -267,10 +267,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(
       Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
-        Seq(
-          Seq("Hi", "there").map(UTF8String.fromString),
-          Seq("The", "price", "was").map(UTF8String.fromString),
-          Seq("But", "not", "now").map(UTF8String.fromString)),
+      Seq(
+        Seq("Hi", "there").map(UTF8String.fromString),
+        Seq("The", "price", "was").map(UTF8String.fromString),
+        Seq("But", "not", "now").map(UTF8String.fromString)),
       EmptyRow)
   }
 }
