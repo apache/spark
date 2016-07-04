@@ -62,7 +62,7 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sparkSession.sessionState.executePlan(logicalPlan)
     qe.assertAnalyzed()
-    new Dataset[Row](sparkSession, logicalPlan, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema), skipAnalysis = true)
   }
 }
 
@@ -155,10 +155,11 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @transient val queryExecution: QueryExecution,
-    encoder: Encoder[T])
+    encoder: Encoder[T],
+    skipAnalysis: Boolean = false)
   extends Serializable {
 
-  queryExecution.assertAnalyzed()
+  if (!skipAnalysis) queryExecution.assertAnalyzed()
 
   // Note for Spark contributors: if adding or updating any action in `Dataset`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
