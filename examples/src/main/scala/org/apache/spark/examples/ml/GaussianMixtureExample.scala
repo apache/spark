@@ -21,8 +21,8 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.clustering.GaussianMixture
-import org.apache.spark.sql.SparkSession
 // $example off$
+import org.apache.spark.sql.SparkSession
 
 /**
  * An example demonstrating Gaussian Mixture Model (GMM).
