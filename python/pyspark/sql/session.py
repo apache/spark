@@ -32,6 +32,7 @@ from pyspark.sql.catalog import Catalog
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
@@ -165,6 +166,13 @@ class SparkSession(object):
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
                     sc = SparkContext.getOrCreate(sparkConf)
+                    # This SparkContext may be an existing one.
+                    for key, value in self._options.items():
+                        # we need to propagate the confs
+                        # before we create the SparkSession. Otherwise, confs like
+                        # warehouse path and metastore url will not be set correctly (
+                        # these confs cannot be changed once the SparkSession is created).
+                        sc._conf.set(key, value)
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session.conf.set(key, value)
@@ -549,11 +557,53 @@ class SparkSession(object):
         """
         return DataFrameReader(self._wrapped)
 
+    @property
+    @since(2.0)
+    def readStream(self):
+        """
+        Returns a :class:`DataStreamReader` that can be used to read data streams
+        as a streaming :class:`DataFrame`.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamReader`
+        """
+        return DataStreamReader(self._wrapped)
+
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`StreamingQueryManager` that allows managing all the
+        :class:`StreamingQuery` StreamingQueries active on `this` context.
+
+        .. note:: Experimental.
+
+        :return: :class:`StreamingQueryManager`
+        """
+        from pyspark.sql.streaming import StreamingQueryManager
+        return StreamingQueryManager(self._jsparkSession.streams())
+
     @since(2.0)
     def stop(self):
         """Stop the underlying :class:`SparkContext`.
         """
         self._sc.stop()
+
+    @since(2.0)
+    def __enter__(self):
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+        """
+        return self
+
+    @since(2.0)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        Specifically stop the SparkSession on exit of the with block.
+        """
+        self.stop()
 
 
 def _test():

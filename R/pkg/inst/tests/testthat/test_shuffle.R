@@ -18,7 +18,8 @@
 context("partitionBy, groupByKey, reduceByKey etc.")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
 intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))

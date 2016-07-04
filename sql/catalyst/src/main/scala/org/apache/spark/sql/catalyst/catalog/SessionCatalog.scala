@@ -445,7 +445,7 @@ class SessionCatalog(
   /**
    * List all tables in the specified database, including temporary tables.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(formatDatabaseName(db), "*")
+  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
    * List all matching tables in the specified database, including temporary tables.
@@ -841,21 +841,29 @@ class SessionCatalog(
   }
 
   /**
-   * List all functions in the specified database, including temporary functions.
+   * List all functions in the specified database, including temporary functions. This
+   * returns the function identifier and the scope in which it was defined (system or user
+   * defined).
    */
-  def listFunctions(db: String): Seq[FunctionIdentifier] = listFunctions(db, "*")
+  def listFunctions(db: String): Seq[(FunctionIdentifier, String)] = listFunctions(db, "*")
 
   /**
-   * List all matching functions in the specified database, including temporary functions.
+   * List all matching functions in the specified database, including temporary functions. This
+   * returns the function identifier and the scope in which it was defined (system or user
+   * defined).
    */
-  def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+  def listFunctions(db: String, pattern: String): Seq[(FunctionIdentifier, String)] = {
     val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
       .map { f => FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    dbFunctions ++ loadedFunctions
+    val functions = dbFunctions ++ loadedFunctions
+    functions.map {
+      case f if FunctionRegistry.functionSet.contains(f.funcName) => (f, "SYSTEM")
+      case f => (f, "USER")
+    }
   }
 
 
@@ -877,7 +885,7 @@ class SessionCatalog(
     listTables(default).foreach { table =>
       dropTable(table, ignoreIfNotExists = false)
     }
-    listFunctions(default).foreach { func =>
+    listFunctions(default).map(_._1).foreach { func =>
       if (func.database.isDefined) {
         dropFunction(func, ignoreIfNotExists = false)
       } else {

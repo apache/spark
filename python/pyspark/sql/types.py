@@ -648,10 +648,13 @@ class UserDefinedType(DataType):
         return cls._cached_sql_type
 
     def toInternal(self, obj):
-        return self._cachedSqlType().toInternal(self.serialize(obj))
+        if obj is not None:
+            return self._cachedSqlType().toInternal(self.serialize(obj))
 
     def fromInternal(self, obj):
-        return self.deserialize(self._cachedSqlType().fromInternal(obj))
+        v = self._cachedSqlType().fromInternal(obj)
+        if v is not None:
+            return self.deserialize(v)
 
     def serialize(self, obj):
         """
@@ -1401,11 +1404,7 @@ class Row(tuple):
         if args and kwargs:
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
-        if args:
-            # create row class or objects
-            return tuple.__new__(self, args)
-
-        elif kwargs:
+        if kwargs:
             # create row objects
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
@@ -1413,7 +1412,8 @@ class Row(tuple):
             return row
 
         else:
-            raise ValueError("No args or kwargs")
+            # create row class or objects
+            return tuple.__new__(self, args)
 
     def asDict(self, recursive=False):
         """

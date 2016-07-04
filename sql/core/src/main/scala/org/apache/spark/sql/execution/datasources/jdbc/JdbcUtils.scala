@@ -34,6 +34,10 @@ import org.apache.spark.sql.types._
  */
 object JdbcUtils extends Logging {
 
+  // the property names are case sensitive
+  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
+  val JDBC_BATCH_INSERT_SIZE = "batchsize"
+
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *
@@ -154,6 +158,10 @@ object JdbcUtils extends Logging {
       nullTypes: Array[Int],
       batchSize: Int,
       dialect: JdbcDialect): Iterator[Byte] = {
+    require(batchSize >= 1,
+      s"Invalid value `${batchSize.toString}` for parameter " +
+      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
+
     val conn = getConnection()
     var committed = false
     val supportsTransactions = try {
@@ -275,7 +283,7 @@ object JdbcUtils extends Logging {
 
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
-    val batchSize = properties.getProperty("batchsize", "1000").toInt
+    val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
     }

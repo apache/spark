@@ -18,7 +18,8 @@
 context("broadcast variables")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
 nums <- 1:2

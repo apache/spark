@@ -891,6 +891,78 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
+  test("append table using different formats") {
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
+
+    withTable("appendOrcToParquet") {
+      createDF(0, 9).write.format("parquet").saveAsTable("appendOrcToParquet")
+      val e = intercept[AnalysisException] {
+        createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
+      }
+      assert(e.getMessage.contains("The file format of the existing table `appendOrcToParquet` " +
+        "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
+        "It doesn't match the specified format `orc`"))
+    }
+
+    withTable("appendParquetToJson") {
+      createDF(0, 9).write.format("json").saveAsTable("appendParquetToJson")
+      val e = intercept[AnalysisException] {
+        createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
+          .saveAsTable("appendParquetToJson")
+      }
+      assert(e.getMessage.contains("The file format of the existing table `appendParquetToJson` " +
+        "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
+        "It doesn't match the specified format `parquet`"))
+    }
+
+    withTable("appendTextToJson") {
+      createDF(0, 9).write.format("json").saveAsTable("appendTextToJson")
+      val e = intercept[AnalysisException] {
+        createDF(10, 19).write.mode(SaveMode.Append).format("text")
+          .saveAsTable("appendTextToJson")
+      }
+      assert(e.getMessage.contains("The file format of the existing table `appendTextToJson` is " +
+        "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
+        "It doesn't match the specified format `text`"))
+    }
+  }
+
+  test("append a table using the same formats but different names") {
+    def createDF(from: Int, to: Int): DataFrame = {
+      (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
+    }
+
+    withTable("appendParquet") {
+      createDF(0, 9).write.format("parquet").saveAsTable("appendParquet")
+      createDF(10, 19).write.mode(SaveMode.Append).format("org.apache.spark.sql.parquet")
+        .saveAsTable("appendParquet")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+
+    withTable("appendParquet") {
+      createDF(0, 9).write.format("org.apache.spark.sql.parquet").saveAsTable("appendParquet")
+      createDF(10, 19).write.mode(SaveMode.Append).format("parquet").saveAsTable("appendParquet")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+
+    withTable("appendParquet") {
+      createDF(0, 9).write.format("org.apache.spark.sql.parquet.DefaultSource")
+        .saveAsTable("appendParquet")
+      createDF(10, 19).write.mode(SaveMode.Append)
+        .format("org.apache.spark.sql.execution.datasources.parquet.DefaultSource")
+        .saveAsTable("appendParquet")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
+    }
+  }
+
   test("SPARK-8156:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")

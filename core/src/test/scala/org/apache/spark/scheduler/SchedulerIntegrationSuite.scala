@@ -17,11 +17,13 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{Duration, SECONDS}
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
@@ -31,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
  * Tests for the  entire scheduler code -- DAGScheduler, TaskSchedulerImpl, TaskSets,
@@ -54,6 +56,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     }
     results.clear()
     failure = null
+    backendException.set(null)
     super.beforeEach()
   }
 
@@ -87,11 +90,6 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       setupScheduler(conf)
       testBody
     }
-  }
-
-  // still a few races to work out in the blacklist tests, so ignore some tests
-  def ignoreScheduler(name: String, extraConfs: Seq[(String, String)])(testBody: => Unit): Unit = {
-    ignore(name)(testBody)
   }
 
   /**
@@ -166,6 +164,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       assert(failure != null)
     }
     assert(scheduler.activeJobs.isEmpty)
+    assert(backendException.get() == null)
   }
 
   /**
@@ -203,6 +202,8 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     new MockRDD(sc, nParts, shuffleDeps)
   }
 
+  val backendException = new AtomicReference[Exception](null)
+
   /**
    * Helper which makes it a little easier to setup a test, which starts a mock backend in another
    * thread, responding to tasks with your custom function.  You also supply the "body" of your
@@ -217,7 +218,17 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       override def run(): Unit = {
         while (backendContinue.get()) {
           if (backend.hasTasksWaitingToRun) {
-            backendFunc()
+            try {
+              backendFunc()
+            } catch {
+              case ex: Exception =>
+                // Try to do a little error handling around exceptions that might occur here --
+                // otherwise it can just look like a TimeoutException in the test itself.
+                logError("Exception in mock backend:", ex)
+                backendException.set(ex)
+                backendContinue.set(false)
+                throw ex
+            }
           } else {
             Thread.sleep(10)
           }
@@ -233,6 +244,25 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     }
   }
 
+  /**
+   * Helper to do a little extra error checking while waiting for the job to terminate.  Primarily
+   * just does a little extra error handling if there is an exception from the backend.
+   */
+  def awaitJobTermination(jobFuture: Future[_], duration: Duration): Unit = {
+    try {
+      Await.ready(jobFuture, duration)
+    } catch {
+      case te: TimeoutException if backendException.get() != null =>
+        val msg = raw"""
+           | ----- Begin Backend Failure Msg -----
+           | ${Utils.exceptionString(backendException.get())}
+           | ----- End Backend Failure Msg ----
+        """.
+          stripMargin
+
+        fail(s"Future timed out after ${duration}, likely because of failure in backend: $msg")
+    }
+  }
 }
 
 /**
@@ -243,6 +273,11 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
 private[spark] abstract class MockBackend(
     conf: SparkConf,
     val taskScheduler: TaskSchedulerImpl) extends SchedulerBackend with Logging {
+
+  // Periodically revive offers to allow delay scheduling to work
+  private val reviveThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
+  private val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "10ms")
 
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
@@ -307,9 +342,17 @@ private[spark] abstract class MockBackend(
     assignedTasksWaitingToRun.nonEmpty
   }
 
-  override def start(): Unit = {}
+  override def start(): Unit = {
+    reviveThread.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = Utils.tryLogNonFatalError {
+        reviveOffers()
+      }
+    }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
+  }
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    reviveThread.shutdown()
+  }
 
   val env = SparkEnv.get
 
@@ -333,8 +376,9 @@ private[spark] abstract class MockBackend(
   }
 
   /**
-   * This is called by the scheduler whenever it has tasks it would like to schedule.  It gets
-   * called in the scheduling thread, not the backend thread.
+   * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks
+   * completes (which will be in a result-getter thread), and by the reviveOffers thread for delay
+   * scheduling.
    */
   override def reviveOffers(): Unit = {
     val offers: Seq[WorkerOffer] = generateOffers()
@@ -483,7 +527,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       val duration = Duration(1, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 10).map { _ -> 42 }.toMap)
     assertDataStructuresEmpty()
@@ -517,10 +561,11 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
 
       // make sure the required map output is available
       task.stageId match {
-        case 1 => assertMapOutputAvailable(b)
-        case 3 => assertMapOutputAvailable(c)
         case 4 => assertMapOutputAvailable(d)
-        case _ => // no shuffle map input, nothing to check
+        case _ =>
+        // we can't check for the output for the two intermediate stages, unfortunately,
+        // b/c the stage numbering is non-deterministic, so stage number alone doesn't tell
+        // us what to check
       }
 
       (task.stageId, task.stageAttemptId, task.partitionId) match {
@@ -534,7 +579,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     withBackend(runBackend _) {
       val jobFuture = submit(d, (0 until 30).toArray)
       val duration = Duration(1, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 30).map { idx => idx -> (4321 + idx) }.toMap)
     assertDataStructuresEmpty()
@@ -556,11 +601,9 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val (taskDescription, task) = backend.beginTask()
       stageToAttempts.getOrElseUpdate(task.stageId, new HashSet()) += task.stageAttemptId
 
-      // make sure the required map output is available
-      task.stageId match {
-        case 1 => assertMapOutputAvailable(shuffledRdd)
-        case _ => // no shuffle map input, nothing to check
-      }
+      // We cannot check if shuffle output is available, because the failed fetch will clear the
+      // shuffle output.  Then we'd have a race, between the already-started task from the first
+      // attempt, and when the failure clears out the map output status.
 
       (task.stageId, task.stageAttemptId, task.partitionId) match {
         case (0, _, _) =>
@@ -576,7 +619,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     withBackend(runBackend _) {
       val jobFuture = submit(shuffledRdd, (0 until 10).toArray)
       val duration = Duration(1, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
     }
     assert(results === (0 until 10).map { idx => idx -> (42 + idx) }.toMap)
     assert(stageToAttempts === Map(0 -> Set(0, 1), 1 -> Set(0, 1)))
@@ -591,7 +634,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       val duration = Duration(1, SECONDS)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
       failure.getMessage.contains("test task failure")
     }
     assertDataStructuresEmpty(noFailure = false)
