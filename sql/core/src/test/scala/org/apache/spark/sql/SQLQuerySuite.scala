@@ -1950,6 +1950,37 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("Star Expansion - table with zero column") {
+    withTempTable("temp_table_no_cols") {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = sqlContext.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.registerTempTable("temp_table_no_cols")
+
+      // ResolvedStar
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select(dfNoCols.col("*")))
+
+      // UnresolvedStar
+      checkAnswer(
+        dfNoCols,
+        sql("SELECT * FROM temp_table_no_cols"))
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select($"*"))
+
+      var e = intercept[AnalysisException] {
+        sql("SELECT a.* FROM temp_table_no_cols a")
+      }.getMessage
+      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+
+      e = intercept[AnalysisException] {
+        dfNoCols.select($"b.*")
+      }.getMessage
+      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
+    }
+  }
+
   test("Common subexpression elimination") {
     // select from a table to prevent constant folding.
     val df = sql("SELECT a, b from testData2 limit 1")
