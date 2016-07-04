@@ -46,6 +46,15 @@ trait CheckAnalysis extends PredicateHelper {
     }).length > 1
   }
 
+  private def checkLimitClause(limitExpr: Expression): Unit = {
+    val numRows = limitExpr.eval().asInstanceOf[Int]
+    if (numRows < 0) {
+      failAnalysis(
+        s"number_rows in limit clause must be equal to or greater than 0. " +
+          s"number_rows:$numRows")
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -251,21 +260,9 @@ trait CheckAnalysis extends PredicateHelper {
                 s"but one table has '${firstError.output.length}' columns and another table has " +
                 s"'${s.children.head.output.length}' columns")
 
-          case l: GlobalLimit =>
-            val numRows = l.limitExpr.eval().asInstanceOf[Int]
-            if (numRows < 0) {
-              failAnalysis(
-                s"number_rows in limit clause must be equal to or greater than 0. " +
-                  s"number_rows:$numRows")
-            }
+          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
-          case l: LocalLimit =>
-            val numRows = l.limitExpr.eval().asInstanceOf[Int]
-            if (numRows < 0) {
-              failAnalysis(
-                s"number_rows in limit clause must be equal to or greater than 0. " +
-                  s"number_rows:$numRows")
-            }
+          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
             p match {
