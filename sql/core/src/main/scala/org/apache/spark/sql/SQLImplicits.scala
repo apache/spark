@@ -33,7 +33,7 @@ abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
 
   /**
-   * Converts $"col name" into an [[Column]].
+   * Converts $"col name" into a [[Column]].
    *
    * @since 2.0.0
    */

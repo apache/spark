@@ -37,6 +37,7 @@ class IncrementalExecution private[sql](
 
   // TODO: make this always part of planning.
   val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+    sparkSession.sessionState.planner.StreamingRelationStrategy +:
     sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.

@@ -35,7 +35,7 @@ object NaiveBayesExample {
     val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     // Split the data into training and test sets (30% held out for testing)
-    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
+    val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3), seed = 1234L)
 
     // Train a NaiveBayes model.
     val model = new NaiveBayes()
@@ -49,9 +49,9 @@ object NaiveBayesExample {
     val evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("label")
       .setPredictionCol("prediction")
-      .setMetricName("precision")
-    val precision = evaluator.evaluate(predictions)
-    println("Precision:" + precision)
+      .setMetricName("accuracy")
+    val accuracy = evaluator.evaluate(predictions)
+    println("Accuracy: " + accuracy)
     // $example off$
 
     spark.stop()

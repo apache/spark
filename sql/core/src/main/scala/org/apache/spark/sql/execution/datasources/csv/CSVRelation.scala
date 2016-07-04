@@ -38,22 +38,40 @@ object CSVRelation extends Logging {
 
   def univocityTokenizer(
       file: RDD[String],
-      header: Seq[String],
       firstLine: String,
       params: CSVOptions): RDD[Array[String]] = {
     // If header is set, make sure firstLine is materialized before sending to executors.
+    val commentPrefix = params.comment.toString
     file.mapPartitions { iter =>
-      new BulkCsvReader(
-        if (params.headerFlag) iter.filterNot(_ == firstLine) else iter,
-        params,
-        headers = header)
+      val parser = new CsvReader(params)
+      val filteredIter = iter.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(commentPrefix)
+      }
+      if (params.headerFlag) {
+        filteredIter.filterNot(_ == firstLine).map { item =>
+          parser.parseLine(item)
+        }
+      } else {
+        filteredIter.map { item =>
+          parser.parseLine(item)
+        }
+      }
     }
   }
 
+  /**
+   * Returns a function that parses a single CSV record (in the form of an array of strings in which
+   * each element represents a column) and turns it into either one resulting row or no row (if the
+   * the record is malformed).
+   *
+   * The 2nd argument in the returned function represents the total number of malformed rows
+   * observed so far.
+   */
+  // This is pretty convoluted and we should probably rewrite the entire CSV parsing soon.
   def csvParser(
       schema: StructType,
       requiredColumns: Array[String],
-      params: CSVOptions): Array[String] => Option[InternalRow] = {
+      params: CSVOptions): (Array[String], Int) => Option[InternalRow] = {
     val schemaFields = schema.fields
     val requiredFields = StructType(requiredColumns.map(schema(_))).fields
     val safeRequiredFields = if (params.dropMalformed) {
@@ -72,9 +90,16 @@ object CSVRelation extends Logging {
     val requiredSize = requiredFields.length
     val row = new GenericMutableRow(requiredSize)
 
-    (tokens: Array[String]) => {
+    (tokens: Array[String], numMalformedRows) => {
       if (params.dropMalformed && schemaFields.length != tokens.length) {
-        logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+        if (numMalformedRows < params.maxMalformedLogPerPartition) {
+          logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+        }
+        if (numMalformedRows == params.maxMalformedLogPerPartition - 1) {
+          logWarning(
+            s"More than ${params.maxMalformedLogPerPartition} malformed records have been " +
+            "found on this partition. Malformed records from now on will not be logged.")
+        }
         None
       } else if (params.failFast && schemaFields.length != tokens.length) {
         throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
@@ -109,21 +134,19 @@ object CSVRelation extends Logging {
           Some(row)
         } catch {
           case NonFatal(e) if params.dropMalformed =>
-            logWarning("Parse exception. " +
-              s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+            if (numMalformedRows < params.maxMalformedLogPerPartition) {
+              logWarning("Parse exception. " +
+                s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+            }
+            if (numMalformedRows == params.maxMalformedLogPerPartition - 1) {
+              logWarning(
+                s"More than ${params.maxMalformedLogPerPartition} malformed records have been " +
+                "found on this partition. Malformed records from now on will not be logged.")
+            }
             None
         }
       }
     }
-  }
-
-  def parseCsv(
-      tokenizedRDD: RDD[Array[String]],
-      schema: StructType,
-      requiredColumns: Array[String],
-      options: CSVOptions): RDD[InternalRow] = {
-    val parser = csvParser(schema, requiredColumns, options)
-    tokenizedRDD.flatMap(parser(_).toSeq)
   }
 
   // Skips the header line of each file if the `header` option is set to true.
@@ -209,6 +232,7 @@ private[sql] class CsvOutputWriter(
 
   override def close(): Unit = {
     flush()
+    csvWriter.close()
     recordWriter.close(context)
   }
 }

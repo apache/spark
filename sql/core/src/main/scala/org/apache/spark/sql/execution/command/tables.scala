@@ -348,7 +348,9 @@ case class TruncateTableCommand(
         s"for tables that are not partitioned: '$tableName'")
     }
     val locations =
-      if (isDatasourceTable || table.partitionColumnNames.isEmpty) {
+      if (isDatasourceTable) {
+        Seq(table.storage.serdeProperties.get("path"))
+      } else if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
@@ -374,7 +376,7 @@ case class TruncateTableCommand(
     spark.sessionState.invalidateTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
-      spark.sharedState.cacheManager.tryUncacheQuery(spark.table(tableName.quotedString))
+      spark.sharedState.cacheManager.uncacheQuery(spark.table(tableName.quotedString))
     } catch {
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table '$tableName'", e)
@@ -526,8 +528,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      val comment =
-        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+      val comment = column.getComment().getOrElse("")
       append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }
@@ -828,7 +829,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (", ",\n  ", "\n)\n")
+      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -862,7 +863,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       }
 
       if (props.nonEmpty) {
-        builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
+        builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
       }
     }
   }

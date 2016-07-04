@@ -85,7 +85,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Subtract('booleanField, 'booleanField),
       "requires (numeric or calendarinterval) type")
     assertError(Multiply('booleanField, 'booleanField), "requires numeric type")
-    assertError(Divide('booleanField, 'booleanField), "requires numeric type")
+    assertError(Divide('booleanField, 'booleanField), "requires (double or decimal) type")
     assertError(Remainder('booleanField, 'booleanField), "requires numeric type")
 
     assertError(BitwiseAnd('booleanField, 'booleanField), "requires integral type")
@@ -165,6 +165,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Coalesce(Nil), "input to function coalesce cannot be empty")
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(Explode('intField),
+      "input to function explode should be array or map type")
+    assertError(PosExplode('intField),
       "input to function explode should be array or map type")
   }
 
