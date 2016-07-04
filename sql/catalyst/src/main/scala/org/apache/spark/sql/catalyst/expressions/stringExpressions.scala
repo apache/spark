@@ -730,8 +730,7 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-
-  private def extractValueFromQuery(query: Any, pattern: Pattern): Any = {
+  private def extractValueFromQuery(query: UTF8String, pattern: Pattern): UTF8String = {
     val m = pattern.matcher(query.toString)
     if (m.find()) {
       UTF8String.fromString(m.group(2))
@@ -740,7 +739,7 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  private def extractFromUrl(url: URL, partToExtract: Any): Any = {
+  private def extractFromUrl(url: URL, partToExtract: UTF8String): UTF8String = {
     if (partToExtract.equals(HOST)) {
       UTF8String.fromString(url.getHost)
     } else if (partToExtract.equals(PATH)) {
@@ -762,7 +761,7 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  private def parseUrlWithoutKey(url: Any, partToExtract: Any): Any = {
+  private def parseUrlWithoutKey(url: UTF8String, partToExtract: UTF8String): UTF8String = {
     if (url != null && partToExtract != null) {
       if (cachedUrl ne null) {
         extractFromUrl(cachedUrl, partToExtract)
@@ -780,8 +779,8 @@ case class ParseUrl(children: Seq[Expression])
   }
 
   override def eval(input: InternalRow): Any = {
-    val url = stringExprs(0).eval(input)
-    val partToExtract = stringExprs(1).eval(input)
+    val url = stringExprs(0).eval(input).asInstanceOf[UTF8String]
+    val partToExtract = stringExprs(1).eval(input).asInstanceOf[UTF8String]
     if (stringExprs.size == 2) {
       parseUrlWithoutKey(url, partToExtract)
     } else { // QUERY with key
@@ -791,8 +790,8 @@ case class ParseUrl(children: Seq[Expression])
           if (cachedPattern ne null) {
             extractValueFromQuery(query, cachedPattern)
           } else {
-            val key = stringExprs(2).eval(input)
-            val pattern = getPattern(key.asInstanceOf[UTF8String])
+            val key = stringExprs(2).eval(input).asInstanceOf[UTF8String]
+            val pattern = getPattern(key)
             if (pattern ne null) {
               extractValueFromQuery(query, pattern)
             } else {
