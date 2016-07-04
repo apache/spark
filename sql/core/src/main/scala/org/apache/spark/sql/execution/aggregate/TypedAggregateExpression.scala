@@ -51,7 +51,8 @@ object TypedAggregateExpression {
       bufferDeserializer,
       outputEncoder.serializer,
       outputEncoder.deserializer.dataType,
-      outputType)
+      outputType,
+      !outputEncoder.flat || outputEncoder.schema.head.nullable)
   }
 }
 
@@ -65,9 +66,8 @@ case class TypedAggregateExpression(
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
     outputExternalType: DataType,
-    dataType: DataType) extends DeclarativeAggregate with NonSQLExpression {
-
-  override def nullable: Boolean = true
+    dataType: DataType,
+    nullable: Boolean) extends DeclarativeAggregate with NonSQLExpression {
 
   override def deterministic: Boolean = true
 
