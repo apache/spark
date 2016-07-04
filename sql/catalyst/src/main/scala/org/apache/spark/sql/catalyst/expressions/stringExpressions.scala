@@ -766,7 +766,7 @@ case class ParseUrl(children: Seq[Expression])
       if (cachedUrl ne null) {
         extractFromUrl(cachedUrl, partToExtract)
       } else {
-        val currentUrl = getUrl(url.asInstanceOf[UTF8String])
+        val currentUrl = getUrl(url)
         if (currentUrl ne null) {
           extractFromUrl(currentUrl, partToExtract)
         } else {
