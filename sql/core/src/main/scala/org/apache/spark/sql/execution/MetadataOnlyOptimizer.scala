@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
  * 1. aggregate expression is partition columns.
  *  e.g. SELECT col FROM tbl GROUP BY col.
  * 2. aggregate function on partition columns with DISTINCT.
- *  e.g. SELECT count(DISTINCT col) FROM tbl GROUP BY col.
+ *  e.g. SELECT count(DISTINCT col1) FROM tbl GROUP BY col2.
  * 3. aggregate function on partition columns which have same result w or w/o DISTINCT keyword.
  *  e.g. SELECT Max(col2) FROM tbl GROUP BY col1.
  */

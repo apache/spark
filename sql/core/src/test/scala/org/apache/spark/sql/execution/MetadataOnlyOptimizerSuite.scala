@@ -32,6 +32,14 @@ class MetadataOnlyOptimizerSuite extends QueryTest with SharedSQLContext {
     data.write.partitionBy("partId", "part").mode("append").saveAsTable("srcpart_15752")
   }
 
+  override protected def afterAll(): Unit = {
+    try {
+      sql("DROP TABLE IF EXISTS srcpart_15752")
+    } finally {
+      super.afterAll()
+    }
+  }
+
   private def checkWithMetadataOnly(df: DataFrame): Unit = {
     val localRelations = df.queryExecution.optimizedPlan.collect {
       case l @ LocalRelation(_, _) => l

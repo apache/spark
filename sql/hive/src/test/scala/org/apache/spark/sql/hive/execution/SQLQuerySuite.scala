@@ -1692,66 +1692,68 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("spark-15752 metadata only optimizer for hive table") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
-      df.createOrReplaceTempView("data_15752")
-      sql(
-        """
-          |CREATE TABLE srcpart_15752 (key INT, value STRING)
-          |PARTITIONED BY (ds STRING, hr INT) STORED AS parquet
-        """.stripMargin)
-      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq(11, 12)) {
+      withTable("data_15752", "srcpart_15752", "srctext_15752") {
+        val df = Seq((1, "2"), (3, "4")).toDF("key", "value")
+        df.createOrReplaceTempView("data_15752")
         sql(
-          s"""
-             |INSERT OVERWRITE TABLE srcpart_15752 PARTITION (ds='$ds',hr='$hr')
-             |select key, value from data_15752
-        """.stripMargin)
-      }
-      checkAnswer(sql("select hr from srcpart_15752 where hr = 11 group by hr"), Row(11))
-      checkAnswer(sql("select max(hr) from srcpart_15752"), Row(12))
-      checkAnswer(sql("select max(hr) from srcpart_15752 where hr = 11"), Row(11))
-      checkAnswer(sql("select max(hr) from (select hr from srcpart_15752) t"), Row(12))
-      checkAnswer(
-        sql("select max(x) from (select hr + 1 as x from srcpart_15752 where hr = 12) t"),
-        Row(13))
-      checkAnswer(sql("select distinct hr from srcpart_15752"), Row(11) :: Row(12) :: Nil)
-      checkAnswer(sql("select distinct hr from srcpart_15752 where hr = 11"), Row(11))
-      checkAnswer(
-        sql("select distinct x from (select hr + 1 as x from srcpart_15752 where hr = 12) t"),
-        Row(13))
+          """
+            |CREATE TABLE srcpart_15752 (key INT, value STRING)
+            |PARTITIONED BY (ds STRING, hr INT) STORED AS parquet
+          """.stripMargin)
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq(11, 12)) {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE srcpart_15752 PARTITION (ds='$ds',hr='$hr')
+              |select key, value from data_15752
+            """.stripMargin)
+        }
+        checkAnswer(sql("select hr from srcpart_15752 where hr = 11 group by hr"), Row(11))
+        checkAnswer(sql("select max(hr) from srcpart_15752"), Row(12))
+        checkAnswer(sql("select max(hr) from srcpart_15752 where hr = 11"), Row(11))
+        checkAnswer(sql("select max(hr) from (select hr from srcpart_15752) t"), Row(12))
+        checkAnswer(
+          sql("select max(x) from (select hr + 1 as x from srcpart_15752 where hr = 12) t"),
+          Row(13))
+        checkAnswer(sql("select distinct hr from srcpart_15752"), Row(11) :: Row(12) :: Nil)
+        checkAnswer(sql("select distinct hr from srcpart_15752 where hr = 11"), Row(11))
+        checkAnswer(
+          sql("select distinct x from (select hr + 1 as x from srcpart_15752 where hr = 12) t"),
+          Row(13))
 
-      // Now donot support metadata only optimizer
-      checkAnswer(
-        sql("select hr from srcpart_15752 where hr = 12 group by rollup(hr)"),
-        Row(null) :: Row(12) :: Nil)
-      checkAnswer(
-        sql("select hr from (select hr from srcpart_15752 where hr = 11 union all " +
-          "select hr from srcpart_15752 where hr= 12)t group by hr"),
-        Row(11) :: Row(12) :: Nil)
+        // Now donot support metadata only optimizer
+        checkAnswer(
+          sql("select hr from srcpart_15752 where hr = 12 group by rollup(hr)"),
+          Row(null) :: Row(12) :: Nil)
+        checkAnswer(
+          sql("select hr from (select hr from srcpart_15752 where hr = 11 union all " +
+            "select hr from srcpart_15752 where hr= 12)t group by hr"),
+          Row(11) :: Row(12) :: Nil)
 
-      sql(
-        """
-          |CREATE TABLE srctext_15752 (key INT, value STRING)
-          |PARTITIONED BY (ds STRING, hr INT) STORED AS textfile
-        """.stripMargin)
-      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq(11, 12)) {
         sql(
-          s"""
-             |INSERT OVERWRITE TABLE srctext_15752 PARTITION (ds='$ds',hr='$hr')
-             |select key, value from data_15752
-        """.stripMargin)
+          """
+            |CREATE TABLE srctext_15752 (key INT, value STRING)
+            |PARTITIONED BY (ds STRING, hr INT) STORED AS textfile
+          """.stripMargin)
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq(11, 12)) {
+          sql(
+            s"""
+              |INSERT OVERWRITE TABLE srctext_15752 PARTITION (ds='$ds',hr='$hr')
+              |select key, value from data_15752
+            """.stripMargin)
+        }
+        checkAnswer(sql("select hr from srctext_15752 where hr = 11 group by hr"), Row(11))
+        checkAnswer(sql("select max(hr) from srctext_15752"), Row(12))
+        checkAnswer(sql("select max(hr) from srctext_15752 where hr = 11"), Row(11))
+        checkAnswer(sql("select max(hr) from (select hr from srctext_15752) t"), Row(12))
+        checkAnswer(
+          sql("select max(x) from (select hr + 1 as x from srctext_15752 where hr = 12) t"),
+          Row(13))
+        checkAnswer(sql("select distinct hr from srctext_15752"), Row(11) :: Row(12) :: Nil)
+        checkAnswer(sql("select distinct hr from srctext_15752 where hr = 11"), Row(11))
+        checkAnswer(
+          sql("select distinct x from (select hr + 1 as x from srctext_15752 where hr = 12) t"),
+          Row(13))
       }
-      checkAnswer(sql("select hr from srctext_15752 where hr = 11 group by hr"), Row(11))
-      checkAnswer(sql("select max(hr) from srctext_15752"), Row(12))
-      checkAnswer(sql("select max(hr) from srctext_15752 where hr = 11"), Row(11))
-      checkAnswer(sql("select max(hr) from (select hr from srctext_15752) t"), Row(12))
-      checkAnswer(
-        sql("select max(x) from (select hr + 1 as x from srctext_15752 where hr = 12) t"),
-        Row(13))
-      checkAnswer(sql("select distinct hr from srctext_15752"), Row(11) :: Row(12) :: Nil)
-      checkAnswer(sql("select distinct hr from srctext_15752 where hr = 11"), Row(11))
-      checkAnswer(
-        sql("select distinct x from (select hr + 1 as x from srctext_15752 where hr = 12) t"),
-        Row(13))
     }
   }
 }
