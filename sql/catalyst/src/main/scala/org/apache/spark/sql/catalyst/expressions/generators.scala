@@ -119,8 +119,7 @@ case class Stack(children: Seq[Expression])
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
-    } else if (children.head.dataType != IntegerType || !children.head.foldable ||
-      children.head.eval().asInstanceOf[Int] < 1) {
+    } else if (children.head.dataType != IntegerType || !children.head.foldable || numRows < 1) {
       TypeCheckResult.TypeCheckFailure("The number of rows must be a positive constant integer.")
     } else {
       for (i <- 1 until children.length) {
