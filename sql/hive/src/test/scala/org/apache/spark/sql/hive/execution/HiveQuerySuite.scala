@@ -1780,6 +1780,30 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |explain extended select key, value, ds from push_or where ds='2000-04-09' or key=5 order by key, ds;
       |select key, value, ds from push_or where ds='2000-04-09' or key=5 order by key, ds;
     """.stripMargin)
+
+  createQueryTest("reducesink_dedup",
+    """
+      |DROP TABLE IF EXISTS part;
+      |
+      |-- data setup
+      |CREATE TABLE part(
+      |    p_partkey INT,
+      |    p_name STRING,
+      |    p_mfgr STRING,
+      |    p_brand STRING,
+      |    p_type STRING,
+      |    p_size INT,
+      |    p_container STRING,
+      |    p_retailprice DOUBLE,
+      |    p_comment STRING
+      |);
+      |
+      |
+      |select p_name
+      |from (select p_name from part distribute by 1 sort by 1) p
+      |distribute by 1 sort by 1
+      |;
+    """.stripMargin)
   // scalastyle:on
 }
 
