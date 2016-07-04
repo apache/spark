@@ -79,7 +79,7 @@ def __row_matrix_example():
     from pyspark.mllib.linalg.distributed import RowMatrix
 
     # Create an RDD of vectors.
-    rows = sc.parallelize([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
+    rows = sc.parallelize([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], 1)
 
     # Create a RowMatrix from an RDD of vectors.
     mat = RowMatrix(rows)
@@ -88,8 +88,8 @@ def __row_matrix_example():
     m = mat.numRows()  # 4
     n = mat.numCols()  # 3
 
-    # Get the rows as an RDD of vectors again.
-    rowsRDD = mat.rows
+    # QR decomposition
+    qrResult = mat.tallSkinnyQR(True)
     # $example off:row_matrix$
 
 

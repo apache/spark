@@ -118,7 +118,7 @@ public class JavaDataTypesExamples {
     Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
 
     // a JavaRDD of local vectors
-    JavaRDD<Vector> rows = jsc.parallelize(Arrays.asList(v1, v2, v3));
+    JavaRDD<Vector> rows = jsc.parallelize(Arrays.asList(v1, v2, v3), 1);
 
     // Create a RowMatrix from an JavaRDD<Vector>.
     RowMatrix mat = new RowMatrix(rows.rdd());
