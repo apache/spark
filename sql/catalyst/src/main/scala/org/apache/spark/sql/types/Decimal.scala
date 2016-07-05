@@ -322,7 +322,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  // HiveTypeCoercion will take care of the precision, scale of result
+  // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 

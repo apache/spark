@@ -21,13 +21,13 @@
 # Load SparkR library into your R session
 library(SparkR)
 
-# Initialize SparkContext and SQLContext
-sc <- sparkR.init(appName="SparkR-ML-example")
-sqlContext <- sparkRSQL.init(sc)
+# Initialize SparkSession
+sparkR.session(appName="SparkR-ML-example")
 
+# $example on$
 ############################ spark.glm and glm ##############################################
 
-irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+irisDF <- suppressWarnings(createDataFrame(iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF
 gaussianTestDF <- irisDF
@@ -57,12 +57,11 @@ binomialPredictions <- predict(binomialGLM, binomialTestDF)
 showDF(binomialPredictions)
 
 ############################ spark.survreg ##############################################
-
 # Use the ovarian dataset available in R survival package
 library(survival)
 
 # Fit an accelerated failure time (AFT) survival regression model with spark.survreg
-ovarianDF <- suppressWarnings(createDataFrame(sqlContext, ovarian))
+ovarianDF <- suppressWarnings(createDataFrame(ovarian))
 aftDF <- ovarianDF
 aftTestDF <- ovarianDF
 aftModel <- spark.survreg(aftDF, Surv(futime, fustat) ~ ecog_ps + rx)
@@ -78,7 +77,7 @@ showDF(aftPredictions)
 
 # Fit a Bernoulli naive Bayes model with spark.naiveBayes
 titanic <- as.data.frame(Titanic)
-titanicDF <- suppressWarnings(createDataFrame(sqlContext, titanic[titanic$Freq > 0, -5]))
+titanicDF <- createDataFrame(titanic[titanic$Freq > 0, -5])
 nbDF <- titanicDF
 nbTestDF <- titanicDF
 nbModel <- spark.naiveBayes(nbDF, Survived ~ Class + Sex + Age)
@@ -93,7 +92,7 @@ showDF(nbPredictions)
 ############################ spark.kmeans ##############################################
 
 # Fit a k-means model with spark.kmeans
-irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+irisDF <- suppressWarnings(createDataFrame(iris))
 kmeansDF <- irisDF
 kmeansTestDF <- irisDF
 kmeansModel <- spark.kmeans(kmeansDF, ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width,
@@ -111,7 +110,7 @@ showDF(kmeansPredictions)
 
 ############################ model read/write ##############################################
 
-irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+irisDF <- suppressWarnings(createDataFrame(iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF
 gaussianTestDF <- irisDF
@@ -121,7 +120,7 @@ gaussianGLM <- spark.glm(gaussianDF, Sepal_Length ~ Sepal_Width + Species, famil
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
 write.ml(gaussianGLM, modelPath)
 gaussianGLM2 <- read.ml(modelPath)
-
+# $example off$
 # Check model summary
 summary(gaussianGLM2)
 
@@ -139,11 +138,11 @@ train <- function(family) {
   model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
   summary(model)
 }
-model.summaries <- spark.lapply(sc, families, train)
+model.summaries <- spark.lapply(families, train)
 
 # Print the summary of each model
 print(model.summaries)
 
 
-# Stop the SparkContext now
-sparkR.stop()
+# Stop the SparkSession now
+sparkR.session.stop()

@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * :: Experimental ::
- * Used to indicate how often results should be produced by a [[ContinuousQuery]].
+ * Used to indicate how often results should be produced by a [[StreamingQuery]].
  *
  * @since 2.0.0
  */
@@ -65,7 +65,7 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
 
 /**
  * :: Experimental ::
- * Used to create [[ProcessingTime]] triggers for [[ContinuousQuery]]s.
+ * Used to create [[ProcessingTime]] triggers for [[StreamingQuery]]s.
  *
  * @since 2.0.0
  */

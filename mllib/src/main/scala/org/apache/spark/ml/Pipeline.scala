@@ -44,7 +44,10 @@ abstract class PipelineStage extends Params with Logging {
   /**
    * :: DeveloperApi ::
    *
-   * Derives the output schema from the input schema.
+   * Check transform validity and derive the output schema from the input schema.
+   *
+   * Typical implementation should first conduct verification on schema change and parameter
+   * validity, including complex parameter interaction checks.
    */
   @DeveloperApi
   def transformSchema(schema: StructType): StructType

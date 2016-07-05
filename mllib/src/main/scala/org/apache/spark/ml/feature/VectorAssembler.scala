@@ -36,15 +36,19 @@ import org.apache.spark.sql.types._
  * A feature transformer that merges multiple columns into a vector column.
  */
 @Experimental
-class VectorAssembler(override val uid: String)
+@Since("1.4.0")
+class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -106,6 +110,7 @@ class VectorAssembler(override val uid: String)
     dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
@@ -122,6 +127,7 @@ class VectorAssembler(override val uid: String)
     StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 

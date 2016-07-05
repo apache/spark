@@ -91,7 +91,7 @@ package object expressions  {
   implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
     /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
     def toStructType: StructType = {
-      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
+      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
     }
 
     // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when

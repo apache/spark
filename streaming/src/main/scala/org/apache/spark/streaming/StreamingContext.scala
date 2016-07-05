@@ -26,7 +26,7 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang.SerializationUtils
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -579,8 +579,7 @@ class StreamingContext private[streaming] (
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
-              savedProperties.set(SerializationUtils.clone(
-                sparkContext.localProperties.get()).asInstanceOf[Properties])
+              savedProperties.set(SerializationUtils.clone(sparkContext.localProperties.get()))
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE

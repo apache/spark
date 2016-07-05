@@ -181,7 +181,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
       .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
-    val sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
+    sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val eventLogPath = eventLogger.logPath

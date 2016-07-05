@@ -213,7 +213,7 @@ case class Multiply(left: Expression, right: Expression)
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
@@ -221,7 +221,6 @@ case class Divide(left: Expression, right: Expression)
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
-    case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
   }
 
   override def eval(input: InternalRow): Any = {

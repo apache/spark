@@ -33,7 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.minBytesForPrecision
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -82,8 +82,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
     }
     this.rootFieldWriters = schema.map(_.dataType).map(makeWriter)
 
-    val messageType = new CatalystSchemaConverter(configuration).convert(schema)
-    val metadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
+    val messageType = new ParquetSchemaConverter(configuration).convert(schema)
+    val metadata = Map(ParquetReadSupport.SPARK_METADATA_KEY -> schemaString).asJava
 
     logInfo(
       s"""Initialized Parquet WriteSupport with Catalyst schema:
@@ -150,7 +150,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
       case StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addBinary(Binary.fromByteArray(row.getUTF8String(ordinal).getBytes))
+          recordConsumer.addBinary(
+            Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
 
       case TimestampType =>
         (row: SpecializedGetters, ordinal: Int) => {
@@ -165,12 +166,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
           val buf = ByteBuffer.wrap(timestampBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
-          recordConsumer.addBinary(Binary.fromByteArray(timestampBuffer))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
         }
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addBinary(Binary.fromByteArray(row.getBinary(ordinal)))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))
 
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
@@ -227,7 +228,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           shift -= 8
         }
 
-        recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
+        recordConsumer.addBinary(Binary.fromReusedByteArray(decimalBuffer, 0, numBytes))
       }
 
     val binaryWriterUsingUnscaledBytes =
@@ -248,7 +249,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           decimalBuffer
         }
 
-        recordConsumer.addBinary(Binary.fromByteArray(fixedLengthBytes, 0, numBytes))
+        recordConsumer.addBinary(Binary.fromReusedByteArray(fixedLengthBytes, 0, numBytes))
       }
 
     writeLegacyParquetFormat match {
@@ -427,7 +428,7 @@ private[parquet] object CatalystWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
-    schema.map(_.name).foreach(CatalystSchemaConverter.checkFieldName)
+    schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,

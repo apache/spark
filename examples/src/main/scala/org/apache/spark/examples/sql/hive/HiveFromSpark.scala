@@ -45,7 +45,6 @@ object HiveFromSpark {
       .appName("HiveFromSpark")
       .enableHiveSupport()
       .getOrCreate()
-    val sc = spark.sparkContext
 
     import spark.implicits._
     import spark.sql
@@ -71,7 +70,7 @@ object HiveFromSpark {
     }
 
     // You can also use RDDs to create temporary views within a HiveContext.
-    val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
+    val rdd = spark.sparkContext.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
     rdd.toDF().createOrReplaceTempView("records")
 
     // Queries can then join RDD data with data stored in Hive.
