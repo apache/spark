@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
@@ -62,6 +63,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       )
       .write
       .saveAsTable("parquet_t3")
+
+    spark.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, "true")
   }
 
   override protected def afterAll(): Unit = {
@@ -72,6 +75,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       sql("DROP TABLE IF EXISTS parquet_t3")
       sql("DROP TABLE IF EXISTS t0")
     } finally {
+      spark.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, "false")
       super.afterAll()
     }
   }
