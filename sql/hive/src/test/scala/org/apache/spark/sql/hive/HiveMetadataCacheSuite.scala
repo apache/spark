@@ -30,30 +30,33 @@ import org.apache.spark.sql.test.SQLTestUtils
 class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-16337 temporary view refresh") {
-    withTempTable("view_refresh") { withTable("view_table") {
-      // Create a Parquet directory
-      spark.range(start = 0, end = 100, step = 1, numPartitions = 3).write.saveAsTable("view_table")
+    withTempTable("view_refresh") {
+      withTable("view_table") {
+        // Create a Parquet directory
+        spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
+          .write.saveAsTable("view_table")
 
-      // Read the table in
-      spark.table("view_table").filter("id > -1").createOrReplaceTempView("view_refresh")
-      assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
+        // Read the table in
+        spark.table("view_table").filter("id > -1").createOrReplaceTempView("view_refresh")
+        assert(sql("select count(*) from view_refresh").first().getLong(0) == 100)
 
-      // Delete a file using the Hadoop file system interface since the path returned by
-      // inputFiles is not recognizable by Java IO.
-      val p = new Path(spark.table("view_table").inputFiles.head)
-      assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, false))
+        // Delete a file using the Hadoop file system interface since the path returned by
+        // inputFiles is not recognizable by Java IO.
+        val p = new Path(spark.table("view_table").inputFiles.head)
+        assert(p.getFileSystem(hiveContext.sessionState.newHadoopConf()).delete(p, false))
 
-      // Read it again and now we should see a FileNotFoundException
-      val e = intercept[SparkException] {
-        sql("select count(*) from view_refresh").first()
+        // Read it again and now we should see a FileNotFoundException
+        val e = intercept[SparkException] {
+          sql("select count(*) from view_refresh").first()
+        }
+        assert(e.getMessage.contains("FileNotFoundException"))
+        assert(e.getMessage.contains("REFRESH"))
+
+        // Refresh and we should be able to read it again.
+        spark.catalog.refreshTable("view_refresh")
+        val newCount = sql("select count(*) from view_refresh").first().getLong(0)
+        assert(newCount > 0 && newCount < 100)
       }
-      assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("REFRESH"))
-
-      // Refresh and we should be able to read it again.
-      spark.catalog.refreshTable("view_refresh")
-      val newCount = sql("select count(*) from view_refresh").first().getLong(0)
-      assert(newCount > 0 && newCount < 100)
-    }}
+    }
   }
 }

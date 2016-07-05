@@ -467,6 +467,8 @@ class SessionCatalog(
    */
   def refreshTable(name: TableIdentifier): Unit = {
     // Go through temporary tables and invalidate them.
+    // If the database is defined, this is definitely not a temp table.
+    // If the database is not defined, there is a good chance this is a temp table.
     if (name.database.isEmpty) {
       tempTables.get(name.table).foreach(_.refresh())
     }
