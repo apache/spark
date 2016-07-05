@@ -208,14 +208,20 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         failAnalysis(s"$l does not allow insertion.")
 
       case c: CreateTableCommand =>
-        val allColNamesInSchema = c.table.schema.map(_.name)
-        val colNames = allColNamesInSchema.diff(c.table.partitionColumnNames)
-        val partitionColumnNames = c.table.partitionColumnNames
+        // If caseSensitiveAnalysis is false, convert the names to lower cases
+        val allColNamesInSchema =
+          c.table.schema.map(col => convertToCaseSensitiveAnalysisAware(col.name))
+        val partitionColumnNames =
+          c.table.partitionColumnNames.map(convertToCaseSensitiveAnalysisAware)
+
         // Duplicates are not allowed in partitionBy
         // Todo: when bucketBy and sortBy are supported, we also need to ban the duplication.
         checkDuplicates(partitionColumnNames, "Partition")
+
+        val colNames = allColNamesInSchema.diff(partitionColumnNames)
         // Ensuring whether no duplicate name is used in table definition
         checkDuplicates(colNames, s"table definition of ${c.table.identifier}")
+
         // For non-data-source tables, partition columns must not be part of the schema
         val badPartCols = partitionColumnNames.toSet.intersect(colNames.toSet)
         if (badPartCols.nonEmpty) {
@@ -223,22 +229,21 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
             "schema: " + badPartCols.map("`" + _ + "`").mkString(","))
         }
 
-
       case c: CreateTableUsing =>
         // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.
         checkDuplicates(c.partitionColumns, "Partition")
-        c.bucketSpec.foreach(b => {
+        c.bucketSpec.foreach { b =>
           checkDuplicates(b.bucketColumnNames, "Bucketing")
           checkDuplicates(b.sortColumnNames, "Sorting")
-        })
+        }
 
       case c: CreateTableUsingAsSelect =>
         // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.
         checkDuplicates(c.partitionColumns, "Partition")
-        c.bucketSpec.foreach(b => {
+        c.bucketSpec.foreach { b =>
           checkDuplicates(b.bucketColumnNames, "Bucketing")
           checkDuplicates(b.sortColumnNames, "Sorting")
-        })
+        }
 
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
@@ -282,11 +287,15 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
     }
   }
 
+  private def convertToCaseSensitiveAnalysisAware(name: String): String = {
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
+  }
+
   private def checkDuplicates(columnNames: Seq[String], columnType: String): Unit = {
-    val duplicateColumns = columnNames.groupBy { name =>
-      if (conf.caseSensitiveAnalysis) name else name.toLowerCase }.collect {
-      case (x, ys) if ys.length > 1 => s"`$x`"
-    }
+    val duplicateColumns =
+      columnNames.groupBy(convertToCaseSensitiveAnalysisAware).collect {
+        case (x, ys) if ys.length > 1 => s"`$x`"
+      }
     if (duplicateColumns.nonEmpty) {
       throw new AnalysisException(
         s"Found duplicate column(s) in $columnType: ${duplicateColumns.mkString(", ")}")

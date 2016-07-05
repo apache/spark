@@ -874,8 +874,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a table, returning either a [[CreateTableCommand]], a
-   * [[CreateHiveTableAsSelectLogicalPlan]] or a [[CreateTableUsingAsSelect]].
+   * Create a table, returning a [[CreateTableCommand]], a [[CreateHiveTableAsSelectLogicalPlan]]
+   * or a [[CreateTableUsingAsSelect]].
    *
    * This is not used to create datasource tables, which is handled through
    * "CREATE TABLE ... USING ...".
