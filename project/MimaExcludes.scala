@@ -643,7 +643,7 @@ object MimaExcludes {
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
-       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
         // [SPARK-14617] Remove deprecated APIs in TaskMetrics
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.InputMetrics$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$"),
@@ -787,6 +787,9 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.jdbc"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.parquetFile"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.applySchema")
+      ) ++ Seq(
+        // [SPARK-11171][SPARK-11237][SPARK-11241] Add PMML exportable to ML (TODO move to Spark 2.1 once master is updated to 2.1)
+        ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.ml.util.MLWriter.saveImpl")
       )
     case v if v.startsWith("1.6") =>
       Seq(
