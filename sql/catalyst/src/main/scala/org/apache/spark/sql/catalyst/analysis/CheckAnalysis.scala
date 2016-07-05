@@ -47,6 +47,11 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
+    if (!limitExpr.foldable) {
+      failAnalysis(
+        "The argument to the LIMIT clause must evaluate to a constant value. " +
+        s"Limit:${limitExpr.sql}")
+    }
     val numRows = limitExpr.eval().asInstanceOf[Int]
     if (numRows < 0) {
       failAnalysis(
