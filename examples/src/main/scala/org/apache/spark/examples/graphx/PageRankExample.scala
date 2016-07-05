@@ -15,43 +15,46 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.ml
-
 // scalastyle:off println
+package org.apache.spark.examples.graphx
 
 // $example on$
-import org.apache.spark.ml.clustering.GaussianMixture
+import org.apache.spark.graphx.GraphLoader
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example demonstrating Gaussian Mixture Model (GMM).
+ * A PageRank example on social network dataset
  * Run with
  * {{{
- * bin/run-example ml.GaussianMixtureExample
+ * bin/run-example graphx.PageRankExample
  * }}}
  */
-object GaussianMixtureExample {
+object PageRankExample {
   def main(args: Array[String]): Unit = {
-    // Creates a SparkSession
-    val spark = SparkSession.builder.appName(s"${this.getClass.getSimpleName}").getOrCreate()
+    // Creates a SparkSession.
+    val spark = SparkSession
+      .builder
+      .appName(s"${this.getClass.getSimpleName}")
+      .getOrCreate()
+    val sc = spark.sparkContext
 
     // $example on$
-    // Loads data
-    val dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
-
-    // Trains Gaussian Mixture Model
-    val gmm = new GaussianMixture()
-      .setK(2)
-    val model = gmm.fit(dataset)
-
-    // output parameters of mixture model model
-    for (i <- 0 until model.getK) {
-      println("weight=%f\nmu=%s\nsigma=\n%s\n" format
-        (model.weights(i), model.gaussians(i).mean, model.gaussians(i).cov))
+    // Load the edges as a graph
+    val graph = GraphLoader.edgeListFile(sc, "data/graphx/followers.txt")
+    // Run PageRank
+    val ranks = graph.pageRank(0.0001).vertices
+    // Join the ranks with the usernames
+    val users = sc.textFile("data/graphx/users.txt").map { line =>
+      val fields = line.split(",")
+      (fields(0).toLong, fields(1))
     }
+    val ranksByUsername = users.join(ranks).map {
+      case (id, (username, rank)) => (username, rank)
+    }
+    // Print the result
+    println(ranksByUsername.collect().mkString("\n"))
     // $example off$
-
     spark.stop()
   }
 }

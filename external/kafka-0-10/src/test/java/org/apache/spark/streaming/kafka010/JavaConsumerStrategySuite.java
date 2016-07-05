@@ -44,37 +44,39 @@ public class JavaConsumerStrategySuite implements Serializable {
     kafkaParams.put("bootstrap.servers", "not used");
     final scala.collection.Map<String, Object> sKafkaParams =
       JavaConverters.mapAsScalaMapConverter(kafkaParams).asScala();
-    final Map<TopicPartition, Object> offsets = new HashMap<>();
+    final Map<TopicPartition, Long> offsets = new HashMap<>();
     offsets.put(tp1, 23L);
     final scala.collection.Map<TopicPartition, Object> sOffsets =
-      JavaConverters.mapAsScalaMapConverter(offsets).asScala();
+      JavaConverters.mapAsScalaMapConverter(offsets).asScala().mapValues(
+        new scala.runtime.AbstractFunction1<Long, Object>() {
+          @Override
+          public Object apply(Long x) {
+            return (Object) x;
+          }
+        }
+      );
 
-    // make sure constructors can be called from java
-    // final ConsumerStrategy<String, String> sub0 =          // does not compile in Scala 2.10
-    //   Subscribe.<String, String>apply(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub1 =
-      Subscribe.<String, String>apply(sTopics, sKafkaParams, sOffsets);
+      ConsumerStrategies.<String, String>Subscribe(sTopics, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> sub2 =
-      Subscribe.<String, String>apply(sTopics, sKafkaParams);
+      ConsumerStrategies.<String, String>Subscribe(sTopics, sKafkaParams);
     final ConsumerStrategy<String, String> sub3 =
-      Subscribe.<String, String>create(topics, kafkaParams, offsets);
+      ConsumerStrategies.<String, String>Subscribe(topics, kafkaParams, offsets);
     final ConsumerStrategy<String, String> sub4 =
-      Subscribe.<String, String>create(topics, kafkaParams);
+      ConsumerStrategies.<String, String>Subscribe(topics, kafkaParams);
 
     Assert.assertEquals(
       sub1.executorKafkaParams().get("bootstrap.servers"),
       sub3.executorKafkaParams().get("bootstrap.servers"));
 
-    // final ConsumerStrategy<String, String> asn0 =          // does not compile in Scala 2.10
-    //   Assign.<String, String>apply(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn1 =
-      Assign.<String, String>apply(sParts, sKafkaParams, sOffsets);
+      ConsumerStrategies.<String, String>Assign(sParts, sKafkaParams, sOffsets);
     final ConsumerStrategy<String, String> asn2 =
-      Assign.<String, String>apply(sParts, sKafkaParams);
+      ConsumerStrategies.<String, String>Assign(sParts, sKafkaParams);
     final ConsumerStrategy<String, String> asn3 =
-      Assign.<String, String>create(parts, kafkaParams, offsets);
+      ConsumerStrategies.<String, String>Assign(parts, kafkaParams, offsets);
     final ConsumerStrategy<String, String> asn4 =
-      Assign.<String, String>create(parts, kafkaParams);
+      ConsumerStrategies.<String, String>Assign(parts, kafkaParams);
 
     Assert.assertEquals(
       asn1.executorKafkaParams().get("bootstrap.servers"),

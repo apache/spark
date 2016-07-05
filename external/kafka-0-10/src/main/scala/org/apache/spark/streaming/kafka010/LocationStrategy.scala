@@ -29,49 +29,57 @@ import org.apache.spark.annotation.Experimental
 /**
  *  :: Experimental ::
  * Choice of how to schedule consumers for a given TopicPartition on an executor.
+ * See [[LocationStrategies]] to obtain instances.
  * Kafka 0.10 consumers prefetch messages, so it's important for performance
  * to keep cached consumers on appropriate executors, not recreate them for every partition.
  * Choice of location is only a preference, not an absolute; partitions may be scheduled elsewhere.
  */
 @Experimental
-sealed trait LocationStrategy
+sealed abstract class LocationStrategy
+
+private case object PreferBrokers extends LocationStrategy
+
+private case object PreferConsistent extends LocationStrategy
+
+private case class PreferFixed(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
 
 /**
- *  :: Experimental ::
- * Use this only if your executors are on the same nodes as your Kafka brokers.
+ * :: Experimental :: object to obtain instances of [[LocationStrategy]]
+ *
  */
 @Experimental
-case object PreferBrokers extends LocationStrategy {
-  def create: PreferBrokers.type = this
-}
+object LocationStrategies {
+  /**
+   *  :: Experimental ::
+   * Use this only if your executors are on the same nodes as your Kafka brokers.
+   */
+  @Experimental
+  def PreferBrokers: LocationStrategy =
+    org.apache.spark.streaming.kafka010.PreferBrokers
 
-/**
- *  :: Experimental ::
- * Use this in most cases, it will consistently distribute partitions across all executors.
- */
-@Experimental
-case object PreferConsistent extends LocationStrategy {
-  def create: PreferConsistent.type = this
-}
+  /**
+   *  :: Experimental ::
+   * Use this in most cases, it will consistently distribute partitions across all executors.
+   */
+  @Experimental
+  def PreferConsistent: LocationStrategy =
+    org.apache.spark.streaming.kafka010.PreferConsistent
 
-/**
- *  :: Experimental ::
- * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
- * Any TopicPartition not specified in the map will use a consistent location.
- */
-@Experimental
-case class PreferFixed private(hostMap: ju.Map[TopicPartition, String]) extends LocationStrategy
+  /**
+   *  :: Experimental ::
+   * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
+   * Any TopicPartition not specified in the map will use a consistent location.
+   */
+  @Experimental
+  def PreferFixed(hostMap: collection.Map[TopicPartition, String]): LocationStrategy =
+    new PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))
 
-/**
- *  :: Experimental ::
- * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
- * Any TopicPartition not specified in the map will use a consistent location.
- */
-@Experimental
-object PreferFixed {
-  def apply(hostMap: collection.Map[TopicPartition, String]): PreferFixed = {
-    PreferFixed(new ju.HashMap[TopicPartition, String](hostMap.asJava))
-  }
-  def create(hostMap: ju.Map[TopicPartition, String]): PreferFixed =
-    PreferFixed(hostMap)
+  /**
+   *  :: Experimental ::
+   * Use this to place particular TopicPartitions on particular hosts if your load is uneven.
+   * Any TopicPartition not specified in the map will use a consistent location.
+   */
+  @Experimental
+  def PreferFixed(hostMap: ju.Map[TopicPartition, String]): LocationStrategy =
+    new PreferFixed(hostMap)
 }

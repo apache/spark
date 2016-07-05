@@ -89,4 +89,64 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
       exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
       Row(3) :: Nil)
   }
+
+  test("inline raises exception on array of null type") {
+    val m = intercept[AnalysisException] {
+      spark.range(2).selectExpr("inline(array())")
+    }.getMessage
+    assert(m.contains("data type mismatch"))
+  }
+
+  test("inline with empty table") {
+    checkAnswer(
+      spark.range(0).selectExpr("inline(array(struct(10, 100)))"),
+      Nil)
+  }
+
+  test("inline on literal") {
+    checkAnswer(
+      spark.range(2).selectExpr("inline(array(struct(10, 100), struct(20, 200), struct(30, 300)))"),
+      Row(10, 100) :: Row(20, 200) :: Row(30, 300) ::
+        Row(10, 100) :: Row(20, 200) :: Row(30, 300) :: Nil)
+  }
+
+  test("inline on column") {
+    val df = Seq((1, 2)).toDF("a", "b")
+
+    checkAnswer(
+      df.selectExpr("inline(array(struct(a), struct(a)))"),
+      Row(1) :: Row(1) :: Nil)
+
+    checkAnswer(
+      df.selectExpr("inline(array(struct(a, b), struct(a, b)))"),
+      Row(1, 2) :: Row(1, 2) :: Nil)
+
+    // Spark think [struct<a:int>, struct<b:int>] is heterogeneous due to name difference.
+    val m = intercept[AnalysisException] {
+      df.selectExpr("inline(array(struct(a), struct(b)))")
+    }.getMessage
+    assert(m.contains("data type mismatch"))
+
+    checkAnswer(
+      df.selectExpr("inline(array(struct(a), named_struct('a', b)))"),
+      Row(1) :: Row(2) :: Nil)
+
+    // Spark think [struct<a:int>, struct<col1:int>] is heterogeneous due to name difference.
+    val m2 = intercept[AnalysisException] {
+      df.selectExpr("inline(array(struct(a), struct(2)))")
+    }.getMessage
+    assert(m2.contains("data type mismatch"))
+
+    checkAnswer(
+      df.selectExpr("inline(array(struct(a), named_struct('a', 2)))"),
+      Row(1) :: Row(2) :: Nil)
+
+    checkAnswer(
+      df.selectExpr("struct(a)").selectExpr("inline(array(*))"),
+      Row(1) :: Nil)
+
+    checkAnswer(
+      df.selectExpr("array(struct(a), named_struct('a', b))").selectExpr("inline(*)"),
+      Row(1) :: Row(2) :: Nil)
+  }
 }

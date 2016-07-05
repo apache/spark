@@ -195,3 +195,38 @@ case class Explode(child: Expression) extends ExplodeBase(child, position = fals
   extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
 // scalastyle:on line.size.limit
 case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)
+
+/**
+ * Explodes an array of structs into a table.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Explodes an array of structs into a table.",
+  extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
+case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(et, _) if et.isInstanceOf[StructType] =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName should be array of struct type, not ${child.dataType}")
+  }
+
+  override def elementSchema: StructType = child.dataType match {
+    case ArrayType(et : StructType, _) => et
+  }
+
+  private lazy val numFields = elementSchema.fields.length
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val inputArray = child.eval(input).asInstanceOf[ArrayData]
+    if (inputArray == null) {
+      Nil
+    } else {
+      for (i <- 0 until inputArray.numElements())
+        yield inputArray.getStruct(i, numFields)
+    }
+  }
+}
