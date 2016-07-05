@@ -230,7 +230,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   }
 
   // Used by doGenCode
-  def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String
+  protected def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String
 
   /**
    * Special case handling due to division by 0 => null.
@@ -289,7 +289,7 @@ case class Divide(left: Expression, right: Expression)
   override def decimalMethod: String = "$div"
 
   // Used by doGenCode
-  override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
+  protected override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
     if (dataType.isInstanceOf[DecimalType]) {
       s"${eval1.value}.$decimalMethod(${eval2.value})"
     } else {
@@ -310,7 +310,7 @@ case class IntegerDivide(left: Expression, right: Expression)
   override def decimalMethod: String = "/"
 
   // Used by doGenCode
-  override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
+  protected override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
     s"($javaType)(${eval1.value} $decimalMethod (${eval2.value}))"
   }
 }
