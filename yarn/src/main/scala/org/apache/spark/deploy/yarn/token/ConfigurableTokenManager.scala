@@ -89,7 +89,7 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
       conf: Configuration,
       creds: Credentials): Array[Token[_]] = {
     val tokenBuf = mutable.ArrayBuffer[Token[_]]()
-    tokenProviders.get(service).foreach { provider =>
+    getServiceTokenProvider(service).foreach { provider =>
       if (provider.isTokenRequired(conf)) {
         tokenBuf ++= provider.obtainTokensFromService(sparkConf, conf, creds)
       } else {
@@ -116,19 +116,48 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
   }
 
   def getTokenRenewalIntervalFromService(service: String, conf: Configuration): Long = {
-    tokenProviders.get(service).map { provider =>
-      if (provider.isTokenRequired(conf)) {
-        provider.getTokenRenewalInterval(sparkConf, conf)
+    getServiceTokenProvider(service).map { provider =>
+      if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
+        provider.asInstanceOf[ServiceTokenRenewable].getTokenRenewalInterval(sparkConf, conf)
       } else {
         Long.MaxValue
       }
     }.getOrElse(Long.MaxValue)
   }
 
-  def getMinTokenRenewalInterval(conf: Configuration): Long = {
+  def getSmallestTokenRenewalInterval(conf: Configuration): Long = {
     tokenProviders.values.map { provider =>
-      if (provider.isTokenRequired(conf)) {
-        provider.getTokenRenewalInterval(sparkConf, conf)
+      if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
+        provider.asInstanceOf[ServiceTokenRenewable].getTokenRenewalInterval(sparkConf, conf)
+      } else {
+        Long.MaxValue
+      }
+    }.min
+  }
+
+  def getTimeFromNowToRenewalForService(
+      service: String,
+      conf: Configuration,
+      fractional: Double,
+      credentials: Credentials): Long = {
+    getServiceTokenProvider(service).map { provider =>
+      if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
+        provider.asInstanceOf[ServiceTokenRenewable].getTimeFromNowToRenewal(
+          sparkConf, fractional, credentials)
+      } else {
+        Long.MaxValue
+      }
+    }.getOrElse(Long.MaxValue)
+  }
+
+  def getNearestTimeFromNowToRenewal(
+      conf: Configuration,
+      fractional: Double,
+      credentials: Credentials): Long = {
+    tokenProviders.values.map { provider =>
+      if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
+        provider.asInstanceOf[ServiceTokenRenewable].getTimeFromNowToRenewal(
+          sparkConf, fractional, credentials)
       } else {
         Long.MaxValue
       }
@@ -187,7 +216,4 @@ private[yarn] object ConfigurableTokenManager {
     configurableTokenManager(conf).getServiceTokenProvider("hdfs")
       .asInstanceOf[HDFSTokenProvider]
   }
-
-
-
 }

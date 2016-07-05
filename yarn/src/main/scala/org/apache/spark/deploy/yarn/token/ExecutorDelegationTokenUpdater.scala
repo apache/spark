@@ -27,6 +27,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.token.ConfigurableTokenManager._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -74,8 +75,8 @@ private[spark] class ExecutorDelegationTokenUpdater(
           return
         }
       }
-      val timeFromNowToRenewal = ConfigurableTokenManager.getTimeFromNowToRenewal(
-        sparkConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
+      val timeFromNowToRenewal = configurableTokenManager(sparkConf).getNearestTimeFromNowToRenewal(
+        hadoopConf, 0.8, UserGroupInformation.getCurrentUser.getCredentials)
       if (timeFromNowToRenewal <= 0) {
         // We just checked for new credentials but none were there, wait a minute and retry.
         // This handles the shutdown case where the staging directory may have been removed(see

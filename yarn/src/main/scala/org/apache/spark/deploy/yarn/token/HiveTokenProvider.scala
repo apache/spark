@@ -40,7 +40,7 @@ private[yarn] class HiveTokenProvider extends ServiceTokenProvider with Logging 
   override def obtainTokensFromService(
       sparkConf: SparkConf,
       serviceConf: Configuration,
-      creds: Credentials): Array[Token[_ <: TokenIdentifier]] = {
+      creds: Credentials): Array[Token[_]] = {
     val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
 
     // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down

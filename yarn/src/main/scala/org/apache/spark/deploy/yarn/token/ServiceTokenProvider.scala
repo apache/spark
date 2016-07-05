@@ -19,10 +19,15 @@ package org.apache.spark.deploy.yarn.token
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.Token
 
 import org.apache.spark.SparkConf
 
+/**
+ * An interface to provide tokens for service, any service needs to be communicated with Spark
+ * through token way need to implement this interface and register into
+ * [[ConfigurableTokenManager]] through configurations.
+ */
 trait ServiceTokenProvider {
 
   /**
@@ -44,20 +49,26 @@ trait ServiceTokenProvider {
   def obtainTokensFromService(
       sparkConf: SparkConf,
       serviceConf: Configuration,
-      creds: Credentials): Array[Token[_ <: TokenIdentifier]]
+      creds: Credentials): Array[Token[_]]
+}
 
+/**
+ * An interface for service token which can be renewable, any [[ServiceTokenProvider]] in which
+ * token can be renewable should also implement this interface, Spark's internal time-based
+ * token renewal mechanism will invoke the methods to update the tokens periodically.
+ */
+trait ServiceTokenRenewable {
   /**
    * Get the token renewal interval from this service. This renewal interval will be used in
    * periodical token renewal mechanism.
    */
-  def getTokenRenewalInterval(sparkConf: SparkConf, serviceConf: Configuration): Long = {
-    Long.MaxValue
-  }
+  def getTokenRenewalInterval(sparkConf: SparkConf, serviceConf: Configuration): Long
 
+  /**
+   * Get the time length from now to next renewal.
+   */
   def getTimeFromNowToRenewal(
       sparkConf: SparkConf,
       fractional: Double,
-      creds: Credentials): Long = {
-    Long.MaxValue
-  }
+      credentials: Credentials): Long
 }

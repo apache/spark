@@ -27,6 +27,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.token.ConfigurableTokenManager._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.ThreadUtils
@@ -85,7 +86,8 @@ private[yarn] class AMDelegationTokenRenewer(
      */
     def scheduleRenewal(runnable: Runnable): Unit = {
       val credentials = UserGroupInformation.getCurrentUser.getCredentials
-      val renewalInterval = hadoopUtil.getTimeFromNowToRenewal(sparkConf, 0.75, credentials)
+      val renewalInterval = configurableTokenManager(sparkConf)
+        .getNearestTimeFromNowToRenewal(hadoopConf, 0.75, credentials)
       // Run now!
       if (renewalInterval <= 0) {
         logInfo("HDFS tokens have expired, creating new tokens now.")
@@ -170,7 +172,6 @@ private[yarn] class AMDelegationTokenRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        import ConfigurableTokenManager._
         hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(dst))
         configurableTokenManager(sparkConf).obtainTokens(freshHadoopConf, tempCreds)
         null

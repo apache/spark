@@ -34,7 +34,7 @@ private[yarn] class HBaseTokenProvider extends ServiceTokenProvider with Logging
   override def obtainTokensFromService(
       sparkConf: SparkConf,
       serviceConf: Configuration,
-      creds: Credentials): Array[Token[_ <: TokenIdentifier]] = {
+      creds: Credentials): Array[Token[_]] = {
     try {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
       val obtainToken = mirror.classLoader.

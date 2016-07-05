@@ -34,7 +34,8 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-private[yarn] class HDFSTokenProvider extends ServiceTokenProvider with Logging {
+private[yarn] class HDFSTokenProvider
+  extends ServiceTokenProvider with ServiceTokenRenewable with Logging {
 
   private var nnsToAccess: Set[Path] = Set.empty
   private var tokenRenewer: Option[String] = None

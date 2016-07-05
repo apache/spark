@@ -733,7 +733,7 @@ private[spark] class Client(
       hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(stagingDirPath))
       sparkConf.get(PRINCIPAL).foreach(hdfsTokenProvider(sparkConf).setTokenRenewer(_))
       val minTokenRenewalInterval =
-        configurableTokenManager(sparkConf).getMinTokenRenewalInterval(hadoopConf)
+        configurableTokenManager(sparkConf).getSmallestTokenRenewalInterval(hadoopConf)
       sparkConf.set(TOKEN_RENEWAL_INTERVAL, minTokenRenewalInterval)
     }
 
