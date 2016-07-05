@@ -257,7 +257,8 @@ private[sql] class ParquetFileFormat
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      schema.length <= conf.wholeStageMaxNumFields
+      schema.length <= conf.wholeStageMaxNumFields &&
+      schema.forall(!_.dataType.isInstanceOf[MapType])
   }
 
   override def isSplitable(

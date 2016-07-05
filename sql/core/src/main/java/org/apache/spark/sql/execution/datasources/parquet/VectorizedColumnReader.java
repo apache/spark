@@ -614,6 +614,7 @@ public class VectorizedColumnReader {
           if (column.getParentColumn().getDefLevel() == maxDefLevel) {
             insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
             offsets.put(maxRepLevel, offset + 1);
+            prevRepLevel = -1;
           } else if (defLevel == 0) {
             // A null record at root level.
             // Obtain most-top column (repetition level 1).
