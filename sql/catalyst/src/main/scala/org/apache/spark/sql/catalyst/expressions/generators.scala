@@ -108,7 +108,7 @@ case class Stack(children: Seq[Expression])
     extends Expression with Generator with CodegenFallback {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
-  private lazy val numFields = ((children.length - 1) + numRows - 1) / numRows
+  private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
@@ -128,21 +128,17 @@ case class Stack(children: Seq[Expression])
     }
   }
 
-  override def elementSchema: StructType = {
-    var schema = new StructType()
-    val types = children.tail.take(numFields).map(_.dataType)
-    for (i <- 0 until numFields) {
-      schema = schema.add(s"col$i", types(i))
-    }
-    schema
-  }
+  override def elementSchema: StructType =
+    StructType(children.tail.take(numFields).zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     val values = children.tail.map(_.eval(input))
     for (row <- 0 until numRows) yield {
       val fields = new Array[Any](numFields)
       for (col <- 0 until numFields) {
-        val index = (row % numRows) * numFields + col
+        val index = row * numFields + col
         fields.update(col, if (index < values.length) values(index) else null)
       }
       InternalRow(fields: _*)
