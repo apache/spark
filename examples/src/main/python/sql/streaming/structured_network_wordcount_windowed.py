@@ -21,7 +21,7 @@
  with a timestamp that is used to determine the windows into which it falls.
 
  Usage: structured_network_wordcount_windowed.py <hostname> <port> <window duration>
-   <optional slide duration>
+   [<slide duration>]
  <hostname> and <port> describe the TCP server that Structured Streaming
  would connect to receive data.
  <window duration> gives the size of window, specified as integer number of seconds
@@ -35,9 +35,9 @@
  and then run the example
     `$ bin/spark-submit
     examples/src/main/python/sql/streaming/structured_network_wordcount_windowed.py
-    localhost 9999 <window duration> <optional slide duration>`
+    localhost 9999 <window duration> [<slide duration>]`
 
- One recommended <window duration>, <slide duration> pair is 60, 30
+ One recommended <window duration>, <slide duration> pair is 10, 5
 """
 from __future__ import print_function
 
@@ -51,7 +51,7 @@ from pyspark.sql.functions import window
 if __name__ == "__main__":
     if len(sys.argv) != 5 and len(sys.argv) != 4:
         msg = ("Usage: structured_network_wordcount_windowed.py <hostname> <port> "
-               "<window duration in seconds> <optional slide duration in seconds>")
+               "<window duration in seconds> [<slide duration in seconds>]")
         print(msg, file=sys.stderr)
         exit(-1)
 
@@ -61,9 +61,8 @@ if __name__ == "__main__":
     slideSize = int(sys.argv[4]) if (len(sys.argv) == 5) else windowSize
     if slideSize > windowSize:
         print("<slide duration> must be less than or equal to <window duration>", file=sys.stderr)
-    windowArg = '{} seconds'.format(windowSize)
-    slideArg = '{} seconds'.format(slideSize)
-
+    windowDuration = '{} seconds'.format(windowSize)
+    slideDuration = '{} seconds'.format(slideSize)
 
     spark = SparkSession\
         .builder\
@@ -80,15 +79,15 @@ if __name__ == "__main__":
         .load()
 
     # Split the lines into words, retaining timestamps
+    # split() splits each line into an array, and explode() turns the array into multiple rows
     words = lines.select(
-        # explode turns each item in an array into a separate row
         explode(split(lines.value, ' ')).alias('word'),
         lines.timestamp
     )
 
     # Group the data by window and word and compute the count of each group
     windowedCounts = words.groupBy(
-        window(words.timestamp, windowArg, slideArg),
+        window(words.timestamp, windowDuration, slideDuration),
         words.word
     ).count().orderBy('window')
 

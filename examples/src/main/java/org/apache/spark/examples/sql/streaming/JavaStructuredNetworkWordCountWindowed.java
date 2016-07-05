@@ -33,7 +33,7 @@ import java.util.List;
  * with a timestamp that is used to determine the windows into which it falls.
  *
  * Usage: JavaStructuredNetworkWordCountWindowed <hostname> <port> <window duration>
- *   <optional slide duration>
+ *   [<slide duration>]
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <window duration> gives the size of window, specified as integer number of seconds
@@ -46,16 +46,16 @@ import java.util.List;
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.JavaStructuredNetworkWordCountWindowed
- *    localhost 9999 <window duration> <optional slide duration>`
+ *    localhost 9999 <window duration in seconds> [<slide duration in seconds>]`
  *
- * One recommended <window duration>, <slide duration> pair is 60, 30
+ * One recommended <window duration>, <slide duration> pair is 10, 5
  */
 public final class JavaStructuredNetworkWordCountWindowed {
 
   public static void main(String[] args) throws Exception {
     if (args.length < 3) {
       System.err.println("Usage: JavaStructuredNetworkWordCountWindowed <hostname> <port>" +
-        " <window duration in seconds> <optional slide duration in seconds>");
+        " <window duration in seconds> [<slide duration in seconds>]");
       System.exit(1);
     }
 
@@ -66,8 +66,8 @@ public final class JavaStructuredNetworkWordCountWindowed {
     if (slideSize > windowSize) {
       System.err.println("<slide duration> must be less than or equal to <window duration>");
     }
-    String windowArg = windowSize + " seconds";
-    String slideArg = slideSize + " seconds";
+    String windowDuration = windowSize + " seconds";
+    String slideDuration = slideSize + " seconds";
 
     SparkSession spark = SparkSession
       .builder()
@@ -100,7 +100,7 @@ public final class JavaStructuredNetworkWordCountWindowed {
 
     // Group the data by window and word and compute the count of each group
     Dataset<Row> windowedCounts = words.groupBy(
-      functions.window(words.col("timestamp"), windowArg, slideArg),
+      functions.window(words.col("timestamp"), windowDuration, slideDuration),
       words.col("word")
     ).count().orderBy("window");
 

@@ -140,6 +140,14 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
+  test("non-boolean includeTimestamp") {
+    val provider = new TextSocketSourceProvider
+    intercept[AnalysisException] {
+      provider.sourceSchema(sqlContext, None, "", Map("host" -> "localhost",
+      "port" -> "1234", "includeTimestamp" -> "fasle"))
+    }
+  }
+
   test("no server up") {
     val provider = new TextSocketSourceProvider
     val parameters = Map("host" -> "localhost", "port" -> "0")

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{BufferedReader, InputStreamReader, IOException}
+import java.io.{BufferedReader, IOException, InputStreamReader}
 import java.net.Socket
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
@@ -25,11 +25,12 @@ import java.util.Calendar
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+
+import scala.util.{Failure, Success, Try}
 
 object TextSocketSource {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
@@ -125,6 +126,14 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
 }
 
 class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegister with Logging {
+  private def parseIncludeTimestamp(params: Map[String, String]): Boolean = {
+    Try(params.getOrElse("includeTimestamp", "false").toBoolean) match {
+      case Success(bool) => bool
+      case Failure(_) =>
+        throw new AnalysisException("includeTimestamp must be set to either \"true\" or \"false\"")
+    }
+  }
+
   /** Returns the name and schema of the source that can be used to continually read data. */
   override def sourceSchema(
       sqlContext: SQLContext,
@@ -140,7 +149,7 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
     val schema =
-      if (parameters.getOrElse("includeTimestamp", "false").toBoolean) {
+      if (parseIncludeTimestamp(parameters)) {
         TextSocketSource.SCHEMA_TIMESTAMP
       } else {
         TextSocketSource.SCHEMA_REGULAR
@@ -156,8 +165,7 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
       parameters: Map[String, String]): Source = {
     val host = parameters("host")
     val port = parameters("port").toInt
-    new TextSocketSource(host, port,
-      parameters.getOrElse("includeTimestamp", "false").toBoolean, sqlContext)
+    new TextSocketSource(host, port, parseIncludeTimestamp(parameters), sqlContext)
   }
 
   /** String that represents the format that this data source provider uses. */

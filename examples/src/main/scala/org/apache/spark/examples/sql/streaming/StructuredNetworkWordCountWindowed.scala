@@ -29,7 +29,7 @@ import org.apache.spark.sql.functions._
  * with a timestamp that is used to determine the windows into which it falls.
  *
  * Usage: StructuredNetworkWordCountWindowed <hostname> <port> <window duration>
- *   <optional slide duration>
+ *   [<slide duration>]
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <window duration> gives the size of window, specified as integer number of seconds
@@ -42,16 +42,16 @@ import org.apache.spark.sql.functions._
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ bin/run-example sql.streaming.StructuredNetworkWordCountWindowed
- *    localhost 9999 <window duration> <optional slide duration>`
+ *    localhost 9999 <window duration in seconds> [<slide duration in seconds>]`
  *
- * One recommended <window duration>, <slide duration> pair is 60, 30
+ * One recommended <window duration>, <slide duration> pair is 10, 5
  */
 object StructuredNetworkWordCountWindowed {
 
   def main(args: Array[String]) {
     if (args.length < 3) {
       System.err.println("Usage: StructuredNetworkWordCountWindowed <hostname> <port>" +
-        " <window duration in seconds> <optional slide duration in seconds>")
+        " <window duration in seconds> [<slide duration in seconds>]")
       System.exit(1)
     }
 
@@ -62,8 +62,8 @@ object StructuredNetworkWordCountWindowed {
     if (slideSize > windowSize) {
       System.err.println("<slide duration> must be less than or equal to <window duration>")
     }
-    val windowArg = s"$windowSize seconds"
-    val slideArg = s"$slideSize seconds"
+    val windowDuration = s"$windowSize seconds"
+    val slideDuration = s"$slideSize seconds"
 
     val spark = SparkSession
       .builder
@@ -87,7 +87,7 @@ object StructuredNetworkWordCountWindowed {
 
     // Group the data by window and word and compute the count of each group
     val windowedCounts = words.groupBy(
-      window($"timestamp", windowArg, slideArg), $"word"
+      window($"timestamp", windowDuration, slideDuration), $"word"
     ).count().orderBy("window")
 
     // Start running the query that prints the windowed word counts to the console
