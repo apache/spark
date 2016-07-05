@@ -134,7 +134,7 @@ case class Stack(children: Seq[Expression])
     })
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
-    val values = children.tail.map(_.eval(input))
+    val values = children.tail.map(_.eval(input)).toArray
     for (row <- 0 until numRows) yield {
       val fields = new Array[Any](numFields)
       for (col <- 0 until numFields) {
