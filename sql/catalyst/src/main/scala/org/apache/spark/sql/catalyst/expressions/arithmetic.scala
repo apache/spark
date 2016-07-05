@@ -238,12 +238,10 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
-    val isZero: String = {
-      if (dataType.isInstanceOf[DecimalType]) {
-        s"${eval2.value}.isZero()"
-      } else {
-        s"${eval2.value} == 0"
-      }
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
     }
     val javaType = ctx.javaType(dataType)
     val division = divide(eval1, eval2, javaType)
