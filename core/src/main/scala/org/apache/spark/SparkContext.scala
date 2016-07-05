@@ -2433,9 +2433,9 @@ object SparkContext extends Logging {
        false
     }
     if (BlacklistTracker.isBlacklistEnabled(conf, isLocalMode)) {
-      new BlacklistTracker(conf)
+      new BlacklistTrackerImpl(conf)
     } else {
-      new NoopBlacklistTracker(conf)
+      NoopBlacklistTracker
     }
   }
 
