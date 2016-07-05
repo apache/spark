@@ -38,9 +38,10 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
   test("foreach") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
-      val query = input.toDS().repartition(2).write
+      val query = input.toDS().repartition(2).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter())
+        .start()
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 
@@ -70,14 +71,14 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
   test("foreach with error") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
-      val query = input.toDS().repartition(1).write
+      val query = input.toDS().repartition(1).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
             super.process(value)
             throw new RuntimeException("error")
           }
-        })
+        }).start()
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.commons.lang.StringUtils
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
@@ -87,9 +87,11 @@ private[sql] case class LogicalRDD(
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case _ => false
+    }
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
@@ -234,7 +236,10 @@ private[sql] case class BatchedDataSourceScanExec(
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException
+    // in the case of fallback, this batched scan should never fail because of:
+    // 1) only primitive types are supported
+    // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
+    WholeStageCodegenExec(this).execute()
   }
 
   override def simpleString: String = {

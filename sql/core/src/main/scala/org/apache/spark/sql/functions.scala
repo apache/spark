@@ -2587,7 +2587,7 @@ object functions {
    *   09:00:25-09:01:25 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2641,7 +2641,7 @@ object functions {
    *   09:00:20-09:01:20 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2683,7 +2683,7 @@ object functions {
    *   09:02:00-09:03:00 ...
    * }}}
    *
-   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
@@ -2720,6 +2720,14 @@ object functions {
    * @since 1.3.0
    */
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
+
+  /**
+   * Creates a new row for each element with position in the given array or map column.
+   *
+   * @group collection_funcs
+   * @since 2.1.0
+   */
+  def posexplode(e: Column): Column = withExpr { PosExplode(e.expr) }
 
   /**
    * Extracts json object from a json string based on json path specified, and returns json string

@@ -345,15 +345,17 @@ case class WindowExec(
                   null,
                   1024,
                   SparkEnv.get.memoryManager.pageSizeBytes,
+                  SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+                    UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
                   false)
                 rows.foreach { r =>
-                  sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0)
+                  sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0, false)
                 }
                 rows.clear()
               }
             } else {
               sorter.insertRecord(nextRow.getBaseObject, nextRow.getBaseOffset,
-                nextRow.getSizeInBytes, 0)
+                nextRow.getSizeInBytes, 0, false)
             }
             fetchNextRow()
           }

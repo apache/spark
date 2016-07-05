@@ -452,53 +452,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        // A partitioned relation's schema can be different from the input logicalPlan, since
-        // partition columns are all moved after data columns. We Project to adjust the ordering.
-        val input = if (parts.nonEmpty) {
-          val (inputPartCols, inputDataCols) = child.output.partition { attr =>
-            parts.contains(attr.name)
-          }
-          Project(inputDataCols ++ inputPartCols, child)
-        } else {
-          child
-        }
-
-        val table = lookupTableFromCatalog(u)
-        // adding the table's partitions or validate the query's partition info
-        table match {
-          case relation: CatalogRelation if relation.catalogTable.partitionColumns.nonEmpty =>
-            val tablePartitionNames = relation.catalogTable.partitionColumns.map(_.name)
-            if (parts.keys.nonEmpty) {
-              // the query's partitioning must match the table's partitioning
-              // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
-              // TODO: add better checking to pre-inserts to avoid needing this here
-              if (tablePartitionNames.size != parts.keySet.size) {
-                throw new AnalysisException(
-                  s"""Requested partitioning does not match the ${u.tableIdentifier} table:
-                     |Requested partitions: ${parts.keys.mkString(",")}
-                     |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
-              }
-              // Partition columns are already correctly placed at the end of the child's output
-              i.copy(table = EliminateSubqueryAliases(table), child = input)
-            } else {
-              // Set up the table's partition scheme with all dynamic partitions by moving partition
-              // columns to the end of the column list, in partition order.
-              val (inputPartCols, columns) = child.output.partition { attr =>
-                tablePartitionNames.contains(attr.name)
-              }
-              // All partition columns are dynamic because this InsertIntoTable had no partitioning
-              val partColumns = tablePartitionNames.map { name =>
-                inputPartCols.find(_.name == name).getOrElse(
-                  throw new AnalysisException(s"Cannot find partition column $name"))
-              }
-              i.copy(
-                table = EliminateSubqueryAliases(table),
-                partition = tablePartitionNames.map(_ -> None).toMap,
-                child = Project(columns ++ partColumns, child))
-            }
-          case _ =>
-            i.copy(table = EliminateSubqueryAliases(table), child = input)
-        }
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&
@@ -1882,13 +1836,25 @@ class Analyzer(
   }
 
   private def commonNaturalJoinProcessing(
-     left: LogicalPlan,
-     right: LogicalPlan,
-     joinType: JoinType,
-     joinNames: Seq[String],
-     condition: Option[Expression]) = {
-    val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
-    val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      joinNames: Seq[String],
+      condition: Option[Expression]) = {
+    val leftKeys = joinNames.map { keyName =>
+      val joinColumn = left.output.find(attr => resolver(attr.name, keyName))
+      assert(
+        joinColumn.isDefined,
+        s"$keyName should exist in ${left.output.map(_.name).mkString(",")}")
+      joinColumn.get
+    }
+    val rightKeys = joinNames.map { keyName =>
+      val joinColumn = right.output.find(attr => resolver(attr.name, keyName))
+      assert(
+        joinColumn.isDefined,
+        s"$keyName should exist in ${right.output.map(_.name).mkString(",")}")
+      joinColumn.get
+    }
     val joinPairs = leftKeys.zip(rightKeys)
 
     val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
