@@ -96,7 +96,7 @@ case class UserDefinedGenerator(
 /**
  * Separate v1, ..., vk into n rows. Each row will have k/n columns. n must be constant.
  * {{{
- *   SELECT stack(2, 1, 2, 3)) ->
+ *   SELECT stack(2, 1, 2, 3) ->
  *   1      2
  *   3      NULL
  * }}}
