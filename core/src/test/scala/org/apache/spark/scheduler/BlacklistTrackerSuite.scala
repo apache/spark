@@ -44,7 +44,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   val clock = new ManualClock(0)
 
-  var blacklistTracker: BlacklistTracker = _
+  var blacklistTracker: BlacklistTrackerImpl = _
 
   override def afterEach(): Unit = {
     if (blacklistTracker != null) {
@@ -66,7 +66,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
 
     // Task 1 failed on executor 1
-    blacklistTracker = new BlacklistTracker(conf, clock)
+    blacklistTracker = new BlacklistTrackerImpl(conf, clock)
     blacklistTracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
     for {
       executor <- (1 to 4).map(_.toString)
@@ -122,7 +122,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklistTracker.executorBlacklist() === Set())
   }
 
-  def trackerFixture: (BlacklistTracker, TaskSchedulerImpl) = {
+  def trackerFixture: (BlacklistTrackerImpl, TaskSchedulerImpl) = {
      val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.ui.enabled", "false")
       .set("spark.scheduler.blacklist.advancedStrategy", "true")
@@ -134,7 +134,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
 
     clock.setTime(0)
-    blacklistTracker = new BlacklistTracker(conf, clock)
+    blacklistTracker = new BlacklistTrackerImpl(conf, clock)
     (blacklistTracker, scheduler)
   }
 
