@@ -31,7 +31,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 public class JavaRowMatrixSuite extends SharedSparkSession {
 
   @Test
-  public void rowMatrixConstruction() {
+  public void rowMatrixQRDecomposition() {
     Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
     Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
     Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
