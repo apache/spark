@@ -2896,23 +2896,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
   }
-
-  test("SPARK-16370: Union queries with side effects should be executed eagerly") {
-    withTable("tbl") {
-      withTempTable("empty") {
-        spark.emptyDataFrame.createOrReplaceTempView("empty")
-        sql("CREATE TABLE tbl(i INT) USING PARQUET")
-        sql("INSERT INTO tbl VALUES(1)")
-        checkAnswer(sql("SELECT * FROM tbl"), Seq(1).map(Row(_)))
-        sql("INSERT INTO tbl VALUES(2)")
-        checkAnswer(sql("SELECT * FROM tbl"), (1 to 2).map(Row(_)))
-        sql("(INSERT INTO tbl VALUES(3)) UNION ALL (INSERT INTO tbl VALUES(4))")
-        checkAnswer(sql("SELECT * FROM tbl"), (1 to 4).map(Row(_)))
-        sql("(INSERT INTO tbl VALUES(5)) UNION ALL (SELECT * FROM empty)")
-        checkAnswer(sql("SELECT * FROM tbl"), (1 to 5).map(Row(_)))
-        sql("(INSERT INTO tbl VALUES(6)) UNION (SELECT * FROM empty)")
-        checkAnswer(sql("SELECT * FROM tbl"), (1 to 6).map(Row(_)))
-      }
-    }
-  }
 }

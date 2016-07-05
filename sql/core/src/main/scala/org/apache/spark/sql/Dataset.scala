@@ -183,9 +183,7 @@ class Dataset[T] private[sql](
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
-      case Union(children) if children.exists(hasSideEffects) =>
-        LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
-      case Distinct(Union(children)) if children.exists(hasSideEffects) =>
+      case Union(children) if children.forall(_.isInstanceOf[InsertIntoTable]) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
       case _ =>
         queryExecution.analyzed
