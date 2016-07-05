@@ -147,10 +147,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    invalidateTable(tableIdent)
-  }
-
-  def invalidateTable(tableIdent: TableIdentifier): Unit = {
     cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
   }
 

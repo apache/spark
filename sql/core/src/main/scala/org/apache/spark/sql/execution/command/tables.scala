@@ -172,7 +172,7 @@ case class AlterTableRenameCommand(
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
-      catalog.invalidateTable(oldName)
+      catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       if (wasCached) {
         sparkSession.catalog.cacheTable(newName.unquotedString)
@@ -373,7 +373,7 @@ case class TruncateTableCommand(
     }
     // After deleting the data, invalidate the table to make sure we don't keep around a stale
     // file relation in the metastore cache.
-    spark.sessionState.invalidateTable(tableName.unquotedString)
+    spark.sessionState.refreshTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
       spark.sharedState.cacheManager.uncacheQuery(spark.table(tableName.quotedString))
