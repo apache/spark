@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
+import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -1077,6 +1077,34 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       case Some(throwable) =>
         fail("CREATE TEMPORARY FUNCTION should not fail.", throwable)
       case None => // OK
+    }
+  }
+
+  test("Change hive warehouse path at runtime") {
+    spark.wrapped.conf.clear()
+    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
+    val sessionState = spark.sessionState.asInstanceOf[HiveSessionState]
+    assert(sessionState.metadataHive.getConf("hive.metastore.warehouse.dir", null)
+      != "/x/y/z/spark-warehouse")
+    try{
+      sql(s"set ${SQLConf.WAREHOUSE_PATH.key}=/x/y/z/spark-warehouse")
+      assert(spark.conf.get(SQLConf.WAREHOUSE_PATH) == "/x/y/z/spark-warehouse")
+      assert(spark.conf.get("hive.metastore.warehouse.dir") == "/x/y/z/spark-warehouse")
+      assert(sessionState.metadataHive.getConf("hive.metastore.warehouse.dir", null)
+        == "/x/y/z/spark-warehouse")
+    } finally {
+      sql(s"set ${SQLConf.WAREHOUSE_PATH.key}=$original")
+      sql(s"set hive.metastore.warehouse.dir=$original")
+    }
+    try{
+      sql(s"set hive.metastore.warehouse.dir=/x/y/z/spark-warehouse")
+      assert(spark.conf.get(SQLConf.WAREHOUSE_PATH) == "/x/y/z/spark-warehouse")
+      assert(spark.conf.get("hive.metastore.warehouse.dir") == "/x/y/z/spark-warehouse")
+      assert(sessionState.metadataHive.getConf("hive.metastore.warehouse.dir", null)
+        == "/x/y/z/spark-warehouse")
+    } finally {
+      sql(s"set ${SQLConf.WAREHOUSE_PATH.key}=$original")
+      sql(s"set hive.metastore.warehouse.dir=$original")
     }
   }
 

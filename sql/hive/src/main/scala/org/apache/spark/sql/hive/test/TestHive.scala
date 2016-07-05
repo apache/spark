@@ -514,6 +514,9 @@ private[hive] class TestHiveSharedState(
     metastoreTemporaryConf: Map[String, String])
   extends HiveSharedState(sc) {
 
+  // The value set by HiveSharedState is the default value of SQLConf.WAREHOUSE_PATH
+  sc.conf.set("hive.metastore.warehouse.dir", warehousePath.toURI.toString)
+
   override lazy val metadataHive: HiveClient = {
     TestHiveContext.newClientForMetadata(
       sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
@@ -534,6 +537,7 @@ private[hive] class TestHiveSessionState(
         super.clear()
         TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
         setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
+        setConfString("spark.sql.warehouse.dir", self.warehousePath.toURI.toString)
       }
     }
   }
