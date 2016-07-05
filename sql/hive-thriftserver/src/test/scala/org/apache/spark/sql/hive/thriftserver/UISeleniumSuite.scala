@@ -27,6 +27,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
@@ -63,11 +64,11 @@ class UISeleniumSuite
         |  --master local
         |  --hiveconf hive.root.logger=INFO,console
         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=$port
         |  --driver-class-path ${sys.props("java.class.path")}
+        |  --conf ${SQLConf.WAREHOUSE_PATH.key}=$warehousePath
         |  --conf spark.ui.enabled=true
         |  --conf spark.ui.port=$uiPort
      """.stripMargin.split("\\s+").toSeq

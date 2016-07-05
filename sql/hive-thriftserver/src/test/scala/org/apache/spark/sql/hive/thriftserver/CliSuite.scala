@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -88,8 +89,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
          |  --conf spark.ui.enabled=false
+         |  --conf ${SQLConf.WAREHOUSE_PATH.key}=$warehousePath
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
-         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
@@ -270,6 +271,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute)(
       s"ADD FILE $dataFilePath;" -> "",
       s"LIST FILE $dataFilePath;" -> "small_kv.txt"
+    )
+  }
+
+  test("set warehousePath") {
+    runCliWithin(2.minute)(
+      "set hive.metastore.warehouse.dir;"
+        -> s"hive.metastore.warehouse.dir\t$warehousePath"
     )
   }
 }
