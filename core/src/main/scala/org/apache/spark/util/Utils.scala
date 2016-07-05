@@ -1813,7 +1813,7 @@ private[spark] object Utils extends Logging {
         .invoke(process, timeoutMs.asInstanceOf[java.lang.Long], TimeUnit.MILLISECONDS)
         .asInstanceOf[Boolean]
     } catch {
-      case _: NoSuchMethodError =>
+      case _: NoSuchMethodException =>
         // Otherwise implement it manually
         var terminated = false
         val startTime = System.currentTimeMillis
