@@ -180,30 +180,47 @@ Note that jars or python files that are passed to spark-submit should be URIs re
 
 # Mesos Run Modes
 
-Spark can run over Mesos in two modes: "coarse-grained" (default) and "fine-grained".
+Spark can run over Mesos in two modes: "coarse-grained" (default) and
+"fine-grained".
 
-The "coarse-grained" mode will launch only *one* long-running Spark task on each Mesos
-machine, and dynamically schedule its own "mini-tasks" within it. The benefit is much lower startup
-overhead, but at the cost of reserving the Mesos resources for the complete duration of the
-application.
+In "coarse-grained" mode, each Spark executor runs as a single Mesos
+task.  Spark executors are sized according to the following
+configuration variables:
 
-Coarse-grained is the default mode. You can also set `spark.mesos.coarse` property to true
-to turn it on explicitly in [SparkConf](configuration.html#spark-properties):
+* Executor memory: `spark.executor.memory`
+* Executor cores: `spark.executor.cores`
+* Number of executors: `spark.cores.max`/`spark.executor.cores`
 
-{% highlight scala %}
-conf.set("spark.mesos.coarse", "true")
-{% endhighlight %}
+Please see the [Spark Configuration](configuration.html) page for
+details and default values.
 
-In addition, for coarse-grained mode, you can control the maximum number of resources Spark will
-acquire. By default, it will acquire *all* cores in the cluster (that get offered by Mesos), which
-only makes sense if you run just one application at a time. You can cap the maximum number of cores
-using `conf.set("spark.cores.max", "10")` (for example).
+Executors are brought up eagerly when the application starts, until
+`spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
+Spark application will reserve all resources offered to it by Mesos,
+so we of course urge you to set this variable in any sort of
+multi-tenant cluster, including one which runs multiple concurrent
+Spark applications.
 
-In "fine-grained" mode, each Spark task runs as a separate Mesos task. This allows
-multiple instances of Spark (and other frameworks) to share machines at a very fine granularity,
-where each application gets more or fewer machines as it ramps up and down, but it comes with an
-additional overhead in launching each task. This mode may be inappropriate for low-latency
-requirements like interactive queries or serving web requests.
+The scheduler will start executors round-robin on the offers Mesos
+gives it, but there are no spread guarantees, as Mesos does not
+provide such guarantees on the offer stream.
+
+The benefit of coarse-grained mode is much lower startup overhead, but
+at the cost of reserving Mesos resources for the complete duration of
+the application.
+
+In "fine-grained" mode, each Spark task inside the Spark executor runs
+as a separate Mesos task. This allows multiple instances of Spark (and
+other frameworks) to share cores at a very fine granularity, where
+each application gets more or fewer cores as it ramps up and down, but
+it comes with an additional overhead in launching each task. This mode
+may be inappropriate for low-latency requirements like interactive
+queries or serving web requests.
+
+Note that while Spark tasks in fine-grained will relinquish cores as
+they terminate, they will not relinquish memory, as the JVM does not
+give memory back to the Operating System.  Neither will executors
+terminate when they're idle.
 
 To run in fine-grained mode, set the `spark.mesos.coarse` property to false in your
 [SparkConf](configuration.html#spark-properties):
@@ -212,7 +229,9 @@ To run in fine-grained mode, set the `spark.mesos.coarse` property to false in y
 conf.set("spark.mesos.coarse", "false")
 {% endhighlight %}
 
-You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
+You may also make use of `spark.mesos.constraints` to set attribute
+based constraints on mesos resource offers. By default, all resource
+offers will be accepted.
 
 {% highlight scala %}
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
