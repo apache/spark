@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand, LogicalRelation}
@@ -710,6 +711,39 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
                   s"but got:\n$queryExecution")
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("Alias used in converted data source tables") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
+      withTempTable("jt") {
+        (1 to 10).map(i => i -> s"str$i").toDF("a", "b").createOrReplaceTempView("jt")
+
+        withTable("test_parquet_ctas") {
+          sql(
+            """
+              |CREATE TABLE test_parquet_ctas STORED AS PARQUET
+              |AS SELECT tmp.a FROM jt tmp WHERE tmp.a < 5
+            """.stripMargin)
+
+          val df = sql(s"SELECT tmp.a + 1 FROM test_parquet_ctas tmp WHERE tmp.a > 2")
+          checkAnswer(df,
+            Row(4) :: Row(5) :: Nil)
+
+          df.queryExecution.analyzed.collectFirst {
+            case _: LogicalRelation => ()
+          }.getOrElse {
+            fail(s"Expecting the query plan to convert parquet to data sources, " +
+              s"but got:\n${df.queryExecution}")
+          }
+
+          df.queryExecution.analyzed.collectFirst {
+            case SubqueryAlias("tmp", SubqueryAlias("test_parquet_ctas", _)) => ()
+          }.getOrElse {
+            fail(s"Expecting alias name tmp above test_parquet_ctas but got:\n${df.queryExecution}")
           }
         }
       }
