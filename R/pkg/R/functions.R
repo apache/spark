@@ -2934,3 +2934,20 @@ setMethod("sort_array",
             jc <- callJStatic("org.apache.spark.sql.functions", "sort_array", x@jc, asc)
             column(jc)
           })
+
+#' posexplode
+#'
+#' Creates a new row for each element with position in the given array or map column.
+#'
+#' @rdname posexplode
+#' @name posexplode
+#' @family collection_funcs
+#' @export
+#' @examples \dontrun{posexplode(df$c)}
+#' @note posexplode since 2.1.0
+setMethod("posexplode",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "posexplode", x@jc)
+            column(jc)
+          })

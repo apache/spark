@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
@@ -228,7 +227,7 @@ public class VectorizedColumnReader {
             column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getInt(i)));
           }
         } else {
-          throw new NotImplementedException("Unimplemented type: " + column.dataType());
+          throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
 
@@ -239,7 +238,7 @@ public class VectorizedColumnReader {
             column.putLong(i, dictionary.decodeToLong(dictionaryIds.getInt(i)));
           }
         } else {
-          throw new NotImplementedException("Unimplemented type: " + column.dataType());
+          throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
         }
         break;
 
@@ -262,7 +261,7 @@ public class VectorizedColumnReader {
             column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
           }
         } else {
-          throw new NotImplementedException();
+          throw new UnsupportedOperationException();
         }
         break;
       case BINARY:
@@ -293,12 +292,12 @@ public class VectorizedColumnReader {
             column.putByteArray(i, v.getBytes());
           }
         } else {
-          throw new NotImplementedException();
+          throw new UnsupportedOperationException();
         }
         break;
 
       default:
-        throw new NotImplementedException("Unsupported type: " + descriptor.getType());
+        throw new UnsupportedOperationException("Unsupported type: " + descriptor.getType());
     }
   }
 
@@ -327,7 +326,7 @@ public class VectorizedColumnReader {
       defColumn.readShorts(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -360,7 +359,7 @@ public class VectorizedColumnReader {
       defColumn.readDoubles(
           num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -381,7 +380,7 @@ public class VectorizedColumnReader {
         }
       }
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -417,7 +416,7 @@ public class VectorizedColumnReader {
         }
       }
     } else {
-      throw new NotImplementedException("Unimplemented type: " + column.dataType());
+      throw new UnsupportedOperationException("Unimplemented type: " + column.dataType());
     }
   }
 
@@ -459,13 +458,13 @@ public class VectorizedColumnReader {
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
       if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
-        throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
+        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
       }
       this.dataColumn = new VectorizedRleValuesReader();
       this.useDictionary = true;
     } else {
       if (dataEncoding != Encoding.PLAIN) {
-        throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
+        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
       }
       this.dataColumn = new VectorizedPlainValuesReader();
       this.useDictionary = false;
@@ -485,7 +484,7 @@ public class VectorizedColumnReader {
 
     // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
-      throw new NotImplementedException("Unsupported encoding: " + page.getDlEncoding());
+      throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
     }
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
