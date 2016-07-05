@@ -44,15 +44,15 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
           g.statistics.sizeInBytes
         }
         assert(sizesGlobalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesGlobalLimit(0).equals(BigInt(expected)),
-          s"expected exact size 24 for table 'test', got: ${sizesGlobalLimit(0)}")
+        assert(sizesGlobalLimit.head === BigInt(expected),
+          s"expected exact size 24 for table 'test', got: ${sizesGlobalLimit.head}")
 
         val sizesLocalLimit = df.queryExecution.analyzed.collect { case l: LocalLimit =>
           l.statistics.sizeInBytes
         }
         assert(sizesLocalLimit.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-        assert(sizesLocalLimit(0).equals(BigInt(expected)),
-          s"expected exact size 24 for table 'test', got: ${sizesLocalLimit(0)}")
+        assert(sizesLocalLimit.head === BigInt(expected),
+          s"expected exact size 24 for table 'test', got: ${sizesLocalLimit.head}")
       }
     }
   }
@@ -70,8 +70,8 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
       }
 
       assert(sizes.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-      assert(sizes(0).equals(BigInt(96)),
-        s"expected exact size 96 for table 'test', got: ${sizes(0)}")
+      assert(sizes.head === BigInt(96),
+        s"expected exact size 96 for table 'test', got: ${sizes.head}")
     }
   }
 
