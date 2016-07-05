@@ -34,6 +34,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
+from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -172,11 +173,25 @@ class DataFrame(object):
     @since(1.4)
     def write(self):
         """
-        Interface for saving the content of the :class:`DataFrame` out into external storage.
+        Interface for saving the content of the non-streaming :class:`DataFrame` out into external
+        storage.
 
         :return: :class:`DataFrameWriter`
         """
         return DataFrameWriter(self)
+
+    @property
+    @since(2.0)
+    def writeStream(self):
+        """
+        Interface for saving the content of the streaming :class:`DataFrame` out into external
+        storage.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamWriter`
+        """
+        return DataStreamWriter(self)
 
     @property
     @since(1.3)
@@ -243,8 +258,8 @@ class DataFrame(object):
     def isStreaming(self):
         """Returns true if this :class:`Dataset` contains one or more sources that continuously
         return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
-        :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
+        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
+        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
 
@@ -257,7 +272,9 @@ class DataFrame(object):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
-        :param truncate: Whether truncate long strings and align cells right.
+        :param truncate: If set to True, truncate strings longer than 20 chars by default.
+            If set to a number greater than one, truncates long strings to length ``truncate``
+            and align cells right.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -268,8 +285,18 @@ class DataFrame(object):
         |  2|Alice|
         |  5|  Bob|
         +---+-----+
+        >>> df.show(truncate=3)
+        +---+----+
+        |age|name|
+        +---+----+
+        |  2| Ali|
+        |  5| Bob|
+        +---+----+
         """
-        print(self._jdf.showString(n, truncate))
+        if isinstance(truncate, bool) and truncate:
+            print(self._jdf.showString(n, 20))
+        else:
+            print(self._jdf.showString(n, int(truncate)))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))

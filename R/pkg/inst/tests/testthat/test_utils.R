@@ -18,7 +18,8 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
           of strings and integers", {
@@ -167,4 +168,17 @@ test_that("convertToJSaveMode", {
 
 test_that("hashCode", {
   expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
+})
+
+test_that("overrideEnvs", {
+  config <- new.env()
+  config[["spark.master"]] <- "foo"
+  config[["config_only"]] <- "ok"
+  param <- new.env()
+  param[["spark.master"]] <- "local"
+  param[["param_only"]] <- "blah"
+  overrideEnvs(config, param)
+  expect_equal(config[["spark.master"]], "local")
+  expect_equal(config[["param_only"]], "blah")
+  expect_equal(config[["config_only"]], "ok")
 })

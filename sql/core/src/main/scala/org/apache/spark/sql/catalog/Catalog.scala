@@ -214,7 +214,7 @@ abstract class Catalog {
   def clearCache(): Unit
 
   /**
-   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Invalidate and refresh all the cached metadata of the given table. For performance reasons,
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
    * call this function to invalidate the cache.
@@ -226,4 +226,11 @@ abstract class Catalog {
    */
   def refreshTable(tableName: String): Unit
 
+  /**
+   * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
+   * contains the given data source path.
+   *
+   * @since 2.0.0
+   */
+  def refreshByPath(path: String): Unit
 }

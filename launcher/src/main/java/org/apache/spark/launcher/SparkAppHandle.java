@@ -46,7 +46,9 @@ public interface SparkAppHandle {
     /** The application finished with a failed status. */
     FAILED(true),
     /** The application was killed. */
-    KILLED(true);
+    KILLED(true),
+    /** The Spark Submit JVM exited with a unknown status. */
+    LOST(true);
 
     private final boolean isFinal;
 

@@ -337,6 +337,7 @@ pyspark_sql = Module(
         "pyspark.sql.group",
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
+        "pyspark.sql.streaming",
         "pyspark.sql.window",
         "pyspark.sql.tests",
     ]

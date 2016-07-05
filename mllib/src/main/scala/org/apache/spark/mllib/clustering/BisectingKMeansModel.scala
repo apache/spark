@@ -32,6 +32,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 
 /**
+ * :: Experimental ::
+ *
  * Clustering model produced by [[BisectingKMeans]].
  * The prediction is done level-by-level from the root node to a leaf node, and at each node among
  * its children the closest to the input point is selected.

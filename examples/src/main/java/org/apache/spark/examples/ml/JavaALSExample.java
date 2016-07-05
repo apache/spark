@@ -87,7 +87,7 @@ public class JavaALSExample {
 
     // $example on$
     JavaRDD<Rating> ratingsRDD = spark
-      .read().text("data/mllib/als/sample_movielens_ratings.txt").javaRDD()
+      .read().textFile("data/mllib/als/sample_movielens_ratings.txt").javaRDD()
       .map(new Function<String, Rating>() {
         public Rating call(String str) {
           return Rating.parseRating(str);

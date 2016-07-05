@@ -44,7 +44,10 @@ abstract class PipelineStage extends Params with Logging {
   /**
    * :: DeveloperApi ::
    *
-   * Derives the output schema from the input schema.
+   * Check transform validity and derive the output schema from the input schema.
+   *
+   * Typical implementation should first conduct verification on schema change and parameter
+   * validity, including complex parameter interaction checks.
    */
   @DeveloperApi
   def transformSchema(schema: StructType): StructType
@@ -82,7 +85,7 @@ abstract class PipelineStage extends Params with Logging {
  * be called on the input dataset to fit a model. Then the model, which is a transformer, will be
  * used to transform the dataset as the input to the next stage. If a stage is a [[Transformer]],
  * its [[Transformer#transform]] method will be called to produce the dataset for the next stage.
- * The fitted model from a [[Pipeline]] is an [[PipelineModel]], which consists of fitted models and
+ * The fitted model from a [[Pipeline]] is a [[PipelineModel]], which consists of fitted models and
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
  */

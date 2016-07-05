@@ -127,6 +127,9 @@ case class ScriptTransformation(
         }
         val mutableRow = new SpecificMutableRow(output.map(_.dataType))
 
+        @transient
+        lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
+
         private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
           if (writerThread.exception.isDefined) {
             throw writerThread.exception.get
@@ -215,13 +218,12 @@ case class ScriptTransformation(
             val raw = outputSerde.deserialize(scriptOutputWritable)
             scriptOutputWritable = null
             val dataList = outputSoi.getStructFieldsDataAsList(raw)
-            val fieldList = outputSoi.getAllStructFieldRefs()
             var i = 0
             while (i < dataList.size()) {
               if (dataList.get(i) == null) {
                 mutableRow.setNullAt(i)
               } else {
-                mutableRow(i) = unwrap(dataList.get(i), fieldList.get(i).getFieldObjectInspector)
+                unwrappers(i)(dataList.get(i), mutableRow, i)
               }
               i += 1
             }

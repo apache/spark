@@ -564,6 +564,18 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val maybeAccumulableTable: Seq[Node] =
         if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
 
+      val aggMetrics =
+        <span class="collapse-aggregated-metrics collapse-table"
+              onClick="collapseTable('collapse-aggregated-metrics','aggregated-metrics')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Aggregated Metrics by Executor</a>
+          </h4>
+        </span>
+        <div class="aggregated-metrics collapsible-table">
+          {executorTable.toNodeSeq}
+        </div>
+
       val content =
         summary ++
         dagViz ++
@@ -572,9 +584,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           // Only show the tasks in the table
           stageData.taskData.values.toSeq.filter(t => taskIdsInPage.contains(t.taskInfo.taskId)),
           currentTime) ++
-        <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
+        <h4>Summary Metrics for <a href="#tasks-section">{numCompleted} Completed Tasks</a></h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
+        aggMetrics ++
         maybeAccumulableTable ++
         <h4 id="tasks-section">Tasks</h4> ++ taskTableHTML ++ jsForScrollingDownToTaskTable
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)

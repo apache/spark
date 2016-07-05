@@ -65,11 +65,11 @@ object OneVsRestExample {
 
     // obtain evaluator.
     val evaluator = new MulticlassClassificationEvaluator()
-      .setMetricName("precision")
+      .setMetricName("accuracy")
 
     // compute the classification error on test data.
-    val precision = evaluator.evaluate(predictions)
-    println(s"Test Error : ${1 - precision}")
+    val accuracy = evaluator.evaluate(predictions)
+    println(s"Test Error : ${1 - accuracy}")
     // $example off$
 
     spark.stop()

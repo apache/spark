@@ -86,7 +86,7 @@ class LogisticRegressionModel @Since("1.3.0") (
   /**
    * Sets the threshold that separates positive predictions from negative predictions
    * in Binary Logistic Regression. An example with prediction score greater than or equal to
-   * this threshold is identified as an positive, and negative otherwise. The default value is 0.5.
+   * this threshold is identified as a positive, and negative otherwise. The default value is 0.5.
    * It is only used for binary classification.
    */
   @Since("1.0.0")
