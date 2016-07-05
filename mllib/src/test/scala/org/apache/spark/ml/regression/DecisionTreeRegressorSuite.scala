@@ -37,11 +37,8 @@ class DecisionTreeRegressorSuite
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
 
-  private var toyData: RDD[LabeledPoint] = _
-
   override def beforeAll() {
     super.beforeAll()
-
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
   }
@@ -100,7 +97,6 @@ class DecisionTreeRegressorSuite
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
     }
-
 
     val varianceData: RDD[LabeledPoint] = TreeTests.varianceData(sc)
     val varianceDF = TreeTests.setMetadata(varianceData, Map.empty[Int, Int], 0)
