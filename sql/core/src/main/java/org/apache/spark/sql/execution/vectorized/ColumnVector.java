@@ -200,9 +200,7 @@ public abstract class ColumnVector implements AutoCloseable {
     public long getLong(int ordinal) { return data.getLong(offset + ordinal); }
 
     @Override
-    public float getFloat(int ordinal) {
-      throw new UnsupportedOperationException();
-    }
+    public float getFloat(int ordinal) { return data.getFloat(offset + ordinal); }
 
     @Override
     public double getDouble(int ordinal) { return data.getDouble(offset + ordinal); }
