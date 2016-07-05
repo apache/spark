@@ -44,14 +44,6 @@ class DecisionTreeRegressorSuite
 
     categoricalDataPointsRDD =
       sc.parallelize(OldDecisionTreeSuite.generateCategoricalDataPoints().map(_.asML))
-    toyData = sc.parallelize(Seq(
-      LabeledPoint(1.0, Vectors.dense(Array(0.0))),
-      LabeledPoint(2.0, Vectors.dense(Array(1.0))),
-      LabeledPoint(3.0, Vectors.dense(Array(2.0))),
-      LabeledPoint(10.0, Vectors.dense(Array(3.0))),
-      LabeledPoint(12.0, Vectors.dense(Array(4.0))),
-      LabeledPoint(14.0, Vectors.dense(Array(5.0))))
-    )
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -109,12 +101,14 @@ class DecisionTreeRegressorSuite
         s"Expected variance $expectedVariance but got $variance.")
     }
 
-    val toyDF = TreeTests.setMetadata(toyData, Map.empty[Int, Int], 0)
+
+    val varianceData: RDD[LabeledPoint] = TreeTests.varianceData(sc)
+    val varianceDF = TreeTests.setMetadata(varianceData, Map.empty[Int, Int], 0)
     dt.setMaxDepth(1)
       .setMaxBins(6)
       .setSeed(0)
-    val transformToyDF = dt.fit(toyDF).transform(toyDF)
-    val calculatedVariances = transformToyDF.select(dt.getVarianceCol).collect().map {
+    val transformVarDF = dt.fit(varianceDF).transform(varianceDF)
+    val calculatedVariances = transformVarDF.select(dt.getVarianceCol).collect().map {
       case Row(variance: Double) => variance
     }
 
