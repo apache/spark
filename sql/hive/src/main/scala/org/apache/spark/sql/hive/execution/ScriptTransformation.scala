@@ -312,7 +312,6 @@ private class ScriptTransformationWriterThread(
           }
         }
       }
-      Utils.tryLogNonFatalError(outputStream.close())
       threwException = false
     } catch {
       case e @ Throwable =>
@@ -323,6 +322,7 @@ private class ScriptTransformationWriterThread(
         throw e
     } finally {
       try {
+        Utils.tryLogNonFatalError(outputStream.close())
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }
