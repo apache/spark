@@ -61,6 +61,11 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .createWithDefault(hiveExecutionVersion)
 
+  val HIVE_EXECUTION_VERSION = SQLConfigBuilder("spark.sql.hive.version")
+    .doc("Version of Hive used internally by Spark SQL.")
+    .stringConf
+    .createWithDefault(hiveExecutionVersion)
+
   val HIVE_METASTORE_JARS = SQLConfigBuilder("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
