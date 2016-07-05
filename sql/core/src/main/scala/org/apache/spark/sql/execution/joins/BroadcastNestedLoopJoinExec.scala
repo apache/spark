@@ -341,7 +341,7 @@ case class BroadcastNestedLoopJoinExec(
   }
 
   protected override def doPrepare(): Unit = {
-    if (!withinBroadcastThreshold && !sqlContext.conf.crossJoinEnabled) {
+    if (!sqlContext.conf.crossJoinEnabled) {
       throw new AnalysisException("Both sides of this join are outside the broadcasting " +
         "threshold and computing it could be prohibitively expensive. To explicitly enable it, " +
         s"please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
