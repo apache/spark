@@ -317,9 +317,9 @@ private class ScriptTransformationWriterThread(
       case t: Throwable =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
-        _exception = e
+        _exception = t
         proc.destroy()
-        throw e
+        throw t
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
