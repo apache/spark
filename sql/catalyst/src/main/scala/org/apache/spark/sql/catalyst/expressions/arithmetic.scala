@@ -231,7 +231,6 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
 
   // Used by doGenCode
   def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String
-  def isZero(eval2: ExprCode): String
 
   /**
    * Special case handling due to division by 0 => null.
@@ -239,7 +238,13 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
-    val isZeroCheck = isZero(eval2)
+    val isZero: String = {
+      if (dataType.isInstanceOf[DecimalType]) {
+        s"${eval2.value}.isZero()"
+      } else {
+        s"${eval2.value} == 0"
+      }
+    }
     val javaType = ctx.javaType(dataType)
     val division = divide(eval1, eval2, javaType)
     if (!left.nullable && !right.nullable) {
@@ -247,7 +252,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        if ($isZeroCheck) {
+        if ($isZero) {
           ${ev.isNull} = true;
         } else {
           ${eval1.code}
@@ -258,7 +263,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        if (${eval2.isNull} || $isZeroCheck) {
+        if (${eval2.isNull} || $isZero) {
           ${ev.isNull} = true;
         } else {
           ${eval1.code}
@@ -291,14 +296,6 @@ case class Divide(left: Expression, right: Expression)
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
   }
-
-  override def isZero(eval2: ExprCode): String = {
-    if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval2.value}.isZero()"
-    } else {
-      s"${eval2.value} == 0"
-    }
-  }
 }
 
 @ExpressionDescription(
@@ -315,10 +312,6 @@ case class IntegerDivide(left: Expression, right: Expression)
   // Used by doGenCode
   override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
     s"($javaType)(${eval1.value} $decimalMethod (${eval2.value}))"
-  }
-
-  override def isZero(eval2: ExprCode): String = {
-    s"${eval2.value} == 0"
   }
 }
 
