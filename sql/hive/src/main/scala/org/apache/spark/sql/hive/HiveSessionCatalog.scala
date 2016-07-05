@@ -90,11 +90,8 @@ private[sql] class HiveSessionCatalog(
   val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    super.refreshTable(name)
     metastoreCatalog.refreshTable(name)
-  }
-
-  override def invalidateTable(name: TableIdentifier): Unit = {
-    metastoreCatalog.invalidateTable(name)
   }
 
   def invalidateCache(): Unit = {
