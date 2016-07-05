@@ -1116,7 +1116,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       // in Analyzer. Thus, we do not need to check if the expressions in conditions are
       // the same as the expressions used in partitioning columns.
       if (partitionAttrs.forall(_.isInstanceOf[Attribute])) {
-        val (candidates, containingNonDeterministic) = splitConjunctivePredicates(condition).span(_.deterministic)
+        val (candidates, containingNonDeterministic) =
+          splitConjunctivePredicates(condition).span(_.deterministic)
 
         val (pushDown, rest) = candidates.partition { cond =>
           cond.references.subsetOf(partitionAttrs)
@@ -1145,7 +1146,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (candidates, containingNonDeterministic) = splitConjunctivePredicates(condition).span(_.deterministic)
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
 
       val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
@@ -1208,7 +1210,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (candidates, containingNonDeterministic) = splitConjunctivePredicates(filter.condition).span(_.deterministic)
+    val (candidates, containingNonDeterministic) = 
+      splitConjunctivePredicates(filter.condition).span(_.deterministic)
 
     val (pushDown, rest) = candidates.partition { cond =>
       cond.references.subsetOf(grandchild.outputSet)
