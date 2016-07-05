@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -107,13 +107,7 @@ case class UserDefinedGenerator(
 case class Stack(children: Seq[Expression])
     extends Expression with Generator with CodegenFallback {
 
-  private lazy val numRows = try {
-    children.head.eval().asInstanceOf[Int]
-  } catch {
-    case _: ClassCastException =>
-      throw new AnalysisException("The number of rows must be a positive constant integer.")
-  }
-
+  private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = ((children.length - 1) + numRows - 1) / numRows
 
   override def checkInputDataTypes(): TypeCheckResult = {
