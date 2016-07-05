@@ -1210,7 +1210,7 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (candidates, containingNonDeterministic) = 
+    val (candidates, containingNonDeterministic) =
       splitConjunctivePredicates(filter.condition).span(_.deterministic)
 
     val (pushDown, rest) = candidates.partition { cond =>
