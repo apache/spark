@@ -61,9 +61,10 @@ private[spark] abstract class ConfigEntry[T] (
 
   protected def readAndExpand(
       conf: JMap[String, String],
-      getenv: String => String): Option[String] = {
+      getenv: String => String,
+      usedRefs: Set[String] = Set()): Option[String] = {
     Option(conf.get(key)).map { value =>
-      if (expandVars) expand(value, conf, getenv) else value
+      if (expandVars) expand(value, conf, getenv, usedRefs) else value
     }
   }
 
@@ -151,7 +152,11 @@ private object ConfigEntry {
   /**
    * Expand the `value` according to the rules explained in `ConfigBuilder.withVariableExpansion`.
    */
-  def expand(value: String, conf: JMap[String, String], getenv: String => String): String = {
+  def expand(
+      value: String,
+      conf: JMap[String, String],
+      getenv: String => String,
+      usedRefs: Set[String]): String = {
     val matcher = REF_RE.matcher(value)
     val result = new StringBuilder()
     var end = 0
@@ -165,7 +170,11 @@ private object ConfigEntry {
       val replacement = prefix match {
         case "spark" =>
           val key = s"spark.$name"
-          Option(conf.get(key)).orElse(defaultValueString(key))
+          require(!usedRefs.contains(key), "Circular reference in $value: $key")
+          Option(findEntry(key))
+            .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + key))
+            .orElse(Option(conf.get(key)))
+            .orElse(defaultValueString(key))
         case "sys" => sys.props.get(name)
         case "env" => Option(getenv(name))
         case _ => throw new IllegalArgumentException(s"Invalid prefix: $prefix")

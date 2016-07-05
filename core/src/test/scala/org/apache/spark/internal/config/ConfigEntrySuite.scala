@@ -167,7 +167,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     def getenv(key: String): String = env.getOrElse(key, null)
 
-    def expand(value: String): String = ConfigEntry.expand(value, conf.asJava, getenv)
+    def expand(value: String): String = ConfigEntry.expand(value, conf.asJava, getenv, Set())
 
     assert(expand("${spark.value1}") === "value1")
     assert(expand("spark.value1 is: ${spark.value1}") === "spark.value1 is: value1")
@@ -201,6 +201,26 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(expand("${" + fallbackConf.key + "}") === "84")
 
     assert(expand("${spark.value1") === "${spark.value1")
+
+    // Chained references.
+    val conf1 = ConfigBuilder(testKey("conf1"))
+      .withVariableExpansion
+      .stringConf
+      .createWithDefault("value1")
+    val conf2 = ConfigBuilder(testKey("conf2"))
+      .withVariableExpansion
+      .stringConf
+      .createWithDefault("value2")
+
+    conf(conf2.key) = "${" + conf1.key + "}"
+    assert(expand("${" + conf2.key + "}") === conf1.defaultValueString)
+
+    // Circular references.
+    conf(conf1.key) = "${" + conf2.key + "}"
+    val e = intercept[IllegalArgumentException] {
+      expand("${" + conf2.key + "}")
+    }
+    assert(e.getMessage().contains("Circular"))
   }
 
   test("path conf") {
