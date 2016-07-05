@@ -314,7 +314,7 @@ private class ScriptTransformationWriterThread(
       }
       threwException = false
     } catch {
-      case e @ Throwable =>
+      case NonFatal(e) =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
         _exception = e
