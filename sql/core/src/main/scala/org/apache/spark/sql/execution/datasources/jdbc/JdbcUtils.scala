@@ -166,8 +166,7 @@ object JdbcUtils extends Logging {
     val conn = getConnection()
     var committed = false
     val supportsTransactions = try {
-      conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
-      conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
+      conn.getMetaData.supportsTransactions()
     } catch {
       case NonFatal(e) =>
         logWarning("Exception while detecting transaction support", e)
@@ -177,6 +176,9 @@ object JdbcUtils extends Logging {
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
+        // Allow even dirty reads to avoid locking; consistent with how, say, file-based
+        // outputs would be readable while writing
+        conn.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
       try {
