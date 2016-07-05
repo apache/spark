@@ -401,20 +401,18 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   usage = """_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into
     key/value pairs using delimiters.
     Default delimiters are ',' for pairDelim and '=' for keyValueDelim.""")
-case class StringToMap(child: Expression, pairDelim: Expression, keyValueDelim: Expression)
+case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes {
 
   def this(child: Expression) = {
     this(child, Literal(","), Literal("="))
   }
 
-  override def children: Seq[Expression] = Seq(child, pairDelim, keyValueDelim)
+  override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
 
   override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
-
-  override def foldable: Boolean = child.foldable
 
   override def nullSafeEval(str: Any, delim1: Any, delim2: Any): Any = {
     val array = str.asInstanceOf[UTF8String]
