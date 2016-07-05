@@ -391,6 +391,7 @@ private[spark] class Client(
     // and add them as local resources to the application master.
     val fs = destDir.getFileSystem(hadoopConf)
     hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(destDir))
+    hdfsTokenProvider(sparkConf).setTokenRenewer(null)
     configurableTokenManager(sparkConf).obtainTokens(hadoopConf, credentials)
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal

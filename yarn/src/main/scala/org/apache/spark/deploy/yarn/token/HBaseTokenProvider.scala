@@ -58,10 +58,16 @@ private[yarn] class HBaseTokenProvider extends ServiceTokenProvider with Logging
   }
 
   private def hbaseConf(conf: Configuration): Configuration = {
-    val mirror = universe.runtimeMirror(getClass.getClassLoader)
-    val confCreate = mirror.classLoader.
-      loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
-      getMethod("create", classOf[Configuration])
-    confCreate.invoke(null, conf).asInstanceOf[Configuration]
+    try {
+      val mirror = universe.runtimeMirror(getClass.getClassLoader)
+      val confCreate = mirror.classLoader.
+        loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
+        getMethod("create", classOf[Configuration])
+      confCreate.invoke(null, conf).asInstanceOf[Configuration]
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Fail to invoke HBaseConfiguration", e)
+        conf
+    }
   }
 }

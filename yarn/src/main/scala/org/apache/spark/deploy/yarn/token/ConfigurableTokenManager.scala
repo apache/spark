@@ -17,22 +17,34 @@
 
 package org.apache.spark.deploy.yarn.token
 
-import java.io.{ByteArrayInputStream, DataInputStream}
-
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.Token
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
+/**
+ * A [[ConfigurableTokenManager]] to manage all the token providers register in this class. Also
+ * it provides other modules the functionality to obtain tokens, get token renweal interval and
+ * calculate the time length till next renewal.
+ *
+ * By default ConfigurableTokenManager has 3 built-in token providers, HDFSTokenProvider,
+ * HiveTokenProvider and HBaseTokenProvider, and this 3 token providers can also be controlled
+ * by configuration spark.yarn.security.tokens.{service}.enabled, if it is set to false, this
+ * provider will not be loaded.
+ *
+ * For other token providers which need to be loaded in should:
+ * 1. Implement [[ServiceTokenProvider]] and [[ServiceTokenRenewable]] if token renewal is
+ * required for this service.
+ * 2. set spark.yarn.security.tokens.{service}.enabled to true
+ * 3. Specify the class name through spark.yarn.security.tokens.{service}.class
+ *
+ */
 private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf) extends Logging {
   private val tokenProviderEnabledConfig = "spark\\.yarn\\.security\\.tokens\\.(.+)\\.enabled".r
   private val tokenProviderClsConfig = "spark.yarn.security.tokens.%s.class"
@@ -54,10 +66,16 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
   private var _delegationTokenUpdater: ExecutorDelegationTokenUpdater = null
 
   def initialize(): Unit = {
-    sparkConf.getAll.filter { case (key, value) =>
+    // Copy SparkConf and add default enabled token provider configurations to SparkConf.
+    val clonedConf = sparkConf.clone
+    defaultTokenProviders.keys.foreach { key =>
+      clonedConf.setIfMissing(s"spark.yarn.security.tokens.$key.enabled", "true")
+    }
+
+    // Instantialize all the service token providers according to the configurations.
+    clonedConf.getAll.filter { case (key, value) =>
       if (tokenProviderEnabledConfig.findPrefixOf(key).isDefined) {
-        val tokenProviderEnabledConfig(service) = key
-        value.toBoolean || defaultTokenProviders.get(service).map(_._1).getOrElse(false)
+        value.toBoolean
       } else {
         false
       }
@@ -84,23 +102,6 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
     tokenProviders.get(service)
   }
 
-  def obtainTokensFromService(
-      service: String,
-      conf: Configuration,
-      creds: Credentials): Array[Token[_]] = {
-    val tokenBuf = mutable.ArrayBuffer[Token[_]]()
-    getServiceTokenProvider(service).foreach { provider =>
-      if (provider.isTokenRequired(conf)) {
-        tokenBuf ++= provider.obtainTokensFromService(sparkConf, conf, creds)
-      } else {
-        logWarning(s"Service $service does not require a token. Check your configuration to see " +
-          "if security is disabled or not.")
-      }
-    }
-
-    tokenBuf.toArray
-  }
-
   def obtainTokens(conf: Configuration, creds: Credentials): Array[Token[_]] = {
     val tokenBuf = mutable.ArrayBuffer[Token[_]]()
     tokenProviders.values.foreach { provider =>
@@ -115,16 +116,6 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
     tokenBuf.toArray
   }
 
-  def getTokenRenewalIntervalFromService(service: String, conf: Configuration): Long = {
-    getServiceTokenProvider(service).map { provider =>
-      if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
-        provider.asInstanceOf[ServiceTokenRenewable].getTokenRenewalInterval(sparkConf, conf)
-      } else {
-        Long.MaxValue
-      }
-    }.getOrElse(Long.MaxValue)
-  }
-
   def getSmallestTokenRenewalInterval(conf: Configuration): Long = {
     tokenProviders.values.map { provider =>
       if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
@@ -133,21 +124,6 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
         Long.MaxValue
       }
     }.min
-  }
-
-  def getTimeFromNowToRenewalForService(
-      service: String,
-      conf: Configuration,
-      fractional: Double,
-      credentials: Credentials): Long = {
-    getServiceTokenProvider(service).map { provider =>
-      if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
-        provider.asInstanceOf[ServiceTokenRenewable].getTimeFromNowToRenewal(
-          sparkConf, fractional, credentials)
-      } else {
-        Long.MaxValue
-      }
-    }.getOrElse(Long.MaxValue)
   }
 
   def getNearestTimeFromNowToRenewal(
@@ -214,6 +190,7 @@ private[yarn] object ConfigurableTokenManager {
    */
   def hdfsTokenProvider(conf: SparkConf): HDFSTokenProvider = {
     configurableTokenManager(conf).getServiceTokenProvider("hdfs")
-      .asInstanceOf[HDFSTokenProvider]
+      .map(_.asInstanceOf[HDFSTokenProvider])
+      .getOrElse(throw new SparkException("Failed to load HDFS token provider"))
   }
 }

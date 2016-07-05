@@ -173,6 +173,7 @@ private[yarn] class AMDelegationTokenRenewer(
       // Get a copy of the credentials
       override def run(): Void = {
         hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(dst))
+        hdfsTokenProvider(sparkConf).setTokenRenewer(null)
         configurableTokenManager(sparkConf).obtainTokens(freshHadoopConf, tempCreds)
         null
       }

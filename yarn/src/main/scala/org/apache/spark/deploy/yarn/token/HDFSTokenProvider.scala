@@ -99,7 +99,7 @@ private[yarn] class HDFSTokenProvider
   }
 
   def setTokenRenewer(tokenRenewer: String): Unit = {
-    this.tokenRenewer = Some(tokenRenewer)
+    this.tokenRenewer = Option(tokenRenewer)
   }
 
   private def getTokenRenewer(conf: Configuration): String = {
