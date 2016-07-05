@@ -469,6 +469,10 @@ setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect")
 #' @export
 setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 
+#' @rdname gapplyCollect
+#' @export
+setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
@@ -1049,6 +1053,10 @@ setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
 #' @rdname pmod
 #' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
+
+#' @rdname posexplode
+#' @export
+setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
 
 #' @rdname quarter
 #' @export

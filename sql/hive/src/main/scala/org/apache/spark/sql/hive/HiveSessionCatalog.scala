@@ -30,12 +30,13 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
 
 
@@ -89,11 +90,8 @@ private[sql] class HiveSessionCatalog(
   val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    super.refreshTable(name)
     metastoreCatalog.refreshTable(name)
-  }
-
-  override def invalidateTable(name: TableIdentifier): Unit = {
-    metastoreCatalog.invalidateTable(name)
   }
 
   def invalidateCache(): Unit = {
@@ -163,6 +161,19 @@ private[sql] class HiveSessionCatalog(
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    try {
+      lookupFunction0(name, children)
+    } catch {
+      case NonFatal(_) =>
+        // SPARK-16228 ExternalCatalog may recognize `double`-type only.
+        val newChildren = children.map { child =>
+          if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
+        }
+        lookupFunction0(name, newChildren)
+    }
+  }
+
+  private def lookupFunction0(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
     // if (super.functionExists(name)) {
     //   super.lookupFunction(name, children)
@@ -224,13 +235,9 @@ private[sql] class HiveSessionCatalog(
   // parse_url_tuple, posexplode, reflect2,
   // str_to_map, windowingtablefunction.
   private val hiveFunctions = Seq(
-    "elt", "hash", "java_method", "histogram_numeric",
-    "map_keys", "map_values",
+    "hash", "java_method", "histogram_numeric",
     "parse_url", "percentile", "percentile_approx", "reflect", "sentences", "stack", "str_to_map",
-    "xpath", "xpath_boolean", "xpath_double", "xpath_float", "xpath_int", "xpath_long",
-    "xpath_number", "xpath_short", "xpath_string",
-
-    // table generating function
-    "inline", "posexplode"
+    "xpath", "xpath_double", "xpath_float", "xpath_int", "xpath_long",
+    "xpath_number", "xpath_short", "xpath_string"
   )
 }

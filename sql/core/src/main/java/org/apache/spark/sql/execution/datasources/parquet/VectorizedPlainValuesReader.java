@@ -170,7 +170,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final Binary readBinary(int len) {
-    Binary result = Binary.fromByteArray(buffer, offset - Platform.BYTE_ARRAY_OFFSET, len);
+    Binary result = Binary.fromConstantByteArray(buffer, offset - Platform.BYTE_ARRAY_OFFSET, len);
     offset += len;
     return result;
   }

@@ -1065,7 +1065,7 @@ test_that("column functions", {
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
-  c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
+  c7 <- mean(c) + min(c) + month(c) + negate(c) + posexplode(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c) + monotonically_increasing_id()
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
@@ -1725,6 +1725,7 @@ test_that("mutate(), transform(), rename() and names()", {
 })
 
 test_that("read/write ORC files", {
+  setHiveContext(sc)
   df <- read.df(jsonPath, "json")
 
   # Test write.df and read.df
@@ -1741,6 +1742,7 @@ test_that("read/write ORC files", {
   expect_equal(count(orcDF), count(df))
 
   unlink(orcPath2)
+  unsetHiveContext()
 })
 
 test_that("read/write Parquet files", {
@@ -2257,21 +2259,24 @@ test_that("repartition by columns on DataFrame", {
   expect_equal(nrow(df1), 2)
 })
 
-test_that("gapply() on a DataFrame", {
+test_that("gapply() and gapplyCollect() on a DataFrame", {
   df <- createDataFrame (
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
-  df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
+  df1 <- gapply(df, "a", function(key, x) { x }, schema(df))
   actual <- collect(df1)
   expect_identical(actual, expected)
+
+  df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
+  expect_identical(df1Collect, expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
   schema <- structType(structField("a", "integer"), structField("e", "boolean"))
   df2 <- gapply(
     df,
-    list(df$"a", df$"c"),
+    c(df$"a", df$"c"),
     function(key, x) {
       y <- data.frame(key[1], sum(x$b) > 2)
     },
@@ -2280,13 +2285,24 @@ test_that("gapply() on a DataFrame", {
   expected <- c(TRUE, TRUE)
   expect_identical(actual, expected)
 
+  df2Collect <- gapplyCollect(
+    df,
+    c(df$"a", df$"c"),
+    function(key, x) {
+      y <- data.frame(key[1], sum(x$b) > 2)
+      colnames(y) <- c("a", "e")
+      y
+    })
+    actual <- df2Collect$e
+    expect_identical(actual, expected)
+
   # Computes the arithmetic mean of the second column by grouping
   # on the first and third columns. Output the groupping value and the average.
   schema <-  structType(structField("a", "integer"), structField("c", "string"),
                structField("avg", "double"))
   df3 <- gapply(
     df,
-    list("a", "c"),
+    c("a", "c"),
     function(key, x) {
       y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
     },
@@ -2301,11 +2317,22 @@ test_that("gapply() on a DataFrame", {
   rownames(expected) <- NULL
   expect_identical(actual, expected)
 
+  df3Collect <- gapplyCollect(
+    df,
+    c("a", "c"),
+    function(key, x) {
+      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+      colnames(y) <- c("a", "c", "avg")
+      y
+    })
+  actual <- df3Collect[order(df3Collect$a), ]
+  expect_identical(actual$avg, expected$avg)
+
   irisDF <- suppressWarnings(createDataFrame (iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
   # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
   df4 <- gapply(
-    cols = list("Sepal_Length"),
+    cols = "Sepal_Length",
     irisDF,
     function(key, x) {
       y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)

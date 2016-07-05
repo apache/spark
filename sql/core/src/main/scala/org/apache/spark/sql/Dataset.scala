@@ -62,7 +62,7 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sparkSession.sessionState.executePlan(logicalPlan)
     qe.assertAnalyzed()
-    new Dataset[Row](sparkSession, logicalPlan, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
 }
 
@@ -1997,11 +1997,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def filter(func: T => Boolean): Dataset[T] = {
-    val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
-    val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
-    val condition = Invoke(function, "apply", BooleanType, deserializer :: Nil)
-    val filter = Filter(condition, logicalPlan)
-    withTypedPlan(filter)
+    withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
   /**
@@ -2014,11 +2010,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def filter(func: FilterFunction[T]): Dataset[T] = {
-    val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
-    val function = Literal.create(func, ObjectType(classOf[FilterFunction[T]]))
-    val condition = Invoke(function, "call", BooleanType, deserializer :: Nil)
-    val filter = Filter(condition, logicalPlan)
-    withTypedPlan(filter)
+    withTypedPlan(TypedFilter(func, logicalPlan))
   }
 
   /**
