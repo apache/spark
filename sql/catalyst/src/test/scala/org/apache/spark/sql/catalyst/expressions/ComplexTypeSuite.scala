@@ -248,29 +248,30 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Sentences") {
+    val correct_answer = Seq(
+      Seq("Hi", "there").map(UTF8String.fromString),
+      Seq("The", "price", "was").map(UTF8String.fromString),
+      Seq("But", "not", "now").map(UTF8String.fromString))
+
     // Hive compatible test-cases.
     checkEvaluation(
       Sentences("Hi there! The price was $1,234.56.... But, not now."),
-      Seq(
-        Seq("Hi", "there").map(UTF8String.fromString),
-        Seq("The", "price", "was").map(UTF8String.fromString),
-        Seq("But", "not", "now").map(UTF8String.fromString)),
+      correct_answer,
       EmptyRow)
 
     checkEvaluation(
       Sentences("Hi there! The price was $1,234.56.... But, not now.", "en"),
-      Seq(
-        Seq("Hi", "there").map(UTF8String.fromString),
-        Seq("The", "price", "was").map(UTF8String.fromString),
-        Seq("But", "not", "now").map(UTF8String.fromString)),
+      correct_answer,
       EmptyRow)
 
     checkEvaluation(
       Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
-      Seq(
-        Seq("Hi", "there").map(UTF8String.fromString),
-        Seq("The", "price", "was").map(UTF8String.fromString),
-        Seq("But", "not", "now").map(UTF8String.fromString)),
+      correct_answer,
+      EmptyRow)
+
+    checkEvaluation(
+      Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXXXX", "YYYYY"),
+      correct_answer,
       EmptyRow)
   }
 }

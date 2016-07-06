@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.text.BreakIterator
+import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import scala.collection.mutable.ArrayBuffer
@@ -221,12 +223,40 @@ case class Sentences(
   override def children: Seq[Expression] = str :: language :: country :: Nil
 
   override def nullSafeEval(string: Any, language: Any, country: Any): Any = {
-    val sentences = string.asInstanceOf[UTF8String].sentences(
-      language.asInstanceOf[UTF8String], country.asInstanceOf[UTF8String])
+    val sentences = getSentences(string.asInstanceOf[UTF8String].toString,
+      language.asInstanceOf[UTF8String].toString, country.asInstanceOf[UTF8String].toString)
     val result = ArrayBuffer.empty[GenericArrayData]
-    for (i <- 0 until sentences.size())
-      result += new GenericArrayData(sentences.get(i).toArray)
+    sentences.foreach(sentence => result += new GenericArrayData(sentence.toArray))
     new GenericArrayData(result.toArray)
+  }
+
+  private def getSentences(sentences: String, language: String, country: String) = {
+    val locale = try {
+      new Locale(language, country)
+    } finally {
+      Locale.getDefault
+    }
+
+    val bi = BreakIterator.getSentenceInstance(locale)
+    bi.setText(sentences)
+    var idx = 0
+    val result = new ArrayBuffer[ArrayBuffer[UTF8String]]
+    while (bi.next != BreakIterator.DONE) {
+      val sentence = sentences.substring(idx, bi.current)
+      idx = bi.current
+
+      val wi = BreakIterator.getWordInstance(locale)
+      var widx = 0
+      wi.setText(sentence)
+      val words = new ArrayBuffer[UTF8String]
+      while (wi.next != BreakIterator.DONE) {
+        val word = sentence.substring(widx, wi.current)
+        widx = wi.current
+        if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
+      }
+      result += words
+    }
+    result
   }
 }
 

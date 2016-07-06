@@ -250,17 +250,6 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("ihhh"))
   }
 
-  test("string sentences function") {
-    val df = Seq(("Hi there! Good morning.", "en", "US")).toDF("str", "language", "country")
-
-    checkAnswer(df.selectExpr("sentences(str)"),
-      Row(Seq(Seq("Hi", "there"), Seq("Good", "morning"))))
-    checkAnswer(df.selectExpr("sentences(str, language)"),
-      Row(Seq(Seq("Hi", "there"), Seq("Good", "morning"))))
-    checkAnswer(df.selectExpr("sentences(str, language, country)"),
-      Row(Seq(Seq("Hi", "there"), Seq("Good", "morning"))))
-  }
-
   test("string space function") {
     val df = Seq((2, 3)).toDF("a", "b")
 
