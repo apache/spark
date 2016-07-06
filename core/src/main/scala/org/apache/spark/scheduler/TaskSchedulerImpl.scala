@@ -34,7 +34,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util._
+import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -302,10 +302,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   }
 
   private[scheduler] def areAllExecutorsBlacklisted(): Boolean = {
-    val nodeBlacklist = blacklistTracker.nodeBlacklist()
-    val execBlacklist = blacklistTracker.executorBlacklist()
     executorsByHost.foreach { case (host, execs) =>
-      if (!nodeBlacklist.contains(host) && execs.exists(!execBlacklist.contains(_))) {
+      if (!blacklistTracker.isNodeBlacklisted(host) &&
+          execs.exists(!blacklistTracker.isExecutorBlacklisted(_))) {
         return false
       }
     }
@@ -338,10 +337,9 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
 
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
-    val nodeBlacklist = blacklistTracker.nodeBlacklist()
-    val execBlacklist = blacklistTracker.executorBlacklist()
     val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
-      !nodeBlacklist.contains(offer.host)  && !execBlacklist.contains(offer.executorId)
+      !blacklistTracker.isNodeBlacklisted(offer.host)  &&
+        !blacklistTracker.isExecutorBlacklisted(offer.executorId)
     }.toIndexedSeq
     if (offers.nonEmpty && filteredOffers.isEmpty) {
       // Its possible that all the executors are now blacklisted, though we haven't aborted stages

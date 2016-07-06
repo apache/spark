@@ -54,6 +54,25 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     super.afterEach()
   }
 
+  val allOptions = (('A' to 'Z').map("host" + _) ++ (1 to 100).map{_.toString}).toSet
+
+  /**
+   * Its easier to write our tests as if we could directly look at the sets of nodes in the
+   * blacklist.  However the api doesn't expose a set (for thread-safety), so this is a simple
+   * way to test something similar, since we know the universe of values that might appear in these
+   * sets.
+   */
+  def assertEquivalentToSet(f: String => Boolean, expected: Set[String]): Unit = {
+    allOptions.foreach { opt =>
+      val actual = f(opt)
+      if (expected.contains(opt)) {
+        assert(actual)
+      } else {
+        assert(!actual)
+      }
+    }
+  }
+
   test("Blacklisting individual tasks") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.ui.enabled", "false")
@@ -76,7 +95,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val exp = (executor == "1" && stage == stage1 && partition == 1)
       assert(blacklistTracker.isExecutorBlacklisted(executor, stage, partition) === exp)
     }
-    assert(blacklistTracker.nodeBlacklist() === Set())
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
     assert(blacklistTracker.nodeBlacklistForStage(stage1) === Set())
     assert(blacklistTracker.nodeBlacklistForStage(stage2) === Set())
 
@@ -107,19 +126,19 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklistTracker.nodeBlacklistForStage(stage1) === Set("hostA"))
     assert(blacklistTracker.nodeBlacklistForStage(stage2) === Set())
     // we dont' blacklist the nodes or executors till the stages complete
-    assert(blacklistTracker.nodeBlacklist() === Set())
-    assert(blacklistTracker.executorBlacklist() === Set())
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
+    assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set())
 
     // when the stage completes successfully, now there is sufficient evidence we've got
     // bad executors and node
     blacklistTracker.taskSetSucceeded(stage1, scheduler)
-    assert(blacklistTracker.nodeBlacklist() === Set("hostA"))
-    assert(blacklistTracker.executorBlacklist() === Set("1", "2"))
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set("hostA"))
+    assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set("1", "2"))
 
     clock.advance(blacklistTracker.EXECUTOR_RECOVERY_MILLIS + 1)
     blacklistTracker.expireExecutorsInBlackList()
-    assert(blacklistTracker.nodeBlacklist() === Set())
-    assert(blacklistTracker.executorBlacklist() === Set())
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
+    assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set())
   }
 
   def trackerFixture: (BlacklistTrackerImpl, TaskSchedulerImpl) = {
@@ -150,7 +169,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         new TaskInfo(stage, 0, 1, 0, "2", "hostA", TaskLocality.ANY, false))
       tracker.taskSetSucceeded(stage, scheduler)
     }
-    assert(tracker.executorBlacklist() === Set("1"))
+    assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1"))
   }
 
   // if an executor has many task failures, but the task set ends up failing, don't count it
@@ -163,7 +182,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false))
       tracker.taskSetFailed(stage)
     }
-    assert(tracker.executorBlacklist() === Set())
+    assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
   }
 
   Seq(true, false).foreach { succeedTaskSet =>
@@ -177,17 +196,17 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
           clock.getTimeMillis(), "1", "hostA", TaskLocality.ANY, false))
       }
       assert(tracker.isExecutorBlacklistedForStage(stageId, "1"))
-      assert(tracker.executorBlacklist() === Set())
+      assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
       if (succeedTaskSet) {
         // the task set succeeded elsewhere, so we count those failures against our executor,
         // and blacklist it across stages
         tracker.taskSetSucceeded(stageId, scheduler)
-        assert(tracker.executorBlacklist() === Set("1"))
+        assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1"))
       } else {
         // the task set failed, so we don't count these failures against the executor for other
         // stages
         tracker.taskSetFailed(stageId)
-        assert(tracker.executorBlacklist() === Set())
+        assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
       }
     }
   }
@@ -199,19 +218,19 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         "1", "hostA", TaskLocality.ANY, false))
     }
     tracker.taskSetSucceeded(0, scheduler)
-    assert(tracker.executorBlacklist() === Set("1"))
+    assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1"))
 
     clock.advance(tracker.EXECUTOR_RECOVERY_MILLIS + 1)
     // TODO might want to change this to avoid the need for expiry thread, if that eliminates the
     // need for the locks.  In which case, expiry would happen automatically.
     tracker.expireExecutorsInBlackList()
-    assert(tracker.executorBlacklist() === Set())
+    assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
     // TODO after recovery, count is reset to 0
     // fail one more task, but executor isn't put back into blacklist since count reset to 0
     tracker.taskFailed(1, 0, new TaskInfo(5, 0, 0, clock.getTimeMillis(),
       "1", "hostA", TaskLocality.ANY, false))
     tracker.taskSetSucceeded(1, scheduler)
-    assert(tracker.executorBlacklist() === Set())
+    assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
   }
 
   test("memory cleaned up as tasksets complete") {

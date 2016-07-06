@@ -47,9 +47,14 @@ private[spark] trait BlacklistTracker {
 
   def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean
 
-  def executorBlacklist(): Set[String]
-
+  /**
+   * expensive, but thread-safe, when you need the full blacklist
+   */
   def nodeBlacklist(): Set[String]
+
+  def isNodeBlacklisted(node: String): Boolean
+
+  def isExecutorBlacklisted(executorId: String): Boolean
 
   def nodeBlacklistForStage(stageId: Int): Set[String]
 
@@ -87,7 +92,8 @@ private[spark] trait BlacklistTracker {
  * this.  Most access will occur from within TaskSchedulerImpl, and will already have a lock on
  * the taskScheduler.  However, it will also be accessed by the YarnSchedulerBackend, to determine
  * the set of currently blacklisted nodes, and by an internal thread to periodically remove
- * nodes and executors from the blacklist.
+ * nodes and executors from the blacklist.  This also means we can't expose any of the internal
+ * datastructures at all (eg., no exposing someInternalMap.keySet).
  */
 private[spark] class BlacklistTrackerImpl(
     conf: SparkConf,
@@ -169,7 +175,6 @@ private[spark] class BlacklistTrackerImpl(
           val node = scheduler.getHostForExecutor(exec)
           val execs = scheduler.getExecutorsAliveOnHost(node).getOrElse(Set())
           val blacklistedExecs = execs.filter(executorIdToBlacklistTime.contains(_))
-          logInfo(s"On node $node, blacklisted $blacklistedExecs")
           if (blacklistedExecs.size >= MAX_FAILED_EXEC_PER_NODE) {
             logInfo(s"Blacklisting node $node because it has ${blacklistedExecs.size} executors " +
               s"blacklisted: ${blacklistedExecs}")
@@ -209,8 +214,8 @@ private[spark] class BlacklistTrackerImpl(
       executorIdToBlacklistTime.contains(executorId)
   }
 
-  override def executorBlacklist(): Set[String] = synchronized {
-    executorIdToBlacklistTime.keySet
+  override def isExecutorBlacklisted(executorId: String): Boolean = synchronized {
+    executorIdToBlacklistTime.contains(executorId)
   }
 
   override def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
@@ -218,14 +223,19 @@ private[spark] class BlacklistTrackerImpl(
   }
 
   override def nodeBlacklist(): Set[String] = synchronized {
-    nodeIdToBlacklistTime.keySet
+    // copy so that its safe to use from outside
+    Set() ++ nodeIdToBlacklistTime.keySet
+  }
+
+  override def isNodeBlacklisted(node: String): Boolean = synchronized {
+    nodeIdToBlacklistTime.contains(node)
   }
 
   override def taskSucceeded(
       stageId: Int,
       partition: Int,
       info: TaskInfo): Unit = synchronized {
-    // no-op intentionally, included jsut for symmetry.  success to failure ratio is irrelevant, we
+    // no-op intentionally, included just for symmetry.  success to failure ratio is irrelevant, we
     // just blacklist based on failures.  Furthermore, one success does not override previous
     // failures, since the bad node / executor may not fail *every* time
   }
@@ -251,12 +261,11 @@ private[spark] class BlacklistTrackerImpl(
   }
 
   /**
-   * Return true if this executor is blacklisted for the given task.  Note that this does *not*
+   * Return true if this executor is blacklisted for the given task.  This does *not*
    * need to return true if the executor is blacklisted for the entire stage, or blacklisted
    * altogether.
    *
-   * Note that this method is called by multiple threads, though always with a lock on
-   * TaskSchedulerImpl.
+   * This method is called by multiple threads, though always with a lock on TaskSchedulerImpl.
    */
   override def isExecutorBlacklisted(
       executorId: String,
@@ -347,12 +356,16 @@ private[spark] object NoopBlacklistTracker extends BlacklistTracker {
     false
   }
 
-  override def executorBlacklist(): Set[String] = {
-    Set()
+  override def isExecutorBlacklisted(executorId: String): Boolean = {
+    false
   }
 
   override def nodeBlacklist(): Set[String] = {
     Set()
+  }
+
+  override def isNodeBlacklisted(node: String): Boolean = {
+    false
   }
 
   override def nodeBlacklistForStage(stageId: Int): Set[String] = {

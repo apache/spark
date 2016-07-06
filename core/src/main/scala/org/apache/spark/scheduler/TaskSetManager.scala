@@ -623,10 +623,9 @@ private[spark] class TaskSetManager(
       pendingTask.foreach { taskId =>
         val stage = taskSet.stageId
         val part = tasks(taskId).partitionId
-        val nodeBlacklist = blacklistTracker.nodeBlacklist()
         val nodeBlacklistForStage = blacklistTracker.nodeBlacklistForStage(stage)
         executorsByHost.foreach { case (host, execs) =>
-          if (!nodeBlacklist.contains(host) &&
+          if (!blacklistTracker.isNodeBlacklisted(host) &&
               !nodeBlacklistForStage.contains(host)) {
             execs.foreach { exec =>
               if (
