@@ -47,7 +47,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
-  with HasStandardization with HasWeightCol with HasThreshold {
+  with HasStandardization with HasWeightCol with HasThreshold with Logging {
 
   /**
    * Set threshold in binary classification, in range [0, 1].
@@ -92,20 +92,19 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   }
 
   /**
+   * This functionality is currently disabled. It will be re-enabled once multi-class logistic
+   * regression is included in ML.
+   *
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
    * predicting each class. Array must have length equal to the number of classes, with values >= 0.
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class' threshold.
    *
-   * Note: When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
-   *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
-   *       equivalent.
-   *
    * @group setParam
    */
   def setThresholds(value: Array[Double]): this.type = {
-    if (isSet(threshold)) clear(threshold)
-    set(thresholds, value)
+    logWarning("Ignoring setThresholds(), use setThreshold() for binary Logistic Regression.")
+    this
   }
 
   /**
