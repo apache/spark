@@ -544,7 +544,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("Do not push down filters incorrectly when inner name and outer name are the same") {
+  test("SPARK-16371 Do not push down filters when inner name and outer name are the same") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(Tuple1(i)))) { implicit df =>
       // Here the schema becomes as below:
       //
