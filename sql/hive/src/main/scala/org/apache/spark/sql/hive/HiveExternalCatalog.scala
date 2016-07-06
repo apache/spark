@@ -179,7 +179,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
 
       try {
         client.createTable(
-          tableDefinition.withNewStorage(locationUri = Some(tempPath.toString)),
+          tableDefinition.copy(storage = tableDefinition.storage.copy(
+            locationUri = Some(tempPath.toString)
+          )),
           ignoreIfExists)
       } finally {
         FileSystem.get(tempPath.toUri, hadoopConf).delete(tempPath, true)

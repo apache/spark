@@ -49,9 +49,9 @@ case class CreateHiveTableAsSelectLogicalPlan(
   override lazy val resolved: Boolean =
     tableDesc.identifier.database.isDefined &&
       tableDesc.schema.nonEmpty &&
-      tableDesc.storage.serde.isDefined &&
-      tableDesc.storage.inputFormat.isDefined &&
-      tableDesc.storage.outputFormat.isDefined &&
+      tableDesc.storage.getSerde.isDefined &&
+      tableDesc.storage.getInputFormat.isDefined &&
+      tableDesc.storage.getOutputFormat.isDefined &&
       childrenResolved
 }
 
@@ -80,11 +80,13 @@ case class CreateTableLikeCommand(
         s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
     }
 
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
+    val sourceTableMeta = catalog.getTableMetadata(sourceTable)
+    val tableToCreate = sourceTableMeta.copy(
       identifier = targetTable,
       tableType = CatalogTableType.MANAGED,
       createTime = System.currentTimeMillis,
-      lastAccessTime = -1).withNewStorage(locationUri = None)
+      lastAccessTime = -1,
+      storage = sourceTableMeta.storage.copy(locationUri = None))
 
     catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]
@@ -120,7 +122,7 @@ case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.serdeProperties.keys.toSeq, "CREATE TABLE")
+    DDLUtils.verifyTableProperties(table.storage.properties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
@@ -166,8 +168,9 @@ case class AlterTableRenameCommand(
       val table = catalog.getTableMetadata(oldName)
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
         val newPath = catalog.defaultTablePath(newName)
-        val newTable = table.withNewStorage(
-          serdeProperties = table.storage.serdeProperties ++ Map("path" -> newPath))
+        val newTable = table.copy(
+          storage = table.storage.copy(
+            properties = table.storage.properties + ("path" -> newPath)))
         catalog.alterTable(newTable)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
@@ -349,7 +352,7 @@ case class TruncateTableCommand(
     }
     val locations =
       if (isDatasourceTable) {
-        Seq(table.storage.serdeProperties.get("path"))
+        Seq(table.storage.properties.get("path"))
       } else if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
@@ -487,15 +490,15 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Storage Information", "", "")
-    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
-    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
-    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
-    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
+
+    metadata.storage.getSerde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
+    metadata.storage.getInputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
+    metadata.storage.getOutputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.serdeProperties.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
+    metadata.storage.getProperties.foreach {
+      case (key, value) => append(buffer, s"  $key", value, "")
     }
   }
 
@@ -821,10 +824,10 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableStorageInfo(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val storage = metadata.storage
 
-    storage.serde.foreach { serde =>
+    storage.getSerde.foreach { serde =>
       builder ++= s"ROW FORMAT SERDE '$serde'\n"
 
-      val serdeProps = metadata.storage.serdeProperties.map {
+      val serdeProps = metadata.storage.getProperties.map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
@@ -832,14 +835,14 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
     }
 
-    if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
+    if (storage.getInputFormat.isDefined || storage.getOutputFormat.isDefined) {
       builder ++= "STORED AS\n"
 
-      storage.inputFormat.foreach { format =>
+      storage.getInputFormat.foreach { format =>
         builder ++= s"  INPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
 
-      storage.outputFormat.foreach { format =>
+      storage.getOutputFormat.foreach { format =>
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
@@ -894,7 +897,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     builder ++= s"USING ${props(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)}\n"
 
-    val dataSourceOptions = metadata.storage.serdeProperties.filterNot {
+    val dataSourceOptions = metadata.storage.properties.filterNot {
       case (key, value) =>
         // If it's a managed table, omit PATH option. Spark SQL always creates external table
         // when the table creation DDL contains the PATH option.

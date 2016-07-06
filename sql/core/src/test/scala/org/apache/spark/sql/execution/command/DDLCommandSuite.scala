@@ -246,9 +246,9 @@ class DDLCommandSuite extends PlanTest {
       val ct = parseAs[CreateTableCommand](query)
       val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
       assert(hiveSerde.isDefined)
-      assert(ct.table.storage.serde == hiveSerde.get.serde)
-      assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-      assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+      assert(ct.table.storage.getSerde == hiveSerde.get.serde)
+      assert(ct.table.storage.getInputFormat == hiveSerde.get.inputFormat)
+      assert(ct.table.storage.getOutputFormat == hiveSerde.get.outputFormat)
     }
   }
 
@@ -260,13 +260,13 @@ class DDLCommandSuite extends PlanTest {
 
     // No conflicting serdes here, OK
     val parsed1 = parseAs[CreateTableCommand](query1)
-    assert(parsed1.table.storage.serde == Some("anything"))
-    assert(parsed1.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed1.table.storage.outputFormat == Some("outputfmt"))
+    assert(parsed1.table.storage.getSerde == Some("anything"))
+    assert(parsed1.table.storage.getInputFormat == Some("inputfmt"))
+    assert(parsed1.table.storage.getOutputFormat == Some("outputfmt"))
     val parsed2 = parseAs[CreateTableCommand](query2)
-    assert(parsed2.table.storage.serde.isEmpty)
-    assert(parsed2.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed2.table.storage.outputFormat == Some("outputfmt"))
+    assert(parsed2.table.storage.getSerde.isEmpty)
+    assert(parsed2.table.storage.getInputFormat == Some("inputfmt"))
+    assert(parsed2.table.storage.getOutputFormat == Some("outputfmt"))
   }
 
   test("create table - row format serde and generic file format") {
@@ -279,9 +279,9 @@ class DDLCommandSuite extends PlanTest {
         val ct = parseAs[CreateTableCommand](query)
         val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
         assert(hiveSerde.isDefined)
-        assert(ct.table.storage.serde == Some("anything"))
-        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+        assert(ct.table.storage.getSerde == Some("anything"))
+        assert(ct.table.storage.getInputFormat == hiveSerde.get.inputFormat)
+        assert(ct.table.storage.getOutputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format serde", "incompatible", s))
       }
@@ -298,9 +298,9 @@ class DDLCommandSuite extends PlanTest {
         val ct = parseAs[CreateTableCommand](query)
         val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
         assert(hiveSerde.isDefined)
-        assert(ct.table.storage.serde == hiveSerde.get.serde)
-        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+        assert(ct.table.storage.getSerde == hiveSerde.get.serde)
+        assert(ct.table.storage.getInputFormat == hiveSerde.get.inputFormat)
+        assert(ct.table.storage.getOutputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
       }

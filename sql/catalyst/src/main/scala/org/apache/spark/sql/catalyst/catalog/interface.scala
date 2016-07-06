@@ -42,38 +42,58 @@ case class CatalogFunction(
 
 /**
  * Storage format, used to describe how a partition or a table is stored.
+ *
+ * @param locationUri the storage location of the table/partition, can be None if it has no storage,
+ *                    e.g. view, or it's not file-based, e.g. JDBC data source table.
+ * @param provider the name of the data source provider, e.g. parquet, json, etc. Can be None if it
+ *                 has no storage. Note that `hive` is also one kind of provider.
+ * @param properties used to store some extra information for the storage.
  */
 case class CatalogStorageFormat(
     locationUri: Option[String],
-    inputFormat: Option[String],
-    outputFormat: Option[String],
-    serde: Option[String],
-    compressed: Boolean,
-    serdeProperties: Map[String, String]) {
+    provider: Option[String],
+    properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString =
-      if (serdeProperties.nonEmpty) {
-        s"Properties: " + serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val propertiesToString =
+      if (properties.nonEmpty) {
+        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
       } else {
         ""
       }
-    val output =
-      Seq(locationUri.map("Location: " + _).getOrElse(""),
-        inputFormat.map("InputFormat: " + _).getOrElse(""),
-        outputFormat.map("OutputFormat: " + _).getOrElse(""),
-        if (compressed) "Compressed" else "",
-        serde.map("Serde: " + _).getOrElse(""),
-        serdePropsToString)
+    val output = Seq(
+      locationUri.map("Location: " + _).getOrElse(""),
+      provider.map("Provider: " + _).getOrElse(""),
+      propertiesToString)
     output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
   }
 
+  // TODO: remove these hive hacks
+
+  def withInputFormat(inFmt: String): CatalogStorageFormat = {
+    this.copy(properties = properties + ("inputFormat" -> inFmt))
+  }
+
+  def withOutputFormat(outFmt: String): CatalogStorageFormat = {
+    this.copy(properties = properties + ("outputFormat" -> outFmt))
+  }
+
+  def withSerde(serde: String): CatalogStorageFormat = {
+    this.copy(properties = properties + ("serde" -> serde))
+  }
+
+  def getInputFormat: Option[String] = properties.get("inputFormat")
+
+  def getOutputFormat: Option[String] = properties.get("outputFormat")
+
+  def getSerde: Option[String] = properties.get("serde")
+
+  def getProperties: Map[String, String] = properties - "inputFormat" - "outputFormat" - "serde"
 }
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, serdeProperties = Map.empty)
+  val empty = CatalogStorageFormat(None, None, Map.empty)
 }
 
 /**
@@ -157,18 +177,6 @@ case class CatalogTable(
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
-
-  /** Syntactic sugar to update a field in `storage`. */
-  def withNewStorage(
-      locationUri: Option[String] = storage.locationUri,
-      inputFormat: Option[String] = storage.inputFormat,
-      outputFormat: Option[String] = storage.outputFormat,
-      compressed: Boolean = false,
-      serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
-    copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
-  }
 
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")

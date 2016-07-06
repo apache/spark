@@ -53,7 +53,7 @@ statement
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec? AS? query                                          #createTableUsing
     | createTableHeader ('(' columns=colTypeList ')')?
-        (COMMENT STRING)?
+        (COMMENT comment=STRING)?
         (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
         bucketSpec? skewSpec?
         rowFormat?  createFileFormat? locationSpec?

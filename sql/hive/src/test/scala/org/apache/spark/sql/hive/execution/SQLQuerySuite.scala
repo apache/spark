@@ -434,7 +434,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           case None => // OK.
         }
         // Also make sure that the format is the desired format.
-        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
+        assert(catalogTable.storage.getInputFormat.get.toLowerCase.contains(format))
     }
 
     // When a user-specified location is defined, the table type needs to be EXTERNAL.

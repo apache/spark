@@ -729,11 +729,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         schema = Seq.empty,
         storage = CatalogStorageFormat(
           locationUri = None,
-          inputFormat = None,
-          outputFormat = None,
-          serde = None,
-          compressed = false,
-          serdeProperties = Map(
+          provider = None,
+          properties = Map(
             "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
         ),
         properties = Map(
@@ -1171,8 +1168,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
         val catalogTable = sharedState.externalCatalog.getTable("default", "t")
         // there should not be a lowercase key 'path' now
-        assert(catalogTable.storage.serdeProperties.get("path").isEmpty)
-        assert(catalogTable.storage.serdeProperties.get("PATH").isDefined)
+        assert(catalogTable.storage.properties.get("path").isEmpty)
+        assert(catalogTable.storage.properties.get("PATH").isDefined)
       }
     }
   }
