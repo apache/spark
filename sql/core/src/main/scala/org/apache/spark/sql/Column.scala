@@ -732,21 +732,6 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def / (other: Any): Column = withExpr { Divide(expr, lit(other).expr) }
 
   /**
-   * Integer Division this expression by another expression.
-   * {{{
-   *   // Scala: The following divides a person's height by their weight.
-   *   people.select( people("height") div people("weight") )
-   *
-   *   // Java:
-   *   people.select( people("height").div(people("weight")) );
-   * }}}
-   *
-   * @group expr_ops
-   * @since 2.1.0
-   */
-  def div (other: Any): Column = withExpr { IntegerDivide(expr, lit(other).expr) }
-
-  /**
    * Division this expression by another expression.
    * {{{
    *   // Scala: The following divides a person's height by their weight.
