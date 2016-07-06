@@ -553,7 +553,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       //  |    |-- _1: integer (nullable = true)
       //
       // The inner column name, `_1` and outer column name `_1` are the same.
-      // Obviously this should not push down filters because the inner column is integer.
+      // Obviously this should not push down filters because the outer column is struct.
       assert(df.filter("_1 IS NOT NULL").count() === 4)
     }
   }
