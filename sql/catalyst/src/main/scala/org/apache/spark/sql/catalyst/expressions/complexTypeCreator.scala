@@ -457,8 +457,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
           $keyArray[$i] = $keyValue[0];
           if ($keyValue.length < 2) {
             $valueArray[$i] = null;
-          }
-          else {
+          } else {
             $valueArray[$i] = $keyValue[1];
           }
         }
