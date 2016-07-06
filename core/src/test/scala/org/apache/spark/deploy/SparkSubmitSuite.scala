@@ -512,8 +512,8 @@ class SparkSubmitSuite
     val clArgs3 = Seq(
       "--master", "local",
       "--py-files", pyFiles,
-      "--pyspark-driver-python", "python3.5",
-      "--pyspark-executor-python", "python3.5",
+      "--conf", "spark.pyspark.driver.python=python3.5",
+      "--conf", "spark.pyspark.python=python3.5",
       "mister.py"
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
@@ -521,10 +521,8 @@ class SparkSubmitSuite
     appArgs3.pyFiles should be (Utils.resolveURIs(pyFiles))
     sysProps3("spark.submit.pyFiles") should be (
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
-    appArgs3.pysparkDriverPython should be ("python3.5")
-    appArgs3.pysparkExecutorPython should be ("python3.5")
-    sysProps3("pyspark.driver.python") should be ("python3.5")
-    sysProps3("pyspark.executor.python") should be ("python3.5")
+    sysProps3("spark.pyspark.driver.python") should be ("python3.5")
+    sysProps3("spark.pyspark.python") should be ("python3.5")
   }
 
   test("resolves config paths correctly") {

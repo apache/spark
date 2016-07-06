@@ -836,7 +836,7 @@ private[spark] class Client(
           sys.env.get(envname).foreach(env(envname) = _)
         }
       }
-      // pass --pyspark-driver-python to AM in cluster mode
+      // pass conf spark.pyspark.driver.python to AM in cluster mode
       sparkConf.getOption(SparkLauncher.PYSPARK_DRIVER_PYTHON)
         .foreach(env("PYSPARK_DRIVER_PYTHON") = _)
     }

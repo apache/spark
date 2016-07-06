@@ -51,11 +51,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("loading from system properties") {
     System.setProperty("spark.test.testProperty", "2")
-    System.setProperty("pyspark.test.testProperty", "1")
     System.setProperty("nonspark.test.testProperty", "0")
     val conf = new SparkConf()
     assert(conf.get("spark.test.testProperty") === "2")
-    assert(conf.get("pyspark.test.testProperty") === "1")
     assert(!conf.contains("nonspark.test.testProperty"))
   }
 
