@@ -53,14 +53,14 @@ case class OptimizeMetadataOnlyQuery(
           val aggFunctions = aggExprs.flatMap(_.collect {
             case agg: AggregateExpression => agg
           })
-          val isPartitionDataOnly = aggFunctions.forall { agg =>
+          val hasAllDistinctAgg = aggFunctions.forall { agg =>
             agg.isDistinct || (agg.aggregateFunction match {
               case _: Max => true
               case _: Min => true
               case _ => false
             })
           }
-          if (isPartitionDataOnly) {
+          if (hasAllDistinctAgg) {
             a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, relation)))
           } else {
             a
