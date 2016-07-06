@@ -357,7 +357,10 @@ object MapObjects {
       function: Expression => Expression,
       inputData: Expression,
       elementType: DataType): MapObjects = {
-    apply(function, inputData, elementType, inputData.dataType)
+    val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
+    val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
+    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
+    MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData, None)
   }
 
   /**
@@ -368,6 +371,11 @@ object MapObjects {
    * @param elementType The data type of elements in the collection.
    * @param inputDataType The explicitly given data type of inputData to override the
    *                      data type inferred from inputData (i.e., inputData.dataType).
+   *                      When Python UDT whose sqlType is an array, the deserializer
+   *                      expression will apply MapObjects on it. However, as the data type
+   *                      of inputData is Python UDT, which is not an expected array type
+   *                      in MapObjects. In this case, we need to explicitly use
+   *                      Python UDT's sqlType as data type.
    */
   def apply(
       function: Expression => Expression,
@@ -377,7 +385,8 @@ object MapObjects {
     val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
     val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
     val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
-    MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData, inputDataType)
+    MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData,
+      Some(inputDataType))
   }
 }
 
@@ -406,7 +415,7 @@ case class MapObjects private(
     loopVarDataType: DataType,
     lambdaFunction: Expression,
     inputData: Expression,
-    inputDataType: DataType) extends Expression with NonSQLExpression {
+    inputDataType: Option[DataType]) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = true
 
@@ -459,7 +468,7 @@ case class MapObjects private(
       case _ => ""
     }
 
-    val (getLength, getLoopVar) = inputDataType match {
+    val (getLength, getLoopVar) = inputDataType.getOrElse(inputData.dataType) match {
       case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
         s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
       case ObjectType(cls) if cls.isArray =>
@@ -473,7 +482,7 @@ case class MapObjects private(
           s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
     }
 
-    val loopNullCheck = inputDataType match {
+    val loopNullCheck = inputDataType.getOrElse(inputData.dataType) match {
       case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
       case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
