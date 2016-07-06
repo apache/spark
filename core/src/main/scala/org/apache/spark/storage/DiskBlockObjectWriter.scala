@@ -157,14 +157,16 @@ private[spark] class DiskBlockObjectWriter(
         objOut.flush()
         bs.flush()
         close()
-      }
 
-      val truncateStream = new FileOutputStream(file, true)
-      try {
-        truncateStream.getChannel.truncate(initialPosition)
+        val truncateStream = new FileOutputStream(file, true)
+        try {
+          truncateStream.getChannel.truncate(initialPosition)
+          file
+        } finally {
+          truncateStream.close()
+        }
+      } else {
         file
-      } finally {
-        truncateStream.close()
       }
     } catch {
       case e: Exception =>

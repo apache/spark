@@ -136,6 +136,16 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         blockManager.diskBlockManager().createTempShuffleBlock();
       final File file = tempShuffleBlockIdPlusFile._2();
       final BlockId blockId = tempShuffleBlockIdPlusFile._1();
+      // Note that we purposely do not call open() on the disk writers here; DiskBlockObjectWriter
+      // will automatically open() itself if necessary. This is an optimization to avoid file
+      // creation and truncation for empty partitions; this optimization probably doesn't make sense
+      // for most realistic production workloads, but it can make a large difference when playing
+      // around with Spark SQL queries in spark-shell on toy datasets: if you performed a query over
+      // an extremely small number of records then Spark SQL's default parallelism of 200 would
+      // result in slower out-of-the-box performance due to these constant-factor overheads. This
+      // optimization speeds up local microbenchmarking and SQL unit tests.
+      // However, we still create the file because the read code expects it to exist:
+      file.createNewFile();
       partitionWriters[i] =
         blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
     }
