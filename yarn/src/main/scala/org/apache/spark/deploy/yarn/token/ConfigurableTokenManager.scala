@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  * 3. Specify the class name through spark.yarn.security.tokens.{service}.class
  *
  */
-private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf) extends Logging {
+final class ConfigurableTokenManager private[yarn] (sparkConf: SparkConf) extends Logging {
   private val tokenProviderEnabledConfig = "spark\\.yarn\\.security\\.tokens\\.(.+)\\.enabled".r
   private val tokenProviderClsConfig = "spark.yarn.security.tokens.%s.class"
 
@@ -53,9 +53,9 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
   private val tokenProviders = mutable.HashMap[String, ServiceTokenProvider]()
 
   private val defaultTokenProviders = Map(
-    "hdfs" -> (true, "org.apache.spark.deploy.yarn.token.HDFSTokenProvider"),
-    "hive" -> (true, "org.apache.spark.deploy.yarn.token.HiveTokenProvider"),
-    "hbase" -> (true, "org.apache.spark.deploy.yarn.token.HBaseTokenProvider")
+    "hdfs" -> "org.apache.spark.deploy.yarn.token.HDFSTokenProvider",
+    "hive" -> "org.apache.spark.deploy.yarn.token.HiveTokenProvider",
+    "hbase" -> "org.apache.spark.deploy.yarn.token.HBaseTokenProvider"
   )
 
   // AMDelegationTokenRenewer, this will only be create and started in the AM
@@ -82,7 +82,7 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
     }.map { case (key, _) =>
       val tokenProviderEnabledConfig(service) = key
       val cls = sparkConf.getOption(tokenProviderClsConfig.format(service))
-        .orElse(defaultTokenProviders.get(service).map(_._2))
+        .orElse(defaultTokenProviders.get(service))
       (service, cls)
     }.foreach { case (service, cls) =>
       if (cls.isDefined) {
@@ -168,10 +168,14 @@ private[yarn] final class ConfigurableTokenManager private (sparkConf: SparkConf
       _delegationTokenUpdater.stop()
       _delegationTokenUpdater = null
     }
+
+    if (ConfigurableTokenManager._configurableTokenManager != null) {
+      ConfigurableTokenManager._configurableTokenManager = null
+    }
   }
 }
 
-private[yarn] object ConfigurableTokenManager {
+object ConfigurableTokenManager {
   private var _configurableTokenManager: ConfigurableTokenManager = null
 
   def configurableTokenManager(conf: SparkConf): ConfigurableTokenManager = synchronized {

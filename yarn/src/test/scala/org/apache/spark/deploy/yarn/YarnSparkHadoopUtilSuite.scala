@@ -18,12 +18,9 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
-import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
