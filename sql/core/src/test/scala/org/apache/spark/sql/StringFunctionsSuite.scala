@@ -77,8 +77,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
+        regexp_replace($"a", $"b", $"c"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
+        Row("num-num", "400-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,

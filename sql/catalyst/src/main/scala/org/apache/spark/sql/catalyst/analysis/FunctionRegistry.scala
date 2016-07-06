@@ -182,6 +182,7 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
+    expression[Stack]("stack"),
     expression[CreateStruct]("struct"),
     expression[CaseWhen]("when"),
 

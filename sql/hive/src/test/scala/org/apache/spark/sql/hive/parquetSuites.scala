@@ -389,17 +389,18 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("SPARK-7749: non-partitioned metastore Parquet table lookup should use cached relation") {
     withTable("nonPartitioned") {
       sql(
-        s"""CREATE TABLE nonPartitioned (
-           |  key INT,
-           |  value STRING
-           |)
-           |STORED AS PARQUET
-         """.stripMargin)
+        """
+          |CREATE TABLE nonPartitioned (
+          |  key INT,
+          |  value STRING
+          |)
+          |STORED AS PARQUET
+        """.stripMargin)
 
       // First lookup fills the cache
-      val r1 = collectHadoopFsRelation (table("nonPartitioned"))
+      val r1 = collectHadoopFsRelation(table("nonPartitioned"))
       // Second lookup should reuse the cache
-      val r2 = collectHadoopFsRelation (table("nonPartitioned"))
+      val r2 = collectHadoopFsRelation(table("nonPartitioned"))
       // They should be the same instance
       assert(r1 eq r2)
     }
@@ -408,18 +409,42 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   test("SPARK-7749: partitioned metastore Parquet table lookup should use cached relation") {
     withTable("partitioned") {
       sql(
-        s"""CREATE TABLE partitioned (
-           | key INT,
-           | value STRING
-           |)
-           |PARTITIONED BY (part INT)
-           |STORED AS PARQUET
-       """.stripMargin)
+        """
+          |CREATE TABLE partitioned (
+          |  key INT,
+          |  value STRING
+          |)
+          |PARTITIONED BY (part INT)
+          |STORED AS PARQUET
+        """.stripMargin)
 
       // First lookup fills the cache
-      val r1 = collectHadoopFsRelation (table("partitioned"))
+      val r1 = collectHadoopFsRelation(table("partitioned"))
       // Second lookup should reuse the cache
-      val r2 = collectHadoopFsRelation (table("partitioned"))
+      val r2 = collectHadoopFsRelation(table("partitioned"))
+      // They should be the same instance
+      assert(r1 eq r2)
+    }
+  }
+
+  test("SPARK-15968: nonempty partitioned metastore Parquet table lookup should use cached " +
+      "relation") {
+    withTable("partitioned") {
+      sql(
+        """
+          |CREATE TABLE partitioned (
+          |  key INT,
+          |  value STRING
+          |)
+          |PARTITIONED BY (part INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+      sql("INSERT INTO TABLE partitioned PARTITION(part=0) SELECT 1 as key, 'one' as value")
+
+      // First lookup fills the cache
+      val r1 = collectHadoopFsRelation(table("partitioned"))
+      // Second lookup should reuse the cache
+      val r2 = collectHadoopFsRelation(table("partitioned"))
       // They should be the same instance
       assert(r1 eq r2)
     }
@@ -462,7 +487,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     checkCached(tableIdentifier)
     // For insert into non-partitioned table, we will do the conversion,
     // so the converted test_insert_parquet should be cached.
-    sessionState.invalidateTable("test_insert_parquet")
+    sessionState.refreshTable("test_insert_parquet")
     assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
     sql(
       """
@@ -475,7 +500,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql("select * from test_insert_parquet"),
       sql("select a, b from jt").collect())
     // Invalidate the cache.
-    sessionState.invalidateTable("test_insert_parquet")
+    sessionState.refreshTable("test_insert_parquet")
     assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     // Create a partitioned table.
@@ -525,7 +550,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
           |select b, '2015-04-02', a FROM jt
         """.stripMargin).collect())
 
-    sessionState.invalidateTable("test_parquet_partitioned_cache_test")
+    sessionState.refreshTable("test_parquet_partitioned_cache_test")
     assert(sessionState.catalog.getCachedDataSourceTable(tableIdentifier) === null)
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
@@ -557,7 +582,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
           Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
 
         // Add data files to partition directory and check whether they can be read
-        Seq("baz").toDF("a").write.mode(SaveMode.Overwrite).parquet(partitionDir)
+        sql("INSERT INTO TABLE test_added_partitions PARTITION (b=1) select 'baz' as a")
         checkAnswer(
           sql("SELECT * FROM test_added_partitions"),
           Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
