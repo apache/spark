@@ -60,11 +60,13 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   extends TaskScheduler with Logging
 {
   def this(sc: SparkContext) = {
-    this(sc, sc.conf.getInt("spark.task.maxFailures", 4), sc.blacklistTracker)
+    this(sc, sc.conf.getInt("spark.task.maxFailures", 4),
+      TaskSchedulerImpl.createBlacklistTracker(sc.conf))
   }
 
   def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
-    this(sc, maxTaskFailures, sc.blacklistTracker, clock = new SystemClock, isLocal)
+    this(sc, maxTaskFailures, TaskSchedulerImpl.createBlacklistTracker(sc.conf),
+      clock = new SystemClock, isLocal)
   }
 
   val conf = sc.conf
@@ -160,6 +162,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   override def start() {
     backend.start()
+    blacklistTracker.start()
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
@@ -502,6 +505,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   override def stop() {
     speculationScheduler.shutdown()
+    blacklistTracker.stop()
     if (backend != null) {
       backend.stop()
     }
@@ -703,6 +707,14 @@ private[spark] object TaskSchedulerImpl {
     }
 
     retval.toList
+  }
+
+  private def createBlacklistTracker(conf: SparkConf): BlacklistTracker = {
+    if (BlacklistTracker.isBlacklistEnabled(conf)) {
+      new BlacklistTrackerImpl(conf)
+    } else {
+      NoopBlacklistTracker
+    }
   }
 
 }

@@ -301,7 +301,15 @@ private[spark] object BlacklistTracker extends Logging {
   val EXPIRY_TIMEOUT_CONF = "spark.scheduler.blacklist.recoverPeriod"
   val ENABLED_CONF = "spark.scheduler.blacklist.enabled"
 
-  def isBlacklistEnabled(conf: SparkConf, localMode: Boolean): Boolean = {
+  /**
+   * Return true if the blacklist is enabled, based on the following order of preferences:
+   * 1. Is it specifically enabled or disabled?
+   * 2. Is it enabled via the legacy timeout conf?
+   * 3. Use the default for the spark-master:
+   *   - off for local mode
+   *   - on for distributed modes (including local-cluster)
+   */
+  def isBlacklistEnabled(conf: SparkConf): Boolean = {
     val isEnabled = conf.get(ENABLED_CONF, null)
     if (isEnabled == null) {
       // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
@@ -313,7 +321,9 @@ private[spark] object BlacklistTracker extends Logging {
         logWarning(s"Turning on blacklisting due to legacy configuration: $LEGACY_TIMEOUT_CONF > 0")
         true
       } else {
-        !localMode
+        // local-cluster is *not* considered local for these purposes, we still want the blacklist
+        // enabled by default
+        Utils.isLocalMaster(conf)
       }
     } else {
       // always take whatever value is explicitly set by the user
