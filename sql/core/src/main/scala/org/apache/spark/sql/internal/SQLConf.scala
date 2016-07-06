@@ -259,7 +259,10 @@ object SQLConf {
       .createWithDefault(false)
 
   val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
-    .doc("When true, enable the metadata-only query optimization.")
+    .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
+      "to produce the partition columns instead of table scans. It applies when all the columns " +
+      "scanned are partition columns and the query has an aggregate operator have distinct " +
+      "semantics.")
     .booleanConf
     .createWithDefault(true)
 

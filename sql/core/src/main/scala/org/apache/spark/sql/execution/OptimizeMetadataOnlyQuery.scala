@@ -25,21 +25,22 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * When scanning only partition columns, get results based on partition data without scanning files.
- * It's used for operators that only need distinct values. Currently only [[Aggregate]] operator
- * which satisfy the following conditions are supported:
+ * This rule optimizes the execution of queries that can be answered by looking only at
+ * partition-level metadata. This applies when all the columns scanned are partition columns, and
+ * the query has an aggregate operator that satisfies the following conditions:
  * 1. aggregate expression is partition columns.
  *  e.g. SELECT col FROM tbl GROUP BY col.
  * 2. aggregate function on partition columns with DISTINCT.
- *  e.g. SELECT count(DISTINCT col1) FROM tbl GROUP BY col2.
+ *  e.g. SELECT col1, count(DISTINCT col2) FROM tbl GROUP BY col1.
  * 3. aggregate function on partition columns which have same result w or w/o DISTINCT keyword.
- *  e.g. SELECT Max(col2) FROM tbl GROUP BY col1.
+ *  e.g. SELECT col1, Max(col2) FROM tbl GROUP BY col1.
  */
-case class OptimizeMetadataOnly(
+case class OptimizeMetadataOnlyQuery(
     catalog: SessionCatalog,
-    conf: CatalystConf) extends Rule[LogicalPlan] {
+    conf: SQLConf) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.optimizerMetadataOnly) {
@@ -52,7 +53,7 @@ case class OptimizeMetadataOnly(
           val aggFunctions = aggExprs.flatMap(_.collect {
             case agg: AggregateExpression => agg
           })
-          val isPartitionDataOnly = aggFunctions.isEmpty || aggFunctions.forall { agg =>
+          val isPartitionDataOnly = aggFunctions.forall { agg =>
             agg.isDistinct || (agg.aggregateFunction match {
               case _: Max => true
               case _: Min => true
@@ -60,7 +61,7 @@ case class OptimizeMetadataOnly(
             })
           }
           if (isPartitionDataOnly) {
-            a.withNewChildren(Seq(usePartitionData(child, relation)))
+            a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, relation)))
           } else {
             a
           }
@@ -70,14 +71,16 @@ case class OptimizeMetadataOnly(
     }
   }
 
-  private def usePartitionData(child: LogicalPlan, relation: LogicalPlan): LogicalPlan = {
+  private def replaceTableScanWithPartitionMetadata(
+      child: LogicalPlan,
+      relation: LogicalPlan): LogicalPlan = {
     child transform {
       case plan if plan eq relation =>
         relation match {
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
             val partColumns = fsRelation.partitionSchema.map(_.name.toLowerCase).toSet
             val partAttrs = l.output.filter(a => partColumns.contains(a.name.toLowerCase))
-            val partitionData = fsRelation.location.listFiles(Nil)
+            val partitionData = fsRelation.location.listFiles(filters = Nil)
             LocalRelation(partAttrs, partitionData.map(_.values))
 
           case relation: CatalogRelation =>
@@ -90,11 +93,19 @@ case class OptimizeMetadataOnly(
             }
             LocalRelation(partAttrs, partitionData)
 
-          case _ => throw new IllegalStateException()
+          case _ =>
+            throw new IllegalStateException(s"The plan: $relation Cannot be replaced by " +
+              s"LocalRelation in the OptimizeMetadataOnlyQuery.")
         }
     }
   }
 
+  /**
+   * A pattern that finds scanned partition attributes and table relation all of whose columns
+   * scanned are partition columns. This applies when project or filter operators with
+   * deterministic expressions scan only partition columns.
+   * It returns scanned partition attributes and table relation plan, otherwise None.
+   */
   object PartitionedRelation {
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
       case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)
@@ -109,24 +120,15 @@ case class OptimizeMetadataOnly(
         Some(AttributeSet(partAttrs), relation)
 
       case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
-        unapply(child).flatMap {
-          case (partAttrs, relation) =>
-            if (p.references.subsetOf(partAttrs)) {
-              Some(p.outputSet, relation)
-            } else {
-              None
-            }
+        unapply(child).flatMap { case (partAttrs, relation) =>
+          if (p.references.subsetOf(partAttrs)) Some(p.outputSet, relation) else None
         }
 
       case f @ Filter(condition, child) if condition.deterministic =>
-        unapply(child).flatMap {
-          case (partAttrs, relation) =>
-            if (f.references.subsetOf(partAttrs)) {
-              Some(f.outputSet, relation)
-            } else {
-              None
-            }
+        unapply(child).flatMap { case (partAttrs, relation) =>
+          if (f.references.subsetOf(partAttrs)) Some(f.outputSet, relation) else None
         }
+
       case _ => None
     }
   }
