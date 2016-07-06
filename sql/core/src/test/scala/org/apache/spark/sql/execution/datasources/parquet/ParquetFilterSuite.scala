@@ -550,7 +550,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       //
       // root
       //  |-- _1: struct (nullable = true)
-      //  |    |-- _1: string (nullable = true)
+      //  |    |-- _1: integer (nullable = true)
       //
       // The inner column name, `_1` and outer column name `_1` are the same.
       // Obviously this should not push down filters because the inner column is integer.
