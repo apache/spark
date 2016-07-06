@@ -182,6 +182,9 @@ private[ui] class StagePagedTable(
   }
 
   override def headers: Seq[Node] = {
+    // stageHeadersAndCssClasses has three parts: header title, tooltip information, and sortable.
+    // The tooltip information could be None, which indicates it does not have a tooltip.
+    // Otherwise, it has two parts: tooltip text, and position (true for left, false for default).
     val stageHeadersAndCssClasses: Seq[(String, Option[(String, Boolean)], Boolean)] =
       Seq(("Stage Id", None, true)) ++
       {if (isFairScheduler) {Seq(("Pool Name", None, true))} else Seq.empty} ++

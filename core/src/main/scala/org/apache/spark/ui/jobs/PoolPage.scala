@@ -45,7 +45,8 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       val shouldShowActiveStages = activeStages.nonEmpty
       val activeStagesTable =
         new StageTableBase(request, activeStages, "activeStage", parent.basePath, "stages/pool",
-          parent.progressListener, parent.isFairScheduler, parent.killEnabled, false)
+          parent.progressListener, parent.isFairScheduler, parent.killEnabled,
+          isFailedStage = false)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getPoolForName(poolName).getOrElse {
