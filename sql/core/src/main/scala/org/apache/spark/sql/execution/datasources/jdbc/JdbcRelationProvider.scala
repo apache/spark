@@ -19,10 +19,14 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.util.Properties
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider}
+import org.apache.spark.Partition
+import org.apache.spark.sql._
+import org.apache.spark.sql.sources.{CreatableRelationProvider, BaseRelation, DataSourceRegister, RelationProvider}
 
-class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
+class JdbcRelationProvider
+  extends RelationProvider
+  with CreatableRelationProvider
+  with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
 
@@ -50,6 +54,22 @@ class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+  }
+
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val jdbcOptions = new JDBCOptions(parameters)
+    val parts = Array.empty[Partition]
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    data.write
+      .mode(mode)
+      .jdbc(jdbcOptions.url, jdbcOptions.table, properties)
     JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
   }
 }
