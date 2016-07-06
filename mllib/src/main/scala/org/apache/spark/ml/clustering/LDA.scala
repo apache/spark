@@ -896,6 +896,6 @@ object LDA extends DefaultParamsReadable[LDA] {
       }
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): LDA = super.load(path)
 }
