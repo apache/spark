@@ -1547,7 +1547,7 @@ val words: DStream[String] = ...
 words.foreachRDD { rdd =>
 
   // Get the singleton instance of SparkSession
-  val spark = SparkSessionSingleton.getInstance(rdd.sparkContext.getConf)
+  val spark = SparkSession.builder.config(rdd.sparkContext.getConf).getOrCreate()
   import spark.implicits._
 
   // Convert RDD[String] to DataFrame
@@ -1594,7 +1594,7 @@ words.foreachRDD(
     public Void call(JavaRDD<String> rdd, Time time) {
 
       // Get the singleton instance of SparkSession
-      SparkSession spark = SparkSessionSingleton.getInstance(rdd.sparkContext().getConf());
+      SparkSession spark = SparkSession.builder().config(rdd.sparkContext().getConf()).getOrCreate();
 
       // Convert RDD[String] to RDD[case class] to DataFrame
       JavaRDD<JavaRow> rowRDD = rdd.map(new Function<String, JavaRow>() {
