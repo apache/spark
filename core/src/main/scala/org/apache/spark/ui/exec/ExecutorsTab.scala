@@ -27,14 +27,21 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 import org.apache.spark.ui.jobs.UIData.ExecutorUIData
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
+  val conf = parent.conf
   val listener = parent.executorsListener
   val sc = parent.sc
   val threadDumpEnabled =
     sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
 
-  attachPage(new ExecutorsPage(this, threadDumpEnabled))
+  val clusterMode = parent.conf.getOption("spark.ui.cluster.mode")
+
+  attachPage(new ExecutorsPage(this, threadDumpEnabled, clusterMode))
   if (threadDumpEnabled) {
     attachPage(new ExecutorThreadDumpPage(this))
+  }
+
+  if (clusterMode.isDefined && clusterMode.get.equals("yarn")) {
+    attachPage(new YarnExecutorLogsPage(this))
   }
 }
 

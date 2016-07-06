@@ -48,7 +48,8 @@ private[ui] case class ExecutorSummaryInfo(
 
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
-    threadDumpEnabled: Boolean)
+    threadDumpEnabled: Boolean,
+    clusterMode: Option[String])
   extends WebUIPage("") {
   private val listener = parent.listener
   // When GCTimePercent is edited change ToolTips.TASK_TIME to match
@@ -168,17 +169,32 @@ private[ui] class ExecutorsPage(
       </td>
       {
         if (logsExist) {
-          <td>
-            {
-              info.executorLogs.map { case (logName, logUrl) =>
-                <div>
-                  <a href={logUrl}>
-                    {logName}
-                  </a>
-                </div>
+          if (clusterMode.isDefined && "yarn".equals(clusterMode.get)) {
+            <td>
+              {
+                if (info.executorLogs.nonEmpty) {
+                  val (_, logUrl) = info.executorLogs.head
+                  val Array(hostPort, _, _, containerId, user, _) = logUrl.substring(
+                    "http://".length).split("/").map(URLEncoder.encode(_, "UTF-8"))
+                  val encodedId = URLEncoder.encode(info.id, "UTF-8")
+                  <div>
+                    <a href={s"executorLogs/?executorId=$encodedId&hostPort" +
+                      s"=$hostPort&containerId=$containerId&user=$user"}>logs</a>
+                  </div>
+                }
               }
-            }
-          </td>
+            </td>
+          } else {
+            <td>
+              {
+                info.executorLogs.map { case (logName, logUrl) =>
+                  <div>
+                    <a href={logUrl}>{logName}</a>
+                  </div>
+                }
+              }
+            </td>
+          }
         }
       }
       {
