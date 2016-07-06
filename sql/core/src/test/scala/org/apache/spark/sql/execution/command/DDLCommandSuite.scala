@@ -327,6 +327,16 @@ class DDLCommandSuite extends PlanTest {
       containsThesePhrases = Seq("key_without_value"))
   }
 
+  test("create table - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
+        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
   test("create table - location implies external") {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTableCommand](query)
