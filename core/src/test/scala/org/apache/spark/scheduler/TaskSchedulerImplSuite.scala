@@ -330,11 +330,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     when(blacklist.isExecutorBlacklisted(anyString(), anyInt(), anyInt())).thenReturn(false)
     when(blacklist.isExecutorBlacklisted("executor0", 0, 0)).thenReturn(true)
 
-
-    (0 to 2).foreach { stageId =>
-      taskScheduler.taskSetManagerForAttempt(stageId, 0).get.setBlacklistTracker(blacklist)
-    }
-
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     // these verifications are tricky b/c we reference them multiple times -- also invoked when we
     // check if we need to abort any stages from unschedulability.
@@ -451,7 +446,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val stageToTsm = (0 to 2).map { stageId =>
       val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
-      tsm.setBlacklistTracker(blacklist)
       stageId -> tsm
     }.toMap
 

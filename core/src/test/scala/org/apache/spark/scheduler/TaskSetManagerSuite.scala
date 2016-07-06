@@ -425,10 +425,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
     val clock = new ManualClock
 
-    // spy taskSetManager to set Manual clock for BlacklistTracker
-    val manager = new TaskSetManager(sched, taskSet, 4, clock)
-    val tracker = new BlacklistTrackerImpl(conf, clock)
-    manager.setBlacklistTracker(tracker)
+    val blacklist = new BlacklistTrackerImpl(conf, clock)
+    val manager = new TaskSetManager(sched, blacklist, taskSet, 4, clock)
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
@@ -484,7 +482,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Despite advancing beyond the time for expiring executors from within the blacklist,
     // we *never* expire from the *within* stage blacklist
     clock.advance(rescheduleDelay)
-    tracker.expireExecutorsInBlackList()
+    blacklist.expireExecutorsInBlackList()
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)

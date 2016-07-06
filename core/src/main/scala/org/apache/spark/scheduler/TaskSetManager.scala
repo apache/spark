@@ -48,11 +48,20 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
  *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
-    sched: TaskSchedulerImpl,
+    val sched: TaskSchedulerImpl,
+    val blacklistTracker: BlacklistTracker,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    clock: Clock = new SystemClock())
+    val clock: Clock)
   extends Schedulable with Logging {
+
+  def this(
+      sched: TaskSchedulerImpl,
+      taskSet: TaskSet,
+      maxTaskFailures: Int,
+      clock: Clock = new SystemClock()) {
+    this(sched, sched.blacklistTracker, taskSet, maxTaskFailures, clock)
+  }
 
   val conf = sched.sc.conf
 
@@ -251,14 +260,6 @@ private[spark] class TaskSetManager(
   /** Check whether a task is currently running an attempt on a given host */
   private def hasAttemptOnHost(taskIndex: Int, host: String): Boolean = {
     taskAttempts(taskIndex).exists(_.host == host)
-  }
-
-  // TODO make a val, part of constructor
-  var blacklistTracker = sched.sc.blacklistTracker
-
-  /** VisibleForTesting */
-  private[scheduler] def setBlacklistTracker (tracker: BlacklistTracker) = {
-    blacklistTracker = tracker
   }
 
   /**

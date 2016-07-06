@@ -54,7 +54,7 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    private val blacklistTracker: BlacklistTracker,
+    private[scheduler] val blacklistTracker: BlacklistTracker,
     private val clock: Clock = new SystemClock,
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
