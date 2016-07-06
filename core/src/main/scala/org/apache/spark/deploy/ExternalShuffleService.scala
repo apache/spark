@@ -21,6 +21,7 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
@@ -54,6 +55,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private var server: TransportServer = _
 
+  private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
+
+  protected val masterMetricsSystem =
+    MetricsSystem.createMetricsSystem("shuffleService", sparkConf, securityManager)
+
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
     new ExternalShuffleBlockHandler(conf, null)
@@ -77,6 +83,9 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
         Nil
       }
     server = transportContext.createServer(port, bootstraps.asJava)
+
+    masterMetricsSystem.registerSource(shuffleServiceSource)
+    masterMetricsSystem.start()
   }
 
   /** Clean up all shuffle files associated with an application that has exited. */

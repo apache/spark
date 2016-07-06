@@ -20,8 +20,14 @@ package org.apache.spark.network.shuffle;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
@@ -52,6 +58,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
+  // Shuffle service metrics setup
+  private final ShuffleMetrics metrics;
+  private final Timer timeDelayForOpenBlockRequest;
+  private final Timer timeDelayForRegisterExecutorRequest;
+  private final Meter transferBlockRate;
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
@@ -64,6 +75,10 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   public ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
+    this.metrics = new ShuffleMetrics();
+    this.timeDelayForOpenBlockRequest = metrics.timeDelayForOpenBlockRequest;
+    this.timeDelayForRegisterExecutorRequest = metrics.timeDelayForRegisterExecutorRequest;
+    this.transferBlockRate = metrics.transferBlockRate;
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }
@@ -79,12 +94,17 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       TransportClient client,
       RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
+      // Reset transferred block size metrics as zero
+      final Timer.Context responseDelayContext = timeDelayForOpenBlockRequest.time();
       OpenBlocks msg = (OpenBlocks) msgObj;
       checkAuth(client, msg.appId);
 
       List<ManagedBuffer> blocks = Lists.newArrayList();
+      long totalBlockSize = 0;
       for (String blockId : msg.blockIds) {
-        blocks.add(blockManager.getBlockData(msg.appId, msg.execId, blockId));
+        final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId, blockId);
+        totalBlockSize += block.size();
+        blocks.add(block);
       }
       long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
       logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
@@ -93,16 +113,32 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
           client.getClientId(),
           NettyUtils.getRemoteAddress(client.getChannel()));
       callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
+      transferBlockRate.mark(totalBlockSize / 1024 / 1024);
+      responseDelayContext.stop();
 
     } else if (msgObj instanceof RegisterExecutor) {
+      final Timer.Context responseDelayContext = timeDelayForRegisterExecutorRequest.time();
       RegisterExecutor msg = (RegisterExecutor) msgObj;
       checkAuth(client, msg.appId);
       blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
       callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+      responseDelayContext.stop();
 
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }
+  }
+
+  public MetricSet getAllMetrics() {
+    return metrics;
+  }
+
+  public long getRegisteredExecutorsSize() {
+    return blockManager.getRegisteredExecutorsSize();
+  }
+
+  public long getTotalShuffleRequests() {
+    return timeDelayForOpenBlockRequest.getCount() + timeDelayForOpenBlockRequest.getCount();
   }
 
   @Override
@@ -140,6 +176,28 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     if (client.getClientId() != null && !client.getClientId().equals(appId)) {
       throw new SecurityException(String.format(
         "Client for %s not authorized for application %s.", client.getClientId(), appId));
+    }
+  }
+
+  /**
+   * A simple class to wrap all shuffle service wrapper metrics
+   */
+  private class ShuffleMetrics implements MetricSet {
+    private final Map<String, Metric> allMetrics;
+    private final Timer timeDelayForOpenBlockRequest = new Timer();
+    private final Timer timeDelayForRegisterExecutorRequest = new Timer();
+    private final Meter transferBlockRate = new Meter();
+
+    private ShuffleMetrics() {
+      allMetrics = new HashMap<>();
+      allMetrics.put("timeDelayForOpenBlockRequest", timeDelayForOpenBlockRequest);
+      allMetrics.put("timeDelayForRegisterExecutorRequest", timeDelayForRegisterExecutorRequest);
+      allMetrics.put("transferBlockRate", transferBlockRate);
+    }
+
+    @Override
+    public Map<String, Metric> getMetrics() {
+      return allMetrics;
     }
   }
 
