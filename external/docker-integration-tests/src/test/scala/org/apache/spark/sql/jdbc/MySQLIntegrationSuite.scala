@@ -21,9 +21,12 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.scalatest.Ignore
+
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
+@Ignore
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     override val imageName = "mysql:5.7.9"
