@@ -1046,9 +1046,9 @@ class DataFrame(object):
 
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([ \\
-        ... Row(name='Alice', age=5, height=80), \\
-        ... Row(name='Alice', age=5, height=80), \\
-        ... Row(name='Alice', age=10, height=80)]).toDF()
+        ...     Row(name='Alice', age=5, height=80), \\
+        ...     Row(name='Alice', age=5, height=80), \\
+        ...     Row(name='Alice', age=10, height=80)]).toDF()
         >>> df.dropDuplicates().show()
         +---+------+-----+
         |age|height| name|
