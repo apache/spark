@@ -479,7 +479,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("AIQ-2170 EnsureRequirements adds sort when ordering columns are same but diff direction") {
+  ignore("AIQ-2170 EnsureRequirements adds sort when ordering columns same but diff direction") {
     val orderingA = SortOrder(Literal(1), Ascending)
     val orderingB = SortOrder(Literal(1), Descending)
     assert(orderingA != orderingB)
@@ -495,7 +495,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("AIQ-2170 EnsureRequirements doesn't add sort with cached sorted table and SortMergeJoin") {
+  ignore("AIQ-2170 EnsureRequirements doesn't add sort with cached sorted table") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempTable("t1", "t2") {
         val df = Seq(
@@ -524,7 +524,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("AIQ-2170 EnsureRequirements doesn't add sort with different column capitalization") {
+  ignore("AIQ-2170 EnsureRequirements doesn't add sort with different column capitalization") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempTable("t1", "t2") {
         val df = Seq(
