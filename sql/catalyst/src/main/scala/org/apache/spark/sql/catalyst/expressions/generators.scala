@@ -94,6 +94,59 @@ case class UserDefinedGenerator(
 }
 
 /**
+ * Separate v1, ..., vk into n rows. Each row will have k/n columns. n must be constant.
+ * {{{
+ *   SELECT stack(2, 1, 2, 3) ->
+ *   1      2
+ *   3      NULL
+ * }}}
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
+  extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
+case class Stack(children: Seq[Expression])
+    extends Expression with Generator with CodegenFallback {
+
+  private lazy val numRows = children.head.eval().asInstanceOf[Int]
+  private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
+    } else if (children.head.dataType != IntegerType || !children.head.foldable || numRows < 1) {
+      TypeCheckResult.TypeCheckFailure("The number of rows must be a positive constant integer.")
+    } else {
+      for (i <- 1 until children.length) {
+        val j = (i - 1) % numFields
+        if (children(i).dataType != elementSchema.fields(j).dataType) {
+          return TypeCheckResult.TypeCheckFailure(
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
+              s"Argument $i (${children(i).dataType})")
+        }
+      }
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def elementSchema: StructType =
+    StructType(children.tail.take(numFields).zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val values = children.tail.map(_.eval(input)).toArray
+    for (row <- 0 until numRows) yield {
+      val fields = new Array[Any](numFields)
+      for (col <- 0 until numFields) {
+        val index = row * numFields + col
+        fields.update(col, if (index < values.length) values(index) else null)
+      }
+      InternalRow(fields: _*)
+    }
+  }
+}
+
+/**
  * A base class for Explode and PosExplode
  */
 abstract class ExplodeBase(child: Expression, position: Boolean)
@@ -195,3 +248,38 @@ case class Explode(child: Expression) extends ExplodeBase(child, position = fals
   extended = "> SELECT _FUNC_(array(10,20));\n  0\t10\n  1\t20")
 // scalastyle:on line.size.limit
 case class PosExplode(child: Expression) extends ExplodeBase(child, position = true)
+
+/**
+ * Explodes an array of structs into a table.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Explodes an array of structs into a table.",
+  extended = "> SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));\n  [1,a]\n  [2,b]")
+case class Inline(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+
+  override def children: Seq[Expression] = child :: Nil
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(et, _) if et.isInstanceOf[StructType] =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName should be array of struct type, not ${child.dataType}")
+  }
+
+  override def elementSchema: StructType = child.dataType match {
+    case ArrayType(et : StructType, _) => et
+  }
+
+  private lazy val numFields = elementSchema.fields.length
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val inputArray = child.eval(input).asInstanceOf[ArrayData]
+    if (inputArray == null) {
+      Nil
+    } else {
+      for (i <- 0 until inputArray.numElements())
+        yield inputArray.getStruct(i, numFields)
+    }
+  }
+}
