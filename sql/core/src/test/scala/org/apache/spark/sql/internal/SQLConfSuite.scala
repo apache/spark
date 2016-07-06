@@ -128,12 +128,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS)
     try {
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === true)
-      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=false")
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === false)
+      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
+      sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}=10")
+      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 10)
       assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 1)
       sql(s"reset")
-      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === true)
+      assert(spark.conf.get(SQLConf.OPTIMIZER_MAX_ITERATIONS) === 100)
       assert(sql(s"set").where(s"key = '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.OPTIMIZER_MAX_ITERATIONS}=$original")
