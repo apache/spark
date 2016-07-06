@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystConf, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -49,18 +48,21 @@ case class OptimizeMetadataOnlyQuery(
 
     plan.transform {
       case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(partAttrs, relation)) =>
+        // We only apply this optimization when only partitioned attributes are scanned.
         if (a.references.subsetOf(partAttrs)) {
           val aggFunctions = aggExprs.flatMap(_.collect {
             case agg: AggregateExpression => agg
           })
-          val hasAllDistinctAgg = aggFunctions.forall { agg =>
+          val isAllDistinctAgg = aggFunctions.forall { agg =>
             agg.isDistinct || (agg.aggregateFunction match {
+              // `Max` and `Min` are always distinct aggregate functions no matter they have
+              // DISTINCT keyword or not, as the result will be same.
               case _: Max => true
               case _: Min => true
               case _ => false
             })
           }
-          if (hasAllDistinctAgg) {
+          if (isAllDistinctAgg) {
             a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, relation)))
           } else {
             a
@@ -71,6 +73,10 @@ case class OptimizeMetadataOnlyQuery(
     }
   }
 
+  /**
+   * Transform the given plan, find its table scan nodes that matches the given relation, and then
+   * replace the table scan node with its corresponding partition values.
+   */
   private def replaceTableScanWithPartitionMetadata(
       child: LogicalPlan,
       relation: LogicalPlan): LogicalPlan = {
@@ -93,18 +99,18 @@ case class OptimizeMetadataOnlyQuery(
             }
             LocalRelation(partAttrs, partitionData)
 
-          case _ =>
-            throw new IllegalStateException(s"The plan: $relation Cannot be replaced by " +
-              s"LocalRelation in the OptimizeMetadataOnlyQuery.")
+          case _ => throw new IllegalStateException(s"unrecognized table scan node: $relation")
         }
     }
   }
 
   /**
-   * A pattern that finds scanned partition attributes and table relation all of whose columns
-   * scanned are partition columns. This applies when project or filter operators with
-   * deterministic expressions scan only partition columns.
-   * It returns scanned partition attributes and table relation plan, otherwise None.
+   * A pattern that finds the partitioned table relation node inside the given plan, and returns a
+   * pair of the partition attributes and the table relation node.
+   *
+   * It keeps traversing down the given plan tree if there is a [[Project]] or [[Filter]] with
+   * deterministic expressions, and returns result after reaching the partitioned table relation
+   * node.
    */
   object PartitionedRelation {
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
@@ -126,7 +132,7 @@ case class OptimizeMetadataOnlyQuery(
 
       case f @ Filter(condition, child) if condition.deterministic =>
         unapply(child).flatMap { case (partAttrs, relation) =>
-          if (f.references.subsetOf(partAttrs)) Some(f.outputSet, relation) else None
+          if (f.references.subsetOf(partAttrs)) Some(partAttrs, relation) else None
         }
 
       case _ => None
