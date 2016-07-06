@@ -400,13 +400,17 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 @ExpressionDescription(
   usage = """_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into
     key/value pairs using delimiters.
-    Default delimiters are ',' for pairDelim and '=' for keyValueDelim.""",
+    Default delimiters are ',' for pairDelim and ':' for keyValueDelim.""",
   extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes {
 
+  def this(child: Expression, pairDelim: Expression) = {
+    this(child, pairDelim, Literal(":"))
+  }
+
   def this(child: Expression) = {
-    this(child, Literal(","), Literal("="))
+    this(child, Literal(","), Literal(":"))
   }
 
   override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
@@ -418,7 +422,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   override def nullSafeEval(str: Any, delim1: Any, delim2: Any): Any = {
     val array = str.asInstanceOf[UTF8String]
       .split(delim1.asInstanceOf[UTF8String], -1)
-      .map{_.split(delim2.asInstanceOf[UTF8String], 2)}
+      .map { kv =>
+        val arr = kv.split(delim2.asInstanceOf[UTF8String], 2)
+        if(arr.length < 2) {
+          Array(arr(0), null)
+        } else {
+          arr
+        }
+      }
 
     ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
   }
@@ -441,10 +452,15 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
         UTF8String[] $keyArray = new UTF8String[$tempArray.length];
         UTF8String[] $valueArray = new UTF8String[$tempArray.length];
 
-        for (int $i = 0; $i < $tempArray.length; $i ++) {
+        for (int $i = 0; $i < $tempArray.length; $i++) {
           UTF8String[] $keyValue = ($tempArray[$i]).split($keyValueDelim, 2);
           $keyArray[$i] = $keyValue[0];
-          $valueArray[$i] = $keyValue[1];
+          if ($keyValue.length < 2) {
+            $valueArray[$i] = null;
+          }
+          else {
+            $valueArray[$i] = $keyValue[1];
+          }
         }
 
         ${ev.value} = new $mapClass(new $arrayClass($keyArray), new $arrayClass($valueArray));

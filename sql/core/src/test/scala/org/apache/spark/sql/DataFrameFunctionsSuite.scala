@@ -412,7 +412,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     ).toDF("a", "b")
 
     checkAnswer(
-      df1.selectExpr("str_to_map(a)"),
+      df1.selectExpr("str_to_map(a,',','=')"),
       Seq(
         Row(Map("a" -> "1", "b" -> "2")),
         Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
@@ -422,7 +422,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
 
     checkAnswer(
-      df2.selectExpr("str_to_map(a,',',':')"),
+      df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
   }
