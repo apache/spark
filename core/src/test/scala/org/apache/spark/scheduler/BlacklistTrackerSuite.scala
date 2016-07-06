@@ -65,11 +65,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   def assertEquivalentToSet(f: String => Boolean, expected: Set[String]): Unit = {
     allOptions.foreach { opt =>
       val actual = f(opt)
-      if (expected.contains(opt)) {
-        assert(actual)
-      } else {
-        assert(!actual)
-      }
+      val exp = expected.contains(opt)
+      assert(actual === exp, raw"""for string "$opt" """)
     }
   }
 
@@ -95,6 +92,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val exp = (executor == "1" && stage == stage1 && partition == 1)
       assert(blacklistTracker.isExecutorBlacklisted(executor, stage, partition) === exp)
     }
+    assert(blacklistTracker.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage1), Set())
     assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage2), Set())
@@ -126,17 +124,20 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage1), Set("hostA"))
     assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage2), Set())
     // we dont' blacklist the nodes or executors till the stages complete
+    assert(blacklistTracker.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set())
 
     // when the stage completes successfully, now there is sufficient evidence we've got
     // bad executors and node
     blacklistTracker.taskSetSucceeded(stage1, scheduler)
+    assert(blacklistTracker.nodeBlacklist() === Set("hostA"))
     assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set("hostA"))
     assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set("1", "2"))
 
     clock.advance(blacklistTracker.EXECUTOR_RECOVERY_MILLIS + 1)
-    blacklistTracker.expireExecutorsInBlackList()
+    blacklistTracker.expireExecutorsInBlacklist()
+    assert(blacklistTracker.nodeBlacklist() === Set())
     assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set())
   }
@@ -218,18 +219,33 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         "1", "hostA", TaskLocality.ANY, false))
     }
     tracker.taskSetSucceeded(0, scheduler)
+    assert(tracker.nodeBlacklist() === Set())
+    assertEquivalentToSet(tracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1"))
+
+    (0 until 4).foreach { partition =>
+      tracker.taskFailed(1, partition, new TaskInfo(partition + 4, partition, 0,
+        clock.getTimeMillis(), "2", "hostA", TaskLocality.ANY, false))
+    }
+    tracker.taskSetSucceeded(1, scheduler)
+    assert(tracker.nodeBlacklist() === Set("hostA"))
+    assertEquivalentToSet(tracker.isNodeBlacklisted(_), Set("hostA"))
+    assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1", "2"))
 
     clock.advance(tracker.EXECUTOR_RECOVERY_MILLIS + 1)
     // TODO might want to change this to avoid the need for expiry thread, if that eliminates the
     // need for the locks.  In which case, expiry would happen automatically.
-    tracker.expireExecutorsInBlackList()
+    tracker.expireExecutorsInBlacklist()
+    assert(tracker.nodeBlacklist() === Set())
+    assertEquivalentToSet(tracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
-    // TODO after recovery, count is reset to 0
+
     // fail one more task, but executor isn't put back into blacklist since count reset to 0
     tracker.taskFailed(1, 0, new TaskInfo(5, 0, 0, clock.getTimeMillis(),
       "1", "hostA", TaskLocality.ANY, false))
     tracker.taskSetSucceeded(1, scheduler)
+    assert(tracker.nodeBlacklist() === Set())
+    assertEquivalentToSet(tracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
   }
 

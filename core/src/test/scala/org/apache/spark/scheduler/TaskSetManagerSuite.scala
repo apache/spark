@@ -482,7 +482,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Despite advancing beyond the time for expiring executors from within the blacklist,
     // we *never* expire from the *within* stage blacklist
     clock.advance(rescheduleDelay)
-    blacklist.expireExecutorsInBlackList()
+    blacklist.expireExecutorsInBlacklist()
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)

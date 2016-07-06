@@ -596,4 +596,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(thirdTaskDescs.size === 0)
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1", "executor3")))
   }
+
+  test("check for executors that can be expired from blacklist") {
+    val blacklist = mock[BlacklistTracker]
+    taskScheduler = setupScheduler(blacklist)
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1, 0, 0))
+    taskScheduler.resourceOffers(Seq(
+      new WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    verify(blacklist).expireExecutorsInBlacklist()
+  }
 }

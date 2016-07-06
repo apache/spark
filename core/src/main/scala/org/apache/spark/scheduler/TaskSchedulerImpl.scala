@@ -342,6 +342,10 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }
 
+    // ensure that we periodically check if executors can be removed from the blacklist, without
+    // requiring a separate thread and added synchronization overhead
+    blacklistTracker.expireExecutorsInBlacklist()
+
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     val filteredOffers: IndexedSeq[WorkerOffer] = offers.filter { offer =>
       !blacklistTracker.isNodeBlacklisted(offer.host)  &&
