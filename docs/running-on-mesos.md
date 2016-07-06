@@ -237,7 +237,7 @@ conf.set("spark.mesos.coarse", "false")
 
 You may also make use of `spark.mesos.constraints` to set
 attribute-based constraints on Mesos resource offers. By default, all
-offers will be accepted.
+resource offers will be accepted.
 
 {% highlight scala %}
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
