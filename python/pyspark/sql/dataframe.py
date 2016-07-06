@@ -629,6 +629,9 @@ class DataFrame(object):
         >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
         [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
+        >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
+        [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
         [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
