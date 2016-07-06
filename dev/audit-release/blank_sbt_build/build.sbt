@@ -25,6 +25,6 @@ libraryDependencies += "org.apache.spark" % System.getenv.get("SPARK_MODULE") % 
 
 resolvers ++= Seq(
   "Spark Release Repository" at System.getenv.get("SPARK_RELEASE_REPOSITORY"),
-  "Eclipse Paho Repository" at "https://repo.eclipse.org/content/repositories/paho-releases/",
+  "Eclipse Paho Repository" at "https://repo.eclipse.org/content/repositories/paho/",
   "Maven Repository" at "http://repo1.maven.org/maven2/",
   "Spray Repository" at "http://repo.spray.cc/")
