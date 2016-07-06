@@ -645,7 +645,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.reverseProxyUrl</code></td>
   <td>http://localhost:8080</td>
   <td>
-    This is the URL where your proxy is running. Make sure this is a complete URL includeing scheme (http/https) and port to reach your proxy.
+    This is the URL where your proxy is running. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
   </td>
 </tr>
 <tr>

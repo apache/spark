@@ -200,8 +200,7 @@ private[spark] object JettyUtils extends Logging {
         val uri = new StringBuilder(target)
         if (target.endsWith("/")) uri.setLength(uri.length() - 1)
         val rest = path.substring(prefix.length())
-        if (!rest.isEmpty())
-        {
+        if (!rest.isEmpty()) {
           if (!rest.startsWith("/")) {
             uri.append("/")
           }
