@@ -24,8 +24,8 @@ import org.apache.hadoop.security.token.Token
 import org.apache.spark.SparkConf
 
 /**
- * An interface to provide tokens for service, any service needs to be communicated with Spark
- * through token way need to implement this interface and register into
+ * An interface to provide tokens for service, any service wants to communicate with Spark
+ * through token way needs to implement this interface and register into
  * [[ConfigurableTokenManager]] through configurations.
  */
 trait ServiceTokenProvider {
@@ -53,7 +53,7 @@ trait ServiceTokenProvider {
 }
 
 /**
- * An interface for service token which can be renewable, any [[ServiceTokenProvider]] in which
+ * An interface for service in which token can be renewable, any [[ServiceTokenProvider]] in which
  * token can be renewable should also implement this interface, Spark's internal time-based
  * token renewal mechanism will invoke the methods to update the tokens periodically.
  */

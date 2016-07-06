@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 
 /**
  * A [[ConfigurableTokenManager]] to manage all the token providers register in this class. Also
- * it provides other modules the functionality to obtain tokens, get token renweal interval and
+ * it provides other modules the functionality to obtain tokens, get token renewal interval and
  * calculate the time length till next renewal.
  *
  * By default ConfigurableTokenManager has 3 built-in token providers, HDFSTokenProvider,
@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
  * provider will not be loaded.
  *
  * For other token providers which need to be loaded in should:
- * 1. Implement [[ServiceTokenProvider]] and [[ServiceTokenRenewable]] if token renewal is
+ * 1. Implement [[ServiceTokenProvider]] or [[ServiceTokenRenewable]] if token renewal is
  * required for this service.
  * 2. set spark.yarn.security.tokens.{service}.enabled to true
  * 3. Specify the class name through spark.yarn.security.tokens.{service}.class
@@ -98,10 +98,16 @@ final class ConfigurableTokenManager private[yarn] (sparkConf: SparkConf) extend
     }
   }
 
+  /**
+   * Get service token provider by name.
+   */
   def getServiceTokenProvider(service: String): Option[ServiceTokenProvider] = {
     tokenProviders.get(service)
   }
 
+  /**
+   * Obtain tokens from all the token providers and add into credentials, also return as an array.
+   */
   def obtainTokens(conf: Configuration, creds: Credentials): Array[Token[_]] = {
     val tokenBuf = mutable.ArrayBuffer[Token[_]]()
     tokenProviders.values.foreach { provider =>
@@ -116,6 +122,10 @@ final class ConfigurableTokenManager private[yarn] (sparkConf: SparkConf) extend
     tokenBuf.toArray
   }
 
+  /**
+   * Get the smallest token renewal interval from all the token providers, this is used for
+   * periodically token renewal.
+   */
   def getSmallestTokenRenewalInterval(conf: Configuration): Long = {
     tokenProviders.values.map { provider =>
       if (provider.isTokenRequired(conf) && provider.isInstanceOf[ServiceTokenRenewable]) {
@@ -126,6 +136,10 @@ final class ConfigurableTokenManager private[yarn] (sparkConf: SparkConf) extend
     }.min
   }
 
+  /**
+   * Get the nearest time from now to next token renewal, token renewer and updater will use this
+    * value to schedule the time to renew and update tokens.
+   */
   def getNearestTimeFromNowToRenewal(
       conf: Configuration,
       fractional: Double,
