@@ -279,6 +279,9 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
+    if (!launchedTask) {
+      taskSet.abortIfCompletelyBlacklisted(executorIdToHost.keys)
+    }
     return launchedTask
   }
 
