@@ -1483,7 +1483,8 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     <p>
       When true, enable the metadata-only query optimization that use the table's metadata to
       produce the partition columns instead of table scans. It applies when all the columns scanned
-      are partition columns and the query has an aggregate operator that has distinct semantics.
+      are partition columns and the query has an aggregate operator that satisfies distinct
+      semantics.
     </p>
   </td>
 </tr>
