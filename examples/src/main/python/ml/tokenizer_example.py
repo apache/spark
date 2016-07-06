@@ -34,10 +34,13 @@ if __name__ == "__main__":
         (1, "I wish Java could use case classes"),
         (2, "Logistic,regression,models,are,neat")
     ], ["label", "sentence"])
+
     tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
     wordsDataFrame = tokenizer.transform(sentenceDataFrame)
+
     for words_label in wordsDataFrame.select("words", "label").take(3):
         print(words_label)
+
     regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
     # alternatively, pattern="\\w+", gaps(False)
     # $example off$

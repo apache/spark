@@ -35,6 +35,7 @@ if __name__ == "__main__":
         .builder\
         .appName("TrainValidationSplit")\
         .getOrCreate()
+
     # $example on$
     # Prepare training and test data.
     data = spark.read.format("libsvm")\
@@ -60,6 +61,7 @@ if __name__ == "__main__":
 
     # Run TrainValidationSplit, and choose the best set of parameters.
     model = tvs.fit(train)
+
     # Make predictions on test data. model is the model with combination of parameters
     # that performed best.
     prediction = model.transform(test)

@@ -38,7 +38,6 @@ object SimpleParamsExample {
       .builder
       .appName("SimpleParamsExample")
       .getOrCreate()
-    import spark.implicits._
 
     // Prepare training data.
     // We use LabeledPoint, which is a case class. Spark SQL can convert RDDs of case classes

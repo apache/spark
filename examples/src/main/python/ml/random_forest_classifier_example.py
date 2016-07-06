@@ -31,7 +31,7 @@ from pyspark.sql import SparkSession
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("random_forest_classifier_example")\
+        .appName("RandomForestClassifierExample")\
         .getOrCreate()
 
     # $example on$
@@ -41,6 +41,7 @@ if __name__ == "__main__":
     # Index labels, adding metadata to the label column.
     # Fit on whole dataset to include all labels in index.
     labelIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel").fit(data)
+
     # Automatically identify categorical features, and index them.
     # Set maxCategories so features with > 4 distinct values are treated as continuous.
     featureIndexer =\

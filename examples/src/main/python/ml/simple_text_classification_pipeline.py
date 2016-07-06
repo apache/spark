@@ -20,8 +20,7 @@ from __future__ import print_function
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import HashingTF, Tokenizer
-from pyspark.sql import Row, SparkSession
-
+from pyspark.sql import SparkSession
 
 """
 A simple text classification pipeline that recognizes "spark" from
@@ -30,7 +29,6 @@ pipeline in Python. Run with:
 
   bin/spark-submit examples/src/main/python/ml/simple_text_classification_pipeline.py
 """
-
 
 if __name__ == "__main__":
     spark = SparkSession\

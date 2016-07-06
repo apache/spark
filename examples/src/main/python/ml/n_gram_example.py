@@ -34,8 +34,10 @@ if __name__ == "__main__":
         (1, ["I", "wish", "Java", "could", "use", "case", "classes"]),
         (2, ["Logistic", "regression", "models", "are", "neat"])
     ], ["label", "words"])
+
     ngram = NGram(inputCol="words", outputCol="ngrams")
     ngramDataFrame = ngram.transform(wordDataFrame)
+
     for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
         print(ngrams_label)
     # $example off$

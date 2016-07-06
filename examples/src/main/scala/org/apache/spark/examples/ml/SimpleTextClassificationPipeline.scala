@@ -46,7 +46,6 @@ object SimpleTextClassificationPipeline {
       .builder
       .appName("SimpleTextClassificationPipeline")
       .getOrCreate()
-    import spark.implicits._
 
     // Prepare training documents, which are labeled.
     val training = spark.createDataFrame(Seq(

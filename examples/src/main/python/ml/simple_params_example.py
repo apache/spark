@@ -18,7 +18,6 @@
 from __future__ import print_function
 
 import pprint
-import sys
 
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.linalg import DenseVector
@@ -89,7 +88,7 @@ if __name__ == "__main__":
         .collect()
 
     for row in result:
-        print("features=%s,label=%s -> prob=%s, prediction=%s"
+        print("features=%s, label=%s -> prob=%s, prediction=%s"
               % (row.features, row.label, row.myProbability, row.prediction))
 
     spark.stop()
