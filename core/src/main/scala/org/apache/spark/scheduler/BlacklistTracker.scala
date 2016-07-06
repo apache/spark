@@ -41,12 +41,6 @@ private[spark] trait BlacklistTracker {
 
   def stop(): Unit
 
-  def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit
-
-  def taskSetFailed(stageId: Int): Unit
-
-  def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean
-
   /**
    * expensive, but thread-safe, when you need the full blacklist
    */
@@ -54,9 +48,11 @@ private[spark] trait BlacklistTracker {
 
   def isNodeBlacklisted(node: String): Boolean
 
+  def isNodeBlacklistedForStage(node: String, stageId: Int): Boolean
+
   def isExecutorBlacklisted(executorId: String): Boolean
 
-  def nodeBlacklistForStage(stageId: Int): Set[String]
+  def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean
 
   def isExecutorBlacklisted(
     executorId: String,
@@ -72,6 +68,10 @@ private[spark] trait BlacklistTracker {
     stageId: Int,
     partition: Int,
     info: TaskInfo): Unit
+
+  def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit
+
+  def taskSetFailed(stageId: Int): Unit
 
   def removeExecutor(executorId: String): Unit
 }
@@ -98,7 +98,6 @@ private[spark] trait BlacklistTracker {
 private[spark] class BlacklistTrackerImpl(
     conf: SparkConf,
     clock: Clock = new SystemClock()) extends BlacklistTracker with Logging {
-
 
   private val MAX_FAILURES_PER_EXEC =
     conf.getInt("spark.blacklist.maxFailedTasksPerExecutor", 2)
@@ -162,11 +161,9 @@ private[spark] class BlacklistTrackerImpl(
       failuresForStage.foreach { case (exec, newFailures) =>
         val prevFailures = executorIdToFailureCount.getOrElse(exec, 0)
         val newTotal = prevFailures + newFailures.totalFailures
-        logInfo(s"exec $exec now has $newTotal failures after adding" +
-          s" ${newFailures.totalFailures} from stage $stageId")
 
         if (newTotal >= MAX_FAILURES_PER_EXEC) {
-          logInfo(s"Blacklisting executor $exec because it had $newTotal" +
+          logInfo(s"Blacklisting executor $exec because it has $newTotal" +
             s" task failures in successful task sets")
           val now = clock.getTimeMillis()
           executorIdToBlacklistTime.put(exec, now)
@@ -188,7 +185,8 @@ private[spark] class BlacklistTrackerImpl(
     // when we blacklist a node within a stage, we don't directly promote that node to being
     // blacklisted for the app.  Instead, we use the mechanism above to decide whether or not to
     // blacklist any executors for the app, and when doing so we'll check whether or not to also
-    // blacklist the node.
+    // blacklist the node.  That is why we just remove this entry without doing any promotion to
+    // the full app blacklist.
     stageIdToBlacklistedNodes.remove(stageId)
   }
 
@@ -200,26 +198,23 @@ private[spark] class BlacklistTrackerImpl(
   }
 
   /**
-   * Return true iff this executor is EITHER (a) completely blacklisted or (b) blacklisted
-   * for the given stage.
+   * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
+   * the executor is blacklisted overall (or anything to do with the node the executor is on).
    */
   override def isExecutorBlacklistedForStage(
       stageId: Int,
       executorId: String): Boolean = synchronized {
     // TODO any point in caching anything here?  do we need to avoid the lock?
-    // TODO should TaskSchedulerImpl just filter out completely blacklisted executors earlier?
-    val stageExecFailures = stageIdToExecToFailures.getOrElse(stageId, new HashMap())
-      .getOrElse(executorId, new FailureStatus)
-    stageExecFailures.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE ||
-      executorIdToBlacklistTime.contains(executorId)
+    stageIdToExecToFailures.get(stageId).flatMap(_.get(executorId))
+      .map(_.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE).getOrElse(false)
   }
 
   override def isExecutorBlacklisted(executorId: String): Boolean = synchronized {
     executorIdToBlacklistTime.contains(executorId)
   }
 
-  override def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
-    stageIdToBlacklistedNodes.getOrElse(stageId, Set())
+  def isNodeBlacklistedForStage(node: String, stageId: Int): Boolean = synchronized {
+    stageIdToBlacklistedNodes.get(stageId).map(_.contains(node)).getOrElse(false)
   }
 
   override def nodeBlacklist(): Set[String] = synchronized {
@@ -264,13 +259,13 @@ private[spark] class BlacklistTrackerImpl(
    * Return true if this executor is blacklisted for the given task.  This does *not*
    * need to return true if the executor is blacklisted for the entire stage, or blacklisted
    * altogether.
-   *
-   * This method is called by multiple threads, though always with a lock on TaskSchedulerImpl.
    */
   override def isExecutorBlacklisted(
       executorId: String,
       stageId: Int,
       partition: Int) : Boolean = synchronized {
+    // intentionally avoiding .getOrElse(..., new HashMap()) to avoid lots of object
+    // creation, since this method gets called a *lot*
     stageIdToExecToFailures.get(stageId) match {
       case Some(stageFailures) =>
         stageFailures.get(executorId) match {
@@ -280,8 +275,6 @@ private[spark] class BlacklistTrackerImpl(
             false
         }
       case None =>
-        // intentionally avoiding .getOrElse(..., new HashMap()) to avoid lots of object
-        // creation, since this method gets called a *lot*
         false
     }
   }
@@ -323,7 +316,7 @@ private[spark] object BlacklistTracker extends Logging {
       } else {
         // local-cluster is *not* considered local for these purposes, we still want the blacklist
         // enabled by default
-        Utils.isLocalMaster(conf)
+        !Utils.isLocalMaster(conf)
       }
     } else {
       // always take whatever value is explicitly set by the user
@@ -337,9 +330,7 @@ private[spark] object BlacklistTracker extends Logging {
   }
 }
 
-/**
- * Failures for one executor, within one stage
- */
+/** Failures for one executor, within one stage */
 private[scheduler] final class FailureStatus {
   val failuresByPart = HashSet[Int]()
   var totalFailures = 0
@@ -349,9 +340,7 @@ private[scheduler] final class FailureStatus {
   }
 }
 
-private[scheduler] case class StageAndPartition(val stageId: Int, val partition: Int)
-
-
+/** Used to turn off blacklisting completely */
 private[spark] object NoopBlacklistTracker extends BlacklistTracker {
 
   override def start: Unit = {}
@@ -366,28 +355,18 @@ private[spark] object NoopBlacklistTracker extends BlacklistTracker {
     false
   }
 
-  override def isExecutorBlacklisted(executorId: String): Boolean = {
-    false
-  }
+  override def isExecutorBlacklisted(executorId: String): Boolean = false
 
-  override def nodeBlacklist(): Set[String] = {
-    Set()
-  }
+  override def nodeBlacklist(): Set[String] = Set()
 
-  override def isNodeBlacklisted(node: String): Boolean = {
-    false
-  }
+  override def isNodeBlacklisted(node: String): Boolean = false
 
-  override def nodeBlacklistForStage(stageId: Int): Set[String] = {
-    Set()
-  }
+  override def isNodeBlacklistedForStage(node: String, stageId: Int): Boolean = false
 
   override def isExecutorBlacklisted(
       executorId: String,
       stageId: Int,
-      partition: Int) : Boolean = {
-    false
-  }
+      partition: Int) : Boolean = false
 
   override def taskSucceeded(
     stageId: Int,

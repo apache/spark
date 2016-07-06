@@ -96,8 +96,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       assert(blacklistTracker.isExecutorBlacklisted(executor, stage, partition) === exp)
     }
     assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
-    assert(blacklistTracker.nodeBlacklistForStage(stage1) === Set())
-    assert(blacklistTracker.nodeBlacklistForStage(stage2) === Set())
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage1), Set())
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage2), Set())
 
     // Task 1 & 2 failed on both executor 1 & 2, so we blacklist all executors on that host,
     // for all tasks for the stage.  Note the api expects multiple checks for each type of
@@ -123,8 +123,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         assert(blacklistTracker.isExecutorBlacklistedForStage(stage, executor) === executorExp)
       }
     }
-    assert(blacklistTracker.nodeBlacklistForStage(stage1) === Set("hostA"))
-    assert(blacklistTracker.nodeBlacklistForStage(stage2) === Set())
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage1), Set("hostA"))
+    assertEquivalentToSet(blacklistTracker.isNodeBlacklistedForStage(_, stage2), Set())
     // we dont' blacklist the nodes or executors till the stages complete
     assertEquivalentToSet(blacklistTracker.isNodeBlacklisted(_), Set())
     assertEquivalentToSet(blacklistTracker.isExecutorBlacklisted(_), Set())

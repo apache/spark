@@ -272,12 +272,15 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    val nodeBlacklist = blacklistTracker.nodeBlacklistForStage(taskSet.stageId)
+    // nodes and executors that are blacklisted for the entire application have already been
+    // filtered out by this point
     for (i <- 0 until shuffledOffers.size) {
-      val execId = shuffledOffers(i).executorId
+      val offer = shuffledOffers(i)
+      val host = offer.host
+      val nodeBlacklisted = blacklistTracker.isNodeBlacklistedForStage(host, taskSet.stageId)
+      val execId = offer.executorId
       val execBlacklisted = blacklistTracker.isExecutorBlacklistedForStage(taskSet.stageId, execId)
-      val host = shuffledOffers(i).host
-      if (!nodeBlacklist(host) && !execBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
+      if (!nodeBlacklisted && !execBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
             tasks(i) += task
@@ -606,7 +609,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     dagScheduler.executorAdded(execId, host)
   }
 
-  def getHostForExecutor(execId: String): String = {
+  def getHostForExecutor(execId: String): String = synchronized {
     executorIdToHost(execId)
   }
 

@@ -624,13 +624,13 @@ private[spark] class TaskSetManager(
       pendingTask.foreach { taskId =>
         val stage = taskSet.stageId
         val part = tasks(taskId).partitionId
-        val nodeBlacklistForStage = blacklistTracker.nodeBlacklistForStage(stage)
         executorsByHost.foreach { case (host, execs) =>
           if (!blacklistTracker.isNodeBlacklisted(host) &&
-              !nodeBlacklistForStage.contains(host)) {
+                !blacklistTracker.isNodeBlacklistedForStage(host, stage)) {
             execs.foreach { exec =>
               if (
-                !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
+                !blacklistTracker.isExecutorBlacklisted(exec) &&
+                  !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
                   !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = part)
               ) {
                 // we've found some executor this task can run on.  Its possible that some *other*
@@ -643,8 +643,8 @@ private[spark] class TaskSetManager(
         }
         val execs = executorsByHost.values.flatten.toIndexedSeq.sorted.mkString("(", ",", ")")
         val partition = tasks(taskId).partitionId
-        abort(s"Aborting ${taskSet} because task $taskId (partition $partition)" +
-          s" has already failed on executors $execs, and no other executors are available.")
+        abort(s"Aborting ${taskSet} because task $taskId (partition $partition) cannot run " +
+          s"anywhere due to node and executor blacklist.")
       }
     }
   }

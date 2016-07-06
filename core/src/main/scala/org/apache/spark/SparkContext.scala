@@ -326,7 +326,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
-
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
@@ -1766,7 +1765,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     Utils.tryLogNonFatalError {
       _executorAllocationManager.foreach(_.stop())
     }
-
     if (_listenerBusStarted) {
       Utils.tryLogNonFatalError {
         listenerBus.stop()
