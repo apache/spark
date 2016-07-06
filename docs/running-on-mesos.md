@@ -215,10 +215,10 @@ resource requirements, look into
 
 ## Fine-Grained (deprecated)
 
-**NOTE:** Fine-grained is deprecated as of Spark 2.0.0.  Consider using
- [Dynamic Allocation](#dynamic-resource-allocation-with-mesos) for
- some of the benefits of fine-grained mode.  For a full explanation
- see [SPARK-11857](https://issues.apache.org/jira/browse/SPARK-11857)
+**NOTE:** Fine-grained mode is deprecated as of Spark 2.0.0.  Consider
+ using [Dynamic Allocation](#dynamic-resource-allocation-with-mesos)
+ for some of the benefits.  For a full explanation see
+ [SPARK-11857](https://issues.apache.org/jira/browse/SPARK-11857)
 
 In "fine-grained" mode, each Spark task inside the Spark executor runs
 as a separate Mesos task. This allows multiple instances of Spark (and
