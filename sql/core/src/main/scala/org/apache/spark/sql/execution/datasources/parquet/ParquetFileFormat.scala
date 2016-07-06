@@ -258,7 +258,7 @@ private[sql] class ParquetFileFormat
     val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(!_.dataType.isInstanceOf[MapType])
+      !schema.existsRecursively(_.isInstanceOf[MapType])
   }
 
   override def isSplitable(
