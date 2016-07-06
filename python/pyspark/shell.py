@@ -51,6 +51,9 @@ except TypeError:
 sc = spark.sparkContext
 atexit.register(lambda: sc.stop())
 
+sc = spark.sparkContext
+atexit.register(lambda: sc.stop())
+
 # for compatibility
 sqlContext = spark._wrapped
 sqlCtx = sqlContext
