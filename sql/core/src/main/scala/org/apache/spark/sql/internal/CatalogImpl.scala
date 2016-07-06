@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, TableIdentifier}
@@ -49,6 +50,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       throw new AnalysisException(s"Table '$tableName' does not exist in database '$dbName'.")
     }
   }
+
+  /**
+   * Return an identifier for the underlying catalog implementation, currently must be
+   * either 'hive' or 'in-memory'.
+   */
+  override val implementation: String = sparkSession.sparkContext.conf.get(CATALOG_IMPLEMENTATION)
 
   /**
    * Returns the current default database in this session.
