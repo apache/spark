@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.spark.Partition
 import org.apache.spark.sql._
-import org.apache.spark.sql.sources.{CreatableRelationProvider, BaseRelation, DataSourceRegister, RelationProvider}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider}
 
 class JdbcRelationProvider
   extends RelationProvider
@@ -35,10 +35,44 @@ class JdbcRelationProvider
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val jdbcOptions = new JDBCOptions(parameters)
+    val parts = buildJDBCPartition(jdbcOptions)
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+  }
+
+  /**
+   * Save the DataFrame to the destination and return a relation with the given parameters based on
+   * the contents of the given DataFrame.
+   */
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val jdbcOptions = new JDBCOptions(parameters)
+    val parts = buildJDBCPartition(jdbcOptions)
+    val properties = new Properties() // Additional properties that we will pass to getConnection
+    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
+    data.write
+      .mode(mode)
+      .jdbc(jdbcOptions.url, jdbcOptions.table, properties)
+
+    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+  }
+
+  /**
+   * Build Partitions based on the user-provided options:
+   * - "partitionColumn": the column used to partition
+   * - "lowerBound": the lower bound of partition column
+   * - "upperBound": the upper bound of the partition column
+   * - "numPartitions": the number of partitions
+   */
+  private def buildJDBCPartition(jdbcOptions: JDBCOptions): Array[Partition] = {
     if (jdbcOptions.partitionColumn != null
       && (jdbcOptions.lowerBound == null
-        || jdbcOptions.upperBound == null
-        || jdbcOptions.numPartitions == null)) {
+      || jdbcOptions.upperBound == null
+      || jdbcOptions.numPartitions == null)) {
       sys.error("Partitioning incompletely specified")
     }
 
@@ -51,25 +85,6 @@ class JdbcRelationProvider
         jdbcOptions.upperBound.toLong,
         jdbcOptions.numPartitions.toInt)
     }
-    val parts = JDBCRelation.columnPartition(partitionInfo)
-    val properties = new Properties() // Additional properties that we will pass to getConnection
-    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
-  }
-
-
-  override def createRelation(
-      sqlContext: SQLContext,
-      mode: SaveMode,
-      parameters: Map[String, String],
-      data: DataFrame): BaseRelation = {
-    val jdbcOptions = new JDBCOptions(parameters)
-    val parts = Array.empty[Partition]
-    val properties = new Properties() // Additional properties that we will pass to getConnection
-    parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    data.write
-      .mode(mode)
-      .jdbc(jdbcOptions.url, jdbcOptions.table, properties)
-    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+    JDBCRelation.columnPartition(partitionInfo)
   }
 }

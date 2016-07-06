@@ -155,21 +155,6 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
   }
 
-  test("jdbc save") {
-    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
-    import scala.collection.JavaConverters._
-
-    // df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
-    df2.write.mode(SaveMode.Overwrite).format("jdbc")
-      .option("url", url1)
-      .option("dbtable", "TEST.TRUNCATETEST")
-      .options(properties.asScala)
-      .save()
-    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
-  }
-
   test("Incompatible INSERT to append") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
@@ -191,5 +176,46 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  }
+
+  test("save API") {
+    import scala.collection.JavaConverters._
+
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    df.write.format("jdbc")
+      .option("url", url1)
+      .option("dbtable", "TEST.TRUNCATETEST")
+      .options(properties.asScala)
+      .save()
+    df2.write.mode(SaveMode.Overwrite).format("jdbc")
+      .option("url", url1)
+      .option("dbtable", "TEST.TRUNCATETEST")
+      .options(properties.asScala)
+      .save()
+    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+  }
+
+  test("save API - error handling") {
+    import scala.collection.JavaConverters._
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    var e = intercept[RuntimeException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.TRUNCATETEST")
+        .options(properties.asScala)
+        .save()
+    }.getMessage
+    assert(e.contains("Option 'url' not specified"))
+
+    e = intercept[org.h2.jdbc.JdbcSQLException] {
+      df.write.format("jdbc")
+        .option("dbtable", "TEST.TRUNCATETEST")
+        .option("url", url1)
+        .save()
+    }.getMessage
+    assert(e.contains("Wrong user name or password"))
   }
 }
