@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
  * 3. aggregate function on partition columns which have same result w or w/o DISTINCT keyword.
  *  e.g. SELECT Max(col2) FROM tbl GROUP BY col1.
  */
-case class MetadataOnlyOptimizer(
+case class OptimizeMetadataOnly(
     catalog: SessionCatalog,
     conf: CatalystConf) extends Rule[LogicalPlan] {
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-class MetadataOnlyOptimizerSuite extends QueryTest with SharedSQLContext {
+class OptimizeMetadataOnlySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   override def beforeAll(): Unit = {
