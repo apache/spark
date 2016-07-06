@@ -45,4 +45,3 @@ private class ExternalShuffleServiceSource
       override def getValue: Long = blockHandler.getTotalShuffleRequests
     })
 }
-
