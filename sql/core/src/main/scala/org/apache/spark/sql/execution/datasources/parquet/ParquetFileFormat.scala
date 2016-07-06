@@ -99,13 +99,13 @@ private[sql] class ParquetFileFormat
     // bundled with `ParquetOutputFormat[Row]`.
     job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
-    ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
     // We want to clear this temporary metadata from saving into Parquet file.
     // This metadata is only useful for detecting optional columns when pushdowning filters.
     val dataSchemaToWrite = StructType.removeMetadata(StructType.metadataKeyForOptionalField,
       dataSchema).asInstanceOf[StructType]
-    CatalystWriteSupport.setSchema(dataSchemaToWrite, conf)
+    ParquetWriteSupport.setSchema(dataSchemaToWrite, conf)
 
     // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
     // and `CatalystWriteSupport` (writing actual rows to Parquet files).
@@ -295,14 +295,14 @@ private[sql] class ParquetFileFormat
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
       ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
     hadoopConf.set(
-      CatalystWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetWriteSupport.SPARK_ROW_SCHEMA,
       ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
 
     // We want to clear this temporary metadata from saving into Parquet file.
     // This metadata is only useful for detecting optional columns when pushdowning filters.
     val dataSchemaToWrite = StructType.removeMetadata(StructType.metadataKeyForOptionalField,
       requiredSchema).asInstanceOf[StructType]
-    CatalystWriteSupport.setSchema(dataSchemaToWrite, hadoopConf)
+    ParquetWriteSupport.setSchema(dataSchemaToWrite, hadoopConf)
 
     // Sets flags for `CatalystSchemaConverter`
     hadoopConf.setBoolean(
@@ -435,14 +435,14 @@ private[sql] class ParquetOutputWriterFactory(
     // bundled with `ParquetOutputFormat[Row]`.
     job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
-    ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
     // We want to clear this temporary metadata from saving into Parquet file.
     // This metadata is only useful for detecting optional columns when pushdowning filters.
     val dataSchemaToWrite = StructType.removeMetadata(
       StructType.metadataKeyForOptionalField,
       dataSchema).asInstanceOf[StructType]
-    CatalystWriteSupport.setSchema(dataSchemaToWrite, conf)
+    ParquetWriteSupport.setSchema(dataSchemaToWrite, conf)
 
     // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
     // and `CatalystWriteSupport` (writing actual rows to Parquet files).
@@ -611,7 +611,7 @@ private[sql] object ParquetFileFormat extends Logging {
     })
 
     conf.set(
-      CatalystWriteSupport.SPARK_ROW_SCHEMA,
+      ParquetWriteSupport.SPARK_ROW_SCHEMA,
       ParquetSchemaConverter.checkFieldNames(dataSchema).json)
 
     // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
