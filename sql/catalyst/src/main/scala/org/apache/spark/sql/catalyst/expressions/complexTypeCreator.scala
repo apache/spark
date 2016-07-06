@@ -419,12 +419,12 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       .split(delim1.asInstanceOf[UTF8String], -1)
       .map{_.split(delim2.asInstanceOf[UTF8String], 2)}
 
-    ArrayBasedMapData(array.map(_(0)), array.map(_(1))).asInstanceOf[MapData]
+    ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
-    nullSafeCodeGen(ctx, ev, (text, delim1, delim2) => {
+    nullSafeCodeGen(ctx, ev, (text, pairDelim, keyValueDelim) => {
       val arrayClass = classOf[GenericArrayData].getName
       val mapClass = classOf[ArrayBasedMapData].getName
       val keyArray = ctx.freshName("keyArray")
@@ -440,14 +440,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       val i = ctx.freshName("i")
 
       s"""
-        UTF8String[] $tempArray = ($text).split($delim1, -1);
+        UTF8String[] $tempArray = ($text).split($pairDelim, -1);
 
         $keyArray = new UTF8String[$tempArray.length];
         $valueArray = new UTF8String[$tempArray.length];
 
         for (int $i = 0; $i < $tempArray.length; $i ++) {
           UTF8String[] $keyValue =
-            ($tempArray[$i]).split($delim2, 2);
+            ($tempArray[$i]).split($keyValueDelim, 2);
           $keyArray[$i] = $keyValue[0];
           $valueArray[$i] = $keyValue[1];
         }
