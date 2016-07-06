@@ -311,6 +311,9 @@ class KMeans @Since("1.5.0") (
     val instr = Instrumentation.create(this, rdd)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
 
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
+
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
