@@ -400,7 +400,8 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 @ExpressionDescription(
   usage = """_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text into
     key/value pairs using delimiters.
-    Default delimiters are ',' for pairDelim and '=' for keyValueDelim.""")
+    Default delimiters are ',' for pairDelim and '=' for keyValueDelim.""",
+  extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes {
 
