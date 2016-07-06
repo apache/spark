@@ -58,7 +58,9 @@ class OptimizeInSuite extends PlanTest {
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2))))
         .where(In(UnresolvedAttribute("b"),
-          Seq(UnresolvedAttribute("a"), Round(UnresolvedAttribute("a"), 0), Rand(0), Rand(0))))
+          Seq(UnresolvedAttribute("a"), UnresolvedAttribute("a"),
+            Round(UnresolvedAttribute("a"), 0), Round(UnresolvedAttribute("a"), 0),
+            Rand(0), Rand(0))))
         .analyze
 
     comparePlans(optimized, correctAnswer)
