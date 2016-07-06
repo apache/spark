@@ -427,14 +427,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     nullSafeCodeGen(ctx, ev, (text, pairDelim, keyValueDelim) => {
       val arrayClass = classOf[GenericArrayData].getName
       val mapClass = classOf[ArrayBasedMapData].getName
+
       val keyArray = ctx.freshName("keyArray")
       val valueArray = ctx.freshName("valueArray")
-      ctx.addMutableState("UTF8String[]", keyArray, s"this.$keyArray = null;")
-      ctx.addMutableState("UTF8String[]", valueArray, s"this.$valueArray = null;")
-
-      val keyData = s"new $arrayClass($keyArray)"
-      val valueData = s"new $arrayClass($valueArray)"
-
       val tempArray = ctx.freshName("tempArray")
       val keyValue = ctx.freshName("keyValue")
       val i = ctx.freshName("i")
@@ -442,19 +437,16 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       s"""
         UTF8String[] $tempArray = ($text).split($pairDelim, -1);
 
-        $keyArray = new UTF8String[$tempArray.length];
-        $valueArray = new UTF8String[$tempArray.length];
+        UTF8String[] $keyArray = new UTF8String[$tempArray.length];
+        UTF8String[] $valueArray = new UTF8String[$tempArray.length];
 
         for (int $i = 0; $i < $tempArray.length; $i ++) {
-          UTF8String[] $keyValue =
-            ($tempArray[$i]).split($keyValueDelim, 2);
+          UTF8String[] $keyValue = ($tempArray[$i]).split($keyValueDelim, 2);
           $keyArray[$i] = $keyValue[0];
           $valueArray[$i] = $keyValue[1];
         }
 
-        ${ev.value} = new $mapClass($keyData, $valueData);
-        this.$keyArray = null;
-        this.$valueArray = null;
+        ${ev.value} = new $mapClass(new $arrayClass($keyArray), new $arrayClass($valueArray));
       """
     })
   }
