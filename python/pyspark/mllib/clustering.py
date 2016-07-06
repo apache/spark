@@ -507,7 +507,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
           Path to where the model is stored.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.GaussianMixtureModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.GaussianMixtureModelWrapper(model)
         return cls(wrapper)
 
 
@@ -638,7 +638,8 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Load a model from the given path.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.PowerIterationClusteringModelWrapper(model)
+        wrapper =\
+            sc._jvm.org.apache.spark.mllib.api.python.PowerIterationClusteringModelWrapper(model)
         return PowerIterationClusteringModel(wrapper)
 
 

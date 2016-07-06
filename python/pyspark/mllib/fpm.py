@@ -64,7 +64,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Load a model from the given path.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.FPGrowthModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.FPGrowthModelWrapper(model)
         return FPGrowthModel(wrapper)
 
 
