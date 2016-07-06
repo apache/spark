@@ -199,23 +199,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val writeElement = et match {
       case t: StructType =>
         s"""
-          final int $tmpCursor = $bufferHolder.cursor;
+          $arrayWriter.setOffset($index, $bufferHolder.cursor);
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          final int $tmpCursor = $bufferHolder.cursor;
+          $arrayWriter.setOffset($index, $bufferHolder.cursor);
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          final int $tmpCursor = $bufferHolder.cursor;
+          $arrayWriter.setOffset($index, $bufferHolder.cursor);
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case t: DecimalType =>

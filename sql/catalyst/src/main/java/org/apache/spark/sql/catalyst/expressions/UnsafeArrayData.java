@@ -115,7 +115,7 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   private int getSize(int ordinal) {
-    if (ordinal != numElements) {
+    if (ordinal != numElements - 1) {
       return getInt(ordinal + 1) - getInt(ordinal);
     } else {
       return sizeInBytes - getInt(ordinal);
@@ -230,9 +230,8 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UTF8String getUTF8String(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
-    final int offset = (int) (offsetAndSize >> 32);
-    final int size = (int) offsetAndSize;
+    final int offset = getInt(ordinal);
+    final int size = getSize(ordinal);
     return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
