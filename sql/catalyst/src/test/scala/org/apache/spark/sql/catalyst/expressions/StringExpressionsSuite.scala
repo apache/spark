@@ -725,4 +725,41 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
     checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
   }
+
+  test("Sentences") {
+    val nullString = Literal.create(null, StringType)
+    checkEvaluation(Sentences(nullString, nullString, nullString), null, EmptyRow)
+    checkEvaluation(Sentences(nullString, nullString), null, EmptyRow)
+    checkEvaluation(Sentences(nullString), null, EmptyRow)
+    checkEvaluation(Sentences(Literal.create(null, NullType)), null, EmptyRow)
+    checkEvaluation(Sentences("", nullString, nullString), Seq.empty, EmptyRow)
+    checkEvaluation(Sentences("", nullString), Seq.empty, EmptyRow)
+    checkEvaluation(Sentences(""), Seq.empty, EmptyRow)
+
+    val correct_answer = Seq(
+      Seq("Hi", "there"),
+      Seq("The", "price", "was"),
+      Seq("But", "not", "now"))
+
+    // Hive compatible test-cases.
+    checkEvaluation(
+      Sentences("Hi there! The price was $1,234.56.... But, not now."),
+      correct_answer,
+      EmptyRow)
+
+    checkEvaluation(
+      Sentences("Hi there! The price was $1,234.56.... But, not now.", "en"),
+      correct_answer,
+      EmptyRow)
+
+    checkEvaluation(
+      Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
+      correct_answer,
+      EmptyRow)
+
+    checkEvaluation(
+      Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXXXX", "YYYYY"),
+      correct_answer,
+      EmptyRow)
+  }
 }

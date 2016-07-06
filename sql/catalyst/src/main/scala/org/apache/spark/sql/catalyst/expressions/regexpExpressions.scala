@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.lang3.StringEscapeUtils
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
@@ -213,34 +214,37 @@ case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
-  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   def this(str: Expression) = this(str, Literal(""), Literal(""))
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
 
-  override def dataType: DataType = ArrayType(ArrayType(StringType))
+  override def nullable: Boolean = true
+  override def dataType: DataType =
+    ArrayType(ArrayType(StringType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
   override def children: Seq[Expression] = str :: language :: country :: Nil
 
-  override def nullSafeEval(string: Any, language: Any, country: Any): Any = {
-    val sentences = getSentences(string.asInstanceOf[UTF8String].toString,
-      language.asInstanceOf[UTF8String].toString, country.asInstanceOf[UTF8String].toString)
-    val result = ArrayBuffer.empty[GenericArrayData]
-    sentences.foreach(sentence => result += new GenericArrayData(sentence.toArray))
-    new GenericArrayData(result.toArray)
+  override def eval(input: InternalRow): Any = {
+    val string = str.eval(input)
+    if (string == null) {
+      null
+    } else {
+      val locale = try {
+        new Locale(language.eval(input).asInstanceOf[UTF8String].toString,
+          country.eval(input).asInstanceOf[UTF8String].toString)
+      } catch {
+        case _: NullPointerException | _: ClassCastException => Locale.getDefault
+      }
+      getSentences(string.asInstanceOf[UTF8String].toString, locale)
+    }
   }
 
-  private def getSentences(sentences: String, language: String, country: String) = {
-    val locale = try {
-      new Locale(language, country)
-    } finally {
-      Locale.getDefault
-    }
-
+  private def getSentences(sentences: String, locale: Locale) = {
     val bi = BreakIterator.getSentenceInstance(locale)
     bi.setText(sentences)
     var idx = 0
-    val result = new ArrayBuffer[ArrayBuffer[UTF8String]]
+    val result = new ArrayBuffer[GenericArrayData]
     while (bi.next != BreakIterator.DONE) {
       val sentence = sentences.substring(idx, bi.current)
       idx = bi.current
@@ -254,9 +258,9 @@ case class Sentences(
         widx = wi.current
         if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
       }
-      result += words
+      result += new GenericArrayData(words)
     }
-    result
+    new GenericArrayData(result)
   }
 }
 
