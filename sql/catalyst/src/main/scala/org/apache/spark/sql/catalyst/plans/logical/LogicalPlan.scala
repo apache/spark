@@ -137,6 +137,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     }
   }
 
+  private[this] lazy val childAttributeResolver = new AttributeResolver(children.flatMap(_.output))
+
+  private[this] lazy val outputAttributeResolver = new AttributeResolver(output)
+
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
    * nodes of this LogicalPlan. The attribute is expressed as
@@ -145,7 +149,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveChildren(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    resolve(nameParts, children.flatMap(_.output), resolver)
+    childAttributeResolver.resolve(nameParts, resolver)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -155,7 +159,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolve(
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
-    resolve(nameParts, output, resolver)
+    outputAttributeResolver.resolve(nameParts, resolver)
 
   /**
    * Given an attribute name, split it to name parts by dot, but
@@ -165,104 +169,92 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
+    outputAttributeResolver.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
+  }
+}
+
+/**
+ * Helper class for (LogicalPlan) attribute resolution. This class indexes attributes by their
+ * case-in-sensitive name, and checks potential candidates using the given Resolver. Both qualified
+ * and direct resolution are supported.
+ */
+private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Logging {
+  private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
+    m.mapValues(_.distinct).map(identity)
   }
 
-  /**
-   * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
-   *
-   * This assumes `name` has multiple parts, where the 1st part is a qualifier
-   * (i.e. table name, alias, or subquery alias).
-   * See the comment above `candidates` variable in resolve() for semantics the returned data.
-   */
-  private def resolveAsTableColumn(
-      nameParts: Seq[String],
-      resolver: Resolver,
-      attribute: Attribute): Option[(Attribute, List[String])] = {
-    assert(nameParts.length > 1)
-    if (attribute.qualifier.exists(resolver(_, nameParts.head))) {
-      // At least one qualifier matches. See if remaining parts match.
-      val remainingParts = nameParts.tail
-      resolveAsColumn(remainingParts, resolver, attribute)
-    } else {
-      None
+  /** Map to use for direct case insensitive attribute lookups. */
+  private val direct: Map[String, Seq[Attribute]] = {
+    unique(attributes.groupBy(_.name.toLowerCase))
+  }
+
+  /** Map to use for qualified case insensitive attribute lookups. */
+  private val qualified: Map[(String, String), Seq[Attribute]] = {
+    val grouped = attributes.filter(_.qualifier.isDefined).groupBy { a =>
+      (a.qualifier.get.toLowerCase, a.name.toLowerCase)
     }
+    unique(grouped)
   }
 
-  /**
-   * Resolve the given `name` string against the given attribute, returning either 0 or 1 match.
-   *
-   * Different from resolveAsTableColumn, this assumes `name` does NOT start with a qualifier.
-   * See the comment above `candidates` variable in resolve() for semantics the returned data.
-   */
-  private def resolveAsColumn(
-      nameParts: Seq[String],
-      resolver: Resolver,
-      attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
-      Option((attribute.withName(nameParts.head), nameParts.tail.toList))
-    } else {
-      None
-    }
-  }
+  /** Perform attribute resolution given a name and a resolver. */
+  def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
+    // Check if the attribute is a match for the given name.
+    def isMatch(name: String, a: Attribute): Boolean = !a.isGenerated && resolver(a.name, name)
 
-  /** Performs attribute resolution given a name and a sequence of possible attributes. */
-  protected def resolve(
-      nameParts: Seq[String],
-      input: Seq[Attribute],
-      resolver: Resolver): Option[NamedExpression] = {
-
-    // A sequence of possible candidate matches.
-    // Each candidate is a tuple. The first element is a resolved attribute, followed by a list
-    // of parts that are to be resolved.
+    // Find matches for the given name assuming that the 1st part is a qualifier (i.e. table name,
+    // alias, or subquery alias) and the 2nd part is the actual name. This returns a tuple of
+    // matched attributes and a list of parts that are to be resolved.
+    //
     // For example, consider an example where "a" is the table name, "b" is the column name,
     // and "c" is the struct field name, i.e. "a.b.c". In this case, Attribute will be "a.b",
     // and the second element will be List("c").
-    var candidates: Seq[(Attribute, List[String])] = {
-      // If the name has 2 or more parts, try to resolve it as `table.column` first.
-      if (nameParts.length > 1) {
-        input.flatMap { option =>
-          resolveAsTableColumn(nameParts, resolver, option)
-        }
-      } else {
-        Seq.empty
-      }
+    val matches = nameParts match {
+      case qualifier :: name :: nestedFields =>
+        val key = (qualifier.toLowerCase, name.toLowerCase)
+        val attributes = qualified.get(key).toSeq.flatMap(_.filter { a =>
+          resolver(qualifier, a.qualifier.get) && isMatch(name, a)
+        })
+        (attributes, nestedFields)
+      case all =>
+        (Nil, all)
     }
 
     // If none of attributes match `table.column` pattern, we try to resolve it as a column.
-    if (candidates.isEmpty) {
-      candidates = input.flatMap { candidate =>
-        resolveAsColumn(nameParts, resolver, candidate)
-      }
+    val (candidates, nestedFields) = matches match {
+      case (Nil, _) =>
+        val name = nameParts.head
+        val attributes = direct.get(name.toLowerCase).toSeq.flatMap(_.filter(isMatch(name, _)))
+        (attributes, nameParts.tail)
+      case _ => matches
     }
 
     def name = UnresolvedAttribute(nameParts).name
-
-    candidates.distinct match {
-      // One match, no nested fields, use it.
-      case Seq((a, Nil)) => Some(a)
-
-      // One match, but we also need to extract the requested nested field.
-      case Seq((a, nestedFields)) =>
+    candidates match {
+      case Seq(a) if nestedFields.nonEmpty =>
+        // One match, but we also need to extract the requested nested field.
         // The foldLeft adds ExtractValues for every remaining parts of the identifier,
         // and aliased it with the last part of the name.
         // For example, consider "a.b.c", where "a" is resolved to an existing attribute.
         // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
         // expression as "c".
-        val fieldExprs = nestedFields.foldLeft(a: Expression)((expr, fieldName) =>
-          ExtractValue(expr, Literal(fieldName), resolver))
+        val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
+          ExtractValue(e, Literal(name), resolver)
+        }
         Some(Alias(fieldExprs, nestedFields.last)())
 
-      // No matches.
+      case Seq(a) =>
+        // One match, no nested fields, use it.
+        Some(a)
+
       case Seq() =>
-        logTrace(s"Could not find $name in ${input.mkString(", ")}")
+        // No matches.
+        logTrace(s"Could not find $name in ${attributes.mkString(", ")}")
         None
 
-      // More than one match.
       case ambiguousReferences =>
-        val referenceNames = ambiguousReferences.map(_._1).mkString(", ")
-        throw new AnalysisException(
-          s"Reference '$name' is ambiguous, could be: $referenceNames.")
+        // More than one match.
+        val referenceNames = ambiguousReferences.mkString(", ")
+        throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
   }
 }
