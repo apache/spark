@@ -554,6 +554,21 @@ class HiveDDLSuite
     }
   }
 
+  test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
+    withTable("tab") {
+      intercept[RuntimeException] {
+        sql(
+          """
+            |CREATE TABLE tab
+            |STORED AS TEXTFILE
+            |SELECT 1 AS a, (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b
+          """.stripMargin)
+      }
+      // After hitting runtime exception, we should drop the created table.
+      assert(!spark.sessionState.catalog.tableExists(TableIdentifier("tab")))
+    }
+  }
+
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
