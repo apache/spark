@@ -426,16 +426,23 @@ class BlockMatrix @Since("1.3.0") (
       partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
     val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
     val rightMatrix = other.blocks.keys.collect()
+
+    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).map { case (rowIndex, arr) =>
+      (rowIndex, arr.map(b => b._2))
+    }
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
-      val rightCounterparts = rightMatrix.filter(_._1 == colIndex)
-      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b._2)))
-      ((rowIndex, colIndex), partitions.toSet)
+      ((rowIndex, colIndex), rightCounterpartsHelper.getOrElse(colIndex, Array()).map(b =>
+        partitioner.getPartition((rowIndex, b))).toSet)
     }.toMap
+
+    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).map { case (colIndex, arr) =>
+      (colIndex, arr.map(b => b._1))
+    }
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
-      val leftCounterparts = leftMatrix.filter(_._2 == rowIndex)
-      val partitions = leftCounterparts.map(b => partitioner.getPartition((b._1, colIndex)))
-      ((rowIndex, colIndex), partitions.toSet)
+      ((rowIndex, colIndex), leftCounterpartsHelper.getOrElse(rowIndex, Array()).map(b =>
+        partitioner.getPartition((b, colIndex))).toSet)
     }.toMap
+
     (leftDestinations, rightDestinations)
   }
 
