@@ -23,7 +23,7 @@ from __future__ import print_function
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
-from pyspark.ml.feature import StringIndexer, VectorIndexer
+from pyspark.ml.feature import IndexToString, StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
 from pyspark.sql import SparkSession
@@ -53,8 +53,12 @@ if __name__ == "__main__":
     # Train a RandomForest model.
     rf = RandomForestClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures", numTrees=10)
 
+    # Convert indexed labels back to original labels.
+    labelConverter = IndexToString(inputCol="prediction", outputCol="predictedLabel",
+                                   labels=labelIndexer.labels)
+
     # Chain indexers and forest in a Pipeline
-    pipeline = Pipeline(stages=[labelIndexer, featureIndexer, rf])
+    pipeline = Pipeline(stages=[labelIndexer, featureIndexer, rf, labelConverter])
 
     # Train model.  This also runs the indexers.
     model = pipeline.fit(trainingData)
@@ -63,7 +67,7 @@ if __name__ == "__main__":
     predictions = model.transform(testData)
 
     # Select example rows to display.
-    predictions.select("prediction", "indexedLabel", "features").show(5)
+    predictions.select("predictedLabel", "label", "features").show(5)
 
     # Select (prediction, true label) and compute test error
     evaluator = MulticlassClassificationEvaluator(
