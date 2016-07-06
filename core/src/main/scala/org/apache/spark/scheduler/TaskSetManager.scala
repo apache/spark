@@ -798,6 +798,7 @@ private[spark] class TaskSetManager(
     }
 
     // always add to failed executors
+    // TODO if there is a fetch failure, does it really make sense to add this?
     blacklistTracker.taskFailed(stageId, tasks(index).partitionId, info)
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
