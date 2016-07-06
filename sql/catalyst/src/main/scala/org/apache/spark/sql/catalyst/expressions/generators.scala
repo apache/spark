@@ -94,6 +94,59 @@ case class UserDefinedGenerator(
 }
 
 /**
+ * Separate v1, ..., vk into n rows. Each row will have k/n columns. n must be constant.
+ * {{{
+ *   SELECT stack(2, 1, 2, 3) ->
+ *   1      2
+ *   3      NULL
+ * }}}
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(n, v1, ..., vk) - Separate v1, ..., vk into n rows.",
+  extended = "> SELECT _FUNC_(2, 1, 2, 3);\n  [1,2]\n  [3,null]")
+case class Stack(children: Seq[Expression])
+    extends Expression with Generator with CodegenFallback {
+
+  private lazy val numRows = children.head.eval().asInstanceOf[Int]
+  private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length <= 1) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least 2 arguments.")
+    } else if (children.head.dataType != IntegerType || !children.head.foldable || numRows < 1) {
+      TypeCheckResult.TypeCheckFailure("The number of rows must be a positive constant integer.")
+    } else {
+      for (i <- 1 until children.length) {
+        val j = (i - 1) % numFields
+        if (children(i).dataType != elementSchema.fields(j).dataType) {
+          return TypeCheckResult.TypeCheckFailure(
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
+              s"Argument $i (${children(i).dataType})")
+        }
+      }
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def elementSchema: StructType =
+    StructType(children.tail.take(numFields).zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val values = children.tail.map(_.eval(input)).toArray
+    for (row <- 0 until numRows) yield {
+      val fields = new Array[Any](numFields)
+      for (col <- 0 until numFields) {
+        val index = row * numFields + col
+        fields.update(col, if (index < values.length) values(index) else null)
+      }
+      InternalRow(fields: _*)
+    }
+  }
+}
+
+/**
  * A base class for Explode and PosExplode
  */
 abstract class ExplodeBase(child: Expression, position: Boolean)
