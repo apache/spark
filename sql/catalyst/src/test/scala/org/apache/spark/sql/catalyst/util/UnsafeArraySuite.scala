@@ -31,11 +31,15 @@ class UnsafeArraySuite extends SparkFunSuite {
   val floatArray = Array(1.1.toFloat, 2.2.toFloat, 3.3.toFloat)
   val doubleArray = Array(1.1, 2.2, 3.3)
 
+  val intMultiDimArray = Array(Array(1, 10), Array(2, 20, 200), Array(3, 30, 300, 3000))
+  val doubleMultiDimArray = Array(
+    Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
+
   test("read array") {
     val unsafeBoolean = ExpressionEncoder[Array[Boolean]].resolveAndBind().
       toRow(booleanArray).getArray(0)
     assert(unsafeBoolean.isInstanceOf[UnsafeArrayData])
-    assert(unsafeBoolean.numElements == 2)
+    assert(unsafeBoolean.numElements == booleanArray.length)
     booleanArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeBoolean.getBoolean(i) == e)
     }
@@ -43,7 +47,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeShort = ExpressionEncoder[Array[Short]].resolveAndBind().
       toRow(shortArray).getArray(0)
     assert(unsafeShort.isInstanceOf[UnsafeArrayData])
-    assert(unsafeShort.numElements == 3)
+    assert(unsafeShort.numElements == shortArray.length)
     shortArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeShort.getShort(i) == e)
     }
@@ -51,7 +55,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeInt = ExpressionEncoder[Array[Int]].resolveAndBind().
       toRow(intArray).getArray(0)
     assert(unsafeInt.isInstanceOf[UnsafeArrayData])
-    assert(unsafeInt.numElements == 3)
+    assert(unsafeInt.numElements == intArray.length)
     intArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeInt.getInt(i) == e)
     }
@@ -59,7 +63,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeLong = ExpressionEncoder[Array[Long]].resolveAndBind().
       toRow(longArray).getArray(0)
     assert(unsafeLong.isInstanceOf[UnsafeArrayData])
-    assert(unsafeLong.numElements == 3)
+    assert(unsafeLong.numElements == longArray.length)
     longArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeLong.getLong(i) == e)
     }
@@ -67,7 +71,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeFloat = ExpressionEncoder[Array[Float]].resolveAndBind().
       toRow(floatArray).getArray(0)
     assert(unsafeFloat.isInstanceOf[UnsafeArrayData])
-    assert(unsafeFloat.numElements == 3)
+    assert(unsafeFloat.numElements == floatArray.length)
     floatArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeFloat.getFloat(i) == e)
     }
@@ -75,9 +79,35 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeDouble = ExpressionEncoder[Array[Double]].resolveAndBind().
       toRow(doubleArray).getArray(0)
     assert(unsafeDouble.isInstanceOf[UnsafeArrayData])
-    assert(unsafeDouble.numElements == 3)
+    assert(unsafeDouble.numElements == doubleArray.length)
     doubleArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeDouble.getDouble(i) == e)
+    }
+
+    val unsafeMultiDimInt = ExpressionEncoder[Array[Array[Int]]].resolveAndBind().
+      toRow(intMultiDimArray).getArray(0)
+    assert(unsafeMultiDimInt.isInstanceOf[UnsafeArrayData])
+    assert(unsafeMultiDimInt.numElements == intMultiDimArray.length)
+    intMultiDimArray.zipWithIndex.map { case (a, j) =>
+      val u = unsafeMultiDimInt.getArray(j)
+      assert(u.isInstanceOf[UnsafeArrayData])
+      assert(u.numElements == a.length)
+      a.zipWithIndex.map { case (e, i) =>
+        assert(u.getInt(i) == e)
+      }
+    }
+
+    val unsafeMultiDimDouble = ExpressionEncoder[Array[Array[Double]]].resolveAndBind().
+      toRow(doubleMultiDimArray).getArray(0)
+    assert(unsafeDouble.isInstanceOf[UnsafeArrayData])
+    assert(unsafeMultiDimDouble.numElements == doubleMultiDimArray.length)
+    doubleMultiDimArray.zipWithIndex.map { case (a, j) =>
+      val u = unsafeMultiDimDouble.getArray(j)
+      assert(u.isInstanceOf[UnsafeArrayData])
+      assert(u.numElements == a.length)
+      a.zipWithIndex.map { case (e, i) =>
+        assert(u.getDouble(i) == e)
+      }
     }
   }
 
