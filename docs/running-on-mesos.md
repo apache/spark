@@ -183,6 +183,8 @@ Note that jars or python files that are passed to spark-submit should be URIs re
 Spark can run over Mesos in two modes: "coarse-grained" (default) and
 "fine-grained".
 
+## Coarse-Grained
+
 In "coarse-grained" mode, each Spark executor runs as a single Mesos
 task.  Spark executors are sized according to the following
 configuration variables:
@@ -207,7 +209,11 @@ provide such guarantees on the offer stream.
 
 The benefit of coarse-grained mode is much lower startup overhead, but
 at the cost of reserving Mesos resources for the complete duration of
-the application.
+the application.  To configure your job to dynamically adjust to its
+resource requirements, look into
+[Dynamic Allocation](#dynamic-resource-allocation-with-mesos).
+
+## Fine-Grained
 
 In "fine-grained" mode, each Spark task inside the Spark executor runs
 as a separate Mesos task. This allows multiple instances of Spark (and
@@ -229,9 +235,9 @@ To run in fine-grained mode, set the `spark.mesos.coarse` property to false in y
 conf.set("spark.mesos.coarse", "false")
 {% endhighlight %}
 
-You may also make use of `spark.mesos.constraints` to set attribute
-based constraints on mesos resource offers. By default, all resource
-offers will be accepted.
+You may also make use of `spark.mesos.constraints` to set
+attribute-based constraints on Mesos resource offers. By default, all
+resource offers will be accepted.
 
 {% highlight scala %}
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
@@ -265,7 +271,7 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Dynamic Resource Allocation with Mesos
 
-Mesos supports dynamic allocation only with coarse-grain mode, which can resize the number of
+Mesos supports dynamic allocation only with coarse-grained mode, which can resize the number of
 executors based on statistics of the application. For general information,
 see [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocation).
 
