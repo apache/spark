@@ -24,6 +24,7 @@ import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.storage.BlockManagerId
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}
@@ -607,5 +608,20 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )).flatten
 
     verify(blacklist).expireExecutorsInBlacklist()
+  }
+
+  test("don't update blacklist for shuffle-fetch failures") {
+    val blacklist = mock[BlacklistTracker]
+    taskScheduler = setupScheduler(blacklist)
+    val stage0 = FakeTask.createTaskSet(numTasks = 2, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(stage0)
+    val taskDescs = taskScheduler.resourceOffers(
+      Seq(new WorkerOffer("executor0", "host0", 10))).flatten
+    assert(taskDescs.size == 2)
+
+    val mgr = taskScheduler.taskIdToTaskSetManager.get(taskDescs(0).taskId).get
+    taskScheduler.handleFailedTask(mgr, taskDescs(0).taskId, TaskState.FAILED,
+      FetchFailed(BlockManagerId("executor1", "host1", 12345), 0, 0, 0, "ignored"))
+    verify(blacklist, never()).taskFailed(anyInt(), anyInt(), anyObject(), anyObject())
   }
 }

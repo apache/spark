@@ -784,9 +784,13 @@ private[spark] class TaskSetManager(
         None
     }
 
-    // always add to failed executors
-    // TODO if there is a fetch failure, does it really make sense to add this?
-    blacklistTracker.foreach(_.taskFailed(stageId, index, info, sched))
+    // we might rack up a bunch of fetch-failures in rapid succession, due to a bad node.  But
+    // that bad node will get handled separately by spark's stage-failure handling mechanism.  It
+    // shouldn't penalize *this* executor at all, so don't count it as a task-failure as far as
+    // the blacklist is concerned.
+    if (!reason.isInstanceOf[FetchFailed]) {
+      blacklistTracker.foreach(_.taskFailed(stageId, index, info, sched))
+    }
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 

@@ -869,10 +869,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(sched.endedTasks(3) === Success)
   }
 
-  test("don't update blacklist for shuffle fetch failures") {
-    pending
-  }
-
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
