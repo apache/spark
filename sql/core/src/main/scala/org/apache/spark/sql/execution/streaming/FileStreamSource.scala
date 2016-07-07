@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
@@ -26,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, DataSource, ListingFileCatalog, LogicalRelation}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -45,6 +47,7 @@ class FileStreamSource(
   private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
   private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
+  private val maxFilesPerBatch = getMaxFilesPerBatch()
 
   private val seenFiles = new OpenHashSet[String]
   metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
@@ -58,19 +61,17 @@ class FileStreamSource(
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(): LongOffset = synchronized {
-    val filesPresent = fetchAllFiles()
-    val newFiles = new ArrayBuffer[String]()
-    filesPresent.foreach { file =>
-      if (!seenFiles.contains(file)) {
-        logDebug(s"new file: $file")
-        newFiles.append(file)
-        seenFiles.add(file)
-      } else {
-        logDebug(s"old file: $file")
-      }
+    val newFiles = fetchAllFiles().filter(!seenFiles.contains(_))
+    val batchFiles =
+      if (maxFilesPerBatch.nonEmpty) newFiles.take(maxFilesPerBatch.get) else newFiles
+    batchFiles.foreach { file =>
+      seenFiles.add(file)
+      logDebug(s"New file: $file")
     }
-
-    if (newFiles.nonEmpty) {
+    logTrace(s"Number of new files = ${newFiles.size})")
+    logTrace(s"Number of files selected for batch = ${batchFiles.size}")
+    logTrace(s"Number of seen files = ${seenFiles.size}")
+    if (batchFiles.nonEmpty) {
       maxBatchId += 1
       metadataLog.add(maxBatchId, newFiles)
       logInfo(s"Max batch id increased to $maxBatchId with ${newFiles.size} new files")
@@ -118,7 +119,7 @@ class FileStreamSource(
     val startTime = System.nanoTime
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
     val catalog = new ListingFileCatalog(sparkSession, globbedPaths, options, Some(new StructType))
-    val files = catalog.allFiles().map(_.getPath.toUri.toString)
+    val files = catalog.allFiles().sortBy(_.getModificationTime).map(_.getPath.toUri.toString)
     val endTime = System.nanoTime
     val listingTimeMs = (endTime.toDouble - startTime) / 1000000
     if (listingTimeMs > 2000) {
@@ -129,6 +130,17 @@ class FileStreamSource(
     }
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     files
+  }
+
+  private def getMaxFilesPerBatch(): Option[Int] = {
+    new CaseInsensitiveMap(options)
+      .get("maxFilesPerTrigger")
+      .map { str =>
+        Try(str.toInt).toOption.filter(_ > 0).getOrElse {
+          throw new IllegalArgumentException(
+            s"Invalid value '$str' for option 'maxFilesPerBatch', must be a positive integer")
+        }
+      }
   }
 
   override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
