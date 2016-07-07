@@ -743,7 +743,6 @@ object ApplicationMaster extends Logging {
         sys.props(k) = v
       }
     }
-    
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient)
       System.exit(master.run())
