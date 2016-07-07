@@ -37,5 +37,8 @@ if [ "$SPARK_MESOS_DISPATCHER_HOST" = "" ]; then
   SPARK_MESOS_DISPATCHER_HOST=`hostname`
 fi
 
+if [ "$SPARK_MESOS_DISPATCHER_NUM" = "" ]; then
+  SPARK_MESOS_DISPATCHER_NUM=1
+fi
 
-"${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.mesos.MesosClusterDispatcher 1 --host $SPARK_MESOS_DISPATCHER_HOST --port $SPARK_MESOS_DISPATCHER_PORT "$@"
+"${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.mesos.MesosClusterDispatcher $SPARK_MESOS_DISPATCHER_NUM --host $SPARK_MESOS_DISPATCHER_HOST --port $SPARK_MESOS_DISPATCHER_PORT "$@"

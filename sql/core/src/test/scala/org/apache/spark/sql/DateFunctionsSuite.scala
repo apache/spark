@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils

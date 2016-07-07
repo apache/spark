@@ -67,7 +67,7 @@ plots (recall, false positive rate) points.
   </thead>
   <tbody>
     <tr>
-      <td>Precision (Postive Predictive Value)</td>
+      <td>Precision (Positive Predictive Value)</td>
       <td>$PPV=\frac{TP}{TP + FP}$</td>
     </tr>
     <tr>
@@ -140,7 +140,7 @@ definitions of positive and negative labels is straightforward.
 #### Label based metrics
 
 Opposed to binary classification where there are only two possible labels, multiclass classification problems have many
-possible labels and so the concept of label-based metrics is introduced. Overall precision measures precision across all
+possible labels and so the concept of label-based metrics is introduced. Accuracy measures precision across all
 labels -  the number of times any class was predicted correctly (true positives) normalized by the number of data
 points. Precision by label considers only one class, and measures the number of time a specific label was predicted
 correctly normalized by the number of times that label appears in the output.
@@ -182,19 +182,9 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
       </td>
     </tr>
     <tr>
-      <td>Overall Precision</td>
-      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
+      <td>Accuracy</td>
+      <td>$ACC = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
         \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall Recall</td>
-      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
-        \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall F1-measure</td>
-      <td>$F1 = 2 \cdot \left(\frac{PPV \cdot TPR}
-          {PPV + TPR}\right)$</td>
     </tr>
     <tr>
       <td>Precision by label</td>
@@ -360,7 +350,7 @@ $$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{ca
 
 **Examples**
 
-The following code snippets illustrate how to evaluate the performance of a multilabel classifer. The examples
+The following code snippets illustrate how to evaluate the performance of a multilabel classifier. The examples
 use the fake prediction and label data for multilabel classification that is shown below.
 
 Document predictions:
@@ -558,7 +548,7 @@ variable from a number of independent variables.
       <td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}}$</td>
     </tr>
     <tr>
-      <td>Mean Absoloute Error (MAE)</td>
+      <td>Mean Absolute Error (MAE)</td>
       <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>

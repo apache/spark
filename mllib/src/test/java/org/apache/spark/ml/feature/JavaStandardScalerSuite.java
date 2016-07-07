@@ -20,30 +20,14 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 
-public class JavaStandardScalerSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaStandardScalerSuite");
-    jsql = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
+public class JavaStandardScalerSuite extends SharedSparkSession {
 
   @Test
   public void standardScaler() {
@@ -53,7 +37,7 @@ public class JavaStandardScalerSuite {
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 3.0)),
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 4.0))
     );
-    DataFrame dataFrame = jsql.createDataFrame(jsc.parallelize(points, 2),
+    Dataset<Row> dataFrame = spark.createDataFrame(jsc.parallelize(points, 2),
       VectorIndexerSuite.FeatureData.class);
     StandardScaler scaler = new StandardScaler()
       .setInputCol("features")
@@ -65,7 +49,7 @@ public class JavaStandardScalerSuite {
     StandardScalerModel scalerModel = scaler.fit(dataFrame);
 
     // Normalize each feature to have unit standard deviation.
-    DataFrame scaledData = scalerModel.transform(dataFrame);
+    Dataset<Row> scaledData = scalerModel.transform(dataFrame);
     scaledData.count();
   }
 }

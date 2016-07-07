@@ -21,18 +21,18 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
-    val plan = (1 to 100)
+    val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
-        a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
+        a.select(UnresolvedStar(None)).select('a).union(b.select(UnresolvedStar(None)))
       }
 
     assertAnalysisSuccess(plan)
@@ -77,15 +77,94 @@ class AnalysisSuite extends AnalysisTest {
       caseSensitive = false)
   }
 
+  test("resolve sort references - filter/limit") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+
+    // Case 1: one missing attribute is in the leaf node and another is in the unary node
+    val plan1 = testRelation2
+      .where('a > "str").select('a, 'b)
+      .where('b > "str").select('a)
+      .sortBy('b.asc, 'c.desc)
+    val expected1 = testRelation2
+      .where(a > "str").select(a, b, c)
+      .where(b > "str").select(a, b, c)
+      .sortBy(b.asc, c.desc)
+      .select(a)
+    checkAnalysis(plan1, expected1)
+
+    // Case 2: all the missing attributes are in the leaf node
+    val plan2 = testRelation2
+      .where('a > "str").select('a)
+      .where('a > "str").select('a)
+      .sortBy('b.asc, 'c.desc)
+    val expected2 = testRelation2
+      .where(a > "str").select(a, b, c)
+      .where(a > "str").select(a, b, c)
+      .sortBy(b.asc, c.desc)
+      .select(a)
+    checkAnalysis(plan2, expected2)
+  }
+
+  test("resolve sort references - join") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+    val h = testRelation3.output(3)
+
+    // Case: join itself can resolve all the missing attributes
+    val plan = testRelation2.join(testRelation3)
+      .where('a > "str").select('a, 'b)
+      .sortBy('c.desc, 'h.asc)
+    val expected = testRelation2.join(testRelation3)
+      .where(a > "str").select(a, b, c, h)
+      .sortBy(c.desc, h.asc)
+      .select(a, b)
+    checkAnalysis(plan, expected)
+  }
+
+  test("resolve sort references - aggregate") {
+    val a = testRelation2.output(0)
+    val b = testRelation2.output(1)
+    val c = testRelation2.output(2)
+    val alias_a3 = count(a).as("a3")
+    val alias_b = b.as("aggOrder")
+
+    // Case 1: when the child of Sort is not Aggregate,
+    //   the sort reference is handled by the rule ResolveSortReferences
+    val plan1 = testRelation2
+      .groupBy('a, 'c, 'b)('a, 'c, count('a).as("a3"))
+      .select('a, 'c, 'a3)
+      .orderBy('b.asc)
+
+    val expected1 = testRelation2
+      .groupBy(a, c, b)(a, c, alias_a3, b)
+      .select(a, c, alias_a3.toAttribute, b)
+      .orderBy(b.asc)
+      .select(a, c, alias_a3.toAttribute)
+
+    checkAnalysis(plan1, expected1)
+
+    // Case 2: when the child of Sort is Aggregate,
+    //   the sort reference is handled by the rule ResolveAggregateFunctions
+    val plan2 = testRelation2
+      .groupBy('a, 'c, 'b)('a, 'c, count('a).as("a3"))
+      .orderBy('b.asc)
+
+    val expected2 = testRelation2
+      .groupBy(a, c, b)(a, c, alias_a3, alias_b)
+      .orderBy(alias_b.toAttribute.asc)
+      .select(a, c, alias_a3.toAttribute)
+
+    checkAnalysis(plan2, expected2)
+  }
+
   test("resolve relations") {
-    assertAnalysisError(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))
-
+    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }
@@ -103,8 +182,7 @@ class AnalysisSuite extends AnalysisTest {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    // StringType will be promoted into Decimal(38, 18)
-    assert(pl(3).dataType == DecimalType(38, 22))
+    assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)
   }
 
@@ -155,6 +233,11 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("self intersect should resolve duplicate expression IDs") {
+    val plan = testRelation.intersect(testRelation)
+    assertAnalysisSuccess(plan)
+  }
+
   test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
       LocalRelation()
@@ -162,7 +245,7 @@ class AnalysisSuite extends AnalysisTest {
     assertAnalysisSuccess(plan)
   }
 
-  test("SPARK-8654: different types in inlist but can be converted to a commmon type") {
+  test("SPARK-8654: different types in inlist but can be converted to a common type") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
       LocalRelation()
     )
@@ -238,46 +321,60 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
-  test("analyzer should replace current_timestamp with literals") {
-    val in = Project(Seq(Alias(CurrentTimestamp(), "a")(), Alias(CurrentTimestamp(), "b")()),
-      LocalRelation())
-
-    val min = System.currentTimeMillis() * 1000
-    val plan = in.analyze.asInstanceOf[Project]
-    val max = (System.currentTimeMillis() + 1) * 1000
-
-    val lits = new scala.collection.mutable.ArrayBuffer[Long]
-    plan.transformAllExpressions { case e: Literal =>
-      lits += e.value.asInstanceOf[Long]
-      e
-    }
-    assert(lits.size == 2)
-    assert(lits(0) >= min && lits(0) <= max)
-    assert(lits(1) >= min && lits(1) <= max)
-    assert(lits(0) == lits(1))
-  }
-
-  test("analyzer should replace current_date with literals") {
-    val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
-
-    val min = DateTimeUtils.millisToDays(System.currentTimeMillis())
-    val plan = in.analyze.asInstanceOf[Project]
-    val max = DateTimeUtils.millisToDays(System.currentTimeMillis())
-
-    val lits = new scala.collection.mutable.ArrayBuffer[Int]
-    plan.transformAllExpressions { case e: Literal =>
-      lits += e.value.asInstanceOf[Int]
-      e
-    }
-    assert(lits.size == 2)
-    assert(lits(0) >= min && lits(0) <= max)
-    assert(lits(1) >= min && lits(1) <= max)
-    assert(lits(0) == lits(1))
+  test("Eliminate the unnecessary union") {
+    val plan = Union(testRelation :: Nil)
+    val expected = testRelation
+    checkAnalysis(plan, expected)
   }
 
   test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
     val relation = LocalRelation('a.struct('x.int), 'b.struct('x.int.withNullability(false)))
-    val plan = relation.select(CaseWhen(Seq(Literal(true), 'a, 'b)).as("val"))
+    val plan = relation.select(CaseWhen(Seq((Literal(true), 'a.attr)), 'b).as("val"))
     assertAnalysisSuccess(plan)
+  }
+
+  test("Keep attribute qualifiers after dedup") {
+    val input = LocalRelation('key.int, 'value.string)
+
+    val query =
+      Project(Seq($"x.key", $"y.key"),
+        Join(
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input)),
+          Inner, None))
+
+    assertAnalysisSuccess(query)
+  }
+
+  private def assertExpressionType(
+      expression: Expression,
+      expectedDataType: DataType): Unit = {
+    val afterAnalyze =
+      Project(Seq(Alias(expression, "a")()), OneRowRelation).analyze.expressions.head
+    if (!afterAnalyze.dataType.equals(expectedDataType)) {
+      fail(
+        s"""
+           |data type of expression $expression doesn't match expected:
+           |Actual data type:
+           |${afterAnalyze.dataType}
+           |
+           |Expected data type:
+           |${expectedDataType}
+         """.stripMargin)
+    }
+  }
+
+  test("SPARK-15776: test whether Divide expression's data type can be deduced correctly by " +
+    "analyzer") {
+    assertExpressionType(sum(Divide(1, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1, 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1, 2.0f)), DoubleType)
+    assertExpressionType(sum(Divide(1.0f, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
 }

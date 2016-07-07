@@ -18,16 +18,17 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
 
@@ -59,6 +60,9 @@ private[deploy] class ExecutorRunner(
   private var process: Process = null
   private var stdoutAppender: FileAppender = null
   private var stderrAppender: FileAppender = null
+
+  // Timeout to wait for when trying to terminate an executor.
+  private val EXECUTOR_TERMINATE_TIMEOUT_MS = 10 * 1000
 
   // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
   // make sense to remove this in the future.
@@ -94,8 +98,11 @@ private[deploy] class ExecutorRunner(
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
-      process.destroy()
-      exitCode = Some(process.waitFor())
+      exitCode = Utils.terminateProcess(process, EXECUTOR_TERMINATE_TIMEOUT_MS)
+      if (exitCode.isEmpty) {
+        logWarning("Failed to terminate process: " + process +
+          ". This process will likely be orphaned.")
+      }
     }
     try {
       worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
@@ -162,7 +169,7 @@ private[deploy] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, UTF_8)
+      Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
@@ -172,16 +179,14 @@ private[deploy] class ExecutorRunner(
       val message = "Command exited with code " + exitCode
       worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
-      case interrupted: InterruptedException => {
+      case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")
         state = ExecutorState.KILLED
         killProcess(None)
-      }
-      case e: Exception => {
+      case e: Exception =>
         logError("Error running executor", e)
         state = ExecutorState.FAILED
         killProcess(Some(e.toString))
-      }
     }
   }
 }

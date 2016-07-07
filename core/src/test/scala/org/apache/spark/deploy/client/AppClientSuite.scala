@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.client
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfterAll
@@ -28,6 +29,7 @@ import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
@@ -158,21 +160,21 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     master.self.askWithRetry[MasterStateResponse](RequestMasterState)
   }
 
-  /** Get the applictions that are active from Master */
+  /** Get the applications that are active from Master */
   private def getApplications(): Seq[ApplicationInfo] = {
     getMasterState.activeApps
   }
 
   /** Application Listener to collect events */
-  private class AppClientCollector extends AppClientListener with Logging {
-    val connectedIdList = new ArrayBuffer[String] with SynchronizedBuffer[String]
+  private class AppClientCollector extends StandaloneAppClientListener with Logging {
+    val connectedIdList = new ConcurrentLinkedQueue[String]()
     @volatile var disconnectedCount: Int = 0
-    val deadReasonList = new ArrayBuffer[String] with SynchronizedBuffer[String]
-    val execAddedList = new ArrayBuffer[String] with SynchronizedBuffer[String]
-    val execRemovedList = new ArrayBuffer[String] with SynchronizedBuffer[String]
+    val deadReasonList = new ConcurrentLinkedQueue[String]()
+    val execAddedList = new ConcurrentLinkedQueue[String]()
+    val execRemovedList = new ConcurrentLinkedQueue[String]()
 
     def connected(id: String): Unit = {
-      connectedIdList += id
+      connectedIdList.add(id)
     }
 
     def disconnected(): Unit = {
@@ -182,7 +184,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     }
 
     def dead(reason: String): Unit = {
-      deadReasonList += reason
+      deadReasonList.add(reason)
     }
 
     def executorAdded(
@@ -191,11 +193,11 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
         hostPort: String,
         cores: Int,
         memory: Int): Unit = {
-      execAddedList += id
+      execAddedList.add(id)
     }
 
     def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit = {
-      execRemovedList += id
+      execRemovedList.add(id)
     }
   }
 
@@ -206,7 +208,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
       List(), Map(), Seq(), Seq(), Seq())
     private val desc = new ApplicationDescription("AppClientSuite", Some(1), 512, cmd, "ignored")
     val listener = new AppClientCollector
-    val client = new AppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
+    val client = new StandaloneAppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
   }
 
 }

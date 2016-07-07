@@ -75,6 +75,29 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("elt") {
+    def testElt(result: String, n: java.lang.Integer, args: String*): Unit = {
+      checkEvaluation(
+        Elt(Literal.create(n, IntegerType) +: args.map(Literal.create(_, StringType))),
+        result)
+    }
+
+    testElt("hello", 1, "hello", "world")
+    testElt(null, 1, null, "world")
+    testElt(null, null, "hello", "world")
+
+    // Invalid ranages
+    testElt(null, 3, "hello", "world")
+    testElt(null, 0, "hello", "world")
+    testElt(null, -1, "hello", "world")
+
+    // type checking
+    assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
+    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+  }
+
   test("StringComparison") {
     val row = create_row("abc", null)
     val c1 = 'a.string.at(0)
@@ -382,6 +405,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InitCap(Literal("a b")), "A B")
     checkEvaluation(InitCap(Literal(" a")), " A")
     checkEvaluation(InitCap(Literal("the test")), "The Test")
+    checkEvaluation(InitCap(Literal("sParK")), "Spark")
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(InitCap(Literal("世界")), "世界")
@@ -507,16 +531,18 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s2 = 'b.string.at(1)
     val s3 = 'c.string.at(2)
     val s4 = 'd.int.at(3)
-    val row1 = create_row("aaads", "aa", "zz", 1)
-    val row2 = create_row(null, "aa", "zz", 0)
-    val row3 = create_row("aaads", null, "zz", 0)
-    val row4 = create_row(null, null, null, 0)
+    val row1 = create_row("aaads", "aa", "zz", 2)
+    val row2 = create_row(null, "aa", "zz", 1)
+    val row3 = create_row("aaads", null, "zz", 1)
+    val row4 = create_row(null, null, null, 1)
 
     checkEvaluation(new StringLocate(Literal("aa"), Literal("aaads")), 1, row1)
-    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 2, row1)
-    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 0, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(0)), 0, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(1)), 1, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(2)), 2, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), Literal(3)), 0, row1)
     checkEvaluation(new StringLocate(Literal("de"), Literal("aaads")), 0, row1)
-    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 1), 0, row1)
+    checkEvaluation(StringLocate(Literal("de"), Literal("aaads"), 2), 0, row1)
 
     checkEvaluation(new StringLocate(s2, s1), 1, row1)
     checkEvaluation(StringLocate(s2, s1, s4), 2, row1)
@@ -687,7 +713,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
-    checkEvaluation(FormatNumber(Literal.create(null, NullType), Literal(3)), null)
+    assert(FormatNumber(Literal.create(null, NullType), Literal(3)).resolved === false)
   }
 
   test("find in set") {

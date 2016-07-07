@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
  * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
@@ -34,9 +34,8 @@ class SortBasedAggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    numInputRows: LongSQLMetric,
-    numOutputRows: LongSQLMetric)
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    numOutputRows: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     valueAttributes,
@@ -47,9 +46,9 @@ class SortBasedAggregationIterator(
     newMutableProjection) {
 
   /**
-    * Creates a new aggregation buffer and initializes buffer values
-    * for all aggregate functions.
-    */
+   * Creates a new aggregation buffer and initializes buffer values
+   * for all aggregate functions.
+   */
   private def newBuffer: MutableRow = {
     val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
@@ -87,7 +86,7 @@ class SortBasedAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
 
-  // An SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
+  // A SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
   // compared to MutableRow (aggregation buffer) directly.
   private[this] val safeProj: Projection = FromUnsafeProjection(valueAttributes.map(_.dataType))
 
@@ -97,7 +96,6 @@ class SortBasedAggregationIterator(
       val inputRow = inputIterator.next()
       nextGroupingKey = groupingProjection(inputRow).copy()
       firstRowInNextGroup = inputRow.copy()
-      numInputRows += 1
       sortedInputHasNewGroup = true
     } else {
       // This inputIter is empty.
@@ -122,7 +120,6 @@ class SortBasedAggregationIterator(
       // Get the grouping key.
       val currentRow = inputIterator.next()
       val groupingKey = groupingProjection(currentRow)
-      numInputRows += 1
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {

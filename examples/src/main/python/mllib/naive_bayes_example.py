@@ -17,21 +17,21 @@
 
 """
 NaiveBayes Example.
+
+Usage:
+  `spark-submit --master local[4] examples/src/main/python/mllib/naive_bayes_example.py`
 """
+
 from __future__ import print_function
+
+import shutil
 
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
-from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import MLUtils
 
 
-def parseLine(line):
-    parts = line.split(',')
-    label = float(parts[0])
-    features = Vectors.dense([float(x) for x in parts[1].split(' ')])
-    return LabeledPoint(label, features)
 # $example off$
 
 if __name__ == "__main__":
@@ -39,10 +39,11 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonNaiveBayesExample")
 
     # $example on$
-    data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
+    # Load and parse the data file.
+    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
-    # Split data aproximately into training (60%) and test (40%)
-    training, test = data.randomSplit([0.6, 0.4], seed=0)
+    # Split data approximately into training (60%) and test (40%)
+    training, test = data.randomSplit([0.6, 0.4])
 
     # Train a naive Bayes model.
     model = NaiveBayes.train(training, 1.0)
@@ -50,8 +51,15 @@ if __name__ == "__main__":
     # Make prediction and test accuracy.
     predictionAndLabel = test.map(lambda p: (model.predict(p.features), p.label))
     accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
+    print('model accuracy {}'.format(accuracy))
 
     # Save and load model
-    model.save(sc, "target/tmp/myNaiveBayesModel")
-    sameModel = NaiveBayesModel.load(sc, "target/tmp/myNaiveBayesModel")
+    output_dir = 'target/tmp/myNaiveBayesModel'
+    shutil.rmtree(output_dir, ignore_errors=True)
+    model.save(sc, output_dir)
+    sameModel = NaiveBayesModel.load(sc, output_dir)
+    predictionAndLabel = test.map(lambda p: (sameModel.predict(p.features), p.label))
+    accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
+    print('sameModel accuracy {}'.format(accuracy))
+
     # $example off$

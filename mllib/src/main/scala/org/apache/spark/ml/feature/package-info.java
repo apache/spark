@@ -22,7 +22,7 @@
  * The `ml.feature` package provides common feature transformers that help convert raw data or
  * features into more suitable forms for model fitting.
  * Most feature transformers are implemented as {@link org.apache.spark.ml.Transformer}s, which
- * transforms one {@link org.apache.spark.sql.DataFrame} into another, e.g.,
+ * transforms one {@link org.apache.spark.sql.Dataset} into another, e.g.,
  * {@link org.apache.spark.ml.feature.HashingTF}.
  * Some feature transformers are implemented as {@link org.apache.spark.ml.Estimator}}s, because the
  * transformation requires some aggregated information of the dataset, e.g., document
@@ -31,7 +31,7 @@
  * obtain the model first, e.g., {@link org.apache.spark.ml.feature.IDFModel}, in order to apply
  * transformation.
  * The transformation is usually done by appending new columns to the input
- * {@link org.apache.spark.sql.DataFrame}, so all input columns are carried over.
+ * {@link org.apache.spark.sql.Dataset}, so all input columns are carried over.
  *
  * We try to make each transformer minimal, so it becomes flexible to assemble feature
  * transformation pipelines.
@@ -46,7 +46,7 @@
  *   import org.apache.spark.api.java.JavaRDD;
  *   import static org.apache.spark.sql.types.DataTypes.*;
  *   import org.apache.spark.sql.types.StructType;
- *   import org.apache.spark.sql.DataFrame;
+ *   import org.apache.spark.sql.Dataset;
  *   import org.apache.spark.sql.RowFactory;
  *   import org.apache.spark.sql.Row;
  *
@@ -66,7 +66,7 @@
  *      RowFactory.create(0, "Hi I heard about Spark", 3.0),
  *      RowFactory.create(1, "I wish Java could use case classes", 4.0),
  *      RowFactory.create(2, "Logistic regression models are neat", 4.0)));
- *  DataFrame df = jsql.createDataFrame(rowRDD, schema);
+ *  Dataset<Row> dataset = jsql.createDataFrame(rowRDD, schema);
  *  // define feature transformers
  *  RegexTokenizer tok = new RegexTokenizer()
  *    .setInputCol("text")
@@ -88,10 +88,10 @@
  *  // assemble and fit the feature transformation pipeline
  *  Pipeline pipeline = new Pipeline()
  *    .setStages(new PipelineStage[] {tok, sw, tf, idf, assembler});
- *  PipelineModel model = pipeline.fit(df);
+ *  PipelineModel model = pipeline.fit(dataset);
  *
  *  // save transformed features with raw data
- *  model.transform(df)
+ *  model.transform(dataset)
  *    .select("id", "text", "rating", "features")
  *    .write().format("parquet").save("/output/path");
  * </code>

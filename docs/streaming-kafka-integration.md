@@ -14,7 +14,7 @@ Next, we discuss how to use this approach in your streaming application.
 1. **Linking:** For Scala/Java applications using SBT/Maven project definitions, link your streaming application with the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
 
 		groupId = org.apache.spark
-		artifactId = spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}
+		artifactId = spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}
 		version = {{site.SPARK_VERSION_SHORT}}
 
 	For Python applications, you will have to add this above library and its dependencies when deploying your application. See the *Deploying* subsection below.
@@ -64,14 +64,14 @@ Next, we discuss how to use this approach in your streaming application.
 
 3. **Deploying:** As with any Spark applications, `spark-submit` is used to launch your application. However, the details are slightly different for Scala/Java applications and Python applications.
 
-	For Scala and Java applications, if you are using SBT or Maven for project management, then package `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and its dependencies into the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` are marked as `provided` dependencies as those are already present in a Spark installation. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide). 
+	For Scala and Java applications, if you are using SBT or Maven for project management, then package `spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}` and its dependencies into the application JAR. Make sure `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` are marked as `provided` dependencies as those are already present in a Spark installation. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
 
-	For Python applications which lack SBT/Maven project management, `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and its dependencies can be directly added to `spark-submit` using `--packages` (see [Application Submission Guide](submitting-applications.html)). That is, 
+	For Python applications which lack SBT/Maven project management, `spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}` and its dependencies can be directly added to `spark-submit` using `--packages` (see [Application Submission Guide](submitting-applications.html)). That is,
 
-	    ./bin/spark-submit --packages org.apache.spark:spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
+	    ./bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
-	Alternatively, you can also download the JAR of the Maven artifact `spark-streaming-kafka-assembly` from the 
-	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-assembly_2.10%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
+	Alternatively, you can also download the JAR of the Maven artifact `spark-streaming-kafka-0-8-assembly` from the
+	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-0-8-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
 
 ## Approach 2: Direct Approach (No Receivers)
 This new receiver-less "direct" approach has been introduced in Spark 1.3 to ensure stronger end-to-end guarantees. Instead of using receivers to receive data, this approach periodically queries Kafka for the latest offsets in each topic+partition, and accordingly defines the offset ranges to process in each batch. When the jobs to process the data are launched, Kafka's simple consumer API is used to read the defined ranges of offsets from Kafka (similar to read files from a file system). Note that this is an experimental feature introduced in Spark 1.3 for the Scala and Java API, in Spark 1.4 for the Python API.
@@ -91,7 +91,7 @@ Next, we discuss how to use this approach in your streaming application.
 1. **Linking:** This approach is supported only in Scala/Java application. Link your SBT/Maven project with the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
 
 		groupId = org.apache.spark
-		artifactId = spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}
+		artifactId = spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}
 		version = {{site.SPARK_VERSION_SHORT}}
 
 2. **Programming:** In the streaming application code, import `KafkaUtils` and create an input DStream as follows.
@@ -111,7 +111,7 @@ Next, we discuss how to use this approach in your streaming application.
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
 
-		JavaPairReceiverInputDStream<String, String> directKafkaStream = 
+		JavaPairInputDStream<String, String> directKafkaStream =
 			KafkaUtils.createDirectStream(streamingContext,
 				[key class], [value class], [key decoder class], [value decoder class],
 				[map of Kafka parameters], [set of topics to consume]);
@@ -207,4 +207,4 @@ Next, we discuss how to use this approach in your streaming application.
 
 	Another thing to note is that since this approach does not use Receivers, the standard receiver-related (that is, [configurations](configuration.html) of the form `spark.streaming.receiver.*` ) will not apply to the input DStreams created by this approach (will apply to other input DStreams though). Instead, use the [configurations](configuration.html) `spark.streaming.kafka.*`. An important one is `spark.streaming.kafka.maxRatePerPartition` which is the maximum rate (in messages per second) at which each Kafka partition will be read by this direct API.
 
-3. **Deploying:** This is same as the first approach, for Scala, Java and Python.
+3. **Deploying:** This is same as the first approach.

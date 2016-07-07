@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, PrintStream, OutputStream}
+import java.io.{File, OutputStream, PrintStream}
 
 import scala.collection.mutable.ArrayBuffer
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, FileSystemResolver, IBiblioResolver}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate

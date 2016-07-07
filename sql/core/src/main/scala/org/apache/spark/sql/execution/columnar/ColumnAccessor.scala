@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.types._
@@ -36,7 +38,7 @@ private[columnar] trait ColumnAccessor {
 
   def hasNext: Boolean
 
-  def extractTo(row: MutableRow, ordinal: Int)
+  def extractTo(row: MutableRow, ordinal: Int): Unit
 
   protected def underlyingBuffer: ByteBuffer
 }
@@ -120,6 +122,7 @@ private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   with NullableColumnAccessor
 
 private[columnar] object ColumnAccessor {
+  @tailrec
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
 

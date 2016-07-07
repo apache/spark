@@ -74,7 +74,7 @@ class ParamGridBuilder @Since("1.2.0") {
   }
 
   /**
-   * Adds a int param with multiple values.
+   * Adds an int param with multiple values.
    */
   @Since("1.2.0")
   def addGrid(param: IntParam, values: Array[Int]): this.type = {

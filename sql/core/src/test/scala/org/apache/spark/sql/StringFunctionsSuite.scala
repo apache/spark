@@ -48,6 +48,20 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("a||b"))
   }
 
+  test("string elt") {
+    val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
+      .toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+      Row(null, "hello", null))
+
+    // check implicit type cast
+    checkAnswer(
+      df.selectExpr("elt(4, a, b, c, d)", "elt('2', a, b, c, d)"),
+      Row("15", "world"))
+  }
+
   test("string Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
@@ -63,8 +77,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
+        regexp_replace($"a", $"b", $"c"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
+        Row("num-num", "400-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,
@@ -189,15 +205,15 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string locate function") {
-    val df = Seq(("aaads", "aa", "zz", 1)).toDF("a", "b", "c", "d")
+    val df = Seq(("aaads", "aa", "zz", 2)).toDF("a", "b", "c", "d")
 
     checkAnswer(
-      df.select(locate("aa", $"a"), locate("aa", $"a", 1)),
-      Row(1, 2))
+      df.select(locate("aa", $"a"), locate("aa", $"a", 2), locate("aa", $"a", 0)),
+      Row(1, 2, 0))
 
     checkAnswer(
-      df.selectExpr("locate(b, a)", "locate(b, a, d)"),
-      Row(1, 2))
+      df.selectExpr("locate(b, a)", "locate(b, a, d)", "locate(b, a, 3)"),
+      Row(1, 2, 0))
   }
 
   test("string padding functions") {
@@ -272,16 +288,16 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("initcap function") {
-    val df = Seq(("ab", "a B")).toDF("l", "r")
+    val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")
     checkAnswer(
-      df.select(initcap($"l"), initcap($"r")), Row("Ab", "A B"))
+      df.select(initcap($"x"), initcap($"y"), initcap($"z")), Row("Ab", "A B", "Spark"))
 
     checkAnswer(
-      df.selectExpr("InitCap(l)", "InitCap(r)"), Row("Ab", "A B"))
+      df.selectExpr("InitCap(x)", "InitCap(y)", "InitCap(z)"), Row("Ab", "A B", "Spark"))
   }
 
   test("number format function") {
-    val df = sqlContext.range(1)
+    val df = spark.range(1)
 
     checkAnswer(
       df.select(format_number(lit(5L), 4)),

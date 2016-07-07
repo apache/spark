@@ -26,8 +26,8 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util.Utils
 
 class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {

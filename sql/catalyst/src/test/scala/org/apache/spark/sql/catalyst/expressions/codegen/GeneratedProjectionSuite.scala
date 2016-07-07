@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -74,7 +76,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
-    val mutableProj = GenerateMutableProjection.generate(exprs)()
+    val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
     val row2 = mutableProj(result)
@@ -107,7 +109,8 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val fields = Array[DataType](StringType, struct)
     val unsafeProj = UnsafeProjection.create(fields)
 
-    val innerRow = InternalRow(false, 1.toByte, 2.toShort, 3, 4.0f, "".getBytes,
+    val innerRow = InternalRow(false, 1.toByte, 2.toShort, 3, 4.0f,
+      "".getBytes(StandardCharsets.UTF_8),
       UTF8String.fromString(""))
     val row1 = InternalRow(UTF8String.fromString(""), innerRow)
     val unsafe1 = unsafeProj(row1).copy()

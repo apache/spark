@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.math.BigInteger
+import java.net.URLClassLoader
 import java.sql.{Date, Timestamp}
 
+import scala.reflect.runtime.universe.typeOf
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 case class PrimitiveData(
     intField: Int,
@@ -69,12 +75,51 @@ case class ComplexData(
 case class GenericData[A](
     genericField: A)
 
+object GenericData {
+  type IntData = GenericData[Int]
+}
+
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+object TestingUDT {
+  @SQLUserDefinedType(udt = classOf[NestedStructUDT])
+  class NestedStruct(val a: Integer, val b: Long, val c: Double)
+
+  class NestedStructUDT extends UserDefinedType[NestedStruct] {
+    override def sqlType: DataType = new StructType()
+      .add("a", IntegerType, nullable = true)
+      .add("b", LongType, nullable = false)
+      .add("c", DoubleType, nullable = false)
+
+    override def serialize(n: NestedStruct): Any = {
+      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      row.setInt(0, n.a)
+      row.setLong(1, n.b)
+      row.setDouble(2, n.c)
+    }
+
+    override def userClass: Class[NestedStruct] = classOf[NestedStruct]
+
+    override def deserialize(datum: Any): NestedStruct = datum match {
+      case row: InternalRow =>
+        new NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
+    }
+  }
+}
+
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+
+  test("SQLUserDefinedType annotation on Scala structure") {
+    val schema = schemaFor[TestingUDT.NestedStruct]
+    assert(schema === Schema(
+      new TestingUDT.NestedStructUDT,
+      nullable = true
+    ))
+  }
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
@@ -186,6 +231,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
+  test("type-aliased data") {
+    assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
+  }
+
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
@@ -229,4 +278,52 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(anyTypes.forall(!_.isPrimitive))
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
+
+  test("SPARK-15062: Get correct serializer for List[_]") {
+    val list = List(1, 2, 3)
+    val serializer = serializerFor[List[Int]](BoundReference(
+      0, ObjectType(list.getClass), nullable = false))
+    assert(serializer.children.size == 2)
+    assert(serializer.children.head.isInstanceOf[Literal])
+    assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
+    assert(serializer.children.last.isInstanceOf[NewInstance])
+    assert(serializer.children.last.asInstanceOf[NewInstance]
+      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
+  }
+
+  private val dataTypeForComplexData = dataTypeFor[ComplexData]
+  private val typeOfComplexData = typeOf[ComplexData]
+
+  Seq(
+    ("mirror", () => mirror),
+    ("dataTypeFor", () => dataTypeFor[ComplexData]),
+    ("constructorFor", () => deserializerFor[ComplexData]),
+    ("extractorsFor", {
+      val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
+      () => serializerFor[ComplexData](inputObject)
+    }),
+    ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
+    ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
+    ("getClassFromType", () => getClassFromType(typeOfComplexData)),
+    ("schemaFor", () => schemaFor[ComplexData]),
+    ("localTypeOf", () => localTypeOf[ComplexData]),
+    ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
+    ("getParameterTypes", () => getParameterTypes(() => ())),
+    ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData))).foreach {
+      case (name, exec) =>
+        test(s"SPARK-13640: thread safety of ${name}") {
+          (0 until 100).foreach { _ =>
+            val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
+            (0 until 10).par.foreach { _ =>
+              val cl = Thread.currentThread.getContextClassLoader
+              try {
+                Thread.currentThread.setContextClassLoader(loader)
+                exec()
+              } finally {
+                Thread.currentThread.setContextClassLoader(cl)
+              }
+            }
+          }
+        }
+    }
 }

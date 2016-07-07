@@ -23,12 +23,13 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.commons.lang3.StringEscapeUtils
-import org.apache.spark.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
-import org.apache.spark.ui.UIUtils._
-import org.apache.spark.ui._
 
-/** Page for Spark Web UI that shows statistics of a streaming job */
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState}
+import org.apache.spark.ui._
+import org.apache.spark.ui.UIUtils._
+
+/** Page for Spark Web UI that shows statistics of jobs running in the thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
   extends WebUIPage("session") with Logging {
 
@@ -59,7 +60,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     UIUtils.headerSparkPage("JDBC/ODBC Session", content, parent, Some(5000))
   }
 
-  /** Generate basic stats of the streaming program */
+  /** Generate basic stats of the thrift server program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
     <ul class ="unstyled">

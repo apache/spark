@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ThreadFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -42,7 +43,7 @@ class OutputRedirector {
 
   OutputRedirector(InputStream in, String loggerName, ThreadFactory tf) {
     this.active = true;
-    this.reader = new BufferedReader(new InputStreamReader(in));
+    this.reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
     this.thread = tf.newThread(new Runnable() {
       @Override
       public void run() {

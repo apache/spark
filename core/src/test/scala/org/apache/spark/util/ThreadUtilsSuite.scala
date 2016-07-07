@@ -20,8 +20,8 @@ package org.apache.spark.util
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 import scala.util.Random
 
 import org.scalatest.concurrent.Eventually._
@@ -109,7 +109,7 @@ class ThreadUtilsSuite extends SparkFunSuite {
     val f = Future {
       Thread.currentThread().getName()
     }(ThreadUtils.sameThread)
-    val futureThreadName = Await.result(f, 10.seconds)
+    val futureThreadName = ThreadUtils.awaitResult(f, 10.seconds)
     assert(futureThreadName === callerThreadName)
   }
 

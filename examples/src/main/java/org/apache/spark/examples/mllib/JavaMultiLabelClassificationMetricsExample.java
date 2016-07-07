@@ -25,10 +25,8 @@ import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
 // $example off$
-import org.apache.spark.SparkContext;
 
 public class JavaMultiLabelClassificationMetricsExample {
   public static void main(String[] args) {
@@ -36,13 +34,13 @@ public class JavaMultiLabelClassificationMetricsExample {
     JavaSparkContext sc = new JavaSparkContext(conf);
     // $example on$
     List<Tuple2<double[], double[]>> data = Arrays.asList(
-      new Tuple2<double[], double[]>(new double[]{0.0, 1.0}, new double[]{0.0, 2.0}),
-      new Tuple2<double[], double[]>(new double[]{0.0, 2.0}, new double[]{0.0, 1.0}),
-      new Tuple2<double[], double[]>(new double[]{}, new double[]{0.0}),
-      new Tuple2<double[], double[]>(new double[]{2.0}, new double[]{2.0}),
-      new Tuple2<double[], double[]>(new double[]{2.0, 0.0}, new double[]{2.0, 0.0}),
-      new Tuple2<double[], double[]>(new double[]{0.0, 1.0, 2.0}, new double[]{0.0, 1.0}),
-      new Tuple2<double[], double[]>(new double[]{1.0}, new double[]{1.0, 2.0})
+      new Tuple2<>(new double[]{0.0, 1.0}, new double[]{0.0, 2.0}),
+      new Tuple2<>(new double[]{0.0, 2.0}, new double[]{0.0, 1.0}),
+      new Tuple2<>(new double[]{}, new double[]{0.0}),
+      new Tuple2<>(new double[]{2.0}, new double[]{2.0}),
+      new Tuple2<>(new double[]{2.0, 0.0}, new double[]{2.0, 0.0}),
+      new Tuple2<>(new double[]{0.0, 1.0, 2.0}, new double[]{0.0, 1.0}),
+      new Tuple2<>(new double[]{1.0}, new double[]{1.0, 2.0})
     );
     JavaRDD<Tuple2<double[], double[]>> scoreAndLabels = sc.parallelize(data);
 
@@ -76,5 +74,7 @@ public class JavaMultiLabelClassificationMetricsExample {
     // Subset accuracy
     System.out.format("Subset accuracy = %f\n", metrics.subsetAccuracy());
     // $example off$
+
+    sc.stop();
   }
 }

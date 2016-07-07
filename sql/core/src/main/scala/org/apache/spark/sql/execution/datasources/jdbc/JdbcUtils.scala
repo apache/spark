@@ -17,27 +17,53 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, PreparedStatement}
+import java.sql.{Connection, Driver, DriverManager, PreparedStatement}
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
-import org.apache.spark.sql.types._
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
+import org.apache.spark.sql.types._
 
 /**
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging {
 
+  // the property names are case sensitive
+  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
+  val JDBC_BATCH_INSERT_SIZE = "batchsize"
+
   /**
-   * Establishes a JDBC connection.
+   * Returns a factory for creating connections to the given JDBC URL.
+   *
+   * @param url the JDBC url to connect to.
+   * @param properties JDBC connection properties.
    */
-  def createConnection(url: String, connectionProperties: Properties): Connection = {
-    JDBCRDD.getConnector(connectionProperties.getProperty("driver"), url, connectionProperties)()
+  def createConnectionFactory(url: String, properties: Properties): () => Connection = {
+    val userSpecifiedDriverClass = Option(properties.getProperty("driver"))
+    userSpecifiedDriverClass.foreach(DriverRegistry.register)
+    // Performing this part of the logic on the driver guards against the corner-case where the
+    // driver returned for a URL is different on the driver and executors due to classpath
+    // differences.
+    val driverClass: String = userSpecifiedDriverClass.getOrElse {
+      DriverManager.getDriver(url).getClass.getCanonicalName
+    }
+    () => {
+      userSpecifiedDriverClass.foreach(DriverRegistry.register)
+      val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
+        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
+        case d if d.getClass.getCanonicalName == driverClass => d
+      }.getOrElse {
+        throw new IllegalStateException(
+          s"Did not find registered driver with class $driverClass")
+      }
+      driver.connect(url, properties)
+    }
   }
 
   /**
@@ -48,7 +74,7 @@ object JdbcUtils extends Logging {
 
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
-    // the database name. Query used to find table exists can be overriden by the dialects.
+    // the database name. Query used to find table exists can be overridden by the dialects.
     Try {
       val statement = conn.prepareStatement(dialect.getTableExistsQuery(table))
       try {
@@ -132,6 +158,10 @@ object JdbcUtils extends Logging {
       nullTypes: Array[Int],
       batchSize: Int,
       dialect: JdbcDialect): Iterator[Byte] = {
+    require(batchSize >= 1,
+      s"Invalid value `${batchSize.toString}` for parameter " +
+      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
+
     val conn = getConnection()
     var committed = false
     val supportsTransactions = try {
@@ -172,8 +202,11 @@ object JdbcUtils extends Logging {
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
                 case ArrayType(et, _) =>
+                  // remove type length parameters from end of type name
+                  val typeName = getJdbcType(et, dialect).databaseTypeDefinition
+                    .toLowerCase.split("\\(")(0)
                   val array = conn.createArrayOf(
-                    getJdbcType(et, dialect).databaseTypeDefinition.toLowerCase,
+                    typeName,
                     row.getSeq[AnyRef](i).toArray)
                   stmt.setArray(i + 1, array)
                 case _ => throw new IllegalArgumentException(
@@ -226,12 +259,12 @@ object JdbcUtils extends Logging {
   def schemaString(df: DataFrame, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    df.schema.fields foreach { field => {
+    df.schema.fields foreach { field =>
       val name = field.name
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
-    }}
+    }
     if (sb.length < 2) "" else sb.substring(2)
   }
 
@@ -242,16 +275,15 @@ object JdbcUtils extends Logging {
       df: DataFrame,
       url: String,
       table: String,
-      properties: Properties = new Properties()) {
+      properties: Properties) {
     val dialect = JdbcDialects.get(url)
     val nullTypes: Array[Int] = df.schema.fields.map { field =>
       getJdbcType(field.dataType, dialect).jdbcNullType
     }
 
     val rddSchema = df.schema
-    val driver: String = DriverRegistry.getDriverClassName(url)
-    val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
-    val batchSize = properties.getProperty("batchsize", "1000").toInt
+    val getConnection: () => Connection = createConnectionFactory(url, properties)
+    val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
     }

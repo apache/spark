@@ -26,8 +26,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.Transformer
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -42,9 +42,9 @@ import org.apache.spark.sql.types._
  * `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
  * with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
  */
-@Since("1.6.0")
 @Experimental
-class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
+@Since("1.6.0")
+class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
   with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
   @Since("1.6.0")
@@ -61,13 +61,15 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
   // optimistic schema; does not contain any ML attributes
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
+    require(get(inputCols).isDefined, "Input cols must be defined first.")
+    require(get(outputCol).isDefined, "Output col must be defined first.")
+    require($(inputCols).length > 0, "Input cols must have non-zero length.")
+    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
     StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
   }
 
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
-    validateParams()
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val inputFeatures = $(inputCols).map(c => dataset.schema(c))
     val featureEncoders = getFeatureEncoders(inputFeatures)
     val featureAttrs = getFeatureAttrs(inputFeatures)
@@ -217,13 +219,6 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
   @Since("1.6.0")
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
-  @Since("1.6.0")
-  override def validateParams(): Unit = {
-    require(get(inputCols).isDefined, "Input cols must be defined first.")
-    require(get(outputCol).isDefined, "Output col must be defined first.")
-    require($(inputCols).length > 0, "Input cols must have non-zero length.")
-    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
-  }
 }
 
 @Since("1.6.0")

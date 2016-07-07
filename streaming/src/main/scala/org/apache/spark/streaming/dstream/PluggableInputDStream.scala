@@ -24,8 +24,8 @@ import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class PluggableInputDStream[T: ClassTag](
-  ssc_ : StreamingContext,
-  receiver: Receiver[T]) extends ReceiverInputDStream[T](ssc_) {
+  _ssc: StreamingContext,
+  receiver: Receiver[T]) extends ReceiverInputDStream[T](_ssc) {
 
   def getReceiver(): Receiver[T] = {
     receiver

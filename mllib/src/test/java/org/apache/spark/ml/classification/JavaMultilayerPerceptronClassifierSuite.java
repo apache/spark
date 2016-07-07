@@ -17,57 +17,39 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
-public class JavaMultilayerPerceptronClassifierSuite implements Serializable {
-
-  private transient JavaSparkContext jsc;
-  private transient SQLContext sqlContext;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
-    sqlContext = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-    sqlContext = null;
-  }
+public class JavaMultilayerPerceptronClassifierSuite extends SharedSparkSession {
 
   @Test
   public void testMLPC() {
-    DataFrame dataFrame = sqlContext.createDataFrame(
-      jsc.parallelize(Arrays.asList(
-        new LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
-        new LabeledPoint(1.0, Vectors.dense(0.0, 1.0)),
-        new LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
-        new LabeledPoint(0.0, Vectors.dense(1.0, 1.0)))),
-      LabeledPoint.class);
+    List<LabeledPoint> data = Arrays.asList(
+      new LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
+      new LabeledPoint(1.0, Vectors.dense(0.0, 1.0)),
+      new LabeledPoint(1.0, Vectors.dense(1.0, 0.0)),
+      new LabeledPoint(0.0, Vectors.dense(1.0, 1.0))
+    );
+    Dataset<Row> dataFrame = spark.createDataFrame(data, LabeledPoint.class);
+
     MultilayerPerceptronClassifier mlpc = new MultilayerPerceptronClassifier()
-      .setLayers(new int[] {2, 5, 2})
+      .setLayers(new int[]{2, 5, 2})
       .setBlockSize(1)
-      .setSeed(11L)
+      .setSeed(123L)
       .setMaxIter(100);
     MultilayerPerceptronClassificationModel model = mlpc.fit(dataFrame);
-    DataFrame result = model.transform(dataFrame);
-    Row[] predictionAndLabels = result.select("prediction", "label").collect();
-    for (Row r: predictionAndLabels) {
+    Dataset<Row> result = model.transform(dataFrame);
+    List<Row> predictionAndLabels = result.select("prediction", "label").collectAsList();
+    for (Row r : predictionAndLabels) {
       Assert.assertEquals((int) r.getDouble(0), (int) r.getDouble(1));
     }
   }

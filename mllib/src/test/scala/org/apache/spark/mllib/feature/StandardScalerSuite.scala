@@ -19,9 +19,9 @@ package org.apache.spark.mllib.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
 import org.apache.spark.rdd.RDD
 
 class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext {

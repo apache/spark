@@ -17,22 +17,23 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Date, DriverManager, ResultSet, ResultSetMetaData, SQLException, Timestamp}
+import java.sql.{Connection, Date, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.util.Properties
 
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -40,7 +41,6 @@ import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Partition {
   override def index: Int = idx
 }
-
 
 private[sql] object JDBCRDD extends Logging {
 
@@ -120,7 +120,7 @@ private[sql] object JDBCRDD extends Logging {
    */
   def resolveTable(url: String, table: String, properties: Properties): StructType = {
     val dialect = JdbcDialects.get(url)
-    val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
+    val conn: Connection = JdbcUtils.createConnectionFactory(url, properties)()
     try {
       val statement = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0")
       try {
@@ -138,7 +138,9 @@ private[sql] object JDBCRDD extends Logging {
             val fieldScale = rsmd.getScale(i + 1)
             val isSigned = rsmd.isSigned(i + 1)
             val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-            val metadata = new MetadataBuilder().putString("name", columnName)
+            val metadata = new MetadataBuilder()
+              .putString("name", columnName)
+              .putLong("scale", fieldScale)
             val columnType =
               dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
                 getCatalystType(dataType, fieldSize, fieldScale, isSigned))
@@ -190,7 +192,7 @@ private[sql] object JDBCRDD extends Logging {
    * Turns a single Filter into a String representing a SQL expression.
    * Returns None for an unhandled filter.
    */
-  private def compileFilter(f: Filter): Option[String] = {
+  private[jdbc] def compileFilter(f: Filter): Option[String] = {
     Option(f match {
       case EqualTo(attr, value) => s"$attr = ${compileValue(value)}"
       case EqualNullSafe(attr, value) =>
@@ -211,14 +213,14 @@ private[sql] object JDBCRDD extends Logging {
         // We can't compile Or filter unless both sub-filters are compiled successfully.
         // It applies too for the following And filter.
         // If we can make sure compileFilter supports all filters, we can remove this check.
-        val or = Seq(f1, f2).map(compileFilter(_)).flatten
+        val or = Seq(f1, f2).flatMap(compileFilter(_))
         if (or.size == 2) {
           or.map(p => s"($p)").mkString(" OR ")
         } else {
           null
         }
       case And(f1, f2) =>
-        val and = Seq(f1, f2).map(compileFilter(_)).flatten
+        val and = Seq(f1, f2).flatMap(compileFilter(_))
         if (and.size == 2) {
           and.map(p => s"($p)").mkString(" AND ")
         } else {
@@ -228,36 +230,13 @@ private[sql] object JDBCRDD extends Logging {
     })
   }
 
-  /**
-   * Given a driver string and an url, return a function that loads the
-   * specified driver string then returns a connection to the JDBC url.
-   * getConnector is run on the driver code, while the function it returns
-   * is run on the executor.
-   *
-   * @param driver - The class name of the JDBC driver for the given url, or null if the class name
-   *                 is not necessary.
-   * @param url - The JDBC url to connect to.
-   *
-   * @return A function that loads the driver and connects to the url.
-   */
-  def getConnector(driver: String, url: String, properties: Properties): () => Connection = {
-    () => {
-      try {
-        if (driver != null) DriverRegistry.register(driver)
-      } catch {
-        case e: ClassNotFoundException =>
-          logWarning(s"Couldn't find class $driver", e)
-      }
-      DriverManager.getConnection(url, properties)
-    }
-  }
+
 
   /**
    * Build and return JDBCRDD from the given information.
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
-   * @param driver - The class name of the JDBC driver for the given url.
    * @param url - The JDBC url to connect to.
    * @param fqTable - The fully-qualified table name (or paren'd SQL query) to use.
    * @param requiredColumns - The names of the columns to SELECT.
@@ -270,7 +249,6 @@ private[sql] object JDBCRDD extends Logging {
   def scanTable(
       sc: SparkContext,
       schema: StructType,
-      driver: String,
       url: String,
       properties: Properties,
       fqTable: String,
@@ -281,7 +259,7 @@ private[sql] object JDBCRDD extends Logging {
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
-      getConnector(driver, url, properties),
+      JdbcUtils.createConnectionFactory(url, properties),
       pruneSchema(schema, requiredColumns),
       fqTable,
       quotedColumns,
@@ -327,14 +305,14 @@ private[sql] class JDBCRDD(
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String =
-    filters.map(JDBCRDD.compileFilter).flatten.mkString(" AND ")
+    filters.flatMap(JDBCRDD.compileFilter).map(p => s"($p)").mkString(" AND ")
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.
    */
   private def getWhereClause(part: JDBCPartition): String = {
     if (part.whereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + filterWhereClause + " AND " + part.whereClause
+      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
     } else if (part.whereClause != null) {
       "WHERE " + part.whereClause
     } else if (filterWhereClause.length > 0) {
@@ -396,6 +374,7 @@ private[sql] class JDBCRDD(
     var nextValue: InternalRow = null
 
     context.addTaskCompletionListener{ context => close() }
+    val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     val conn = getConnection()
     val dialect = JdbcDialects.get(url)
@@ -411,7 +390,11 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val fetchSize = properties.getProperty("fetchsize", "0").toInt
+    val fetchSize = properties.getProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "0").toInt
+    require(fetchSize >= 0,
+      s"Invalid value `${fetchSize.toString}` for parameter " +
+      s"`${JdbcUtils.JDBC_BATCH_FETCH_SIZE}`. The minimum value is 0. When the value is 0, " +
+      "the JDBC driver ignores the value and does the estimates.")
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
@@ -420,6 +403,7 @@ private[sql] class JDBCRDD(
 
     def getNext(): InternalRow = {
       if (rs.next()) {
+        inputMetrics.incRecordsRead(1)
         var i = 0
         while (i < conversions.length) {
           val pos = i + 1

@@ -17,41 +17,32 @@
 
 package org.apache.spark.sql
 
-import java.beans.{BeanInfo, Introspector}
+import java.beans.BeanInfo
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.control.NonFatal
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
-import org.apache.spark.sql.SQLConf.SQLConfEntry
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.errors.DialectException
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.sql.{execution => sparkexecution}
-import org.apache.spark.util.Utils
-import org.apache.spark.{SparkContext, SparkException}
 
 /**
- * The entry point for working with structured data (rows and columns) in Spark.  Allows the
- * creation of [[DataFrame]] objects as well as the execution of SQL queries.
+ * The entry point for working with structured data (rows and columns) in Spark 1.x.
+ *
+ * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class
+ * here for backward compatibility.
  *
  * @groupname basic Basic Operations
  * @groupname ddl_ops Persistent Catalog DDL
@@ -60,64 +51,51 @@ import org.apache.spark.{SparkContext, SparkException}
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
+ * @groupname dataset Custom Dataset Creation
  * @groupname Ungrouped Support functions for language integrated queries
- *
  * @since 1.0.0
  */
-class SQLContext private[sql](
-    @transient val sparkContext: SparkContext,
-    @transient protected[sql] val cacheManager: CacheManager,
-    @transient private[sql] val listener: SQLListener,
-    val isRootContext: Boolean)
-  extends org.apache.spark.Logging with Serializable {
+class SQLContext private[sql](val sparkSession: SparkSession)
+  extends Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = {
-    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
+  sparkSession.sparkContext.assertNotStopped()
+
+  // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
+  // real functionality resides. This class remains mainly for backward compatibility.
+
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
+  def this(sc: SparkContext) = {
+    this(SparkSession.builder().sparkContext(sc).getOrCreate())
   }
+
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
-  // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
-  // wants to create a new root SQLContext (a SLQContext that is not created by newSession).
-  private val allowMultipleContexts =
-    sparkContext.conf.getBoolean(
-      SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
-      SQLConf.ALLOW_MULTIPLE_CONTEXTS.defaultValue.get)
+  // TODO: move this logic into SparkSession
 
-  // Assert no root SQLContext is running when allowMultipleContexts is false.
-  {
-    if (!allowMultipleContexts && isRootContext) {
-      SQLContext.getInstantiatedContextOption() match {
-        case Some(rootSQLContext) =>
-          val errMsg = "Only one SQLContext/HiveContext may be running in this JVM. " +
-            s"It is recommended to use SQLContext.getOrCreate to get the instantiated " +
-            s"SQLContext/HiveContext. To ignore this error, " +
-            s"set ${SQLConf.ALLOW_MULTIPLE_CONTEXTS.key} = true in SparkConf."
-          throw new SparkException(errMsg)
-        case None => // OK
-      }
-    }
-  }
+  private[sql] def sessionState: SessionState = sparkSession.sessionState
+  private[sql] def sharedState: SharedState = sparkSession.sharedState
+  private[sql] def conf: SQLConf = sessionState.conf
+
+  def sparkContext: SparkContext = sparkSession.sparkContext
 
   /**
-   * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
+   * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
+   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * other things.
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = {
-    new SQLContext(
-      sparkContext = sparkContext,
-      cacheManager = cacheManager,
-      listener = listener,
-      isRootContext = false)
-  }
+  def newSession(): SQLContext = sparkSession.newSession().sqlContext
 
   /**
-   * @return Spark SQL configuration
+   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
+   * that listen for execution metrics.
    */
-  protected[sql] lazy val conf = new SQLConf
+  @Experimental
+  def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /**
    * Set Spark SQL configuration properties.
@@ -125,10 +103,16 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(props: Properties): Unit = conf.setConf(props)
+  def setConf(props: Properties): Unit = {
+    sessionState.conf.setConf(props)
+  }
 
-  /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+  /**
+   * Set the given Spark SQL configuration property.
+   */
+  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    sessionState.conf.setConf(entry, value)
+  }
 
   /**
    * Set the given Spark SQL configuration property.
@@ -136,7 +120,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
+  def setConf(key: String, value: String): Unit = {
+    sparkSession.conf.set(key, value)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -144,21 +130,8 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = conf.getConfString(key)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[SQLConfEntry]].
-   */
-  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
-   * desired one.
-   */
-  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
-    conf.getConf(entry, defaultValue)
+  def getConf(key: String): String = {
+    sparkSession.conf.get(key)
   }
 
   /**
@@ -168,7 +141,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = {
+    sparkSession.conf.get(key, defaultValue)
+  }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -177,100 +152,8 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
-
-  @transient
-  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
-
-  @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
-
-  @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
-
-  @transient
-  protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, conf) {
-      override val extendedResolutionRules =
-        ExtractPythonUDFs ::
-        PreInsertCastAndRename ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
-
-      override val extendedCheckRules = Seq(
-        datasources.PreWriteCheck(catalog)
-      )
-    }
-
-  @transient
-  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
-
-  @transient
-  protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))
-
-  @transient
-  protected[sql] val sqlParser = new SparkSQLParser(getSQLDialect().parse(_))
-
-  protected[sql] def getSQLDialect(): ParserDialect = {
-    try {
-      val clazz = Utils.classForName(dialectClassName)
-      clazz.newInstance().asInstanceOf[ParserDialect]
-    } catch {
-      case NonFatal(e) =>
-        // Since we didn't find the available SQL Dialect, it will fail even for SET command:
-        // SET spark.sql.dialect=sql; Let's reset as default dialect automatically.
-        val dialect = conf.dialect
-        // reset the sql dialect
-        conf.unsetConf(SQLConf.DIALECT)
-        // throw out the exception, and the default sql dialect will take effect for next query.
-        throw new DialectException(
-          s"""Instantiating dialect '$dialect' failed.
-             |Reverting to default dialect '${conf.dialect}'""".stripMargin, e)
-    }
-  }
-
-  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
-
-  protected[sql] def executeSql(sql: String):
-    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
-
-  protected[sql] def executePlan(plan: LogicalPlan) =
-    new sparkexecution.QueryExecution(this, plan)
-
-  protected[sql] def dialectClassName = if (conf.dialect == "sql") {
-    classOf[DefaultParserDialect].getCanonicalName
-  } else {
-    conf.dialect
-  }
-
-  /**
-   * Add a jar to SQLContext
-   */
-  protected[sql] def addJar(path: String): Unit = {
-    sparkContext.addJar(path)
-  }
-
-  {
-    // We extract spark sql settings from SparkContext's conf and put them to
-    // Spark SQL's conf.
-    // First, we populate the SQLConf (conf). So, we can make sure that other values using
-    // those settings in their construction can get the correct settings.
-    // For example, metadataHive in HiveContext may need both spark.sql.hive.metastore.version
-    // and spark.sql.hive.metastore.jars to get correctly constructed.
-    val properties = new Properties
-    sparkContext.getConf.getAll.foreach {
-      case (key, value) if key.startsWith("spark.sql") => properties.setProperty(key, value)
-      case _ =>
-    }
-    // We directly put those settings to conf to avoid of calling setConf, which may have
-    // side-effects. For example, in HiveContext, setConf may cause executionHive and metadataHive
-    // get constructed. If we call setConf directly, the constructed metadataHive may have
-    // wrong settings, or the construction may fail.
-    conf.setConf(properties)
-    // After we have populated SQLConf, we call setConf to populate other confs in the subclass
-    // (e.g. hiveconf in HiveContext).
-    properties.asScala.foreach {
-      case (key, value) => setConf(key, value)
-    }
+  def getAllConfs: immutable.Map[String, String] = {
+    sparkSession.conf.getAll
   }
 
   /**
@@ -283,21 +166,21 @@ class SQLContext private[sql](
    */
   @Experimental
   @transient
-  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+  def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrame]] with no rows or columns.
    *
    * @group basic
    * @since 1.3.0
    */
-  @Experimental
-  @transient
-  lazy val emptyDataFrame: DataFrame = createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+  def emptyDataFrame: DataFrame = sparkSession.emptyDataFrame
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
+   * Note that the user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -324,10 +207,8 @@ class SQLContext private[sql](
    *
    * @group basic
    * @since 1.3.0
-   * TODO move to SQLSession?
    */
-  @transient
-  val udf: UDFRegistration = new UDFRegistration(this)
+  def udf: UDFRegistration = sparkSession.udf
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -335,16 +216,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def isCached(tableName: String): Boolean = {
-    cacheManager.lookupCachedData(table(tableName)).nonEmpty
-  }
-
-  /**
-    * Returns true if the [[Queryable]] is currently cached in-memory.
-    * @group cachemgmt
-    * @since 1.3.0
-    */
-  private[sql] def isCached(qName: Queryable): Boolean = {
-    cacheManager.lookupCachedData(qName).nonEmpty
+    sparkSession.catalog.isCached(tableName)
   }
 
   /**
@@ -353,7 +225,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def cacheTable(tableName: String): Unit = {
-    cacheManager.cacheQuery(table(tableName), Some(tableName))
+    sparkSession.catalog.cacheTable(tableName)
   }
 
   /**
@@ -361,13 +233,17 @@ class SQLContext private[sql](
    * @group cachemgmt
    * @since 1.3.0
    */
-  def uncacheTable(tableName: String): Unit = cacheManager.uncacheQuery(table(tableName))
+  def uncacheTable(tableName: String): Unit = {
+    sparkSession.catalog.uncacheTable(tableName)
+  }
 
   /**
    * Removes all cached tables from the in-memory cache.
    * @since 1.3.0
    */
-  def clearCache(): Unit = cacheManager.clearCache()
+  def clearCache(): Unit = {
+    sparkSession.catalog.clearCache()
+  }
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
@@ -387,17 +263,6 @@ class SQLContext private[sql](
   @Experimental
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
-
-    /**
-     * Converts $"col name" into an [[Column]].
-     * @since 1.3.0
-     */
-    // This must live here to preserve binary compatibility with Spark < 1.5.
-    implicit class StringToColumn(val sc: StringContext) {
-      def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args: _*))
-      }
-    }
   }
   // scalastyle:on
 
@@ -410,11 +275,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SQLContext.setActive(self)
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    DataFrame(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    sparkSession.createDataFrame(rdd)
   }
 
   /**
@@ -426,10 +287,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SQLContext.setActive(self)
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
+    sparkSession.createDataFrame(data)
   }
 
   /**
@@ -439,7 +297,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    DataFrame(this, LogicalRelation(baseRelation))
+    sparkSession.baseRelationToDataFrame(baseRelation)
   }
 
   /**
@@ -467,7 +325,7 @@ class SQLContext private[sql](
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -476,7 +334,7 @@ class SQLContext private[sql](
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD, schema, needsConversion = true)
+    sparkSession.createDataFrame(rowRDD, schema)
   }
 
   /**
@@ -485,39 +343,78 @@ class SQLContext private[sql](
    */
   private[sql]
   def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
-    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
-    // schema differs from the existing schema on any field data type.
-    val catalystRows = if (needsConversion) {
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[InternalRow])
-    } else {
-      rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
-    }
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    DataFrame(this, logicalPlan)
+    sparkSession.createDataFrame(rowRDD, schema, needsConversion)
   }
 
-
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
-    val enc = encoderFor[T]
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d).copy())
-    val plan = new LocalRelation(attributes, encoded)
-
-    new Dataset[T](this, plan)
+    sparkSession.createDataset(data)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
-    val enc = encoderFor[T]
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d))
-    val plan = LogicalRDD(attributes, encoded)(self)
-
-    new Dataset[T](this, plan)
+    sparkSession.createDataset(data)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Java Example ==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
-    createDataset(data.asScala)
+    sparkSession.createDataset(data)
   }
 
   /**
@@ -526,15 +423,12 @@ class SQLContext private[sql](
    */
   private[sql]
   def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
-    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
-    // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
-    DataFrame(this, logicalPlan)
+    sparkSession.internalCreateDataFrame(catalystRows, schema)
   }
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -543,12 +437,12 @@ class SQLContext private[sql](
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD.rdd, schema)
+    sparkSession.createDataFrame(rowRDD, schema)
   }
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -557,7 +451,7 @@ class SQLContext private[sql](
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    DataFrame(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    sparkSession.createDataFrame(rows, schema)
   }
 
   /**
@@ -569,14 +463,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
-    val className = beanClass.getName
-    val rowRdd = rdd.mapPartitions { iter =>
-      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
-      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
-    }
-    DataFrame(this, LogicalRDD(attributeSeq, rowRdd)(this))
+    sparkSession.createDataFrame(rdd, beanClass)
   }
 
   /**
@@ -588,11 +475,11 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
-    createDataFrame(rdd.rdd, beanClass)
+    sparkSession.createDataFrame(rdd, beanClass)
   }
 
   /**
-   * Applies a schema to an List of Java Beans.
+   * Applies a schema to a List of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
@@ -600,17 +487,12 @@ class SQLContext private[sql](
    * @since 1.6.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
-    val attrSeq = getSchema(beanClass)
-    val className = beanClass.getName
-    val beanInfo = Introspector.getBeanInfo(beanClass)
-    val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+    sparkSession.createDataFrame(data, beanClass)
   }
 
-
   /**
-   * :: Experimental ::
-   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")
@@ -619,57 +501,63 @@ class SQLContext private[sql](
    * @group genericdata
    * @since 1.4.0
    */
-  @Experimental
-  def read: DataFrameReader = new DataFrameReader(this)
+  def read: DataFrameReader = sparkSession.read
+
 
   /**
    * :: Experimental ::
+   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a [[DataFrame]].
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def readStream: DataStreamReader = sparkSession.readStream
+
+
+  /**
    * Creates an external table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    val dataSourceName = conf.defaultDataSourceName
-    createExternalTable(tableName, path, dataSourceName)
+    sparkSession.catalog.createExternalTable(tableName, path)
   }
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path based on a data source
    * and returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       path: String,
       source: String): DataFrame = {
-    createExternalTable(tableName, source, Map("path" -> path))
+    sparkSession.catalog.createExternalTable(tableName, path, source)
   }
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.asScala.toMap)
+    sparkSession.catalog.createExternalTable(tableName, source, options)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -677,44 +565,29 @@ class SQLContext private[sql](
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
-    val cmd =
-      CreateTableUsing(
-        tableIdent,
-        userSpecifiedSchema = None,
-        source,
-        temporary = false,
-        options,
-        allowExisting = false,
-        managedIfNoPath = false)
-    executePlan(cmd).toRdd
-    table(tableIdent)
+    sparkSession.catalog.createExternalTable(tableName, source, options)
   }
 
   /**
-   * :: Experimental ::
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.asScala.toMap)
+    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
@@ -722,24 +595,12 @@ class SQLContext private[sql](
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    val tableIdent = SqlParser.parseTableIdentifier(tableName)
-    val cmd =
-      CreateTableUsing(
-        tableIdent,
-        userSpecifiedSchema = Some(schema),
-        source,
-        temporary = false,
-        options,
-        allowExisting = false,
-        managedIfNoPath = false)
-    executePlan(cmd).toRdd
-    table(tableIdent)
+    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
   }
 
   /**
@@ -747,7 +608,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(TableIdentifier(tableName), df.logicalPlan)
+    df.createOrReplaceTempView(tableName)
   }
 
   /**
@@ -755,50 +616,46 @@ class SQLContext private[sql](
    * cached/persisted before, it's also unpersisted.
    *
    * @param tableName the name of the table to be unregistered.
-   *
    * @group basic
    * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
-    cacheManager.tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(TableIdentifier(tableName))
+    sparkSession.catalog.dropTempView(tableName)
   }
 
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from 0 to `end` (exclusive) with step value 1.
+   * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 1.4.1
    * @group dataframe
    */
   @Experimental
-  def range(end: Long): DataFrame = range(0, end)
+  def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with step value 1.
+   * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 1.4.0
    * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long): DataFrame = {
-    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
-  }
+  def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
-    * :: Experimental ::
-    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-    * in an range from `start` to `end` (exclusive) with an step value.
-    *
-    * @since 2.0.0
-    * @group dataframe
-    */
+   * :: Experimental ::
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in a range from `start` to `end` (exclusive) with a step value.
+   *
+   * @since 2.0.0
+   * @group dataframe
+   */
   @Experimental
   def range(start: Long, end: Long, step: Long): DataFrame = {
-    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
+    sparkSession.range(start, end, step).toDF()
   }
 
   /**
@@ -812,7 +669,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    DataFrame(this, Range(start, end, step, numPartitions))
+    sparkSession.range(start, end, step, numPartitions).toDF()
   }
 
   /**
@@ -822,9 +679,7 @@ class SQLContext private[sql](
    * @group basic
    * @since 1.3.0
    */
-  def sql(sqlText: String): DataFrame = {
-    DataFrame(this, parseSql(sqlText))
-  }
+  def sql(sqlText: String): DataFrame = sparkSession.sql(sqlText)
 
   /**
    * Returns the specified table as a [[DataFrame]].
@@ -833,11 +688,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def table(tableName: String): DataFrame = {
-    table(SqlParser.parseTableIdentifier(tableName))
-  }
-
-  private def table(tableIdent: TableIdentifier): DataFrame = {
-    DataFrame(this, catalog.lookupRelation(tableIdent))
+    sparkSession.table(tableName)
   }
 
   /**
@@ -849,7 +700,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    DataFrame(this, ShowTablesCommand(None))
+    Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
   }
 
   /**
@@ -861,8 +712,16 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    DataFrame(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(sparkSession, ShowTablesCommand(Some(databaseName), None))
   }
+
+  /**
+   * Returns a [[StreamingQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
+   *
+   * @since 2.0.0
+   */
+  def streams: StreamingQueryManager = sparkSession.streams
 
   /**
    * Returns the names of tables in the current database as an array.
@@ -871,9 +730,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    catalog.getTables(None).map {
-      case (tableName, _) => tableName
-    }.toArray
+    sparkSession.catalog.listTables().collect().map(_.name)
   }
 
   /**
@@ -883,73 +740,17 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    catalog.getTables(Some(databaseName)).map {
-      case (tableName, _) => tableName
-    }.toArray
+    sparkSession.catalog.listTables(databaseName).collect().map(_.name)
   }
-
-  @deprecated("use org.apache.spark.sql.SparkPlanner", "1.6.0")
-  protected[sql] class SparkPlanner extends sparkexecution.SparkPlanner(this)
-
-  @transient
-  protected[sql] val planner: sparkexecution.SparkPlanner = new sparkexecution.SparkPlanner(this)
-
-  @transient
-  protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
-
-  /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
-   * row format conversions as needed.
-   */
-  @transient
-  protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches = Seq(
-      Batch("Add exchange", Once, EnsureRequirements(self))
-    )
-  }
-
-  @deprecated("use org.apache.spark.sql.QueryExecution", "1.6.0")
-  protected[sql] class QueryExecution(logical: LogicalPlan)
-    extends sparkexecution.QueryExecution(this, logical)
 
   /**
    * Parses the data type in our internal string representation. The data type string should
    * have the same format as the one generated by `toString` in scala.
    * It is only used by PySpark.
    */
-  protected[sql] def parseDataType(dataTypeString: String): DataType = {
+  // TODO: Remove this function (would require updating PySpark).
+  private[sql] def parseDataType(dataTypeString: String): DataType = {
     DataType.fromJson(dataTypeString)
-  }
-
-  /**
-   * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
-   */
-  protected[sql] def applySchemaToPythonRDD(
-      rdd: RDD[Array[Any]],
-      schemaString: String): DataFrame = {
-    val schema = parseDataType(schemaString).asInstanceOf[StructType]
-    applySchemaToPythonRDD(rdd, schema)
-  }
-
-  /**
-   * Apply a schema defined by the schema to an RDD. It is only used by PySpark.
-   */
-  protected[sql] def applySchemaToPythonRDD(
-      rdd: RDD[Array[Any]],
-      schema: StructType): DataFrame = {
-
-    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
-  }
-
-  /**
-   * Returns a Catalyst Schema for the given java bean class.
-   */
-  protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
-    dataType.asInstanceOf[StructType].fields.map { f =>
-      AttributeReference(f.name, f.dataType, f.nullable)()
-    }
   }
 
   ////////////////////////////////////////////////////////////////////////////
@@ -959,33 +760,33 @@ class SQLContext private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
 
   /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
 
   /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
   }
 
   /**
-   * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.3.0, replaced by `createDataFrame()`.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
   }
@@ -995,9 +796,9 @@ class SQLContext private[sql](
    * [[DataFrame]] if no paths are passed in.
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().parquet()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().parquet()`.
    */
-  @deprecated("Use read.parquet(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.parquet() instead.", "1.4.0")
   @scala.annotation.varargs
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
@@ -1012,9 +813,9 @@ class SQLContext private[sql](
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonFile(path: String): DataFrame = {
     read.json(path)
   }
@@ -1024,18 +825,18 @@ class SQLContext private[sql](
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonFile(path: String, schema: StructType): DataFrame = {
     read.schema(schema).json(path)
   }
 
   /**
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonFile(path: String, samplingRatio: Double): DataFrame = {
     read.option("samplingRatio", samplingRatio.toString).json(path)
   }
@@ -1046,9 +847,9 @@ class SQLContext private[sql](
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
 
   /**
@@ -1057,9 +858,9 @@ class SQLContext private[sql](
    * It goes through the entire dataset once to determine the schema.
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
 
   /**
@@ -1067,9 +868,9 @@ class SQLContext private[sql](
    * returning the result as a [[DataFrame]].
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
     read.schema(schema).json(json)
   }
@@ -1079,9 +880,9 @@ class SQLContext private[sql](
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
     read.schema(schema).json(json)
   }
@@ -1091,9 +892,9 @@ class SQLContext private[sql](
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
     read.option("samplingRatio", samplingRatio.toString).json(json)
   }
@@ -1103,9 +904,9 @@ class SQLContext private[sql](
    * schema, returning the result as a [[DataFrame]].
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().json()`.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
     read.option("samplingRatio", samplingRatio.toString).json(json)
   }
@@ -1115,9 +916,9 @@ class SQLContext private[sql](
    * using the default data source configured by spark.sql.sources.default.
    *
    * @group genericdata
-   * @deprecated As of 1.4.0, replaced by `read().load(path)`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().load(path)`.
    */
-  @deprecated("Use read.load(path). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.load(path) instead.", "1.4.0")
   def load(path: String): DataFrame = {
     read.load(path)
   }
@@ -1127,9 +928,8 @@ class SQLContext private[sql](
    *
    * @group genericdata
    * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
-   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.format(source).load(path). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).load(path) instead.", "1.4.0")
   def load(path: String, source: String): DataFrame = {
     read.format(source).load(path)
   }
@@ -1140,10 +940,8 @@ class SQLContext private[sql](
    *
    * @group genericdata
    * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
-   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.format(source).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
     read.options(options).format(source).load()
   }
@@ -1155,8 +953,7 @@ class SQLContext private[sql](
    * @group genericdata
    * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
-  @deprecated("Use read.format(source).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
   def load(source: String, options: Map[String, String]): DataFrame = {
     read.options(options).format(source).load()
   }
@@ -1169,10 +966,11 @@ class SQLContext private[sql](
    * @deprecated As of 1.4.0, replaced by
    *            `read().format(source).schema(schema).options(options).load()`.
    */
-  @deprecated("Use read.format(source).schema(schema).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
-  def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
-  {
+  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
+  def load(
+      source: String,
+      schema: StructType,
+      options: java.util.Map[String, String]): DataFrame = {
     read.format(source).schema(schema).options(options).load()
   }
 
@@ -1184,8 +982,7 @@ class SQLContext private[sql](
    * @deprecated As of 1.4.0, replaced by
    *            `read().format(source).schema(schema).options(options).load()`.
    */
-  @deprecated("Use read.format(source).schema(schema).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
   def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
     read.format(source).schema(schema).options(options).load()
   }
@@ -1195,9 +992,9 @@ class SQLContext private[sql](
    * url named table.
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
-  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
   def jdbc(url: String, table: String): DataFrame = {
     read.jdbc(url, table, new Properties)
   }
@@ -1213,9 +1010,9 @@ class SQLContext private[sql](
    * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
    *                      evenly into this many partitions
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
-  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
   def jdbc(
       url: String,
       table: String,
@@ -1233,31 +1030,12 @@ class SQLContext private[sql](
    * of the [[DataFrame]].
    *
    * @group specificdata
-   * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
+   * @deprecated As of 1.4.0, replaced by `read().jdbc()`.
    */
-  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
   def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
     read.jdbc(url, table, theParts, new Properties)
   }
-
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-  // End of deprecated methods
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-
-
-  // Register a succesfully instantiatd context to the singleton. This should be at the end of
-  // the class definition so that the singleton is updated only if there is no exception in the
-  // construction of the instance.
-  sparkContext.addSparkListener(new SparkListener {
-    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      SQLContext.clearInstantiatedContext()
-      SQLContext.clearSqlListener()
-    }
-  })
-
-  SQLContext.setInstantiatedContext(self)
 }
 
 /**
@@ -1271,19 +1049,6 @@ class SQLContext private[sql](
 object SQLContext {
 
   /**
-   * The active SQLContext for the current thread.
-   */
-  private val activeContext: InheritableThreadLocal[SQLContext] =
-    new InheritableThreadLocal[SQLContext]
-
-  /**
-   * Reference to the created SQLContext.
-   */
-  @transient private val instantiatedContext = new AtomicReference[SQLContext]()
-
-  @transient private val sqlListener = new AtomicReference[SQLListener]()
-
-  /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    *
    * This function can be used to create a singleton SQLContext object that can be shared across
@@ -1294,41 +1059,9 @@ object SQLContext {
    *
    * @since 1.5.0
    */
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    val ctx = activeContext.get()
-    if (ctx != null && !ctx.sparkContext.isStopped) {
-      return ctx
-    }
-
-    synchronized {
-      val ctx = instantiatedContext.get()
-      if (ctx == null || ctx.sparkContext.isStopped) {
-        new SQLContext(sparkContext)
-      } else {
-        ctx
-      }
-    }
-  }
-
-  private[sql] def clearInstantiatedContext(): Unit = {
-    instantiatedContext.set(null)
-  }
-
-  private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
-    synchronized {
-      val ctx = instantiatedContext.get()
-      if (ctx == null || ctx.sparkContext.isStopped) {
-        instantiatedContext.set(sqlContext)
-      }
-    }
-  }
-
-  private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
-    Option(instantiatedContext.get())
-  }
-
-  private[sql] def clearSqlListener(): Unit = {
-    sqlListener.set(null)
+    SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
 
   /**
@@ -1338,8 +1071,9 @@ object SQLContext {
    *
    * @since 1.6.0
    */
+  @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
   def setActive(sqlContext: SQLContext): Unit = {
-    activeContext.set(sqlContext)
+    SparkSession.setActiveSession(sqlContext.sparkSession)
   }
 
   /**
@@ -1348,12 +1082,9 @@ object SQLContext {
    *
    * @since 1.6.0
    */
+  @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
   def clearActive(): Unit = {
-    activeContext.remove()
-  }
-
-  private[sql] def getActive(): Option[SQLContext] = {
-    Option(activeContext.get())
+    SparkSession.clearActiveSession()
   }
 
   /**
@@ -1361,8 +1092,10 @@ object SQLContext {
    * bean info & schema. This is not related to the singleton, but is a static
    * method for internal use.
    */
-  private def beansToRows(data: Iterator[_], beanInfo: BeanInfo, attrs: Seq[AttributeReference]):
-      Iterator[InternalRow] = {
+  private[sql] def beansToRows(
+        data: Iterator[_],
+        beanInfo: BeanInfo,
+        attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
       beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
     val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
@@ -1376,16 +1109,16 @@ object SQLContext {
   }
 
   /**
-   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
+   * Extract `spark.sql.*` properties from the conf and return them as a [[Properties]].
    */
-  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (sqlListener.compareAndSet(null, listener)) {
-        sc.addSparkListener(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
+  private[sql] def getSQLProperties(sparkConf: SparkConf): Properties = {
+    val properties = new Properties
+    sparkConf.getAll.foreach { case (key, value) =>
+      if (key.startsWith("spark.sql")) {
+        properties.setProperty(key, value)
       }
     }
-    sqlListener.get()
+    properties
   }
+
 }

@@ -18,7 +18,8 @@
 context("partitionBy, groupByKey, reduceByKey etc.")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
 intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
@@ -176,8 +177,8 @@ test_that("partitionBy() partitions data correctly", {
 
   resultRDD <- partitionBy(numPairsRdd, 2L, partitionByMagnitude)
 
-  expected_first <- list(list(1, 100), list(2, 200)) # key < 3
-  expected_second <- list(list(4, -1), list(3, 1), list(3, 0)) # key >= 3
+  expected_first <- list(list(1, 100), list(2, 200)) # key less than 3
+  expected_second <- list(list(4, -1), list(3, 1), list(3, 0)) # key greater than or equal 3
   actual_first <- collectPartition(resultRDD, 0L)
   actual_second <- collectPartition(resultRDD, 1L)
 

@@ -7,6 +7,14 @@
   "resultSerializationTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "memoryBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "diskBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "inputMetrics" : {
+    "bytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "recordsRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+  },
+  "outputMetrics" : {
+    "bytesWritten" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "recordsWritten" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+  },
   "shuffleReadMetrics" : {
     "readBytes" : [ 17100.0, 17100.0, 17100.0, 17100.0, 17100.0 ],
     "readRecords" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ],
@@ -15,5 +23,10 @@
     "fetchWaitTime" : [ 0.0, 0.0, 0.0, 1.0, 1.0 ],
     "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
     "totalBlocksFetched" : [ 100.0, 100.0, 100.0, 100.0, 100.0 ]
+  },
+  "shuffleWriteMetrics" : {
+    "writeBytes" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "writeRecords" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "writeTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
   }
 }

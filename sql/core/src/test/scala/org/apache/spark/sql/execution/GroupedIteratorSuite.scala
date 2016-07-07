@@ -21,13 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.types.{LongType, StringType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 class GroupedIteratorSuite extends SparkFunSuite {
 
   test("basic") {
     val schema = new StructType().add("i", IntegerType).add("s", StringType)
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
     val input = Seq(Row(1, "a"), Row(1, "b"), Row(2, "c"))
     val grouped = GroupedIterator(input.iterator.map(encoder.toRow),
       Seq('i.int.at(0)), schema.toAttributes)
@@ -45,7 +45,7 @@ class GroupedIteratorSuite extends SparkFunSuite {
 
   test("group by 2 columns") {
     val schema = new StructType().add("i", IntegerType).add("l", LongType).add("s", StringType)
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
 
     val input = Seq(
       Row(1, 2L, "a"),
@@ -72,7 +72,7 @@ class GroupedIteratorSuite extends SparkFunSuite {
 
   test("do nothing to the value iterator") {
     val schema = new StructType().add("i", IntegerType).add("s", StringType)
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
     val input = Seq(Row(1, "a"), Row(1, "b"), Row(2, "c"))
     val grouped = GroupedIterator(input.iterator.map(encoder.toRow),
       Seq('i.int.at(0)), schema.toAttributes)

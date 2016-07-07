@@ -146,12 +146,6 @@ class LogisticGradient(numClasses: Int) extends Gradient {
 
   def this() = this(2)
 
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val gradient = Vectors.zeros(weights.size)
-    val loss = compute(data, label, weights, gradient)
-    (gradient, loss)
-  }
-
   override def compute(
       data: Vector,
       label: Double,

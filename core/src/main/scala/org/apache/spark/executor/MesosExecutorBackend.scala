@@ -21,13 +21,14 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
+import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv, TaskState}
+import org.apache.spark.{SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
 import org.apache.spark.util.Utils
 

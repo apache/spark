@@ -18,7 +18,8 @@
 context("binary functions")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
 nums <- 1:10
@@ -31,7 +32,7 @@ test_that("union on two RDDs", {
   actual <- collect(unionRDD(rdd, rdd))
   expect_equal(actual, as.list(rep(nums, 2)))
 
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   text.rdd <- textFile(sc, fileName)
@@ -74,10 +75,10 @@ test_that("zipPartitions() on RDDs", {
   actual <- collect(zipPartitions(rdd1, rdd2, rdd3,
                                   func = function(x, y, z) { list(list(x, y, z))} ))
   expect_equal(actual,
-               list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6))))
+               list(list(1, c(1, 2), c(1, 2, 3)), list(2, c(3, 4), c(4, 5, 6))))
 
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName, 1)

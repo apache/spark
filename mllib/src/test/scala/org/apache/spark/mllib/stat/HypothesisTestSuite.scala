@@ -144,7 +144,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(chi.size === numCols)
     assert(chi(1000) != null) // SPARK-3087
 
-    // Detect continous features or labels
+    // Detect continuous features or labels
     val random = new Random(11L)
     val continuousLabel =
       Seq.fill(100000)(LabeledPoint(random.nextDouble(), Vectors.dense(random.nextInt(2))))

@@ -20,13 +20,13 @@ package org.apache.spark.examples
 
 import org.apache.commons.math3.linear._
 
-import org.apache.spark._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Alternating least squares matrix factorization.
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to org.apache.spark.mllib.recommendation.ALS
+ * please refer to org.apache.spark.ml.recommendation.ALS.
  */
 object SparkALS {
 
@@ -58,7 +58,7 @@ object SparkALS {
   }
 
   def update(i: Int, m: RealVector, us: Array[RealVector], R: RealMatrix) : RealVector = {
-    val U = us.size
+    val U = us.length
     val F = us(0).getDimension
     var XtX: RealMatrix = new Array2DRowRealMatrix(F, F)
     var Xty: RealVector = new ArrayRealVector(F)
@@ -81,7 +81,7 @@ object SparkALS {
   def showWarning() {
     System.err.println(
       """WARN: This is a naive implementation of ALS and is given as an example!
-        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |Please use org.apache.spark.ml.recommendation.ALS
         |for more conventional use.
       """.stripMargin)
   }
@@ -108,8 +108,12 @@ object SparkALS {
 
     println(s"Running with M=$M, U=$U, F=$F, iters=$ITERATIONS")
 
-    val sparkConf = new SparkConf().setAppName("SparkALS")
-    val sc = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder
+      .appName("SparkALS")
+      .getOrCreate()
+
+    val sc = spark.sparkContext
 
     val R = generateR()
 
@@ -135,7 +139,7 @@ object SparkALS {
       println()
     }
 
-    sc.stop()
+    spark.stop()
   }
 
   private def randomVector(n: Int): RealVector =

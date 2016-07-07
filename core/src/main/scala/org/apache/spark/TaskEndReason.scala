@@ -20,9 +20,10 @@ package org.apache.spark
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 // ==============================================================================================
 // NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol!
@@ -115,8 +116,9 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    metrics: Option[TaskMetrics],
-    private val exceptionWrapper: Option[ThrowableSerializationWrapper])
+    private val exceptionWrapper: Option[ThrowableSerializationWrapper],
+    accumUpdates: Seq[AccumulableInfo] = Seq.empty,
+    private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil)
   extends TaskFailedReason {
 
   /**
@@ -124,18 +126,24 @@ case class ExceptionFailure(
    * driver. This may be set to `false` in the event that the exception is not in fact
    * serializable.
    */
-  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics], preserveCause: Boolean) {
-    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics,
-      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None)
+  private[spark] def this(
+      e: Throwable,
+      accumUpdates: Seq[AccumulableInfo],
+      preserveCause: Boolean) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
+      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
-    this(e, metrics, preserveCause = true)
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
+    this(e, accumUpdates, preserveCause = true)
   }
 
-  def exception: Option[Throwable] = exceptionWrapper.flatMap {
-    (w: ThrowableSerializationWrapper) => Option(w.exception)
+  private[spark] def withAccums(accums: Seq[AccumulatorV2[_, _]]): ExceptionFailure = {
+    this.accums = accums
+    this
   }
+
+  def exception: Option[Throwable] = exceptionWrapper.flatMap(w => Option(w.exception))
 
   override def toErrorString: String =
     if (fullStackTrace == null) {
@@ -233,7 +241,6 @@ case class ExecutorLostFailure(
     } else {
       "unrelated to the running tasks"
     }
-    s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
       reason.map { r => s" Reason: $r" }.getOrElse("")
   }

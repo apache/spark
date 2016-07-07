@@ -18,11 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
 import org.apache.spark.rdd.RDD
 // $example off$
-import org.apache.spark.{SparkContext, SparkConf}
 
 object MultiLabelMetricsExample {
   def main(args: Array[String]): Unit = {

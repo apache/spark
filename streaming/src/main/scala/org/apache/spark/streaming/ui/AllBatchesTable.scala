@@ -52,7 +52,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
     val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
-    val eventCount = batch.numRecords
+    val numRecords = batch.numRecords
     val schedulingDelay = batch.schedulingDelay
     val formattedSchedulingDelay = schedulingDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
     val processingTime = batch.processingDelay
@@ -65,7 +65,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
         {formattedBatchTime}
       </a>
     </td>
-      <td sorttable_customkey={eventCount.toString}>{eventCount.toString} events</td>
+      <td sorttable_customkey={numRecords.toString}>{numRecords.toString} records</td>
       <td sorttable_customkey={schedulingDelay.getOrElse(Long.MaxValue).toString}>
         {formattedSchedulingDelay}
       </td>
@@ -97,6 +97,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
         completed = batch.numCompletedOutputOp,
         failed = batch.numFailedOutputOp,
         skipped = 0,
+        killed = 0,
         total = batch.outputOperations.size)
       }
     </td>

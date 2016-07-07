@@ -24,8 +24,6 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
-import py4j.GatewayServer
-
 import org.apache.spark.SparkException
 import org.apache.spark.api.java._
 import org.apache.spark.rdd.RDD
@@ -167,16 +165,6 @@ private[python] object PythonDStream {
    */
   def registerSerializer(ser: PythonTransformFunctionSerializer): Unit = {
     PythonTransformFunctionSerializer.register(ser)
-  }
-
-  /**
-   * Update the port of callback client to `port`
-   */
-  def updatePythonGatewayPort(gws: GatewayServer, port: Int): Unit = {
-    val cl = gws.getCallbackClient
-    val f = cl.getClass.getDeclaredField("port")
-    f.setAccessible(true)
-    f.setInt(cl, port)
   }
 
   /**

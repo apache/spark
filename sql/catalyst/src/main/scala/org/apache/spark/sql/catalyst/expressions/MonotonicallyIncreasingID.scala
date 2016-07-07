@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.types.{LongType, DataType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
  * Returns monotonically increasing 64-bit integers.
@@ -65,17 +65,19 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
     partitionMask + currentCount
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
     ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
       s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
 
-    ev.isNull = "false"
-    s"""
+    ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
-      $countTerm++;
-    """
+      $countTerm++;""", isNull = "false")
   }
+
+  override def prettyName: String = "monotonically_increasing_id"
+
+  override def sql: String = s"$prettyName()"
 }

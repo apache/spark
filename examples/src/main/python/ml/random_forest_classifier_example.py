@@ -20,23 +20,23 @@ Random Forest Classifier Example.
 """
 from __future__ import print_function
 
-import sys
-
-from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="random_forest_classifier_example")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("random_forest_classifier_example")\
+        .getOrCreate()
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
-    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Index labels, adding metadata to the label column.
     # Fit on whole dataset to include all labels in index.
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
     # Train a RandomForest model.
-    rf = RandomForestClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures")
+    rf = RandomForestClassifier(labelCol="indexedLabel", featuresCol="indexedFeatures", numTrees=10)
 
     # Chain indexers and forest in a Pipeline
     pipeline = Pipeline(stages=[labelIndexer, featureIndexer, rf])
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     # Select (prediction, true label) and compute test error
     evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
+        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test Error = %g" % (1.0 - accuracy))
 
@@ -74,4 +74,4 @@ if __name__ == "__main__":
     print(rfModel)  # summary only
     # $example off$
 
-    sc.stop()
+    spark.stop()
