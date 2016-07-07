@@ -856,4 +856,65 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
   }
+
+  test("support for other types in DBPROPERTIES") {
+    val sql =
+      """
+        |CREATE DATABASE database_name
+        |LOCATION '/home/user/db'
+        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    val parsed = parser.parsePlan(sql)
+    val expected = CreateDatabaseCommand(
+      "database_name",
+      ifNotExists = false,
+      Some("/home/user/db"),
+      None,
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
+
+    comparePlans(parsed, expected)
+  }
+
+  test("support for other types in TBLPROPERTIES") {
+    val sql =
+      """
+        |ALTER TABLE table_name
+        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
+      """.stripMargin
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableSetPropertiesCommand(
+      TableIdentifier("table_name"),
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      isView = false)
+
+    comparePlans(parsed, expected)
+  }
+
+  test("support for other types in OPTIONS") {
+    val sql =
+      """
+        |CREATE TABLE table_name USING json
+        |OPTIONS (a 1, b 0.1, c TRUE)
+      """.stripMargin
+    val expected = CreateTableUsing(
+      TableIdentifier("table_name"),
+      None,
+      "json",
+      false,
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      null,
+      None,
+      false,
+      true)
+
+    parser.parsePlan(sql) match {
+      case ct: CreateTableUsing =>
+        // We can't compare array in `CreateTableUsing` directly, so here we explicitly
+        // set partitionColumns to `null` and then compare it.
+        comparePlans(ct.copy(partitionColumns = null), expected)
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
+  }
 }
