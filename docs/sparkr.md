@@ -1,7 +1,8 @@
 ---
+title: "SparkR (R on Spark)"
 layout: global
+output: html_document
 displayTitle: SparkR (R on Spark)
-title: SparkR (R on Spark)
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -302,6 +303,64 @@ head(ldf, 3)
 ##1     3.600      79         4740
 ##2     1.800      54         3240
 ##3     3.333      74         4440
+
+{% endhighlight %}
+</div>
+
+#### Run a given function on a large dataset grouping by input column(s) and using `gapply` or `gapplyCollect`
+
+##### gapply
+Apply a function to each group of a `SparkDataFrame`. The function is to be applied to each group of the `SparkDataFrame` and should have only two parameters: grouping key and R `data.frame` corresponding to
+that key. The groups are chosen from `SparkDataFrame`s column(s).
+The output of function should be a `data.frame`. Schema specifies the row format of the resulting
+`SparkDataFrame`. It must match the R function's output.
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Determine six waiting times with the largest eruption time in minutes.
+schema <- structType(structField("waiting", "double"), structField("max_eruption", "double"))
+result <- gapply(
+    df,
+    "waiting",
+    function(key, x) {
+        y <- data.frame(key, max(x$eruptions))
+    },
+    schema)
+head(collect(arrange(result, "max_eruption", decreasing = TRUE)))
+
+##    waiting   max_eruption
+##1      64       5.100
+##2      69       5.067
+##3      71       5.033
+##4      87       5.000
+##5      63       4.933
+##6      89       4.900
+{% endhighlight %}
+</div>
+
+##### gapplyCollect
+Like `gapply`, applies a function to each partition of a `SparkDataFrame` and collect the result back to R data.frame. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can only be used if the output of UDF run on all the partitions can fit in driver memory.
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Determine six waiting times with the largest eruption time in minutes.
+result <- gapplyCollect(
+    df,
+    "waiting",
+    function(key, x) {
+        y <- data.frame(key, max(x$eruptions))
+        colnames(y) <- c("waiting", "max_eruption")
+        y
+    })
+head(result[order(result$max_eruption, decreasing = TRUE), ])
+
+##    waiting   max_eruption
+##1      64       5.100
+##2      69       5.067
+##3      71       5.033
+##4      87       5.000
+##5      63       4.933
+##6      89       4.900
 
 {% endhighlight %}
 </div>
