@@ -163,15 +163,15 @@ private[spark] case class ConfigBuilder(key: String) {
 
   /**
    * Enable variable expansion in config values. If the config value contains variable references
-   * of the form "${prefix.variableName}", the reference will be replaced with the value of the
+   * of the form "${prefix:variableName}", the reference will be replaced with the value of the
    * variable depending on the prefix. The prefix can be one of:
    *
-   * - spark: looks for the value in the Spark configuration
-   * - sys: looks for the value in the system properties
+   * - no prefix: looks for the value in the Spark configuration
+   * - system: looks for the value in the system properties
    * - env: looks for the value in the environment
    *
    * So referencing "${spark.master}" will look for the value of "spark.master" in the Spark
-   * configuration, while referencing "${env.MASTER}" will read the value from the "MASTER"
+   * configuration, while referencing "${env:MASTER}" will read the value from the "MASTER"
    * environment variable.
    *
    * For known Spark configuration keys (i.e. those created using `ConfigBuilder`), references

@@ -174,8 +174,8 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(expand("${spark.value1} ${spark.value2}") === "value1 value2")
     assert(expand("${spark.value3}") === "${spark.value3}")
 
-    assert(expand("${env.ENV1}") === "env1")
-    assert(expand("${sys.user.name}") === sys.props("user.name"))
+    assert(expand("${env:ENV1}") === "env1")
+    assert(expand("${system:user.name}") === sys.props("user.name"))
 
     val stringConf = ConfigBuilder(testKey("stringForExpansion"))
       .stringConf
@@ -226,7 +226,7 @@ class ConfigEntrySuite extends SparkFunSuite {
   test("path conf") {
     val conf = new SparkConf()
     val path = ConfigBuilder(testKey("path")).pathConf.createWithDefault("unset")
-    conf.set(path, "/${sys.user.name}")
+    conf.set(path, "/${system:user.name}")
     assert(conf.get(path) === s"/${sys.props("user.name")}")
   }
 

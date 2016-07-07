@@ -140,7 +140,7 @@ private object ConfigEntry {
 
   private val knownConfigs = new java.util.concurrent.ConcurrentHashMap[String, ConfigEntry[_]]()
 
-  private val REF_RE = "\\$\\{(\\w+?)\\.(\\S+?)\\}".r.pattern
+  private val REF_RE = "\\$\\{(?:(\\w+?):)?(\\S+?)\\}".r.pattern
 
   def registerEntry(entry: ConfigEntry[_]): Unit = {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)
@@ -168,14 +168,13 @@ private object ConfigEntry {
       result.append(value.substring(end, matcher.start()))
 
       val replacement = prefix match {
-        case "spark" =>
-          val key = s"spark.$name"
-          require(!usedRefs.contains(key), "Circular reference in $value: $key")
-          Option(findEntry(key))
-            .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + key))
-            .orElse(Option(conf.get(key)))
-            .orElse(defaultValueString(key))
-        case "sys" => sys.props.get(name)
+        case null =>
+          require(!usedRefs.contains(name), s"Circular reference in $value: $name")
+          Option(findEntry(name))
+            .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + name))
+            .orElse(Option(conf.get(name)))
+            .orElse(defaultValueString(name))
+        case "system" => sys.props.get(name)
         case "env" => Option(getenv(name))
         case _ => throw new IllegalArgumentException(s"Invalid prefix: $prefix")
       }
