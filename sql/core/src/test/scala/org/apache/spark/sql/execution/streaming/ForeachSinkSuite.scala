@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.ForeachWriter
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
@@ -40,7 +40,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(2).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .outputMode("append")
+        .outputMode(OutputMode.Append)
         .foreach(new TestForeachWriter())
         .start()
 
@@ -63,10 +63,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
 
       var allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 2)
-      assert {
-        allEvents === Seq(expectedEventsForPartition0, expectedEventsForPartition1) ||
-          allEvents === Seq(expectedEventsForPartition1, expectedEventsForPartition0)
-      }
+      assert(allEvents.toSet === Set(expectedEventsForPartition0, expectedEventsForPartition1))
 
       ForeachSinkSuite.clear()
 
@@ -89,10 +86,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
 
       allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 2)
-      assert {
-        allEvents === Seq(expectedEventsForPartition0, expectedEventsForPartition1) ||
-          allEvents === Seq(expectedEventsForPartition1, expectedEventsForPartition0)
-      }
+      assert(allEvents.toSet === Set(expectedEventsForPartition0, expectedEventsForPartition1))
 
       query.stop()
     }
@@ -106,7 +100,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         .groupBy().count().as[Long].map(_.toInt)
         .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .outputMode("complete")
+        .outputMode(OutputMode.Complete)
         .foreach(new TestForeachWriter())
         .start()
 

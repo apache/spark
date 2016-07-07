@@ -48,9 +48,8 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
     // created Datasets use `IncrementalExecution` where necessary (which is SPARK-16264 tries to
     // resolve).
 
-    val dataAsT = data.as[T]
     val datasetWithIncrementalExecution =
-      new Dataset(data.sparkSession, dataAsT.logicalPlan, dataAsT.encoder) {
+      new Dataset(data.sparkSession, data.logicalPlan, implicitly[Encoder[T]]) {
         override lazy val rdd: RDD[T] = {
           val objectType = exprEnc.deserializer.dataType
           val deserialized = CatalystSerde.deserialize[T](logicalPlan)
