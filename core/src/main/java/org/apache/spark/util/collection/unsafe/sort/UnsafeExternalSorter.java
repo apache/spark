@@ -27,7 +27,6 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
@@ -99,8 +98,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long numElementsForSpillThreshold,
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
-      serializerManager, taskContext, recordComparator, prefixComparator, initialSize, numElementsForSpillThreshold,
-        pageSizeBytes, inMemorySorter, false /* ignored */);
+      serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
+        numElementsForSpillThreshold, pageSizeBytes, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
@@ -119,8 +118,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long numElementsForSpillThreshold,
       boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, numElementsForSpillThreshold, null,
-      canUseRadixSort);
+      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes,
+      numElementsForSpillThreshold, null, canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -387,7 +386,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     assert(inMemSorter != null);
     if (inMemSorter.numRecords() >= numElementsForSpillThreshold) {
-      logger.info("Spilling data because number of spilledRecords crossed the threshold " + numElementsForSpillThreshold);
+      logger.info("Spilling data because number of spilledRecords crossed the threshold " +
+        numElementsForSpillThreshold);
       spill();
     }
 

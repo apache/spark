@@ -1045,10 +1045,10 @@ class DataFrame(object):
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         >>> from pyspark.sql import Row
-        >>> df = sc.parallelize([ \
-            Row(name='Alice', age=5, height=80), \
-            Row(name='Alice', age=5, height=80), \
-            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df = sc.parallelize([ \\
+        ...     Row(name='Alice', age=5, height=80), \\
+        ...     Row(name='Alice', age=5, height=80), \\
+        ...     Row(name='Alice', age=10, height=80)]).toDF()
         >>> df.dropDuplicates().show()
         +---+------+-----+
         |age|height| name|

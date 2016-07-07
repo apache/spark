@@ -464,6 +464,19 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-15198 Support for pushing down filters for boolean types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(_ => (true, false))
+      withOrcFile(data) { file =>
+        val df = spark.read.orc(file).where("_2 == true")
+        val actual = stripSparkFilter(df).count()
+
+        // ORC filter should be applied and the total count should be 0.
+        assert(actual === 0)
+      }
+    }
+  }
+
   test("column nullability and comment - write and then read") {
     val schema = (new StructType)
       .add("cl1", IntegerType, nullable = false, comment = "test")
