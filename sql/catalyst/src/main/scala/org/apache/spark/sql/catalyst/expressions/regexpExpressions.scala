@@ -230,12 +230,12 @@ case class Sentences(
     if (string == null) {
       null
     } else {
-      var locale = Locale.getDefault
-      val lang = language.eval(input)
-      val coun = country.eval(input)
-      if (lang != null && coun != null) {
-        locale = new Locale(lang.asInstanceOf[UTF8String].toString,
-          coun.asInstanceOf[UTF8String].toString)
+      val languageStr = language.eval(input).asInstanceOf[UTF8String]
+      val countryStr = country.eval(input).asInstanceOf[UTF8String]
+      val locale = if (languageStr != null && countryStr != null) {
+        new Locale(languageStr.toString, countryStr.toString)
+      } else {
+        Locale.getDefault
       }
       getSentences(string.asInstanceOf[UTF8String].toString, locale)
     }
