@@ -27,60 +27,6 @@ import org.apache.spark.util.Clock
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
 
-
-/**
- * Abstract interface for tracking all info related to executor and node blacklist.  Though we only
- * have one real implmentation currently, [[BlacklistTrackerImpl]], usage becomes much simpler
- * by adding [[NoopBlacklistTracker]] than by making all uses switch to Option[BlacklistTracker].
- * See [[BlacklistTrackerImpl]] for all meaningful documentation.
- */
-private[scheduler] trait BlacklistTracker {
-  def start(): Unit
-
-  def stop(): Unit
-
-  def expireExecutorsInBlacklist(): Unit
-
-  /** Get the full blacklist.  This *is* thread-safe, unlike all other methods. */
-  def nodeBlacklist(): Set[String]
-
-  def isNodeBlacklisted(node: String): Boolean
-
-  def isNodeBlacklistedForStage(node: String, stageId: Int): Boolean
-
-  def isExecutorBlacklisted(executorId: String): Boolean
-
-  def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean
-
-  def isExecutorBlacklisted(
-    executorId: String,
-    stageId: Int,
-    indexInTaskSet: Int) : Boolean
-
-  def isNodeBlacklisted(
-    node: String,
-    stageId: Int,
-    indexInTaskSet: Int) : Boolean
-
-  def taskSucceeded(
-    stageId: Int,
-    indexInTaskSet: Int,
-    info: TaskInfo,
-    scheduler: TaskSchedulerImpl): Unit
-
-  def taskFailed(
-    stageId: Int,
-    indexInTaskSet: Int,
-    info: TaskInfo,
-    scheduler: TaskSchedulerImpl): Unit
-
-  def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit
-
-  def taskSetFailed(stageId: Int): Unit
-
-  def removeExecutor(executorId: String): Unit
-}
-
 /**
  * BlacklistTracker is designed to track problematic executors and nodes.  It supports blacklisting
  * specific (executor, task) pairs within a stage, blacklisting entire executors and nodes for a
@@ -97,9 +43,9 @@ private[scheduler] trait BlacklistTracker {
   * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The
   * one exception is [[nodeBlacklist()]], which can be called without holding a lock.
  */
-private[scheduler] class BlacklistTrackerImpl(
+private[scheduler] class BlacklistTracker (
     conf: SparkConf,
-    clock: Clock = new SystemClock()) extends BlacklistTracker with Logging {
+    clock: Clock = new SystemClock()) extends Logging {
 
   private val MAX_TASK_FAILURES_PER_NODE =
     conf.getInt("spark.blacklist.maxTaskFailuresPerNode", 2)
@@ -127,11 +73,11 @@ private[scheduler] class BlacklistTrackerImpl(
   private val _nodeBlacklist: AtomicReference[Set[String]] = new AtomicReference(Set())
   private var nextExpiryTime: Long = Long.MaxValue
 
-  override def start(): Unit = {}
+  def start(): Unit = {}
 
-  override def stop(): Unit = {}
+  def stop(): Unit = {}
 
-  override def expireExecutorsInBlacklist(): Unit = {
+  def expireExecutorsInBlacklist(): Unit = {
     val now = clock.getTimeMillis()
     // quickly check if we've got anything to expire from blacklist -- if not, avoid doing any work
     if (now > nextExpiryTime) {
@@ -155,7 +101,7 @@ private[scheduler] class BlacklistTrackerImpl(
     }
  }
 
-  override def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit = {
+  def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit = {
     // if any tasks failed, we count them towards the overall failure count for the executor at
     // this point.  Also clean out all data about the stage to avoid increasing memory use.
     stageIdToExecToFailures.remove(stageId).map { failuresForStage =>
@@ -197,7 +143,7 @@ private[scheduler] class BlacklistTrackerImpl(
     stageIdToBlacklistedNodes.remove(stageId)
   }
 
-  override def taskSetFailed(stageId: Int): Unit = {
+  def taskSetFailed(stageId: Int): Unit = {
     // just throw away all the info for the failures in this taskSet -- assume the executors were
     // fine, the failures were just b/c the taskSet itself was bad (eg., bad user code)
     stageIdToExecToFailures.remove(stageId)
@@ -208,14 +154,14 @@ private[scheduler] class BlacklistTrackerImpl(
    * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
    * the executor is blacklisted overall (or anything to do with the node the executor is on).
    */
-  override def isExecutorBlacklistedForStage(
+  def isExecutorBlacklistedForStage(
       stageId: Int,
       executorId: String): Boolean = {
     stageIdToExecToFailures.get(stageId).flatMap(_.get(executorId))
       .map(_.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE).getOrElse(false)
   }
 
-  override def isExecutorBlacklisted(executorId: String): Boolean = {
+  def isExecutorBlacklisted(executorId: String): Boolean = {
     executorIdToBlacklistExpiryTime.contains(executorId)
   }
 
@@ -223,25 +169,25 @@ private[scheduler] class BlacklistTrackerImpl(
     stageIdToBlacklistedNodes.get(stageId).map(_.contains(node)).getOrElse(false)
   }
 
-  override def nodeBlacklist(): Set[String] = {
+  def nodeBlacklist(): Set[String] = {
     _nodeBlacklist.get()
   }
 
-  override def isNodeBlacklisted(node: String): Boolean = {
+  def isNodeBlacklisted(node: String): Boolean = {
     nodeIdToBlacklistExpiryTime.contains(node)
   }
 
-  override def taskSucceeded(
+  def taskSucceeded(
       stageId: Int,
       indexInTaskSet: Int,
       info: TaskInfo,
       scheduler: TaskSchedulerImpl): Unit = {
     // no-op intentionally, included just for symmetry.  success to failure ratio is irrelevant, we
-    // just blacklist based on failures.  Furthermore, one success does not override previous
+    // just blacklist based on failures.  Furthermore, one success does not previous
     // failures, since the bad node / executor may not fail *every* time
   }
 
-  override def taskFailed(
+  def taskFailed(
       stageId: Int,
       indexInTaskSet: Int,
       info: TaskInfo,
@@ -283,7 +229,7 @@ private[scheduler] class BlacklistTrackerImpl(
    * need to return true if the executor is blacklisted for the entire stage, or blacklisted
    * altogether.
    */
-  override def isExecutorBlacklisted(
+  def isExecutorBlacklisted(
       executorId: String,
       stageId: Int,
       indexInTaskSet: Int): Boolean = {
@@ -302,7 +248,7 @@ private[scheduler] class BlacklistTrackerImpl(
     }
   }
 
-  override def isNodeBlacklisted(
+  def isNodeBlacklisted(
       node: String,
       stageId: Int,
       indexInTaskSet: Int): Boolean = {
@@ -311,7 +257,7 @@ private[scheduler] class BlacklistTrackerImpl(
     }.getOrElse(false)
   }
 
-  override def removeExecutor(executorId: String): Unit = {
+  def removeExecutor(executorId: String): Unit = {
     executorIdToBlacklistExpiryTime -= executorId
     executorIdToFailureCount -= executorId
     stageIdToExecToFailures.values.foreach { execFailureOneStage =>
@@ -371,55 +317,4 @@ private[scheduler] final class FailureStatus {
   override def toString(): String = {
     s"totalFailures = $totalFailures; tasksFailed = $failuresByTask"
   }
-}
-
-/** Used to turn off blacklisting completely */
-private[scheduler] object NoopBlacklistTracker extends BlacklistTracker {
-
-  override def start: Unit = {}
-
-  override def stop: Unit = {}
-
-  override def expireExecutorsInBlacklist(): Unit = {}
-
-  override def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit = {}
-
-  override def taskSetFailed(stageId: Int): Unit = {}
-
-  override def isExecutorBlacklistedForStage(stageId: Int, executorId: String): Boolean = {
-    false
-  }
-
-  override def isExecutorBlacklisted(executorId: String): Boolean = false
-
-  override def nodeBlacklist(): Set[String] = Set()
-
-  override def isNodeBlacklisted(node: String): Boolean = false
-
-  override def isNodeBlacklistedForStage(node: String, stageId: Int): Boolean = false
-
-  override def isExecutorBlacklisted(
-      executorId: String,
-      stageId: Int,
-      indexInTaskSet: Int) : Boolean = false
-
-  override def isNodeBlacklisted(
-    node: String,
-    stageId: Int,
-    indexInTaskSet: Int): Boolean = false
-
-
-  override def taskSucceeded(
-    stageId: Int,
-    indexInTaskSet: Int,
-    info: TaskInfo,
-    scheduler: TaskSchedulerImpl): Unit = {}
-
-  override def taskFailed(
-    stageId: Int,
-    indexInTaskSet: Int,
-    info: TaskInfo,
-    scheduler: TaskSchedulerImpl): Unit = {}
-
-  override def removeExecutor(executorId: String): Unit = {}
 }

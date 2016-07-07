@@ -78,7 +78,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       sc.conf.set(k, v)
     }
     taskScheduler =
-      new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4), blacklist)
+      new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4), Some(blacklist))
     setupHelper()
   }
 

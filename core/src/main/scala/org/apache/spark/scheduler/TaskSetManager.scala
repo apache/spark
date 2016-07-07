@@ -49,7 +49,7 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
  */
 private[spark] class TaskSetManager(
     val sched: TaskSchedulerImpl,
-    val blacklistTracker: BlacklistTracker,
+    val blacklistTracker: Option[BlacklistTracker],
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     val clock: Clock)
@@ -249,8 +249,11 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!blacklistTracker.isNodeBlacklisted(host, stageId, index) &&
-          !blacklistTracker.isExecutorBlacklisted(execId, stageId, index)) {
+      val taskBlacklisted = blacklistTracker.map { bl =>
+        bl.isNodeBlacklisted(host, stageId, index) ||
+          bl.isExecutorBlacklisted(execId, stageId, index)
+      }.getOrElse(false)
+      if (!taskBlacklisted) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -277,10 +280,12 @@ private[spark] class TaskSetManager(
   {
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
 
-    def canRunOnHost(index: Int): Boolean =
-      !hasAttemptOnHost(index, host) &&
-        !blacklistTracker.isNodeBlacklisted(host, stageId, index) &&
-        !blacklistTracker.isExecutorBlacklisted(execId, stageId, index)
+    def canRunOnHost(index: Int): Boolean = {
+      !hasAttemptOnHost(index, host) && blacklistTracker.map { bl =>
+        !bl.isNodeBlacklisted(host, stageId, index) &&
+          !bl.isExecutorBlacklisted(execId, stageId, index)
+      }.getOrElse(true)
+    }
 
     if (!speculatableTasks.isEmpty) {
       // Check for process-local tasks; note that tasks can be process-local
@@ -607,14 +612,14 @@ private[spark] class TaskSetManager(
       pendingTask.foreach { indexInTaskSet =>
         val stage = taskSet.stageId
         executorsByHost.foreach { case (host, execs) =>
-          if (!blacklistTracker.isNodeBlacklisted(host) &&
-                !blacklistTracker.isNodeBlacklistedForStage(host, stage) &&
-                !blacklistTracker.isNodeBlacklisted(host, stage, indexInTaskSet)) {
+          if (!blacklist.isNodeBlacklisted(host) &&
+                !blacklist.isNodeBlacklistedForStage(host, stage) &&
+                !blacklist.isNodeBlacklisted(host, stage, indexInTaskSet)) {
             execs.foreach { exec =>
               if (
-                !blacklistTracker.isExecutorBlacklisted(exec) &&
-                  !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
-                  !blacklistTracker.isExecutorBlacklisted(exec, stage, indexInTaskSet)
+                !blacklist.isExecutorBlacklisted(exec) &&
+                  !blacklist.isExecutorBlacklistedForStage(stage, exec) &&
+                  !blacklist.isExecutorBlacklisted(exec, stage, indexInTaskSet)
               ) {
                 // we've found some executor this task can run on.  Its possible that some *other*
                 // task isn't schedulable anywhere, but we will discover that in some later call,
@@ -696,7 +701,7 @@ private[spark] class TaskSetManager(
         " because task " + index + " has already completed successfully")
     }
 
-    blacklistTracker.taskSucceeded(stageId, index, info, sched)
+    blacklistTracker.foreach(_.taskSucceeded(stageId, index, info, sched))
     maybeFinishTaskSet()
   }
 
@@ -781,7 +786,7 @@ private[spark] class TaskSetManager(
 
     // always add to failed executors
     // TODO if there is a fetch failure, does it really make sense to add this?
-    blacklistTracker.taskFailed(stageId, index, info, sched)
+    blacklistTracker.foreach(_.taskFailed(stageId, index, info, sched))
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
