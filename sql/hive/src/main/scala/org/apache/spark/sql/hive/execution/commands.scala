@@ -113,8 +113,9 @@ case class AddFile(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val recursive = sqlContext.sparkContext.getConf.getBoolean("spark.input.dir.recursive", false)
     hiveContext.runSqlHive(s"ADD FILE $path")
-    hiveContext.sparkContext.addFile(path)
+    hiveContext.sparkContext.addFile(path, recursive)
     Seq.empty[Row]
   }
 }
