@@ -52,45 +52,45 @@ if __name__ == "__main__":
 
     # Displays the content of the DataFrame to stdout
     df.show()
-    ## age  name
-    ## null Michael
-    ## 30   Andy
-    ## 19   Justin
+    # age  name
+    # null Michael
+    # 30   Andy
+    # 19   Justin
     # $example off:create_df$
 
     # $example on:untyped_ops$
     # spark, df are from the previous example
     # Print the schema in a tree format
     df.printSchema()
-    ## root
-    ## |-- age: long (nullable = true)
-    ## |-- name: string (nullable = true)
+    # root
+    # |-- age: long (nullable = true)
+    # |-- name: string (nullable = true)
 
     # Select only the "name" column
     df.select("name").show()
-    ## name
-    ## Michael
-    ## Andy
-    ## Justin
+    # name
+    # Michael
+    # Andy
+    # Justin
 
     # Select everybody, but increment the age by 1
     df.select(df['name'], df['age'] + 1).show()
-    ## name    (age + 1)
-    ## Michael null
-    ## Andy    31
-    ## Justin  20
+    # name    (age + 1)
+    # Michael null
+    # Andy    31
+    # Justin  20
 
     # Select people older than 21
     df.filter(df['age'] > 21).show()
-    ## age name
-    ## 30  Andy
+    # age name
+    # 30  Andy
 
     # Count people by age
     df.groupBy("age").count().show()
-    ## age  count
-    ## null 1
-    ## 19   1
-    ## 30   1
+    # age  count
+    # null 1
+    # 19   1
+    # 30   1
     # $example off:untyped_ops$
 
     # $example on:run_sql$
@@ -168,12 +168,13 @@ if __name__ == "__main__":
     # DataFrames can be saved as Parquet files, maintaining the schema information.
     schemaPeople.write.parquet("people.parquet")
 
-    # Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
+    # Read in the Parquet file created above.
+    # Parquet files are self-describing so the schema is preserved.
     # The result of loading a parquet file is also a DataFrame.
     parquetFile = spark.read.parquet("people.parquet")
 
     # Parquet files can also be used to create a temporary view and then used in SQL statements.
-    parquetFile.createOrReplaceTempView("parquetFile");
+    parquetFile.createOrReplaceTempView("parquetFile")
     teenagers = spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
     teenagers.show()
     # $example off:ld_data_prog$
@@ -181,13 +182,13 @@ if __name__ == "__main__":
     # $example on:schema_merge$
     # spark is from the previous example.
     # Create a simple DataFrame, stored into a partition directory
-    df1 = spark.createDataFrame(sc.parallelize(range(1, 6))\
+    df1 = spark.createDataFrame(sc.parallelize(range(1, 6))
                                 .map(lambda i: Row(single=i, double=i * 2)))
     df1.write.parquet("data/test_table/key=1")
 
     # Create another DataFrame in a new partition directory,
     # adding a new column and dropping an existing column
-    df2 = spark.createDataFrame(sc.parallelize(range(6, 11))\
+    df2 = spark.createDataFrame(sc.parallelize(range(6, 11))
                                 .map(lambda i: Row(single=i, triple=i * 3)))
     df2.write.parquet("data/test_table/key=2")
 
@@ -205,4 +206,3 @@ if __name__ == "__main__":
     # $example off:schema_merge$
 
     spark.stop()
-
