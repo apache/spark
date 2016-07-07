@@ -79,7 +79,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/java
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
 
-{% include_example init_session python/sql.py %}
+{% include_example init_session python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -123,14 +123,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% highlight python %}
-# spark is an existing SparkSession
-df = spark.read.json("examples/src/main/resources/people.json")
-
-# Displays the content of the DataFrame to stdout
-df.show()
-{% endhighlight %}
-
+{% include_example create_df python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -178,53 +171,7 @@ interactive data exploration, users are highly encouraged to use the
 latter form, which is future proof and won't break with column names that
 are also attributes on the DataFrame class.
 
-{% highlight python %}
-# spark is an existing SparkSession
-
-# Create the DataFrame
-df = spark.read.json("examples/src/main/resources/people.json")
-
-# Show the content of the DataFrame
-df.show()
-## age  name
-## null Michael
-## 30   Andy
-## 19   Justin
-
-# Print the schema in a tree format
-df.printSchema()
-## root
-## |-- age: long (nullable = true)
-## |-- name: string (nullable = true)
-
-# Select only the "name" column
-df.select("name").show()
-## name
-## Michael
-## Andy
-## Justin
-
-# Select everybody, but increment the age by 1
-df.select(df['name'], df['age'] + 1).show()
-## name    (age + 1)
-## Michael null
-## Andy    31
-## Justin  20
-
-# Select people older than 21
-df.filter(df['age'] > 21).show()
-## age name
-## 30  Andy
-
-# Count people by age
-df.groupBy("age").count().show()
-## age  count
-## null 1
-## 19   1
-## 30   1
-
-{% endhighlight %}
-
+{% include_example untyped_ops python/SparkSQLExample.py %}
 For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
 
 In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/pyspark.sql.html#module-pyspark.sql.functions).
@@ -261,10 +208,7 @@ The `sql` function on a `SparkSession` enables applications to run SQL queries p
 <div data-lang="python"  markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
-{% highlight python %}
-# spark is an existing SparkSession
-df = spark.sql("SELECT * FROM table")
-{% endhighlight %}
+{% include_example run_sql python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -339,29 +283,7 @@ Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the dataty
 key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
 and the types are inferred by sampling the whole datase, similar to the inference that is performed on JSON files.
 
-{% highlight python %}
-# spark is an existing SparkSession.
-from pyspark.sql import Row
-sc = spark.sparkContext
-
-# Load a text file and convert each line to a Row.
-lines = sc.textFile("examples/src/main/resources/people.txt")
-parts = lines.map(lambda l: l.split(","))
-people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
-
-# Infer the schema, and register the DataFrame as a table.
-schemaPeople = spark.createDataFrame(people)
-schemaPeople.createOrReplaceTempView("people")
-
-# SQL can be run over DataFrames that have been registered as a table.
-teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-# The results of SQL queries are RDDs and support all the normal RDD operations.
-teenNames = teenagers.map(lambda p: "Name: " + p.name)
-for teenName in teenNames.collect():
-  print(teenName)
-{% endhighlight %}
-
+{% include_example schema_infer python/SparkSQLExample.py %}
 </div>
 
 </div>
@@ -419,39 +341,8 @@ tuples or lists in the RDD created in the step 1.
 3. Apply the schema to the RDD via `createDataFrame` method provided by `SparkSession`.
 
 For example:
-{% highlight python %}
-# Import SparkSession and data types
-from pyspark.sql.types import *
 
-# spark is an existing SparkSession.
-sc = spark.sparkContext
-
-# Load a text file and convert each line to a tuple.
-lines = sc.textFile("examples/src/main/resources/people.txt")
-parts = lines.map(lambda l: l.split(","))
-people = parts.map(lambda p: (p[0], p[1].strip()))
-
-# The schema is encoded in a string.
-schemaString = "name age"
-
-fields = [StructField(field_name, StringType(), True) for field_name in schemaString.split()]
-schema = StructType(fields)
-
-# Apply the schema to the RDD.
-schemaPeople = spark.createDataFrame(people, schema)
-
-# Creates a temporary view using the DataFrame
-schemaPeople.createOrReplaceTempView("people")
-
-# SQL can be run over DataFrames that have been registered as a table.
-results = spark.sql("SELECT name FROM people")
-
-# The results of SQL queries are RDDs and support all the normal RDD operations.
-names = results.map(lambda p: "Name: " + p.name)
-for name in names.collect():
-  print(name)
-{% endhighlight %}
-
+{% include_example schema_spec python/SparkSQLExample.py %}
 </div>
 
 </div>
@@ -481,13 +372,7 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-
-df = spark.read.load("examples/src/main/resources/users.parquet")
-df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
-
-{% endhighlight %}
-
+{% include_example ds_gen_ls python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -516,13 +401,7 @@ using this syntax.
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-
-df = spark.read.load("examples/src/main/resources/people.json", format="json")
-df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
-
-{% endhighlight %}
-
+{% include_example ds_man_op python/SparkSQLExample.py %}
 </div>
 <div data-lang="r"  markdown="1">
 
@@ -547,10 +426,7 @@ file directly with SQL.
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
-{% endhighlight %}
-
+{% include_example run_sql_file python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -642,26 +518,7 @@ Using the data from the above example:
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-# spark from the previous example is used in this example.
-
-schemaPeople # The DataFrame from the previous example.
-
-# DataFrames can be saved as Parquet files, maintaining the schema information.
-schemaPeople.write.parquet("people.parquet")
-
-# Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
-# The result of loading a parquet file is also a DataFrame.
-parquetFile = spark.read.parquet("people.parquet")
-
-# Parquet files can also be used to create a temporary view and then used in SQL statements.
-parquetFile.createOrReplaceTempView("parquetFile");
-teenagers = spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-teenNames = teenagers.map(lambda p: "Name: " + p.name)
-for teenName in teenNames.collect():
-  print(teenName)
-{% endhighlight %}
-
+{% include_example ld_data_prog python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -775,33 +632,7 @@ turned it off by default starting from 1.5.0. You may enable it by
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-# spark from the previous example is used in this example.
-
-# Create a simple DataFrame, stored into a partition directory
-df1 = spark.createDataFrame(sc.parallelize(range(1, 6))\
-                                   .map(lambda i: Row(single=i, double=i * 2)))
-df1.write.parquet("data/test_table/key=1")
-
-# Create another DataFrame in a new partition directory,
-# adding a new column and dropping an existing column
-df2 = spark.createDataFrame(sc.parallelize(range(6, 11))
-                                   .map(lambda i: Row(single=i, triple=i * 3)))
-df2.write.parquet("data/test_table/key=2")
-
-# Read the partitioned table
-df3 = spark.read.option("mergeSchema", "true").parquet("data/test_table")
-df3.printSchema()
-
-# The final schema consists of all 3 columns in the Parquet files together
-# with the partitioning column appeared in the partition directory paths.
-# root
-# |-- single: int (nullable = true)
-# |-- double: int (nullable = true)
-# |-- triple: int (nullable = true)
-# |-- key : int (nullable = true)
-{% endhighlight %}
-
+{% include_example schema_merge python/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
