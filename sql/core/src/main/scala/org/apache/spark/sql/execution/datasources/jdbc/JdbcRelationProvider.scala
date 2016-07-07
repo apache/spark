@@ -39,17 +39,11 @@ class JdbcRelationProvider extends CreatableRelationProvider
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
-    val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
-    val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
-    val partitionColumn = parameters.getOrElse("partitionColumn", null)
-    val lowerBound = parameters.getOrElse("lowerBound", null)
-    val upperBound = parameters.getOrElse("upperBound", null)
-    val numPartitions = parameters.getOrElse("numPartitions", null)
-
-    if (partitionColumn != null
-      && (lowerBound == null || upperBound == null || numPartitions == null)) {
-      sys.error("Partitioning incompletely specified")
-    }
+    val jdbcOptions = new JDBCOptions(parameters)
+    val partitionColumn = jdbcOptions.partitionColumn
+    val lowerBound = jdbcOptions.lowerBound
+    val upperBound = jdbcOptions.upperBound
+    val numPartitions = jdbcOptions.numPartitions
 
     val partitionInfo = if (partitionColumn == null) null
     else {
@@ -59,7 +53,8 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(url, table, parts, properties, Option(schema))(sqlContext.sparkSession)
+    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties,
+      Option(schema))(sqlContext.sparkSession)
   }
 
   /*

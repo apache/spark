@@ -36,4 +36,9 @@ private[jdbc] class JDBCOptions(
   val upperBound = parameters.getOrElse("upperBound", null)
   // the number of partitions
   val numPartitions = parameters.getOrElse("numPartitions", null)
+
+  if (partitionColumn != null
+      && (lowerBound == null || upperBound == null || numPartitions == null)) {
+      sys.error("Partitioning incompletely specified")
+  }
 }

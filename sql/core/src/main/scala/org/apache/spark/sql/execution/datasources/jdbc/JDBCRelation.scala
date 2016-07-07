@@ -116,14 +116,7 @@ private[sql] case class JDBCRelation(
   override val needConversion: Boolean = false
 
   override val schema: StructType = {
-    val resolvedSchema = JDBCRDD.resolveTable(url, table, properties)
-    providedSchemaOption match {
-      case Some(providedSchema) =>
-        if (providedSchema.sql.toLowerCase == resolvedSchema.sql.toLowerCase) resolvedSchema
-        else sys.error(s"User specified schema, $providedSchema, " +
-          s"does not match the actual schema, $resolvedSchema.")
-      case None => resolvedSchema
-    }
+    providedSchemaOption.getOrElse(JDBCRDD.resolveTable(url, table, properties))
   }
 
   // Check if JDBCRDD.compileFilter can accept input filters
