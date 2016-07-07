@@ -26,7 +26,7 @@ import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.annotation.Experimental
-
+import org.apache.spark.internal.Logging
 
 /**
  * :: Experimental ::
@@ -50,6 +50,7 @@ abstract class ConsumerStrategy[K, V] {
    * Must return a fully configured Kafka Consumer, including subscribed or assigned topics.
    * See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Kafka docs</a>.
    * This consumer will be used on the driver to query for offsets only, not messages.
+   * The consumer must be returned in a state that it is safe to call poll(0) on.
    * @param currentOffsets A map from TopicPartition to offset, indicating how far the driver
    * has successfully read.  Will be empty on initial start, possibly non-empty on restart from
    * checkpoint.
@@ -74,7 +75,7 @@ private case class Subscribe[K, V](
     topics: ju.Collection[jl.String],
     kafkaParams: ju.Map[String, Object],
     offsets: ju.Map[TopicPartition, jl.Long]
-  ) extends ConsumerStrategy[K, V] {
+  ) extends ConsumerStrategy[K, V] with Logging {
 
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
@@ -88,13 +89,17 @@ private case class Subscribe[K, V](
     }
     if (!toSeek.isEmpty) {
       // work around KAFKA-3370 when reset is none
+      // poll will throw if no position, i.e. auto offset reset none and no explicit position
+      // but cant seek to a position before poll, because poll is what gets subscription partitions
+      // So, poll, suppress the first exception, then seek
       val aor = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)
       val shouldSuppress = aor != null && aor.asInstanceOf[String].toUpperCase == "NONE"
       try {
         consumer.poll(0)
       } catch {
         case x: NoOffsetForPartitionException if shouldSuppress =>
-          // silence exception
+          logWarn("Catching NoOffsetForPartitionException since " +
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + "is none.  See KAFKA-3370")
       }
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
@@ -123,7 +128,7 @@ private case class SubscribePattern[K, V](
     pattern: ju.regex.Pattern,
     kafkaParams: ju.Map[String, Object],
     offsets: ju.Map[TopicPartition, jl.Long]
-  ) extends ConsumerStrategy[K, V] {
+  ) extends ConsumerStrategy[K, V] with Logging {
 
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
@@ -136,14 +141,15 @@ private case class SubscribePattern[K, V](
       currentOffsets
     }
     if (!toSeek.isEmpty) {
-      // work around KAFKA-3370 when reset is none
+      // work around KAFKA-3370 when reset is none, see explanation in Subscribe above
       val aor = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)
       val shouldSuppress = aor != null && aor.asInstanceOf[String].toUpperCase == "NONE"
       try {
         consumer.poll(0)
       } catch {
         case x: NoOffsetForPartitionException if shouldSuppress =>
-          // silence exception
+          logWarn("Catching NoOffsetForPartitionException since " +
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + "is none.  See KAFKA-3370")
       }
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
