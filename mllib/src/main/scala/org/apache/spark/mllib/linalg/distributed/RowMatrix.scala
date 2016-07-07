@@ -537,7 +537,7 @@ class RowMatrix @Since("1.0.0") (
   def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
     val col = numCols().toInt
     // split rows horizontally into smaller matrices, and compute QR for each of them
-    val blockQRs = rows.glom().map { partRows =>
+    val blockQRs = rows.retag(classOf[Vector]).glom().map { partRows =>
       val bdm = BDM.zeros[Double](partRows.length, col)
       var i = 0
       partRows.foreach { row =>
