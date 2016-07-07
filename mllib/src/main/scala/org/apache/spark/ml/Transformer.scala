@@ -95,6 +95,8 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
    */
   protected def createTransformFunc: IN => OUT
 
+  def transformInstance(input: IN) : OUT = {this.createTransformFunc(input)}
+
   /**
    * Returns the data type of the output column.
    */

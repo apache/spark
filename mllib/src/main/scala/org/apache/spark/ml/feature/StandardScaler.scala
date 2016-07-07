@@ -164,13 +164,15 @@ class StandardScalerModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
-
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML
-
-    val scale = udf(transformer)
+    val scale = udf(transformInstance _)
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
+  }
+
+  private lazy val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
+
+  def transformInstance(v: Vector) : Vector = {
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    scaler.transform(OldVectors.fromML(v)).asML
   }
 
   @Since("1.4.0")

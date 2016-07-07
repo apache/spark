@@ -97,7 +97,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
     // Data transformation.
     val assembleFunc = udf { r: Row =>
-      VectorAssembler.assemble(r.toSeq: _*)
+      transformInstance(r.toSeq)
     }
     val args = $(inputCols).map { c =>
       schema(c).dataType match {
@@ -109,6 +109,9 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
     dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
+
+  /** Takes a sequence of values or vectors and assembles them into a single vector */
+  def transformInstance(seq: Seq[Any]): Vector = {VectorAssembler.assemble(seq: _*)}
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {

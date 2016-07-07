@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
@@ -246,28 +246,29 @@ class CountVectorizerModel(
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
+    val vectorizer = udf { transformInstance _ }
+    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
+  }
+
+  def transformInstance(document: Seq[String]): Vector = {
     val dictBr = broadcastDict.get
     val minTf = $(minTF)
-    val vectorizer = udf { (document: Seq[String]) =>
-      val termCounts = new OpenHashMap[Int, Double]
-      var tokenCount = 0L
-      document.foreach { term =>
-        dictBr.value.get(term) match {
-          case Some(index) => termCounts.changeValue(index, 1.0, _ + 1.0)
-          case None => // ignore terms not in the vocabulary
-        }
-        tokenCount += 1
+    val termCounts = new OpenHashMap[Int, Double]
+    var tokenCount = 0L
+    document.foreach { term =>
+      dictBr.value.get(term) match {
+        case Some(index) => termCounts.changeValue(index, 1.0, _ + 1.0)
+        case None => // ignore terms not in the vocabulary
       }
-      val effectiveMinTF = if (minTf >= 1.0) minTf else tokenCount * minTf
-      val effectiveCounts = if ($(binary)) {
-        termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
-      } else {
-        termCounts.filter(_._2 >= effectiveMinTF).toSeq
-      }
-
-      Vectors.sparse(dictBr.value.size, effectiveCounts)
+      tokenCount += 1
     }
-    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
+    val effectiveMinTF = if (minTf >= 1.0) minTf else tokenCount * minTf
+    val effectiveCounts = if ($(binary)) {
+      termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
+    } else {
+      termCounts.filter(_._2 >= effectiveMinTF).toSeq
+    }
+    Vectors.sparse(dictBr.value.size, effectiveCounts)
   }
 
   @Since("1.5.0")

@@ -149,15 +149,17 @@ class PCAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val pcaModel = new feature.PCAModel($(k),
-      OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
-      OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
-
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
-
-    val pcaOp = udf(transformer)
+    val pcaOp = udf{ transformInstance _ }
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
+  }
+
+  lazy val pcaModel = new feature.PCAModel($(k),
+    OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
+    OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
+
+  def transformInstance(v: Vector): Vector = {
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    pcaModel.transform(OldVectors.fromML(v)).asML
   }
 
   @Since("1.5.0")

@@ -60,7 +60,12 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
 
   /** @group setParam */
   @Since("1.5.0")
-  def setStopWords(value: Array[String]): this.type = set(stopWords, value)
+  def setStopWords(value: Array[String]): this.type = {
+    set(stopWords, value)
+    stopWordsSet = if ($(caseSensitive)) $(stopWords).toSet
+                   else $(stopWords).map(toLower(_)).toSet
+    this
+  }
 
   /** @group getParam */
   @Since("1.5.0")
@@ -77,7 +82,12 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
 
   /** @group setParam */
   @Since("1.5.0")
-  def setCaseSensitive(value: Boolean): this.type = set(caseSensitive, value)
+  def setCaseSensitive(value: Boolean): this.type = {
+    set(caseSensitive, value)
+    stopWordsSet = if ($(caseSensitive)) $(stopWords).toSet
+                   else $(stopWords).map(toLower(_)).toSet
+    this
+  }
 
   /** @group getParam */
   @Since("1.5.0")
@@ -88,21 +98,24 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val t = if ($(caseSensitive)) {
-      val stopWordsSet = $(stopWords).toSet
-      udf { terms: Seq[String] =>
-        terms.filter(s => !stopWordsSet.contains(s))
-      }
-    } else {
-      // TODO: support user locale (SPARK-15064)
-      val toLower = (s: String) => if (s != null) s.toLowerCase else s
-      val lowerStopWords = $(stopWords).map(toLower(_)).toSet
-      udf { terms: Seq[String] =>
-        terms.filter(s => !lowerStopWords.contains(toLower(s)))
-      }
-    }
+    val t = udf { transformInstance _ }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
+  }
+
+  private val toLower = (s: String) => if (s != null) s.toLowerCase else s
+
+  /** Updated by the setters when parameters change */
+  private var stopWordsSet = if ($(caseSensitive)) $(stopWords).toSet
+                             else $(stopWords).map(toLower(_)).toSet
+
+  def transformInstance(terms: Seq[String]) : Seq[String] = {
+      if ($(caseSensitive)) {
+      terms.filter(s => !stopWordsSet.contains(s))
+    } else {
+      // TODO: support user locale (SPARK-15064)
+      terms.filter(s => !stopWordsSet.contains(toLower(s)))
+    }
   }
 
   @Since("1.5.0")
