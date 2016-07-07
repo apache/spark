@@ -99,7 +99,9 @@ case class OptimizeMetadataOnlyQuery(
             }
             LocalRelation(partAttrs, partitionData)
 
-          case _ => throw new IllegalStateException(s"unrecognized table scan node: $relation")
+          case _ =>
+            throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
+              s"please turn off ${SQLConf.OPTIMIZER_METADATA_ONLY.key} and try again.")
         }
     }
   }
