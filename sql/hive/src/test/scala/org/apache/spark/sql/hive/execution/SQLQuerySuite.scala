@@ -1727,16 +1727,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             "where partcol1 = 12) t"),
           Row(13))
 
-        // Now donot support metadata only optimizer
-        checkAnswer(
-          sql("select partcol1, max(partcol2) from srcpart_15752 where partcol1 = 12 " +
-            "group by rollup(partcol1)"),
-          Row(null, "b") :: Row(12, "b") :: Nil)
-        checkAnswer(
-          sql("select partcol2 from (select partcol2 from srcpart_15752 where partcol1 = 11 " +
-            "union all select partcol2 from srcpart_15752 where partcol1= 12)t group by partcol2"),
-          Row("a") :: Row("b") :: Nil)
-
         sql(
           """
             |CREATE TABLE srctext_15752 (col1 INT, col2 STRING)
