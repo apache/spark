@@ -145,14 +145,22 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === spark.read.jdbc(url, "TEST.APPENDTEST", new Properties()).collect()(0).length)
   }
 
-  test("CREATE then INSERT to truncate") {
+  test("Truncate") {
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+    val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
     df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
-    df2.write.mode(SaveMode.Overwrite).jdbc(url1, "TEST.TRUNCATETEST", properties)
+    df2.write.mode(SaveMode.Overwrite).option("truncate", true)
+      .jdbc(url1, "TEST.TRUNCATETEST", properties)
     assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+
+    val m = intercept[SparkException] {
+      df3.write.mode(SaveMode.Overwrite).option("truncate", true)
+        .jdbc(url1, "TEST.TRUNCATETEST", properties)
+    }.getMessage
+    assert(m.contains("Column \"SEQ\" not found"))
   }
 
   test("Incompatible INSERT to append") {

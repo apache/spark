@@ -387,6 +387,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
+   * You can set the following JDBC-specific option(s) for storing JDBC:
+   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
+   *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
@@ -423,8 +426,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
-        tableExists = false
+        if (extraOptions.getOrElse("truncate", "false").toBoolean) {
+          JdbcUtils.truncateTable(conn, table)
+        } else {
+          JdbcUtils.dropTable(conn, table)
+          tableExists = false
+        }
       }
 
       // Create the table if the table didn't exist.
