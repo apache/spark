@@ -365,6 +365,6 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     val m = intercept[AnalysisException] {
       df.selectExpr("sentences()")
     }.getMessage
-    assert(m.contains("Invalid number of arguments"))
+    assert(m.contains("Invalid number of arguments for function sentences"))
   }
 }

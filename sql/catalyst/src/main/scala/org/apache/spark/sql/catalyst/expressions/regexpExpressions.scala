@@ -230,11 +230,11 @@ case class Sentences(
     if (string == null) {
       null
     } else {
-      val locale = try {
-        new Locale(language.eval(input).asInstanceOf[UTF8String].toString,
+      var locale = Locale.getDefault
+      if (language != null && language.eval(input) != null &&
+          country != null && country.eval(input) != null) {
+        locale = new Locale(language.eval(input).asInstanceOf[UTF8String].toString,
           country.eval(input).asInstanceOf[UTF8String].toString)
-      } catch {
-        case _: NullPointerException | _: ClassCastException => Locale.getDefault
       }
       getSentences(string.asInstanceOf[UTF8String].toString, locale)
     }
