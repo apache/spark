@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.fs.Path
@@ -27,7 +26,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, DataSource, ListingFileCatalog, LogicalRelation}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -47,6 +45,8 @@ class FileStreamSource(
   private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
   private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
+
+  /** Maximum number of new files to be considered in each batch */
   private val maxFilesPerBatch = getMaxFilesPerBatch()
 
   private val seenFiles = new OpenHashSet[String]
