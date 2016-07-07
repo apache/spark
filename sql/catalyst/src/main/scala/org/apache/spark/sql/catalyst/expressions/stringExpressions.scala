@@ -691,19 +691,18 @@ case class ParseUrl(children: Seq[Expression])
 
   // If the url is a constant, cache the URL object so that we don't need to convert url
   // from UTF8String to String to URL for every row.
-  @transient private lazy val cachedUrl = stringExprs(0) match {
+  @transient private lazy val cachedUrl = children(0) match {
     case Literal(url: UTF8String, _) => getUrl(url)
     case _ => null
   }
 
   // If the key is a constant, cache the Pattern object so that we don't need to convert key
   // from UTF8String to String to StringBuilder to String to Pattern for every row.
-  @transient private lazy val cachedPattern = stringExprs(2) match {
+  @transient private lazy val cachedPattern = children(2) match {
     case Literal(key: UTF8String, _) => getPattern(key)
     case _ => null
   }
 
-  private lazy val stringExprs = children.toArray
   import ParseUrl._
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -715,11 +714,7 @@ case class ParseUrl(children: Seq[Expression])
   }
 
   private def getPattern(key: UTF8String): Pattern = {
-    if (key != null) {
-      Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
-    } else {
-      null
-    }
+    Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
   }
 
   private def getUrl(url: UTF8String): URL = {
@@ -762,41 +757,31 @@ case class ParseUrl(children: Seq[Expression])
   }
 
   private def parseUrlWithoutKey(url: UTF8String, partToExtract: UTF8String): UTF8String = {
-    if (url != null && partToExtract != null) {
-      if (cachedUrl ne null) {
-        extractFromUrl(cachedUrl, partToExtract)
-      } else {
-        val currentUrl = getUrl(url)
-        if (currentUrl ne null) {
-          extractFromUrl(currentUrl, partToExtract)
-        } else {
-          null
-        }
-      }
+    if (cachedUrl ne null) {
+      extractFromUrl(cachedUrl, partToExtract)
     } else {
-      null
+      val currentUrl = getUrl(url)
+      if (currentUrl ne null) {
+        extractFromUrl(currentUrl, partToExtract)
+      } else {
+        null
+      }
     }
   }
 
   override def eval(input: InternalRow): Any = {
-    val url = stringExprs(0).eval(input).asInstanceOf[UTF8String]
-    val partToExtract = stringExprs(1).eval(input).asInstanceOf[UTF8String]
-    if (stringExprs.size == 2) {
-      parseUrlWithoutKey(url, partToExtract)
+    val evaluated = children.map{e => e.eval(input).asInstanceOf[UTF8String]}
+    if (evaluated.contains(null)) return null
+    if (evaluated.size == 2) {
+      parseUrlWithoutKey(evaluated(0), evaluated(1))
     } else { // QUERY with key
-      if (QUERY.equals(partToExtract)) {
-        val query = parseUrlWithoutKey(url, partToExtract)
-        if (query != null) {
+      if (evaluated(1) == QUERY) {
+        val query = parseUrlWithoutKey(evaluated(0), evaluated(1))
+        if (query ne null) {
           if (cachedPattern ne null) {
             extractValueFromQuery(query, cachedPattern)
           } else {
-            val key = stringExprs(2).eval(input).asInstanceOf[UTF8String]
-            val pattern = getPattern(key)
-            if (pattern ne null) {
-              extractValueFromQuery(query, pattern)
-            } else {
-              null
-            }
+            extractValueFromQuery(query, getPattern(evaluated(2)))
           }
         } else {
           null
