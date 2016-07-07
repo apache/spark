@@ -29,8 +29,8 @@ import org.apache.spark.util.Benchmark
 /**
  * Benchmark to measure performance of columnar storage for dataframe cache.
  * To run this:
- *  bin/spark-submit --class org.apache.spark.sql.DataFrameCacheBenchmark 
- *    sql/core/target/spark-sql_*-tests.jar 
+ *  bin/spark-submit --class org.apache.spark.sql.DataFrameCacheBenchmark
+ *    sql/core/target/spark-sql_*-tests.jar
  *    [float datasize scale] [double datasize scale] [master URL]
  */
 case class DataFrameCacheBenchmark(masterURL: String) {
@@ -117,7 +117,7 @@ case class DataFrameCacheBenchmark(masterURL: String) {
     System.gc()
   }
 
-  def run(f: Int, d: Int): Unit = { 
+  def run(f: Int, d: Int): Unit = {
     floatSumBenchmark(1024 * 1024 * f)
     doubleSumBenchmark(1024 * 1024 * d)
   }
