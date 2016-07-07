@@ -25,13 +25,13 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.Token
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-
 
 private[yarn] class HiveTokenProvider extends ServiceTokenProvider with Logging {
 
@@ -75,12 +75,12 @@ private[yarn] class HiveTokenProvider extends ServiceTokenProvider with Logging 
             .asInstanceOf[String]
           val hive2Token = new Token[DelegationTokenIdentifier]()
           hive2Token.decodeFromUrlString(tokenStr)
-          creds.addToken(hive2Token.getService, hive2Token)
+          creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
           Array(hive2Token)
         }
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Fail to get token from service $serviceName", e)
+          logDebug(s"Fail to get token from service $serviceName", e)
           Array.empty
       } finally {
         Utils.tryLogNonFatalError {

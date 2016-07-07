@@ -48,7 +48,7 @@ private[yarn] class HBaseTokenProvider extends ServiceTokenProvider with Logging
       Array(token)
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get token from service $serviceName", e)
+        logDebug(s"Failed to get token from service $serviceName", e)
         Array.empty
     }
   }
@@ -66,7 +66,7 @@ private[yarn] class HBaseTokenProvider extends ServiceTokenProvider with Logging
       confCreate.invoke(null, conf).asInstanceOf[Configuration]
     } catch {
       case NonFatal(e) =>
-        logWarning("Fail to invoke HBaseConfiguration", e)
+        logDebug("Fail to invoke HBaseConfiguration", e)
         conf
     }
   }

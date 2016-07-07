@@ -58,6 +58,7 @@ trait ServiceTokenProvider {
  * token renewal mechanism will invoke the methods to update the tokens periodically.
  */
 trait ServiceTokenRenewable {
+
   /**
    * Get the token renewal interval from this service. This renewal interval will be used in
    * periodical token renewal mechanism.
