@@ -40,8 +40,9 @@ if __name__ == "__main__":
     # Prepare training and test data.
     data = spark.read.format("libsvm")\
         .load("data/mllib/sample_linear_regression_data.txt")
-    train, test = data.randomSplit([0.7, 0.3])
-    lr = LinearRegression(maxIter=10, regParam=0.1)
+    train, test = data.randomSplit([0.9, 0.1], seed=12345)
+
+    lr = LinearRegression(maxIter=10)
 
     # We use a ParamGridBuilder to construct a grid of parameters to search over.
     # TrainValidationSplit will try all combinations of values and determine best model using
