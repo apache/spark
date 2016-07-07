@@ -22,7 +22,7 @@ import scala.util.Try
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
@@ -389,6 +389,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
 object StructType extends AbstractDataType {
 
+  /**
+   * A key used in field metadata to indicate that the field comes from the result of merging
+   * two different StructTypes that do not always contain the field. That is to say, the field
+   * might be missing (optional) from one of the StructTypes.
+   */
   private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
 
   override private[sql] def defaultConcreteType: DataType = new StructType
