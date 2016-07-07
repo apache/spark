@@ -83,7 +83,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     // Task 1 failed on executor 1
     blacklistTracker = new BlacklistTrackerImpl(conf, clock)
-    blacklistTracker.taskFailed(stage1, partition1, taskInfo_1_hostA)
+    blacklistTracker.taskFailed(stage1, partition1, taskInfo_1_hostA, scheduler)
     for {
       executor <- (1 to 4).map(_.toString)
       partition <- 0 until 10
@@ -101,11 +101,11 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // for all tasks for the stage.  Note the api expects multiple checks for each type of
     // blacklist -- this actually fits naturally with its use in the scheduler
     blacklistTracker.taskFailed(stage1, partition1,
-      new TaskInfo(2L, 1, 1, 0L, "2", "hostA", TaskLocality.ANY, false))
+      new TaskInfo(2L, 1, 1, 0L, "2", "hostA", TaskLocality.ANY, false), scheduler)
     blacklistTracker.taskFailed(stage1, partition2,
-      new TaskInfo(3L, 2, 1, 0L, "2", "hostA", TaskLocality.ANY, false))
+      new TaskInfo(3L, 2, 1, 0L, "2", "hostA", TaskLocality.ANY, false), scheduler)
     blacklistTracker.taskFailed(stage1, partition2,
-      new TaskInfo(4L, 2, 1, 0L, "1", "hostA", TaskLocality.ANY, false))
+      new TaskInfo(4L, 2, 1, 0L, "1", "hostA", TaskLocality.ANY, false), scheduler)
     // we don't explicitly return the executors in hostA here, but that is OK
     for {
       executor <- (1 to 4).map(_.toString)
@@ -165,9 +165,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // any particular taskset, but we still blacklist the executor overall eventually
     (0 until 4).foreach { stage =>
       tracker.taskFailed(stage, 0,
-        new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false))
+        new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false), scheduler)
       tracker.taskSucceeded(stage, 0,
-        new TaskInfo(stage, 0, 1, 0, "2", "hostA", TaskLocality.ANY, false))
+        new TaskInfo(stage, 0, 1, 0, "2", "hostA", TaskLocality.ANY, false), scheduler)
       tracker.taskSetSucceeded(stage, scheduler)
     }
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set("1"))
@@ -180,7 +180,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // for 4 different stages, executor 1 fails a task, and then the taskSet fails.
     (0 until 4).foreach { stage =>
       tracker.taskFailed(stage, 0,
-        new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false))
+        new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false), scheduler)
       tracker.taskSetFailed(stage)
     }
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
@@ -194,7 +194,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val stageId = 1 + (if (succeedTaskSet) 1 else 0)
       (0 until 4).foreach { partition =>
         tracker.taskFailed(stageId, partition, new TaskInfo(stageId * 4 + partition, partition, 0,
-          clock.getTimeMillis(), "1", "hostA", TaskLocality.ANY, false))
+          clock.getTimeMillis(), "1", "hostA", TaskLocality.ANY, false), scheduler)
       }
       assert(tracker.isExecutorBlacklistedForStage(stageId, "1"))
       assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
@@ -216,7 +216,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     val (tracker, scheduler) = trackerFixture
     (0 until 4).foreach { partition =>
       tracker.taskFailed(0, partition, new TaskInfo(partition, partition, 0, clock.getTimeMillis(),
-        "1", "hostA", TaskLocality.ANY, false))
+        "1", "hostA", TaskLocality.ANY, false), scheduler)
     }
     tracker.taskSetSucceeded(0, scheduler)
     assert(tracker.nodeBlacklist() === Set())
@@ -225,7 +225,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     (0 until 4).foreach { partition =>
       tracker.taskFailed(1, partition, new TaskInfo(partition + 4, partition, 0,
-        clock.getTimeMillis(), "2", "hostA", TaskLocality.ANY, false))
+        clock.getTimeMillis(), "2", "hostA", TaskLocality.ANY, false), scheduler)
     }
     tracker.taskSetSucceeded(1, scheduler)
     assert(tracker.nodeBlacklist() === Set("hostA"))
@@ -242,7 +242,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     // fail one more task, but executor isn't put back into blacklist since count reset to 0
     tracker.taskFailed(1, 0, new TaskInfo(5, 0, 0, clock.getTimeMillis(),
-      "1", "hostA", TaskLocality.ANY, false))
+      "1", "hostA", TaskLocality.ANY, false), scheduler)
     tracker.taskSetSucceeded(1, scheduler)
     assert(tracker.nodeBlacklist() === Set())
     assertEquivalentToSet(tracker.isNodeBlacklisted(_), Set())
@@ -264,7 +264,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       // we want to fail on multiple executors, to trigger node blacklist
       val exec = (partition % 2).toString
       tracker.taskFailed(stage, partition, new TaskInfo(tid, partition, 0, clock.getTimeMillis(),
-        exec, "hostA", TaskLocality.ANY, false))
+        exec, "hostA", TaskLocality.ANY, false), scheduler)
     }
 
     when(scheduler.getHostForExecutor("0")).thenReturn("hostA")

@@ -55,17 +55,24 @@ private[scheduler] trait BlacklistTracker {
   def isExecutorBlacklisted(
     executorId: String,
     stageId: Int,
-    partition: Int) : Boolean
+    indexInTaskSet: Int) : Boolean
+
+  def isNodeBlacklisted(
+    node: String,
+    stageId: Int,
+    indexInTaskSet: Int) : Boolean
 
   def taskSucceeded(
     stageId: Int,
-    partition: Int,
-    info: TaskInfo): Unit
+    indexInTaskSet: Int,
+    info: TaskInfo,
+    scheduler: TaskSchedulerImpl): Unit
 
   def taskFailed(
     stageId: Int,
-    partition: Int,
-    info: TaskInfo): Unit
+    indexInTaskSet: Int,
+    info: TaskInfo,
+    scheduler: TaskSchedulerImpl): Unit
 
   def taskSetSucceeded(stageId: Int, scheduler: TaskSchedulerImpl): Unit
 
@@ -94,6 +101,8 @@ private[scheduler] class BlacklistTrackerImpl(
     conf: SparkConf,
     clock: Clock = new SystemClock()) extends BlacklistTracker with Logging {
 
+  private val MAX_TASK_FAILURES_PER_NODE =
+    conf.getInt("spark.blacklist.maxTaskFailuresPerNode", 2)
   private val MAX_FAILURES_PER_EXEC =
     conf.getInt("spark.blacklist.maxFailedTasksPerExecutor", 2)
   private val MAX_FAILURES_PER_EXEC_STAGE =
@@ -109,6 +118,8 @@ private[scheduler] class BlacklistTrackerImpl(
   private val executorIdToFailureCount: HashMap[String, Int] = HashMap()
   // failures for each executor by stage.  Only tracked while the stage is running.
   val stageIdToExecToFailures: HashMap[Int, HashMap[String, FailureStatus]] =
+    new HashMap()
+  val stageIdToNodeBlacklistedTasks: HashMap[Int, HashMap[String, HashSet[Int]]] =
     new HashMap()
   val stageIdToBlacklistedNodes: HashMap[Int, HashSet[String]] = new HashMap()
   private val executorIdToBlacklistExpiryTime: HashMap[String, Long] = new HashMap()
@@ -222,8 +233,9 @@ private[scheduler] class BlacklistTrackerImpl(
 
   override def taskSucceeded(
       stageId: Int,
-      partition: Int,
-      info: TaskInfo): Unit = {
+      indexInTaskSet: Int,
+      info: TaskInfo,
+      scheduler: TaskSchedulerImpl): Unit = {
     // no-op intentionally, included just for symmetry.  success to failure ratio is irrelevant, we
     // just blacklist based on failures.  Furthermore, one success does not override previous
     // failures, since the bad node / executor may not fail *every* time
@@ -231,12 +243,29 @@ private[scheduler] class BlacklistTrackerImpl(
 
   override def taskFailed(
       stageId: Int,
-      partition: Int,
-      info: TaskInfo): Unit = {
+      indexInTaskSet: Int,
+      info: TaskInfo,
+      scheduler: TaskSchedulerImpl): Unit = {
     val stageFailures = stageIdToExecToFailures.getOrElseUpdate(stageId, new HashMap())
     val failureStatus = stageFailures.getOrElseUpdate(info.executorId, new FailureStatus())
     failureStatus.totalFailures += 1
-    failureStatus.failuresByPart += partition
+    failureStatus.failuresByTask += indexInTaskSet
+
+    // check if this task has also failed on other executors on the same host, and if so, blacklist
+    // this task from the host
+    val failuresOnHost = (for {
+      exec <- scheduler.getExecutorsAliveOnHost(info.host).getOrElse(Set()).toSeq
+      failures <- stageFailures.get(exec)
+    } yield {
+      if (failures.failuresByTask.contains(indexInTaskSet)) 1 else 0
+    }).sum
+    logInfo(s"total failures on host ${info.host} = $failuresOnHost")
+    if (failuresOnHost > MAX_TASK_FAILURES_PER_NODE) {
+      stageIdToNodeBlacklistedTasks.getOrElseUpdate(stageId, new HashMap())
+        .getOrElseUpdate(info.host, new HashSet()) += indexInTaskSet
+    }
+
+
     if (failureStatus.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
       // this executor has been pushed into the blacklist for this stage.  Lets check if it pushes
       // the whole node into the blacklist
@@ -257,20 +286,29 @@ private[scheduler] class BlacklistTrackerImpl(
   override def isExecutorBlacklisted(
       executorId: String,
       stageId: Int,
-      partition: Int) : Boolean = {
+      indexInTaskSet: Int): Boolean = {
     // intentionally avoiding .getOrElse(..., new HashMap()) to avoid lots of object
     // creation, since this method gets called a *lot*
     stageIdToExecToFailures.get(stageId) match {
       case Some(stageFailures) =>
         stageFailures.get(executorId) match {
           case Some(failures) =>
-            failures.failuresByPart.contains(partition)
+            failures.failuresByTask.contains(indexInTaskSet)
           case None =>
             false
         }
       case None =>
         false
     }
+  }
+
+  override def isNodeBlacklisted(
+      node: String,
+      stageId: Int,
+      indexInTaskSet: Int): Boolean = {
+    stageIdToNodeBlacklistedTasks.get(stageId).flatMap { nodeToFailures =>
+      nodeToFailures.get(node).map{_.contains(indexInTaskSet)}
+    }.getOrElse(false)
   }
 
   override def removeExecutor(executorId: String): Unit = {
@@ -324,13 +362,14 @@ private[scheduler] object BlacklistTracker extends Logging {
   }
 }
 
-/** Failures for one executor, within one stage */
+/** Failures for one executor, within one taskset */
 private[scheduler] final class FailureStatus {
-  val failuresByPart = HashSet[Int]()
+  /** index of the tasks in the taskset that have failed on this executor. */
+  val failuresByTask = HashSet[Int]()
   var totalFailures = 0
 
   override def toString(): String = {
-    s"totalFailures = $totalFailures; partitionsFailed = $failuresByPart"
+    s"totalFailures = $totalFailures; tasksFailed = $failuresByTask"
   }
 }
 
@@ -362,17 +401,25 @@ private[scheduler] object NoopBlacklistTracker extends BlacklistTracker {
   override def isExecutorBlacklisted(
       executorId: String,
       stageId: Int,
-      partition: Int) : Boolean = false
+      indexInTaskSet: Int) : Boolean = false
+
+  override def isNodeBlacklisted(
+    node: String,
+    stageId: Int,
+    indexInTaskSet: Int): Boolean = false
+
 
   override def taskSucceeded(
     stageId: Int,
-    partition: Int,
-    info: TaskInfo): Unit = {}
+    indexInTaskSet: Int,
+    info: TaskInfo,
+    scheduler: TaskSchedulerImpl): Unit = {}
 
   override def taskFailed(
     stageId: Int,
-    partition: Int,
-    info: TaskInfo): Unit = {}
+    indexInTaskSet: Int,
+    info: TaskInfo,
+    scheduler: TaskSchedulerImpl): Unit = {}
 
   override def removeExecutor(executorId: String): Unit = {}
 }

@@ -241,12 +241,16 @@ private[spark] class TaskSetManager(
    * This method also cleans up any tasks in the list that have already
    * been launched, since we want that to happen lazily.
    */
-  private def dequeueTaskFromList(execId: String, list: ArrayBuffer[Int]): Option[Int] = {
+  private def dequeueTaskFromList(
+      execId: String,
+      host: String,
+      list: ArrayBuffer[Int]): Option[Int] = {
     var indexOffset = list.size
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!blacklistTracker.isExecutorBlacklisted(execId, stageId, index)) {
+      if (!blacklistTracker.isNodeBlacklisted(host, stageId, index) &&
+          !blacklistTracker.isExecutorBlacklisted(execId, stageId, index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -275,6 +279,7 @@ private[spark] class TaskSetManager(
 
     def canRunOnHost(index: Int): Boolean =
       !hasAttemptOnHost(index, host) &&
+        !blacklistTracker.isNodeBlacklisted(host, stageId, index) &&
         !blacklistTracker.isExecutorBlacklisted(execId, stageId, index)
 
     if (!speculatableTasks.isEmpty) {
@@ -348,19 +353,19 @@ private[spark] class TaskSetManager(
   private def dequeueTask(execId: String, host: String, maxLocality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
-    for (index <- dequeueTaskFromList(execId, getPendingTasksForExecutor(execId))) {
+    for (index <- dequeueTaskFromList(execId, host, getPendingTasksForExecutor(execId))) {
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
-      for (index <- dequeueTaskFromList(execId, getPendingTasksForHost(host))) {
+      for (index <- dequeueTaskFromList(execId, host, getPendingTasksForHost(host))) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
-      for (index <- dequeueTaskFromList(execId, pendingTasksWithNoPrefs)) {
+      for (index <- dequeueTaskFromList(execId, host, pendingTasksWithNoPrefs)) {
         return Some((index, TaskLocality.PROCESS_LOCAL, false))
       }
     }
@@ -368,14 +373,14 @@ private[spark] class TaskSetManager(
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
       for {
         rack <- sched.getRackForHost(host)
-        index <- dequeueTaskFromList(execId, getPendingTasksForRack(rack))
+        index <- dequeueTaskFromList(execId, host, getPendingTasksForRack(rack))
       } {
         return Some((index, TaskLocality.RACK_LOCAL, false))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
-      for (index <- dequeueTaskFromList(execId, allPendingTasks)) {
+      for (index <- dequeueTaskFromList(execId, host, allPendingTasks)) {
         return Some((index, TaskLocality.ANY, false))
       }
     }
@@ -599,17 +604,17 @@ private[spark] class TaskSetManager(
     if (executorsByHost.nonEmpty) {
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
-      pendingTask.foreach { taskId =>
+      pendingTask.foreach { indexInTaskSet =>
         val stage = taskSet.stageId
-        val part = tasks(taskId).partitionId
         executorsByHost.foreach { case (host, execs) =>
           if (!blacklistTracker.isNodeBlacklisted(host) &&
-                !blacklistTracker.isNodeBlacklistedForStage(host, stage)) {
+                !blacklistTracker.isNodeBlacklistedForStage(host, stage) &&
+                !blacklistTracker.isNodeBlacklisted(host, stage, indexInTaskSet)) {
             execs.foreach { exec =>
               if (
                 !blacklistTracker.isExecutorBlacklisted(exec) &&
                   !blacklistTracker.isExecutorBlacklistedForStage(stage, exec) &&
-                  !blacklistTracker.isExecutorBlacklisted(exec, stageId = stage, partition = part)
+                  !blacklistTracker.isExecutorBlacklisted(exec, stage, indexInTaskSet)
               ) {
                 // we've found some executor this task can run on.  Its possible that some *other*
                 // task isn't schedulable anywhere, but we will discover that in some later call,
@@ -619,9 +624,9 @@ private[spark] class TaskSetManager(
             }
           }
         }
-        val partition = tasks(taskId).partitionId
-        abort(s"Aborting ${taskSet} because task $taskId (partition $partition) cannot run " +
-          s"anywhere due to node and executor blacklist.")
+        val partition = tasks(indexInTaskSet).partitionId
+        abort(s"Aborting ${taskSet} because task $indexInTaskSet (partition $partition) cannot " +
+          s"run anywhere due to node and executor blacklist.")
       }
     }
   }
@@ -691,7 +696,7 @@ private[spark] class TaskSetManager(
         " because task " + index + " has already completed successfully")
     }
 
-    blacklistTracker.taskSucceeded(stageId, tasks(index).partitionId, info)
+    blacklistTracker.taskSucceeded(stageId, index, info, sched)
     maybeFinishTaskSet()
   }
 
@@ -776,7 +781,7 @@ private[spark] class TaskSetManager(
 
     // always add to failed executors
     // TODO if there is a fetch failure, does it really make sense to add this?
-    blacklistTracker.taskFailed(stageId, tasks(index).partitionId, info)
+    blacklistTracker.taskFailed(stageId, index, info, sched)
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
