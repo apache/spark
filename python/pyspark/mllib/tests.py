@@ -150,12 +150,12 @@ class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
         self.assertEqual(v, ser.loads(ser.dumps(v)))
-        jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
-        nv = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvec)))
+        jvec = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(v)))
+        nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvec)))
         self.assertEqual(v, nv)
         vs = [v] * 100
-        jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
-        nvs = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jvecs)))
+        jvecs = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(vs)))
+        nvs = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvecs)))
         self.assertEqual(vs, nvs)
 
     def test_serialize(self):
@@ -1650,8 +1650,8 @@ class ALSTests(MLlibTestCase):
 
     def test_als_ratings_serialize(self):
         r = Rating(7, 1123, 3.14)
-        jr = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(r)))
-        nr = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jr)))
+        jr = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(r)))
+        nr = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jr)))
         self.assertEqual(r.user, nr.user)
         self.assertEqual(r.product, nr.product)
         self.assertAlmostEqual(r.rating, nr.rating, 2)
@@ -1659,7 +1659,8 @@ class ALSTests(MLlibTestCase):
     def test_als_ratings_id_long_error(self):
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
-        self.assertRaises(Py4JJavaError, self.sc._jvm.SerDe.loads, bytearray(ser.dumps(r)))
+        self.assertRaises(Py4JJavaError, self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads,
+                          bytearray(ser.dumps(r)))
 
 
 class HashingTFTest(MLlibTestCase):

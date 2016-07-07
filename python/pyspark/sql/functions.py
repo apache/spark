@@ -1550,8 +1550,8 @@ def translate(srcCol, matching, replace):
     The translate will happen when any character in the string matching with the character
     in the `matching`.
 
-    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123")\
-    .alias('r')).collect()
+    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123") \\
+    ...     .alias('r')).collect()
     [Row(r=u'1a2s3ae')]
     """
     sc = SparkContext._active_spark_context
@@ -1670,8 +1670,8 @@ def get_json_object(col, path):
 
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
-    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \
-                          get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
+    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
+    ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
     [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
     """
     sc = SparkContext._active_spark_context

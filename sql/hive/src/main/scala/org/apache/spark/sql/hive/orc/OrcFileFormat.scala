@@ -111,7 +111,7 @@ private[sql] class OrcFileFormat
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
-        hadoopConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
+        hadoopConf.set(OrcRelation.SARG_PUSHDOWN, f.toKryo)
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
@@ -258,14 +258,12 @@ private[orc] class OrcOutputWriter(
   }
 }
 
-private[orc] object OrcTableScan {
-  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
-  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
-}
-
 private[orc] object OrcRelation extends HiveInspectors {
   // The references of Hive's classes will be minimized.
   val ORC_COMPRESSION = "orc.compress"
+
+  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
+  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
