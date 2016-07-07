@@ -2194,6 +2194,16 @@ object functions {
   }
 
   /**
+   * Replace all substrings of the specified string value that match regexp with rep.
+   *
+   * @group string_funcs
+   * @since 2.1.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
+    RegExpReplace(e.expr, pattern.expr, replacement.expr)
+  }
+
+  /**
    * Decodes a BASE64 encoded string column and returns it as a binary column.
    * This is the reverse of base64.
    *

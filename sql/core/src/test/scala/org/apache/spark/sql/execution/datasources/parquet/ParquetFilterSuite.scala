@@ -229,8 +229,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  // See https://issues.apache.org/jira/browse/SPARK-11153
-  ignore("filter pushdown - string") {
+  test("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -258,8 +257,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  // See https://issues.apache.org/jira/browse/SPARK-11153
-  ignore("filter pushdown - binary") {
+  test("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
@@ -543,6 +541,20 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           assert(stripSparkFilter(df4).count == 3)
         }
       }
+    }
+  }
+
+  test("SPARK-16371 Do not push down filters when inner name and outer name are the same") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Tuple1(i)))) { implicit df =>
+      // Here the schema becomes as below:
+      //
+      // root
+      //  |-- _1: struct (nullable = true)
+      //  |    |-- _1: integer (nullable = true)
+      //
+      // The inner column name, `_1` and outer column name `_1` are the same.
+      // Obviously this should not push down filters because the outer column is struct.
+      assert(df.filter("_1 IS NOT NULL").count() === 4)
     }
   }
 }

@@ -23,6 +23,59 @@ import org.apache.spark.sql.test.SharedSQLContext
 class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  test("stack") {
+    val df = spark.range(1)
+
+    // Empty DataFrame suppress the result generation
+    checkAnswer(spark.emptyDataFrame.selectExpr("stack(1, 1, 2, 3)"), Nil)
+
+    // Rows & columns
+    checkAnswer(df.selectExpr("stack(1, 1, 2, 3)"), Row(1, 2, 3) :: Nil)
+    checkAnswer(df.selectExpr("stack(2, 1, 2, 3)"), Row(1, 2) :: Row(3, null) :: Nil)
+    checkAnswer(df.selectExpr("stack(3, 1, 2, 3)"), Row(1) :: Row(2) :: Row(3) :: Nil)
+    checkAnswer(df.selectExpr("stack(4, 1, 2, 3)"), Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+
+    // Various column types
+    checkAnswer(df.selectExpr("stack(3, 1, 1.1, 'a', 2, 2.2, 'b', 3, 3.3, 'c')"),
+      Row(1, 1.1, "a") :: Row(2, 2.2, "b") :: Row(3, 3.3, "c") :: Nil)
+
+    // Repeat generation at every input row
+    checkAnswer(spark.range(2).selectExpr("stack(2, 1, 2, 3)"),
+      Row(1, 2) :: Row(3, null) :: Row(1, 2) :: Row(3, null) :: Nil)
+
+    // The first argument must be a positive constant integer.
+    val m = intercept[AnalysisException] {
+      df.selectExpr("stack(1.1, 1, 2, 3)")
+    }.getMessage
+    assert(m.contains("The number of rows must be a positive constant integer."))
+    val m2 = intercept[AnalysisException] {
+      df.selectExpr("stack(-1, 1, 2, 3)")
+    }.getMessage
+    assert(m2.contains("The number of rows must be a positive constant integer."))
+
+    // The data for the same column should have the same type.
+    val m3 = intercept[AnalysisException] {
+      df.selectExpr("stack(2, 1, '2.2')")
+    }.getMessage
+    assert(m3.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (StringType)"))
+
+    // stack on column data
+    val df2 = Seq((2, 1, 2, 3)).toDF("n", "a", "b", "c")
+    checkAnswer(df2.selectExpr("stack(2, a, b, c)"), Row(1, 2) :: Row(3, null) :: Nil)
+
+    val m4 = intercept[AnalysisException] {
+      df2.selectExpr("stack(n, a, b, c)")
+    }.getMessage
+    assert(m4.contains("The number of rows must be a positive constant integer."))
+
+    val df3 = Seq((2, 1, 2.0)).toDF("n", "a", "b")
+    val m5 = intercept[AnalysisException] {
+      df3.selectExpr("stack(2, a, b)")
+    }.getMessage
+    assert(m5.contains("data type mismatch: Argument 1 (IntegerType) != Argument 2 (DoubleType)"))
+
+  }
+
   test("single explode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
