@@ -189,7 +189,7 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
   }
 
   /** Map to use for direct case insensitive attribute lookups. */
-  private val direct: Map[String, Seq[Attribute]] = {
+  private lazy val direct: Map[String, Seq[Attribute]] = {
     unique(attributes.groupBy(_.name.toLowerCase))
   }
 
@@ -214,7 +214,7 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
     // and "c" is the struct field name, i.e. "a.b.c". In this case, Attribute will be "a.b",
     // and the second element will be List("c").
     val matches = nameParts match {
-      case qualifier :: name :: nestedFields =>
+      case qualifier +: name +: nestedFields =>
         val key = (qualifier.toLowerCase, name.toLowerCase)
         val attributes = qualified.get(key).toSeq.flatMap(_.filter { a =>
           resolver(qualifier, a.qualifier.get) && isMatch(name, a)
@@ -226,7 +226,7 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
 
     // If none of attributes match `table.column` pattern, we try to resolve it as a column.
     val (candidates, nestedFields) = matches match {
-      case (Nil, _) =>
+      case (Seq(), _) =>
         val name = nameParts.head
         val attributes = direct.get(name.toLowerCase).toSeq.flatMap(_.filter(isMatch(name, _)))
         (attributes, nameParts.tail)
