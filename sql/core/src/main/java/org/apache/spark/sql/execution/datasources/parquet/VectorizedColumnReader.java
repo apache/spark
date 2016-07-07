@@ -611,7 +611,7 @@ public class VectorizedColumnReader {
             offset = offsets.get(maxRepLevel);
           }
 
-          if (column.getParentColumn().getDefLevel() == maxDefLevel) {
+          if (column.getParentColumn().getDefLevel() == maxDefLevel && maxRepLevel > 0) {
             insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
             offsets.put(maxRepLevel, offset + 1);
             prevRepLevel = -1;
@@ -627,6 +627,14 @@ public class VectorizedColumnReader {
             if (rowIds.containsKey(1)) {
               rowId = rowIds.get(1);
             }
+            // Add up previously accumulated count for repetition level 1.
+            // Otherwise, we will override previous non-null records.
+            int repCount = 0;
+            if (reptitionMap.containsKey(1)) {
+              repCount = reptitionMap.get(1);
+            }
+            reptitionMap.put(1, 0);
+            rowId += repCount;
             // Insert null record and increase row id.
             topColumn.putNull(rowId);
             rowIds.put(1, rowId + 1);
