@@ -171,6 +171,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       resolver: Resolver): Option[NamedExpression] = {
     outputAttributeResolver.resolve(UnresolvedAttribute.parseAttributeName(name), resolver)
   }
+
+  /**
+   * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
+   */
+  def refresh(): Unit = children.foreach(_.refresh())
 }
 
 /**
@@ -257,11 +262,6 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
         throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
   }
-
-  /**
-   * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
-   */
-  def refresh(): Unit = children.foreach(_.refresh())
 }
 
 /**
