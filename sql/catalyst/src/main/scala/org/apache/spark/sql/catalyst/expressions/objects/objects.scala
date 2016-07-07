@@ -407,7 +407,8 @@ object MapObjects {
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
  * @param inputData An expression that when evaluated returns a collection object.
- * @param inputDataType The dataType of inputData.
+ * @param inputDataType The optional dataType of inputData. If it is None, the default behavior is
+ *                      to use the resolved data type of the inputData.
  */
 case class MapObjects private(
     loopValue: String,
