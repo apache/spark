@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.execution.streaming.IncrementalExecution
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 
 /**
@@ -98,7 +100,14 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val queryExecution = sparkSession.sessionState.executePlan(logicalPlan)
+    val queryExecution =
+      if (logicalPlan.isStreaming) {
+        // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
+        // output mode does not matter since there is no `Sink`.
+        new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0)
+      } else {
+        sparkSession.sessionState.executePlan(logicalPlan)
+      }
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)

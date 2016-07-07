@@ -58,15 +58,37 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
-      StringUtils.filterPattern(spark.sessionState.functionRegistry.listFunction(), pattern)
+      StringUtils.filterPattern(
+        spark.sessionState.catalog.listFunctions("default").map(_._1.funcName), pattern)
         .map(Row(_))
     }
+
+    def createFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
+      }
+    }
+
+    def dropFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.sessionState.catalog.dropTempFunction(name, false)
+      }
+    }
+
+    val functions = Array("ilog", "logi", "logii", "logiii", "crc32i", "cubei", "cume_disti",
+      "isize", "ispace", "to_datei", "date_addi", "current_datei")
+
+    createFunction(functions)
+
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    assert(sql("SHOW functions").collect().size > 200)
+
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
       // For '*', we need to replace it to '.*'.
       checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
+    dropFunction(functions)
   }
 
   test("describe functions") {
@@ -2093,6 +2115,37 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("Star Expansion - table with zero column") {
+    withTempTable("temp_table_no_cols") {
+      val rddNoCols = sparkContext.parallelize(1 to 10).map(_ => Row.empty)
+      val dfNoCols = spark.createDataFrame(rddNoCols, StructType(Seq.empty))
+      dfNoCols.createTempView("temp_table_no_cols")
+
+      // ResolvedStar
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select(dfNoCols.col("*")))
+
+      // UnresolvedStar
+      checkAnswer(
+        dfNoCols,
+        sql("SELECT * FROM temp_table_no_cols"))
+      checkAnswer(
+        dfNoCols,
+        dfNoCols.select($"*"))
+
+      var e = intercept[AnalysisException] {
+        sql("SELECT a.* FROM temp_table_no_cols a")
+      }.getMessage
+      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+
+      e = intercept[AnalysisException] {
+        dfNoCols.select($"b.*")
+      }.getMessage
+      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
+    }
+  }
+
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
@@ -2118,7 +2171,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // is correct.
       def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
         countAcc.setValue(0)
-        checkAnswer(df, expectedResult)
+        QueryTest.checkAnswer(
+          df, Seq(expectedResult), checkToRDD = false /* avoid duplicate exec */)
         assert(countAcc.value == expectedCount)
       }
 

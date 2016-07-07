@@ -140,11 +140,11 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("registering as a table in Append output mode") {
     val input = MemoryStream[Int]
-    val query = input.toDF().write
+    val query = input.toDF().writeStream
       .format("memory")
       .outputMode("append")
       .queryName("memStream")
-      .startStream()
+      .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
@@ -166,21 +166,21 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     val query = input.toDF()
       .groupBy("value")
       .count()
-      .write
+      .writeStream
       .format("memory")
       .outputMode("complete")
       .queryName("memStream")
-      .startStream()
+      .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
-    checkDataset(
+    checkDatasetUnorderly(
       spark.table("memStream").as[(Int, Long)],
       (1, 1L), (2, 1L), (3, 1L))
 
     input.addData(4, 5, 6)
     query.processAllAvailable()
-    checkDataset(
+    checkDatasetUnorderly(
       spark.table("memStream").as[(Int, Long)],
       (1, 1L), (2, 1L), (3, 1L), (4, 1L), (5, 1L), (6, 1L))
 
@@ -191,10 +191,10 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     // Ignore the stress test as it takes several minutes to run
     (0 until 1000).foreach { _ =>
       val input = MemoryStream[Int]
-      val query = input.toDF().write
+      val query = input.toDF().writeStream
         .format("memory")
         .queryName("memStream")
-        .startStream()
+        .start()
       input.addData(1, 2, 3)
       query.processAllAvailable()
 
@@ -215,9 +215,9 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   test("error when no name is specified") {
     val error = intercept[AnalysisException] {
       val input = MemoryStream[Int]
-      val query = input.toDF().write
+      val query = input.toDF().writeStream
           .format("memory")
-          .startStream()
+          .start()
     }
 
     assert(error.message contains "queryName must be specified")
@@ -227,21 +227,21 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     val location = Utils.createTempDir(namePrefix = "steaming.checkpoint").getCanonicalPath
 
     val input = MemoryStream[Int]
-    val query = input.toDF().write
+    val query = input.toDF().writeStream
         .format("memory")
         .queryName("memStream")
         .option("checkpointLocation", location)
-        .startStream()
+        .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
     query.stop()
 
     intercept[AnalysisException] {
-      input.toDF().write
+      input.toDF().writeStream
         .format("memory")
         .queryName("memStream")
         .option("checkpointLocation", location)
-        .startStream()
+        .start()
     }
   }
 

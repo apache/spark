@@ -232,6 +232,11 @@ class Catalog(object):
         """Removes all cached tables from the in-memory cache."""
         self._jcatalog.clearCache()
 
+    @since(2.0)
+    def refreshTable(self, tableName):
+        """Invalidate and refresh all the cached metadata of the given table."""
+        self._jcatalog.refreshTable(tableName)
+
     def _reset(self):
         """(Internal use only) Drop all existing databases (except "default"), tables,
         partitions and functions, and set the current database to "default".

@@ -441,7 +441,7 @@ class KMeans private (
           val rs = (0 until runs).filter { r =>
             rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
           }
-          if (rs.length > 0) Some((p, rs)) else None
+          if (rs.nonEmpty) Some((p, rs)) else None
         }
       }.collect()
       mergeNewCenters()

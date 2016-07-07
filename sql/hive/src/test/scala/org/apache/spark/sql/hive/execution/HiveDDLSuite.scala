@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -407,6 +408,19 @@ class HiveDDLSuite
     }
   }
 
+  test("desc table for data source table using Hive Metastore") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(s"CREATE TABLE $tabName(a int comment 'test') USING parquet ")
+
+      checkAnswer(
+        sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
+        Row("a", "int", "test")
+      )
+    }
+  }
+
   private def createDatabaseWithLocation(tmpDir: File, dirExists: Boolean): Unit = {
     val catalog = spark.sessionState.catalog
     val dbName = "db1"
@@ -537,6 +551,21 @@ class HiveDDLSuite
         }.getMessage
         assert(message.contains("Can not drop default database"))
       }
+    }
+  }
+
+  test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
+    withTable("tab") {
+      intercept[RuntimeException] {
+        sql(
+          """
+            |CREATE TABLE tab
+            |STORED AS TEXTFILE
+            |SELECT 1 AS a, (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b
+          """.stripMargin)
+      }
+      // After hitting runtime exception, we should drop the created table.
+      assert(!spark.sessionState.catalog.tableExists(TableIdentifier("tab")))
     }
   }
 

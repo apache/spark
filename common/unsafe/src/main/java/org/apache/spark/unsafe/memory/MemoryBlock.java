@@ -53,4 +53,11 @@ public class MemoryBlock extends MemoryLocation {
   public static MemoryBlock fromLongArray(final long[] array) {
     return new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length * 8L);
   }
+
+  /**
+   * Fills the memory block with the specified byte value.
+   */
+  public void fill(byte value) {
+    Platform.setMemory(obj, offset, length, value);
+  }
 }

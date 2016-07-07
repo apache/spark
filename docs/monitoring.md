@@ -157,7 +157,7 @@ The history server can be configured as follows:
       If enabled, access control checks are made regardless of what the individual application had
       set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
       will always have authorization to view their own application and any users specified via
-      <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups<code>
+      <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
       when the application was run will also have authorization to view that application.
       If disabled, no access control checks are made.
     </td>
