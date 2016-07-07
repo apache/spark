@@ -30,6 +30,7 @@ class UnsafeArraySuite extends SparkFunSuite {
   val longArray = Array(1.toLong, 10.toLong, 100.toLong)
   val floatArray = Array(1.1.toFloat, 2.2.toFloat, 3.3.toFloat)
   val doubleArray = Array(1.1, 2.2, 3.3)
+  val stringArray = Array("1", "10", "100")
 
   val intMultiDimArray = Array(Array(1, 10), Array(2, 20, 200), Array(3, 30, 300, 3000))
   val doubleMultiDimArray = Array(
@@ -84,6 +85,14 @@ class UnsafeArraySuite extends SparkFunSuite {
       assert(unsafeDouble.getDouble(i) == e)
     }
 
+    val unsafeString = ExpressionEncoder[Array[String]].resolveAndBind().
+      toRow(stringArray).getArray(0)
+    assert(unsafeString.isInstanceOf[UnsafeArrayData])
+    assert(unsafeString.numElements == stringArray.length)
+    stringArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeString.getUTF8String(i).toString().equals(e))
+    }
+
     val unsafeMultiDimInt = ExpressionEncoder[Array[Array[Int]]].resolveAndBind().
       toRow(intMultiDimArray).getArray(0)
     assert(unsafeMultiDimInt.isInstanceOf[UnsafeArrayData])
@@ -131,13 +140,9 @@ class UnsafeArraySuite extends SparkFunSuite {
 
   test("to primitive array") {
     val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
-    val intInternalRow = intEncoder.toRow(intArray)
-    val intUnsafeArray = intInternalRow.getArray(0)
-    assert(intUnsafeArray.toIntArray.sameElements(intArray))
+    assert(intEncoder.toRow(intArray).getArray(0).toIntArray.sameElements(intArray))
 
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
-    val doubleInternalRow = doubleEncoder.toRow(doubleArray)
-    val doubleUnsafeArray = doubleInternalRow.getArray(0)
-    assert(doubleUnsafeArray.toDoubleArray.sameElements(doubleArray))
+    assert(doubleEncoder.toRow(doubleArray).getArray(0).toDoubleArray.sameElements(doubleArray))
   }
 }

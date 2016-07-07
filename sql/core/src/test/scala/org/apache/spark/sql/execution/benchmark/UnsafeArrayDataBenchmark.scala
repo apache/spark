@@ -35,52 +35,44 @@ import org.apache.spark.util.Benchmark
 class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
   def calculateHeaderPortionInBytes(count: Int) : Int = {
-    // Use this assignment for SPARK-15962
-    // val size = 4 + 4 * count
-    val size = UnsafeArrayData.calculateHeaderPortionInBytes(count)
-    size
+    /* 4 + 4 * count // Use this expression for SPARK-15962 */
+    UnsafeArrayData.calculateHeaderPortionInBytes(count)
   }
 
   def readUnsafeArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 16
     val rand = new Random(42)
 
-    var intResult: Int = 0
-    val intBuffer = Array.fill[Int](count) { rand.nextInt }
+    val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt }
     val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
-    val intInternalRow = intEncoder.toRow(intBuffer)
-    val intUnsafeArray = intInternalRow.getArray(0)
+    val intUnsafeArray = intEncoder.toRow(intPrimitiveArray).getArray(0)
     val readIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
         val len = intUnsafeArray.numElements
-        var sum = 0.toInt
+        var sum = 0
         var i = 0
         while (i < len) {
           sum += intUnsafeArray.getInt(i)
           i += 1
         }
-        intResult = sum
         n += 1
       }
     }
 
-    var doubleResult: Double = 0
-    val doubleBuffer = Array.fill[Double](count) { rand.nextDouble }
+    val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble }
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
-    val doubleInternalRow = doubleEncoder.toRow(doubleBuffer)
-    val doubleUnsafeArray = doubleInternalRow.getArray(0)
+    val doubleUnsafeArray = doubleEncoder.toRow(doublePrimitiveArray).getArray(0)
     val readDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
         val len = doubleUnsafeArray.numElements
-        var sum = 0.toDouble
+        var sum = 0.0
         var i = 0
         while (i < len) {
           sum += doubleUnsafeArray.getDouble(i)
           i += 1
         }
-        doubleResult = sum
         n += 1
       }
     }
@@ -102,43 +94,26 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
 
   def writeUnsafeArray(iters: Int): Unit = {
     val count = 1024 * 1024 * 16
+    val rand = new Random(42)
 
-    val intUnsafeRow = new UnsafeRow(1)
-    val intUnsafeArrayWriter = new UnsafeArrayWriter
-    val intBufferHolder = new BufferHolder(intUnsafeRow, 64)
-    intBufferHolder.reset()
-    intUnsafeArrayWriter.initialize(intBufferHolder, count, 4)
-    val intCursor = intBufferHolder.cursor
+    var intTotalLength: Int = 0
+    val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt }
+    val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
     val writeIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        intBufferHolder.cursor = intCursor
-        val len = count
-        var i = 0
-        while (i < len) {
-          intUnsafeArrayWriter.write(i, 0.toInt)
-          i += 1
-        }
+        intTotalLength += intEncoder.toRow(intPrimitiveArray).getArray(0).numElements()
         n += 1
       }
     }
 
-    val doubleUnsafeRow = new UnsafeRow(1)
-    val doubleUnsafeArrayWriter = new UnsafeArrayWriter
-    val doubleBufferHolder = new BufferHolder(doubleUnsafeRow, 64)
-    doubleBufferHolder.reset()
-    doubleUnsafeArrayWriter.initialize(doubleBufferHolder, count, 8)
-    val doubleCursor = doubleBufferHolder.cursor
+    var doubleTotalLength: Int = 0
+    val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble }
+    val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
     val writeDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
-        doubleBufferHolder.cursor = doubleCursor
-        val len = count
-        var i = 0
-        while (i < len) {
-          doubleUnsafeArrayWriter.write(i, 0.toDouble)
-          i += 1
-        }
+        doubleTotalLength += doubleEncoder.toRow(doublePrimitiveArray).getArray(0).numElements()
         n += 1
       }
     }
@@ -147,15 +122,6 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Int")(writeIntArray)
     benchmark.addCase("Double")(writeDoubleArray)
     benchmark.run
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-
-    Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                             79 /   86       2124.2           0.5       1.0X
-    Double                                         140 /  147       1201.0           0.8       0.6X
-    */
   }
 
   def getPrimitiveArray(iters: Int): Unit = {
@@ -163,10 +129,9 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     val rand = new Random(42)
 
     var intTotalLength: Int = 0
-    val intBuffer = Array.fill[Int](count) { rand.nextInt }
+    val intPrimitiveArray = Array.fill[Int](count) { rand.nextInt }
     val intEncoder = ExpressionEncoder[Array[Int]].resolveAndBind()
-    val intInternalRow = intEncoder.toRow(intBuffer)
-    val intUnsafeArray = intInternalRow.getArray(0)
+    val intUnsafeArray = intEncoder.toRow(intPrimitiveArray).getArray(0)
     val readIntArray = { i: Int =>
       var n = 0
       while (n < iters) {
@@ -176,10 +141,9 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     }
 
     var doubleTotalLength: Int = 0
-    val doubleBuffer = Array.fill[Double](count) { rand.nextDouble }
+    val doublePrimitiveArray = Array.fill[Double](count) { rand.nextDouble }
     val doubleEncoder = ExpressionEncoder[Array[Double]].resolveAndBind()
-    val doubleInternalRow = doubleEncoder.toRow(doubleBuffer)
-    val doubleUnsafeArray = doubleInternalRow.getArray(0)
+    val doubleUnsafeArray = doubleEncoder.toRow(doublePrimitiveArray).getArray(0)
     val readDoubleArray = { i: Int =>
       var n = 0
       while (n < iters) {
