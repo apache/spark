@@ -601,7 +601,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       createFile(2)
       createFile(3)
 
-      // Set up a query to read text files 2 at a tie
+      // Set up a query to read text files 2 at a time
       val df = spark
         .readStream
         .option("maxFilesPerTrigger", 2)
