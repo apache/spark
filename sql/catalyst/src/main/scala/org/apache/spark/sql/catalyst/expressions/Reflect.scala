@@ -41,9 +41,8 @@ import org.apache.spark.util.Utils
   usage = "_FUNC_(class,method[,arg1[,arg2..]]) calls method with reflection",
   extended = "> SELECT _FUNC_('java.util.UUID', 'randomUUID');\nc33fb387-8500-4bfa-81d2-6e0e3e930df2")
 // scalastyle:on line.size.limit
-case class JavaMethodReflect(children: Seq[Expression])
+case class Reflect(children: Seq[Expression])
   extends Expression with CodegenFallback {
-  import JavaMethodReflect._
 
   override def prettyName: String = "reflect"
 
@@ -53,8 +52,10 @@ case class JavaMethodReflect(children: Seq[Expression])
     } else if (!children.take(2).forall(e => e.dataType == StringType && e.foldable)) {
       // The first two arguments must be string type.
       TypeCheckFailure("first two arguments should be string literals")
+    } else if (!classExists) {
+      TypeCheckFailure(s"class $className not found")
     } else if (method == null) {
-      TypeCheckFailure("cannot find a method that matches the argument types")
+      TypeCheckFailure(s"cannot find a method that matches the argument types in $className")
     } else {
       TypeCheckSuccess
     }
@@ -81,22 +82,26 @@ case class JavaMethodReflect(children: Seq[Expression])
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
 
   /** Name of the class -- this has to be called after we verify children has at least two exprs. */
-  @transient private lazy val className = children(0).eval(null).asInstanceOf[UTF8String].toString
+  @transient private lazy val className = children(0).eval().asInstanceOf[UTF8String].toString
+
+  /** True if the class exists and can be loaded. */
+  @transient private lazy val classExists = Reflect.classExists(className)
 
   /** The reflection method. */
   @transient lazy val method: Method = {
     val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
-    findMethod(className, methodName, argExprs.map(_.dataType)).orNull
+    Reflect.findMethod(className, methodName, argExprs.map(_.dataType)).orNull
   }
 
   /** If the class has a no-arg ctor, instantiate the object. Otherwise, obj is null. */
-  @transient private lazy val obj: Object = instantiate(className).orNull.asInstanceOf[Object]
+  @transient private lazy val obj: Object =
+    Reflect.instantiate(className).orNull.asInstanceOf[Object]
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 }
 
-object JavaMethodReflect {
+object Reflect {
   /** Mapping from Spark's type to acceptable JVM types. */
   val typeMapping = Map[DataType, Seq[Class[_]]](
     BooleanType -> Seq(classOf[java.lang.Boolean], classOf[Boolean]),
@@ -108,6 +113,18 @@ object JavaMethodReflect {
     DoubleType -> Seq(classOf[java.lang.Double], classOf[Double]),
     StringType -> Seq(classOf[String])
   )
+
+  /**
+   * Returns true if the class can be found and loaded.
+   */
+  private def classExists(className: String): Boolean = {
+    try {
+      Utils.classForName(className)
+      true
+    } catch {
+      case e: ClassNotFoundException => false
+    }
+  }
 
   /**
    * Finds a Java method using reflection that matches the given argument types,

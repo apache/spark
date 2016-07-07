@@ -18,14 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
- * Test suite for [[JavaMethodReflect]] and its companion object.
+ * Test suite for [[Reflect]] and its companion object.
  */
-class JavaMethodReflectSuite extends SparkFunSuite with ExpressionEvalHelper {
+class ReflectSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  import JavaMethodReflect._
+  import Reflect._
 
   private val staticClassName = ReflectStaticClass.getClass.getName
   private val dynamicClassName = classOf[ReflectClass].getName
@@ -52,13 +53,32 @@ class JavaMethodReflectSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(findMethod(classOf[java.util.UUID].getName, "randomUUID", Seq.empty).isDefined)
   }
 
-  test("type checking") {
-    assert(JavaMethodReflect(Seq.empty).checkInputDataTypes().isFailure)
-    assert(JavaMethodReflect(Seq(Literal(staticClassName))).checkInputDataTypes().isFailure)
-    assert(
-      JavaMethodReflect(Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes().isFailure)
+  test("class not found") {
+    val ret = reflectExpr("some-random-class", "method").checkInputDataTypes()
+    assert(ret.isFailure)
+    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
+    assert(errorMsg.contains("not found") && errorMsg.contains("class"))
+  }
 
+  test("method not found") {
+    val ret = reflectExpr(staticClassName, "notfoundmethod").checkInputDataTypes()
+    assert(ret.isFailure)
+    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
+    assert(errorMsg.contains("cannot find a method"))
+  }
+
+  test("type checking for static classes") {
+    assert(Reflect(Seq.empty).checkInputDataTypes().isFailure)
+    assert(Reflect(Seq(Literal(staticClassName))).checkInputDataTypes().isFailure)
+    assert(Reflect(Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes().isFailure)
     assert(reflectExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
+  }
+
+  test("type checking for dynamic classes") {
+    assert(Reflect(Seq.empty).checkInputDataTypes().isFailure)
+    assert(Reflect(Seq(Literal(dynamicClassName))).checkInputDataTypes().isFailure)
+    assert(Reflect(Seq(Literal(dynamicClassName), Literal(1))).checkInputDataTypes().isFailure)
+    assert(reflectExpr(dynamicClassName, "method1").checkInputDataTypes().isSuccess)
   }
 
   test("invoking methods using acceptable types") {
@@ -70,8 +90,8 @@ class JavaMethodReflectSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  private def reflectExpr(className: String, methodName: String, args: Any*): JavaMethodReflect = {
-    JavaMethodReflect(
+  private def reflectExpr(className: String, methodName: String, args: Any*): Reflect = {
+    Reflect(
       Literal.create(className, StringType) +:
       Literal.create(methodName, StringType) +:
       args.map(Literal.apply)
