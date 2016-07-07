@@ -192,26 +192,25 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val elementOrOffsetSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
       case _ if ctx.isPrimitiveType(jt) => et.defaultSize
-      case _ => 8  // we need 8 bytes to store offset and length for variable-length types
+      case _ => 4  // we need 4 bytes to store offset
     }
 
-    val tmpCursor = ctx.freshName("tmpCursor")
     val writeElement = et match {
       case t: StructType =>
         s"""
-          $arrayWriter.setOffset($index, $bufferHolder.cursor);
+          $arrayWriter.setOffset($index);
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          $arrayWriter.setOffset($index, $bufferHolder.cursor);
+          $arrayWriter.setOffset($index);
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          $arrayWriter.setOffset($index, $bufferHolder.cursor);
+          $arrayWriter.setOffset($index);
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
         """
 

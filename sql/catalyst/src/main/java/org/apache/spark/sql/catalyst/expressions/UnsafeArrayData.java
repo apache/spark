@@ -248,7 +248,6 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final long offsetAndSize = getLong(ordinal);
     final int offset = getInt(ordinal);
     final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
@@ -393,10 +392,10 @@ public final class UnsafeArrayData extends ArrayData {
 
   private static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
-    final long headerInBytes = calculateHeaderPortionInBytes(length);
-    final long valueRegionInBytes = (long)elementSize * (long)length;
-    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
-    if (totalSizeInLongs * 8> Integer.MAX_VALUE) {
+    final int headerInBytes = calculateHeaderPortionInBytes(length);
+    final int valueRegionInBytes = elementSize * length;
+    final int totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    if (totalSizeInLongs * 8 > Integer.MAX_VALUE) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "it's too big.");
     }
