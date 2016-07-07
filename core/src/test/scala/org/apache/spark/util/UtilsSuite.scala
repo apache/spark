@@ -754,7 +754,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
-    conf.set("spark.master", "yarn-client")
+    conf.set("spark.master", "yarn")
+    conf.set("spark.submit.deployMode", "client")
     assert(Utils.isDynamicAllocationEnabled(conf) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "false")) === false)
@@ -862,7 +863,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
           assert(terminated.isDefined)
           Utils.waitForProcess(process, 5000)
           val duration = System.currentTimeMillis() - start
-          assert(duration < 5000)
+          assert(duration < 6000) // add a little extra time to allow a force kill to finish
           assert(!pidExists(pid))
         } finally {
           signal(pid, "SIGKILL")

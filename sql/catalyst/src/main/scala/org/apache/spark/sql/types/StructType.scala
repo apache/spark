@@ -171,6 +171,23 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true, "comment1")
+   *   .add("b", LongType, false, "comment2")
+   *   .add("c", StringType, true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      comment: String): StructType = {
+    StructType(fields :+ StructField(name, dataType, nullable).withComment(comment))
+  }
+
+  /**
    * Creates a new [[StructType]] by adding a new nullable field with no metadata where the
    * dataType is specified as a String.
    *
@@ -216,6 +233,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       nullable: Boolean,
       metadata: Metadata): StructType = {
     add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, "comment1")
+   *   .add("b", "long", false, "comment2")
+   *   .add("c", "string", true, "comment3")
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      comment: String): StructType = {
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, comment)
   }
 
   /**
@@ -378,10 +413,10 @@ object StructType extends AbstractDataType {
     StructType(fields.asScala)
   }
 
-  protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
+  private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
-  def removeMetadata(key: String, dt: DataType): DataType =
+  private[sql] def removeMetadata(key: String, dt: DataType): DataType =
     dt match {
       case StructType(fields) =>
         val newFields = fields.map { f =>

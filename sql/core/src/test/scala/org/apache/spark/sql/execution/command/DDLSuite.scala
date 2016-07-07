@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -1314,6 +1314,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("create temporary view with mismatched schema") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE TEMPORARY VIEW view1 (col1, col3) AS SELECT * FROM tab1")
+        }.getMessage
+        assert(e.contains("the SELECT clause (num: `1`) does not match")
+          && e.contains("CREATE VIEW (num: `2`)"))
+      }
+    }
+  }
+
+  test("create temporary view with specified schema") {
+    withView("view1") {
+      sql("CREATE TEMPORARY VIEW view1 (col1, col2) AS SELECT 1, 2")
+      checkAnswer(
+        sql("SELECT * FROM view1"),
+        Row(1, 2) :: Nil
+      )
+    }
+  }
+
   test("truncate table - external table, temporary table, view (not allowed)") {
     import testImplicits._
     val path = Utils.createTempDir().getAbsolutePath
@@ -1368,6 +1391,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("select a, b, c from partitionedTable"),
         Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
       )
+    }
+  }
+
+  test("show functions") {
+    withUserDefinedFunction("add_one" -> true) {
+      val numFunctions = FunctionRegistry.functionSet.size.toLong
+      assert(sql("show functions").count() === numFunctions)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions)
+      assert(sql("show user functions").count() === 0L)
+      spark.udf.register("add_one", (x: Long) => x + 1)
+      assert(sql("show functions").count() === numFunctions + 1L)
+      assert(sql("show system functions").count() === numFunctions)
+      assert(sql("show all functions").count() === numFunctions + 1L)
+      assert(sql("show user functions").count() === 1L)
     }
   }
 }

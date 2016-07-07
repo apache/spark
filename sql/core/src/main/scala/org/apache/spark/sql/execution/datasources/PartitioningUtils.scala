@@ -351,7 +351,7 @@ private[sql] object PartitioningUtils {
       }
     }
 
-    if (partitionColumns.size == schema.fields.size) {
+    if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
       throw new AnalysisException(s"Cannot use all columns for partition columns")
     }
   }
