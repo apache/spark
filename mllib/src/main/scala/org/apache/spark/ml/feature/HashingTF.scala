@@ -109,7 +109,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
-  /** Used by transformInstance - Reinitialized by the setters */
+  /** Updated by the setters when parameters change */
   private var hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
 
   def transformInstance(terms: Seq[_]): Vector = {
