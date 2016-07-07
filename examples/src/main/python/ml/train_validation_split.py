@@ -49,6 +49,7 @@ if __name__ == "__main__":
     # the evaluator.
     paramGrid = ParamGridBuilder()\
         .addGrid(lr.regParam, [0.1, 0.01]) \
+        .addGrid(lr.fitIntercept, [False, True])\
         .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0])\
         .build()
 
