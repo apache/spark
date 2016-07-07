@@ -1,8 +1,7 @@
 ---
-title: "SparkR (R on Spark)"
 layout: global
-output: html_document
 displayTitle: SparkR (R on Spark)
+title: SparkR (R on Spark)
 ---
 
 * This will become a table of contents (this text will be scraped).
