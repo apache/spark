@@ -99,7 +99,7 @@ private case class Subscribe[K, V](
       } catch {
         case x: NoOffsetForPartitionException if shouldSuppress =>
           logWarning("Catching NoOffsetForPartitionException since " +
-            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + "is none.  See KAFKA-3370")
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is none.  See KAFKA-3370")
       }
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
@@ -149,7 +149,7 @@ private case class SubscribePattern[K, V](
       } catch {
         case x: NoOffsetForPartitionException if shouldSuppress =>
           logWarning("Catching NoOffsetForPartitionException since " +
-            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + "is none.  See KAFKA-3370")
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is none.  See KAFKA-3370")
       }
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
