@@ -226,6 +226,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
+        // Can suffix up/down arrow in the header
         tableHeaders(0) should startWith ("Job Id (Job Group)")
       }
 
