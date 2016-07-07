@@ -88,7 +88,11 @@ case class CreateViewCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    require(tableDesc.schema == Nil || tableDesc.schema.length == analyzedPlan.output.length)
+    if (tableDesc.schema != Nil && tableDesc.schema.length != analyzedPlan.output.length) {
+      throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
+        s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
+        s"specified by CREATE VIEW (num: `${tableDesc.schema.length}`).")
+    }
     val sessionState = sparkSession.sessionState
 
     if (isTemporary) {
