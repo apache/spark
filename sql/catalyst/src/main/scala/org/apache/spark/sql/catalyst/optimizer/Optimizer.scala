@@ -834,7 +834,7 @@ case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
         } else if (newList.size < list.size) {
-          expr.copy(value = v, list = newList)
+          In(v, newList)
         } else { // newList.length == list.length
           expr
         }
