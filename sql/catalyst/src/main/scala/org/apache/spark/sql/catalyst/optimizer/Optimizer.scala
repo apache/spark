@@ -821,23 +821,22 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
 /**
  * Optimize IN predicates:
- * 1. Removes deterministic repetitions.
+ * 1. Removes literal repetitions.
  * 2. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case i @ In(v, list) if i.inSetConvertible =>
+      case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
-        if (newList.forall(_.isInstanceOf[Literal]) &&
-            newList.size > conf.optimizerInSetConversionThreshold) {
+        if (newList.size > conf.optimizerInSetConversionThreshold) {
           val hSet = newList.map(e => e.eval(EmptyRow))
           InSet(v, HashSet() ++ hSet)
-        } else if (newList.length < list.length) {
-          i.copy(v, newList)
+        } else if (newList.size < list.size) {
+          expr.copy(value = v, list = newList)
         } else { // newList.length == list.length
-          i
+          expr
         }
     }
   }
