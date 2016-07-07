@@ -144,7 +144,6 @@ private[sql] object JDBCRDD extends Logging {
             val columnType =
               dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
                 getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-
             fields(i) = StructField(columnName, columnType, nullable, metadata.build())
             i = i + 1
           }
