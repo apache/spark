@@ -29,11 +29,14 @@ import org.apache.spark.util.Benchmark
 /**
  * Benchmark to measure performance of columnar storage for dataframe cache.
  * To run this:
- *  spark-submit --class <this class> <spark sql test jar>
+ *  bin/spark-submit --class org.apache.spark.sql.DataFrameCacheBenchmark 
+ *    sql/core/target/spark-sql_*-tests.jar 
+ *    [float datasize scale] [double datasize scale] [master URL]
  */
-object DataFrameCacheBenchmark {
+case class DataFrameCacheBenchmark(masterURL: String) {
   val conf = new SparkConf()
-  val sc = new SparkContext("local[1]", "test-sql-context", conf)
+  val sc = new SparkContext(
+    (if (masterURL == null) "local[1]" else masterURL), "test-sql-context", conf)
   val sqlContext = new SQLContext(sc)
   import sqlContext.implicits._
 
@@ -114,9 +117,19 @@ object DataFrameCacheBenchmark {
     System.gc()
   }
 
-  def main(args: Array[String]): Unit = {
-    doubleSumBenchmark(1024 * 1024 * 15)
-    floatSumBenchmark(1024 * 1024 * 30)
+  def run(f: Int, d: Int): Unit = { 
+    floatSumBenchmark(1024 * 1024 * f)
+    doubleSumBenchmark(1024 * 1024 * d)
   }
 }
 
+object DataFrameCacheBenchmark {
+  def main(args: Array[String]): Unit = {
+    val f = if (args.length > 0) args(0).toInt else 30
+    val d = if (args.length > 1) args(1).toInt else 15
+    val masterURL = if (args.length > 2) args(2) else "local[1]"
+
+    val benchmark = DataFrameCacheBenchmark(masterURL)
+    benchmark.run(f, d)
+  }
+}
