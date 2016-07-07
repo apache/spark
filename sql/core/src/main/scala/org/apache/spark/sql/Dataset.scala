@@ -228,7 +228,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  private[sql] def aggregatableColumns: Seq[Expression] = {
+  private def aggregatableColumns: Seq[Expression] = {
     schema.fields
       .filter(f => f.dataType.isInstanceOf[NumericType] || f.dataType.isInstanceOf[StringType])
       .map { n =>
