@@ -48,6 +48,20 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("a||b"))
   }
 
+  test("string elt") {
+    val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
+      .toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+      Row(null, "hello", null))
+
+    // check implicit type cast
+    checkAnswer(
+      df.selectExpr("elt(4, a, b, c, d)", "elt('2', a, b, c, d)"),
+      Row("15", "world"))
+  }
+
   test("string Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
@@ -63,8 +77,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
+        regexp_replace($"a", $"b", $"c"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
+        Row("num-num", "400-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,

@@ -120,12 +120,12 @@ class StreamSuite extends StreamTest {
     }
 
     // Running streaming plan as a batch query
-    assertError("startStream" :: Nil) {
+    assertError("start" :: Nil) {
       streamInput.toDS.map { i => i }.count()
     }
 
     // Running non-streaming plan with as a streaming query
-    assertError("without streaming sources" :: "startStream" :: Nil) {
+    assertError("without streaming sources" :: "start" :: Nil) {
       val ds = batchInput.map { i => i }
       testStream(ds)()
     }

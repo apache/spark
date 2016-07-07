@@ -149,37 +149,18 @@ case class CreateViewCommand(
    * SQL based on the analyzed plan, and also creates the proper schema for the view.
    */
   private def prepareTable(sparkSession: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
-    val viewSQL: String =
-      if (sparkSession.sessionState.conf.canonicalView) {
-        val logicalPlan =
-          if (tableDesc.schema.isEmpty) {
-            analyzedPlan
-          } else {
-            val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
-              case (attr, col) => Alias(attr, col.name)()
-            }
-            sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
+    val viewSQL: String = {
+      val logicalPlan =
+        if (tableDesc.schema.isEmpty) {
+          analyzedPlan
+        } else {
+          val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
+            case (attr, col) => Alias(attr, col.name)()
           }
-        new SQLBuilder(logicalPlan).toSQL
-      } else {
-        // When user specified column names for view, we should create a project to do the renaming.
-        // When no column name specified, we still need to create a project to declare the columns
-        // we need, to make us more robust to top level `*`s.
-        val viewOutput = {
-          val columnNames = analyzedPlan.output.map(f => quote(f.name))
-          if (tableDesc.schema.isEmpty) {
-            columnNames.mkString(", ")
-          } else {
-            columnNames.zip(tableDesc.schema.map(f => quote(f.name))).map {
-              case (name, alias) => s"$name AS $alias"
-            }.mkString(", ")
-          }
+          sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
         }
-
-        val viewText = tableDesc.viewText.get
-        val viewName = quote(tableDesc.identifier.table)
-        s"SELECT $viewOutput FROM ($viewText) $viewName"
-      }
+      new SQLBuilder(logicalPlan).toSQL
+    }
 
     // Validate the view SQL - make sure we can parse it and analyze it.
     // If we cannot analyze the generated query, there is probably a bug in SQL generation.
