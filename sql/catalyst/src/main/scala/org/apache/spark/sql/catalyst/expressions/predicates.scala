@@ -132,8 +132,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
   }
 
   override def children: Seq[Expression] = value +: list
-  lazy val inSetConvertible =
-    children.forall(_.deterministic) && list.forall(_.isInstanceOf[Literal])
+  lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
