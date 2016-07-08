@@ -180,8 +180,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
 /**
  * Helper class for (LogicalPlan) attribute resolution. This class indexes attributes by their
- * case-in-sensitive name, and checks potential candidates using the given Resolver. Both qualified
- * and direct resolution are supported.
+ * case-in-sensitive name, and checks potential candidates using the [[Resolver]] passed to the
+ * resolve(...) function. Both qualified and direct resolution are supported.
  */
 private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Logging {
   private def unique[T](m: Map[T, Seq[Attribute]]): Map[T, Seq[Attribute]] = {
@@ -203,8 +203,12 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
 
   /** Perform attribute resolution given a name and a resolver. */
   def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
-    // Check if the attribute is a match for the given name.
-    def isMatch(name: String, a: Attribute): Boolean = !a.isGenerated && resolver(a.name, name)
+    // Collect matching attributes given a name and a lookup.
+    def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
+      candidates.toSeq.flatMap(_.collect {
+        case a if !a.isGenerated && resolver(a.name, name) => a.withName(name)
+      })
+    }
 
     // Find matches for the given name assuming that the 1st part is a qualifier (i.e. table name,
     // alias, or subquery alias) and the 2nd part is the actual name. This returns a tuple of
@@ -216,9 +220,9 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
     val matches = nameParts match {
       case qualifier +: name +: nestedFields =>
         val key = (qualifier.toLowerCase, name.toLowerCase)
-        val attributes = qualified.get(key).toSeq.flatMap(_.filter { a =>
-          resolver(qualifier, a.qualifier.get) && isMatch(name, a)
-        })
+        val attributes = collectMatches(name, qualified.get(key)).filter { a =>
+          resolver(qualifier, a.qualifier.get)
+        }
         (attributes, nestedFields)
       case all =>
         (Nil, all)
@@ -228,7 +232,7 @@ private[catalyst] class AttributeResolver(attributes: Seq[Attribute]) extends Lo
     val (candidates, nestedFields) = matches match {
       case (Seq(), _) =>
         val name = nameParts.head
-        val attributes = direct.get(name.toLowerCase).toSeq.flatMap(_.filter(isMatch(name, _)))
+        val attributes = collectMatches(name, direct.get(name.toLowerCase))
         (attributes, nameParts.tail)
       case _ => matches
     }
