@@ -1099,6 +1099,34 @@ for details.
 </tr>
 </table>
 
+#### Asynchronous Actions
+Spark provide asynchronous actions to execute two or more actions concurrently, these actions are execute asynchronously without blocking each other. 
+The following table lists some of the asynchronous actions supported by Spark. Refer to the RDD API doc ([Scala](api/scala/index.html#org.apache.spark.rdd.AsyncRDDActions),[Java](api/java/org/apache/spark/rdd/AsyncRDDActions.html))
+
+<table class="table">
+<tr><th>Asynchronous Action</th><th>Meaning</th></tr>
+<tr>
+  <td> <b>collectAsync</b>() </td>
+  <td> Returns a future for retrieving all the elements of the dataset as an array at the driver program. This is usually useful after a filter or other operation that returns a sufficiently small subset of the data. </td>
+</tr>
+<tr>
+  <td> <b>countAsync</b>() </td>
+  <td> Returns a future for counting the number of elements in the RDD. </td>
+</tr>
+<tr>
+  <td> <b>foreachAsync</b>(<i>func</i>) </td>
+  <td> Applies a function f to all elements of this RDD. </td>
+</tr>
+<tr>
+  <td> <b>foreachPartitionAsync</b>(<i>func</i>) </td>
+  <td> Applies a function f to all elements of this RDD. </td>
+</tr>
+<tr>
+  <td> <b>takeAsync</b>(<i>n</i>) </td>
+  <td> Returns a future for retrieving the first num elements of the RDD. </td>
+</tr>
+</table>
+
 ### Shuffle operations
 
 Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's
