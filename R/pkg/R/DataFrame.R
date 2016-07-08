@@ -2617,8 +2617,7 @@ setMethod("describe",
 setMethod("describe",
           signature(x = "SparkDataFrame"),
           function(x) {
-            colList <- as.list(c(columns(x)))
-            sdf <- callJMethod(x@sdf, "describe", colList)
+            sdf <- callJMethod(x@sdf, "describe", list())
             dataFrame(sdf)
           })
 
