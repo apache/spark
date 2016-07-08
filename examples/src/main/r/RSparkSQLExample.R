@@ -76,6 +76,11 @@ head(count(groupBy(df, "age")))
 # $example off:dataframe_operations$
 
 
+# Create a DataFrame from json file
+path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
+peopleDF <- read.json(path)
+# Register this DataFrame as a table.
+createOrReplaceTempView(peopleDF, "table")
 # $example on:sql_query$
 df <- sql("SELECT * FROM table")
 # $example off:sql_query$
