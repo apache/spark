@@ -20,6 +20,8 @@ package org.apache.spark.network.shuffle;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Timer;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -66,6 +68,13 @@ public class ExternalShuffleBlockHandlerSuite {
 
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
+    // Verify register executor request latency metrics
+    Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
+        .getAllMetrics()
+        .getMetrics()
+        .get("registerExecutorRequestLatencyMillis");
+    assertEquals(1, registerExecutorRequestLatencyMillis.getCount());
+    assertEquals(1, ((ExternalShuffleBlockHandler) handler).getTotalShuffleRequests());
   }
 
   @SuppressWarnings("unchecked")
@@ -73,8 +82,8 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testOpenShuffleBlocks() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
-    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
+    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3 * 1024 * 1024]));
+    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7 * 1024 * 1024]));
     when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
     ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
@@ -99,6 +108,20 @@ public class ExternalShuffleBlockHandlerSuite {
     assertEquals(block0Marker, buffers.next());
     assertEquals(block1Marker, buffers.next());
     assertFalse(buffers.hasNext());
+
+    // Verify open block request latency metrics
+    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
+        .getAllMetrics()
+        .getMetrics()
+        .get("openBlockRequestLatencyMillis");
+    assertEquals(1, openBlockRequestLatencyMillis.getCount());
+    // Verify block transfer metrics
+    Meter blockTransferRateBytes = (Meter) ((ExternalShuffleBlockHandler) handler)
+        .getAllMetrics()
+        .getMetrics()
+        .get("blockTransferRateBytes");
+    assertEquals(10, blockTransferRateBytes.getCount());
+    assertEquals(1, ((ExternalShuffleBlockHandler) handler).getTotalShuffleRequests());
   }
 
   @Test

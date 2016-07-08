@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.Pack200;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
@@ -60,9 +61,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   private final OneForOneStreamManager streamManager;
   // Shuffle service metrics setup
   private final ShuffleMetrics metrics;
-  private final Timer timeDelayForOpenBlockRequest;
-  private final Timer timeDelayForRegisterExecutorRequest;
-  private final Meter transferBlockRate;
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
@@ -76,9 +74,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
     this.metrics = new ShuffleMetrics();
-    this.timeDelayForOpenBlockRequest = metrics.timeDelayForOpenBlockRequest;
-    this.timeDelayForRegisterExecutorRequest = metrics.timeDelayForRegisterExecutorRequest;
-    this.transferBlockRate = metrics.transferBlockRate;
     this.streamManager = streamManager;
     this.blockManager = blockManager;
   }
@@ -95,34 +90,40 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
       // Reset transferred block size metrics as zero
-      final Timer.Context responseDelayContext = timeDelayForOpenBlockRequest.time();
-      OpenBlocks msg = (OpenBlocks) msgObj;
-      checkAuth(client, msg.appId);
+      final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
+      try {
+        OpenBlocks msg = (OpenBlocks) msgObj;
+        checkAuth(client, msg.appId);
 
-      List<ManagedBuffer> blocks = Lists.newArrayList();
-      long totalBlockSize = 0;
-      for (String blockId : msg.blockIds) {
-        final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId, blockId);
-        totalBlockSize += block.size();
-        blocks.add(block);
+        List<ManagedBuffer> blocks = Lists.newArrayList();
+        long totalBlockSize = 0;
+        for (String blockId : msg.blockIds) {
+          final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId, blockId);
+          totalBlockSize += block.size();
+          blocks.add(block);
+        }
+        long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
+        logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
+                     streamId,
+                     msg.blockIds.length,
+                     client.getClientId(),
+                     NettyUtils.getRemoteAddress(client.getChannel()));
+        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
+        metrics.blockTransferRateMBytes.mark(totalBlockSize / 1024 / 1024);
+      } finally {
+        responseDelayContext.stop();
       }
-      long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
-      logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
-          streamId,
-          msg.blockIds.length,
-          client.getClientId(),
-          NettyUtils.getRemoteAddress(client.getChannel()));
-      callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
-      transferBlockRate.mark(totalBlockSize / 1024 / 1024);
-      responseDelayContext.stop();
 
     } else if (msgObj instanceof RegisterExecutor) {
-      final Timer.Context responseDelayContext = timeDelayForRegisterExecutorRequest.time();
-      RegisterExecutor msg = (RegisterExecutor) msgObj;
-      checkAuth(client, msg.appId);
-      blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
-      callback.onSuccess(ByteBuffer.wrap(new byte[0]));
-      responseDelayContext.stop();
+      final Timer.Context responseDelayContext = metrics.registerExecutorRequestLatencyMillis.time();
+      try {
+        RegisterExecutor msg = (RegisterExecutor) msgObj;
+        checkAuth(client, msg.appId);
+        blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
+        callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+      } finally {
+        responseDelayContext.stop();
+      }
 
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
@@ -138,7 +139,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   }
 
   public long getTotalShuffleRequests() {
-    return timeDelayForOpenBlockRequest.getCount() + timeDelayForOpenBlockRequest.getCount();
+    return metrics.openBlockRequestLatencyMillis.getCount() + metrics.registerExecutorRequestLatencyMillis.getCount();
   }
 
   @Override
@@ -184,15 +185,18 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
    */
   private class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
-    private final Timer timeDelayForOpenBlockRequest = new Timer();
-    private final Timer timeDelayForRegisterExecutorRequest = new Timer();
-    private final Meter transferBlockRate = new Meter();
+    // Time latency for open block request in ms
+    private final Timer openBlockRequestLatencyMillis = new Timer();
+    // Time latency for executor registration latency in ms
+    private final Timer registerExecutorRequestLatencyMillis = new Timer();
+    // Block transfer rate in mbps
+    private final Meter blockTransferRateMBytes = new Meter();
 
     private ShuffleMetrics() {
       allMetrics = new HashMap<>();
-      allMetrics.put("timeDelayForOpenBlockRequest", timeDelayForOpenBlockRequest);
-      allMetrics.put("timeDelayForRegisterExecutorRequest", timeDelayForRegisterExecutorRequest);
-      allMetrics.put("transferBlockRate", transferBlockRate);
+      allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
+      allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
+      allMetrics.put("blockTransferRateBytes", blockTransferRateMBytes);
     }
 
     @Override
