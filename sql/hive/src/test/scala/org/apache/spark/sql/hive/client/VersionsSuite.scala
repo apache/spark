@@ -249,15 +249,16 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: dropTable") {
+      val versionsWithoutPurge = versions.takeWhile(_ != "0.14")
       // First try with the purge option set. This should fail if the version is < 0.14, in which
       // case we check the version and try without it.
       try {
         client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
           purge = true)
+        assert(!versionsWithoutPurge.contains(version))
       } catch {
         case _: UnsupportedOperationException =>
-          val oldVersions = versions.takeWhile(_ != "0.14")
-          assert(oldVersions.contains(version))
+          assert(versionsWithoutPurge.contains(version))
           client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
             purge = false)
       }
@@ -377,16 +378,16 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: dropPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "3")
-
+      val versionsWithoutPurge = versions.takeWhile(_ != "1.2")
       // Similar to dropTable; try with purge set, and if it fails, make sure we're running
       // with a version that is older than the minimum (1.2 in this case).
       try {
         client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
           purge = true)
+        assert(!versionsWithoutPurge.contains(version))
       } catch {
         case _: UnsupportedOperationException =>
-          val oldVersions = versions.takeWhile(_ != "1.2")
-          assert(oldVersions.contains(version))
+          assert(versionsWithoutPurge.contains(version))
           client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
             purge = false)
       }

@@ -774,33 +774,30 @@ class DDLCommandSuite extends PlanTest {
     val tableName1 = "db.tab"
     val tableName2 = "tab"
 
-    val parsed1 = parser.parsePlan(s"DROP TABLE $tableName1")
-    val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
-    val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
-    val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
-    val parsed5 = parser.parsePlan(s"DROP TABLE $tableName2 PURGE")
+    val parsed = Seq(
+        s"DROP TABLE $tableName1",
+        s"DROP TABLE IF EXISTS $tableName1",
+        s"DROP TABLE $tableName2",
+        s"DROP TABLE IF EXISTS $tableName2",
+        s"DROP TABLE $tableName2 PURGE",
+        s"DROP TABLE IF EXISTS $tableName2 PURGE"
+      ).map(parser.parsePlan)
 
-    val expected1 =
+    val expected = Seq(
       DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false,
-        purge = false)
-    val expected2 =
+        purge = false),
       DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false,
-        purge = false)
-    val expected3 =
+        purge = false),
       DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
-        purge = false)
-    val expected4 =
+        purge = false),
       DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
-        purge = false)
-    val expected5 =
+        purge = false),
       DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
-        purge = true)
+        purge = true),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
+        purge = true))
 
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
+    parsed.zip(expected).foreach { case (p, e) => comparePlans(p, e) }
   }
 
   test("drop view") {
