@@ -77,8 +77,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
+        regexp_replace($"a", $"b", $"c"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
+        Row("num-num", "400-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,
@@ -361,5 +363,25 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df2.filter("b>0").selectExpr("format_number(a, b)"),
       Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
+  }
+
+  test("string sentences function") {
+    val df = Seq(("Hi there! The price was $1,234.56.... But, not now.", "en", "US"))
+      .toDF("str", "language", "country")
+
+    checkAnswer(
+      df.selectExpr("sentences(str, language, country)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    // Type coercion
+    checkAnswer(
+      df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    // Argument number exception
+    val m = intercept[AnalysisException] {
+      df.selectExpr("sentences()")
+    }.getMessage
+    assert(m.contains("Invalid number of arguments for function sentences"))
   }
 }

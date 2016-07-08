@@ -213,15 +213,35 @@ test_that("read csv as DataFrame", {
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
                    "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt")
+                   "2015,Chevy,Volt",
+                   "NA,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
-  # default "header" is false
-  df <- read.df(csvPath, "csv", header = "true")
-  expect_equal(count(df), 3)
+  # default "header" is false, inferSchema to handle "year" as "int"
+  df <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expect_equal(count(df), 4)
   expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
-  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
-               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
+  expect_equal(sort(unlist(collect(where(df, df$year == 2015)))),
+               sort(unlist(list(year = 2015, make = "Chevy", model = "Volt"))))
+
+  # since "year" is "int", let's skip the NA values
+  withoutna <- na.omit(df, how = "any", cols = "year")
+  expect_equal(count(withoutna), 3)
+
+  unlink(csvPath)
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                   "1997,Ford,E350,\"Go get one now they are going fast\",",
+                   "2015,Chevy,Volt",
+                   "Empty,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.string = "Empty")
+  expect_equal(count(df2), 4)
+  withoutna2 <- na.omit(df2, how = "any", cols = "year")
+  expect_equal(count(withoutna2), 3)
+  expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
   unlink(csvPath)
 })
@@ -1804,12 +1824,16 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[2, "age"], "24.5")
   expect_equal(collect(stats)[3, "age"], "7.7781745930520225")
   stats <- describe(df)
-  expect_equal(collect(stats)[4, "name"], "Andy")
+  expect_equal(collect(stats)[4, "name"], NULL)
   expect_equal(collect(stats)[5, "age"], "30")
 
   stats2 <- summary(df)
-  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[4, "name"], NULL)
   expect_equal(collect(stats2)[5, "age"], "30")
+
+  # SPARK-16425: SparkR summary() fails on column of type logical
+  df <- withColumn(df, "boolean", df$age == 30)
+  summary(df)
 
   # Test base::summary is working
   expect_equal(length(summary(attenu, digits = 4)), 35)
