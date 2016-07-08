@@ -74,28 +74,28 @@ object RDDConversions {
   }
 }
 
-private[sql] object ExistingRDD {
+private[sql] object ExternalRDD {
 
   def apply[T: Encoder](rdd: RDD[T])(session: SparkSession): LogicalPlan = {
-    val exisitingRdd = ExistingRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
-    CatalystSerde.serialize[T](exisitingRdd)
+    val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
+    CatalystSerde.serialize[T](externalRdd)
   }
 }
 
 /** Logical plan node for scanning data from an RDD. */
-private[sql] case class ExistingRDD[T](
+private[sql] case class ExternalRDD[T](
     outputObjAttr: Attribute,
     rdd: RDD[T])(session: SparkSession)
   extends LeafNode with ObjectProducer with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
-  override def newInstance(): ExistingRDD.this.type =
-    ExistingRDD(outputObjAttr.newInstance(), rdd)(session).asInstanceOf[this.type]
+  override def newInstance(): ExternalRDD.this.type =
+    ExternalRDD(outputObjAttr.newInstance(), rdd)(session).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan): Boolean = {
     plan.canonicalized match {
-      case ExistingRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case ExternalRDD(_, otherRDD) => rdd.id == otherRDD.id
       case _ => false
     }
   }
@@ -110,7 +110,7 @@ private[sql] case class ExistingRDD[T](
 }
 
 /** Physical plan node for scanning data from an RDD. */
-private[sql] case class ExistingRDDScanExec[T](
+private[sql] case class ExternalRDDScanExec[T](
     outputObjAttr: Attribute,
     rdd: RDD[T]) extends LeafExecNode with ObjectProducerExec {
 
