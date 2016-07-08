@@ -738,6 +738,7 @@ object ApplicationMaster extends Logging {
 
     // Load the properties file with the Spark configuration and set entries as system properties,
     // so that user code run inside the AM also has access to them.
+    // Note: we must do this before SparkHadoopUtil instantiated
     if (amArgs.propertiesFile != null) {
       Utils.getPropertiesFromFile(amArgs.propertiesFile).foreach { case (k, v) =>
         sys.props(k) = v
