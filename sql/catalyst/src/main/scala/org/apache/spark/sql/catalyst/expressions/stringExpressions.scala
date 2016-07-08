@@ -732,16 +732,16 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  private def getExtractPartFunc(partToExtract: UTF8String): (URL) => String = {
+  private def getExtractPartFunc(partToExtract: UTF8String): URL => String = {
     partToExtract match {
-      case HOST => (url: URL) => url.getHost
-      case PATH => (url: URL) => url.getPath
-      case QUERY => (url: URL) => url.getQuery
-      case REF => (url: URL) => url.getRef
-      case PROTOCOL => (url: URL) => url.getProtocol
-      case FILE => (url: URL) => url.getFile
-      case AUTHORITY => (url: URL) => url.getAuthority
-      case USERINFO => (url: URL) => url.getUserInfo
+      case HOST => _.getHost
+      case PATH => _.getPath
+      case QUERY => _.getQuery
+      case REF => _.getRef
+      case PROTOCOL => _.getProtocol
+      case FILE => _.getFile
+      case AUTHORITY => _.getAuthority
+      case USERINFO => _.getUserInfo
       case _ => (url: URL) => null
     }
   }
