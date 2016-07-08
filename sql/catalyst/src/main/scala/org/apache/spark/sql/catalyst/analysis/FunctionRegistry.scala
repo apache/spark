@@ -288,6 +288,7 @@ object FunctionRegistry {
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
+    expression[ParseUrl]("parse_url"),
     expression[FormatString]("printf"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
