@@ -1895,8 +1895,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
-   * If no columns are given, this function computes statistics for all numerical columns.
+   * Computes statistics for numeric/string columns, including count, mean, stddev, min, and max.
+   * If no columns are given, this function computes statistics for all numeric/string columns.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting Dataset. If you want to
