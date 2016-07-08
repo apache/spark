@@ -21,10 +21,7 @@ import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -268,8 +265,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(expectedSchema === jsonDF.schema)
 
     jsonDF.createOrReplaceTempView("jsonTable")
-
-    val aa = jsonDF.collect()
 
     checkAnswer(
       sql("select * from jsonTable"),
