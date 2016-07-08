@@ -41,12 +41,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   }
 
   protected def checkEvaluation(
-      originalExpr: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val expression = originalExpr match {
-      case replaceable: RuntimeReplaceable => replaceable.replaced
-      case _ => originalExpr
-    }
-
+      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
