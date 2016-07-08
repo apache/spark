@@ -673,13 +673,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("non-foldable expressions in LIMIT") {
-    var e = intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT key > 3")
     }.getMessage
     assert(e.contains("The argument to the LIMIT clause must evaluate to a constant value. " +
       "Limit:(testdata.`key` > 3)"))
+  }
 
-    e = intercept[AnalysisException] {
+  test("Limit: unable to evaluate and cast expressions in limit clauses to Int") {
+    val e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT true")
     }.getMessage
     assert(e.contains("number_rows in limit clause cannot be cast to integer:true"))
