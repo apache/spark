@@ -352,8 +352,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             InputStream partitionInputStream = null;
             boolean innerThrewException = true;
             try {
-               partitionInputStream =
-                       new LimitedInputStream(spillInputStreams[i], partitionLengthInSpill, false);
+              partitionInputStream =
+                  new LimitedInputStream(spillInputStreams[i], partitionLengthInSpill, false);
               if (compressionCodec != null) {
                 partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
               }

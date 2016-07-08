@@ -118,6 +118,7 @@ public final class LimitedInputStream extends FilterInputStream {
     left -= skipped;
     return skipped;
   }
+
   @Override
   public void close() throws IOException {
     if (closeWrappedStream) {
