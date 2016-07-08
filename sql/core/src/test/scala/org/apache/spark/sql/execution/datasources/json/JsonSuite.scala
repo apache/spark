@@ -64,9 +64,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
-        parser.nextToken()
-        JacksonParser.convertRootField(factory, parser, dataType)
+      val dummyOption =
+        new JSONOptions(Map.empty[String, String], new SQLConf())
+      val dummySchema = StructType(Seq.empty)
+      val parser = new JacksonParser(dummySchema, dummyOption)
+
+      Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
+        jsonParser.nextToken()
+        val converter = parser.makeRootConverter(dataType)
+        converter.apply(jsonParser)
       }
     }
 
@@ -262,6 +268,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(expectedSchema === jsonDF.schema)
 
     jsonDF.createOrReplaceTempView("jsonTable")
+
+    val aa = jsonDF.collect()
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -1336,7 +1344,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema.infer(empty, "", new JSONOptions(Map()))
+    val options = Map("columnNameOfCorruptRecord" -> "")
+    val parsedOptions =
+      new JSONOptions(options, new SQLConf())
+    val emptySchema = InferSchema.infer(empty, parsedOptions)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1360,7 +1371,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema.infer(emptyRecords, "", new JSONOptions(Map()))
+    val options = Map("columnNameOfCorruptRecord" -> "")
+    val parsedOptions =
+      new JSONOptions(options, new SQLConf())
+    val emptySchema = InferSchema.infer(emptyRecords, parsedOptions)
     assert(StructType(Seq()) === emptySchema)
   }
 

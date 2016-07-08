@@ -37,11 +37,11 @@ private[sql] object InferSchema {
    */
   def infer(
       json: RDD[String],
-      columnNameOfCorruptRecords: String,
       configOptions: JSONOptions): StructType = {
     require(configOptions.samplingRatio > 0,
       s"samplingRatio (${configOptions.samplingRatio}) should be greater than 0")
     val shouldHandleCorruptRecord = configOptions.permissive
+    val columnNameOfCorruptRecords = configOptions.columnNameOfCorruptRecord
     val schemaData = if (configOptions.samplingRatio > 0.99) {
       json
     } else {

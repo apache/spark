@@ -309,26 +309,23 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
-    val columnNameOfCorruptRecord =
-      parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val conf = sparkSession.sessionState.conf
+    val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap, conf)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(
         jsonRDD,
-        columnNameOfCorruptRecord,
         parsedOptions)
+    }
+    val parsed = jsonRDD.mapPartitions { iter =>
+      val parser = new JacksonParser(schema, parsedOptions)
+      iter.flatMap { record =>
+        parser.parse(record)
+      }
     }
 
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(
-        schema.toAttributes,
-        JacksonParser.parse(
-          jsonRDD,
-          schema,
-          columnNameOfCorruptRecord,
-          parsedOptions))(sparkSession))
+      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
   }
 
   /**

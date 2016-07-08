@@ -49,10 +49,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (files.isEmpty) {
       None
     } else {
-      val parsedOptions: JSONOptions = new JSONOptions(options)
-      val columnNameOfCorruptRecord =
-        parsedOptions.columnNameOfCorruptRecord
-          .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      val parsedOptions: JSONOptions =
+        new JSONOptions(options, sparkSession.sessionState.conf)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
@@ -60,7 +58,6 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
       val jsonSchema = InferSchema.infer(
         createBaseRdd(sparkSession, jsonFiles),
-        columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
 
@@ -74,7 +71,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions: JSONOptions = new JSONOptions(options)
+    val parsedOptions: JSONOptions =
+      new JSONOptions(options, sparkSession.sessionState.conf)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
@@ -101,18 +99,16 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
-      .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    val parsedOptions: JSONOptions =
+      new JSONOptions(options, sparkSession.sessionState.conf)
 
     (file: PartitionedFile) => {
       val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
+      val parser = new JacksonParser(requiredSchema, parsedOptions)
 
-      JacksonParser.parseJson(
-        lines,
-        requiredSchema,
-        columnNameOfCorruptRecord,
-        parsedOptions)
+      lines.flatMap { record =>
+        parser.parse(record)
+      }
     }
   }
 

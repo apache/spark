@@ -21,6 +21,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the JSON data source.
@@ -28,7 +29,8 @@ import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient private val parameters: Map[String, String])
+    @transient private val parameters: Map[String, String],
+    @transient private val sqlConf: SQLConf)
   extends Logging with Serializable  {
 
   val samplingRatio =
@@ -51,7 +53,8 @@ private[sql] class JSONOptions(
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+  val columnNameOfCorruptRecord =
+    parameters.getOrElse("columnNameOfCorruptRecord", sqlConf.columnNameOfCorruptRecord)
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {
