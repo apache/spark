@@ -309,6 +309,7 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
     expression[XPathDouble]("xpath_double"),
     expression[XPathDouble]("xpath_number"),

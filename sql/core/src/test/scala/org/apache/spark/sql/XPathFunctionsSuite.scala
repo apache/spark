@@ -26,26 +26,37 @@ class XPathFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("xpath_boolean") {
-    val df = Seq("<a><b>b</b></a>" -> "a/b").toDF("xml", "path")
-    checkAnswer(df.selectExpr("xpath_boolean(xml, path)"), Row(true))
+    val df = Seq("<a><b>b</b></a>").toDF("xml")
+    checkAnswer(df.selectExpr("xpath_boolean(xml, 'a/b')"), Row(true))
   }
 
   test("xpath_short, xpath_int, xpath_long") {
-    val df = Seq("<a><b>1</b><b>2</b></a>" -> "sum(a/b)").toDF("xml", "path")
+    val df = Seq("<a><b>1</b><b>2</b></a>").toDF("xml")
     checkAnswer(
-      df.selectExpr("xpath_short(xml, path)", "xpath_int(xml, path)", "xpath_long(xml, path)"),
+      df.selectExpr(
+        "xpath_short(xml, 'sum(a/b)')",
+        "xpath_int(xml, 'sum(a/b)')",
+        "xpath_long(xml, 'sum(a/b)')"),
       Row(3.toShort, 3, 3L))
   }
 
   test("xpath_float, xpath_double, xpath_number") {
-    val df = Seq("<a><b>1.0</b><b>2.1</b></a>" -> "sum(a/b)").toDF("xml", "path")
+    val df = Seq("<a><b>1.0</b><b>2.1</b></a>").toDF("xml")
     checkAnswer(
-      df.selectExpr("xpath_float(xml, path)", "xpath_double(xml, path)", "xpath_number(xml, path)"),
+      df.selectExpr(
+        "xpath_float(xml, 'sum(a/b)')",
+        "xpath_double(xml, 'sum(a/b)')",
+        "xpath_number(xml, 'sum(a/b)')"),
       Row(3.1.toFloat, 3.1, 3.1))
   }
 
   test("xpath_string") {
-    val df = Seq("<a><b>b</b><c>cc</c></a>" -> "a/c").toDF("xml", "path")
-    checkAnswer(df.selectExpr("xpath_string(xml, path)"), Row("cc"))
+    val df = Seq("<a><b>b</b><c>cc</c></a>").toDF("xml")
+    checkAnswer(df.selectExpr("xpath_string(xml, 'a/c')"), Row("cc"))
+  }
+
+  test("xpath") {
+    val df = Seq("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>").toDF("xml")
+    checkAnswer(df.selectExpr("xpath(xml, 'a/*/text()')"), Row(Seq("b1", "b2", "b3", "c1", "c2")))
   }
 }
