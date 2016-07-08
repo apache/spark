@@ -21,11 +21,14 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Base class for xpath_boolean, xpath_double, xpath_int, etc.
+ *
+ * This is not the world's most efficient implementation due to type conversion, but works.
  */
 abstract class XPathExtract extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
   override def left: Expression = xml
@@ -142,5 +145,30 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   override def nullSafeEval(xml: Any, path: Any): Any = {
     val ret = xpathUtil.evalString(xml.asInstanceOf[UTF8String].toString, pathString)
     UTF8String.fromString(ret)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(xml, xpath) - Returns a string array of values within xml nodes that match the xpath expression",
+  extended = "> SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');\n['b1','b2','b3']")
+// scalastyle:on line.size.limit
+case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
+  override def prettyName: String = "xpath"
+  override def dataType: DataType = ArrayType(StringType, containsNull = false)
+
+  override def nullSafeEval(xml: Any, path: Any): Any = {
+    val nodeList = xpathUtil.evalNodeList(xml.asInstanceOf[UTF8String].toString, pathString)
+    if (nodeList ne null) {
+      val ret = new Array[UTF8String](nodeList.getLength)
+      var i = 0
+      while (i < nodeList.getLength) {
+        ret(i) = UTF8String.fromString(nodeList.item(i).getNodeValue)
+        i += 1
+      }
+      new GenericArrayData(ret)
+    } else {
+      null
+    }
   }
 }

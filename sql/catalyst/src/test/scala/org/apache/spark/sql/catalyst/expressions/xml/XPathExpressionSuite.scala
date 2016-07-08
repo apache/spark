@@ -167,6 +167,25 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testNullAndErrorBehavior(testExpr)
   }
 
+  test("xpath") {
+    def testExpr[T](xml: String, path: String, expected: Seq[String]): Unit = {
+      checkEvaluation(
+        XPathList(Literal.create(xml, StringType), Literal.create(path, StringType)),
+        expected)
+    }
+
+    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/text()", Seq.empty[String])
+    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/*/text()",
+      Seq("b1", "b2", "b3", "c1", "c2"))
+    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b/text()",
+      Seq("b1", "b2", "b3"))
+    testExpr("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/c/text()", Seq("c1", "c2"))
+    testExpr("<a><b class='bb'>b1</b><b>b2</b><b>b3</b><c class='bb'>c1</c><c>c2</c></a>",
+      "a/*[@class='bb']/text()", Seq("b1", "c1"))
+
+    testNullAndErrorBehavior(testExpr)
+  }
+
   test("accept only literal path") {
     def testExpr(exprCtor: (Expression, Expression) => Expression): Unit = {
       // Validate that literal (technically this is foldable) paths are supported
