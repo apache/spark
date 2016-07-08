@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import org.apache.spark.broadcast.Broadcast
+
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -82,6 +84,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the regularization parameter.
    * Default is 0.0.
+   *
    * @group setParam
    */
   @Since("1.3.0")
@@ -91,6 +94,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set if we should fit the intercept
    * Default is true.
+   *
    * @group setParam
    */
   @Since("1.5.0")
@@ -104,6 +108,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * the models should be always converged to the same solution when no regularization
    * is applied. In R's GLMNET package, the default behavior is true as well.
    * Default is true.
+   *
    * @group setParam
    */
   @Since("1.5.0")
@@ -115,6 +120,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * For 0 < alpha < 1, the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
+   *
    * @group setParam
    */
   @Since("1.4.0")
@@ -124,6 +130,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the maximum number of iterations.
    * Default is 100.
+   *
    * @group setParam
    */
   @Since("1.3.0")
@@ -134,6 +141,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
+   *
    * @group setParam
    */
   @Since("1.4.0")
@@ -144,6 +152,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * Whether to over-/under-sample training instances according to the given weights in weightCol.
    * If not set or empty, all instances are treated equally (weight 1.0).
    * Default is not set, so all instances have weight one.
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -157,6 +166,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * solution to the linear regression problem.
    * The default value is "auto" which means that the solver algorithm is
    * selected automatically.
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -419,6 +429,7 @@ class LinearRegressionModel private[ml] (
 
   /**
    * Evaluates the model on a test dataset.
+   *
    * @param dataset Test dataset to evaluate model on.
    */
   @Since("2.0.0")
@@ -544,6 +555,7 @@ class LinearRegressionTrainingSummary private[regression] (
    * Number of training iterations until termination
    *
    * This value is only available when using the "l-bfgs" solver.
+   *
    * @see [[LinearRegression.solver]]
    */
   @Since("1.5.0")
@@ -862,17 +874,49 @@ class LinearRegressionSummary private[regression] (
  *    $$
  * </blockquote></p>
  *
+ * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param labelStd The standard deviation value of the label.
+ * @param labelMean The mean value of the label.
+ * @param fitIntercept Whether to fit an intercept term.
+ * @param bcFeaturesStd The broadcast standard deviation values of the features.
+ * @param bcFeaturesMean The broadcast mean values of the features.
  */
 private class LeastSquaresAggregator(
-    private val numFeatures: Int,
-    labelStd: Double) extends Serializable {
+    bcCoefficients: Broadcast[Vector],
+    labelStd: Double,
+    labelMean: Double,
+    fitIntercept: Boolean,
+    bcFeaturesStd: Broadcast[Array[Double]],
+    bcFeaturesMean: Broadcast[Array[Double]]) extends Serializable {
 
   private var totalCnt: Long = 0L
   private var weightSum: Double = 0.0
   private var lossSum = 0.0
 
-  private val gradientSumArray = Array.ofDim[Double](numFeatures)
+  private val dim = bcCoefficients.value.size
+  @transient private lazy val featuresStd = bcFeaturesStd.value
+  @transient private lazy val coefAndOffset = {
+    val coefficientsArray = bcCoefficients.value.toArray.clone()
+    val featuresMean = bcFeaturesMean.value
+    var sum = 0.0
+    var i = 0
+    val len = coefficientsArray.length
+    while (i < len) {
+      if (featuresStd(i) != 0.0) {
+        coefficientsArray(i) /=  featuresStd(i)
+        sum += coefficientsArray(i) * featuresMean(i)
+      } else {
+        coefficientsArray(i) = 0.0
+      }
+      i += 1
+    }
+    val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
+    (Vectors.dense(coefficientsArray), offset)
+  }
+  @transient private lazy val effectiveCoefficientsVector = coefAndOffset._1
+  @transient private lazy val offset = coefAndOffset._2
+
+  private val gradientSumArray = Array.ofDim[Double](dim)
 
   /**
    * Add a new training instance to this LeastSquaresAggregator, and update the loss and gradient
@@ -881,14 +925,11 @@ private class LeastSquaresAggregator(
    * @param instance The instance of data point to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(
-      instance: Instance,
-      effectiveCoefficientsVector: Vector,
-      offset: Double,
-      featuresStd: Array[Double]): this.type = {
+  def add(instance: Instance): this.type = {
+
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new sample." +
-        s" Expecting $numFeatures but got ${features.size}.")
+      require(dim == features.size, s"Dimensions mismatch when adding new sample." +
+        s" Expecting $dim but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
@@ -897,9 +938,10 @@ private class LeastSquaresAggregator(
 
       if (diff != 0) {
         val localGradientSumArray = gradientSumArray
+        val localFeaturesStd = featuresStd
         features.foreachActive { (index, value) =>
-          if (featuresStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += weight * diff * value / featuresStd(index)
+          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+            localGradientSumArray(index) += weight * diff * value / localFeaturesStd(index)
           }
         }
         lossSum += weight * diff * diff / 2.0
@@ -920,8 +962,8 @@ private class LeastSquaresAggregator(
    * @return This LeastSquaresAggregator object.
    */
   def merge(other: LeastSquaresAggregator): this.type = {
-    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
-      s"LeastSquaresAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
+    require(dim == other.dim, s"Dimensions mismatch when merging with another " +
+      s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
 
     if (other.weightSum != 0) {
       totalCnt += other.totalCnt
@@ -931,7 +973,7 @@ private class LeastSquaresAggregator(
       var i = 0
       val localThisGradientSumArray = this.gradientSumArray
       val localOtherGradientSumArray = other.gradientSumArray
-      while (i < numFeatures) {
+      while (i < dim) {
         localThisGradientSumArray(i) += localOtherGradientSumArray(i)
         i += 1
       }
@@ -973,35 +1015,18 @@ private class LeastSquaresCostFun(
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
-    val localFeaturesStd = featuresStd
-
-    val (effectiveCoefficientsArray: Array[Double], offset: Double) = {
-      val coefficientsArray = coefficients.toArray.clone()
-      var sum = 0.0
-      var i = 0
-      val len = coefficientsArray.length
-      while (i < len) {
-        if (featuresStd(i) != 0.0) {
-          coefficientsArray(i) /=  featuresStd(i)
-          sum += coefficientsArray(i) * featuresMean(i)
-        } else {
-          coefficientsArray(i) = 0.0
-        }
-        i += 1
-      }
-      val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
-      (coefficientsArray, offset)
-    }
-
-    val effectiveCoefficientsVector = Vectors.dense(effectiveCoefficientsArray)
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val bcFeaturesMean = instances.context.broadcast(featuresMean)
+    val bcCoeffs = instances.context.broadcast(coeffs)
 
     val leastSquaresAggregator = {
       val seqOp = (c: LeastSquaresAggregator, instance: Instance) =>
-        c.add(instance, effectiveCoefficientsVector, offset, localFeaturesStd)
+        c.add(instance)
       val combOp = (c1: LeastSquaresAggregator, c2: LeastSquaresAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LeastSquaresAggregator(coeffs.size, labelStd))(seqOp, combOp)
+        new LeastSquaresAggregator(bcCoeffs, labelStd, labelMean,
+          fitIntercept, bcFeaturesStd, bcFeaturesMean))(seqOp, combOp)
     }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
