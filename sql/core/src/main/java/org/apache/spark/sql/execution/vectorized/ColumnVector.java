@@ -181,9 +181,7 @@ public abstract class ColumnVector implements AutoCloseable {
     public boolean isNullAt(int ordinal) { return data.isNullAt(offset + ordinal); }
 
     @Override
-    public boolean getBoolean(int ordinal) {
-      throw new UnsupportedOperationException();
-    }
+    public boolean getBoolean(int ordinal) { return data.getBoolean(offset + ordinal); }
 
     @Override
     public byte getByte(int ordinal) { return data.getByte(offset + ordinal); }
