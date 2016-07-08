@@ -90,11 +90,8 @@ private[sql] class HiveSessionCatalog(
   val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    super.refreshTable(name)
     metastoreCatalog.refreshTable(name)
-  }
-
-  override def invalidateTable(name: TableIdentifier): Unit = {
-    metastoreCatalog.invalidateTable(name)
   }
 
   def invalidateCache(): Unit = {
@@ -238,13 +235,9 @@ private[sql] class HiveSessionCatalog(
   // parse_url_tuple, posexplode, reflect2,
   // str_to_map, windowingtablefunction.
   private val hiveFunctions = Seq(
-    "elt", "hash", "java_method", "histogram_numeric",
-    "map_keys", "map_values",
-    "parse_url", "percentile", "percentile_approx", "reflect", "sentences", "stack", "str_to_map",
+    "hash", "java_method", "histogram_numeric",
+    "parse_url", "percentile", "percentile_approx", "reflect", "str_to_map",
     "xpath", "xpath_double", "xpath_float", "xpath_int", "xpath_long",
-    "xpath_number", "xpath_short", "xpath_string",
-
-    // table generating function
-    "inline", "posexplode"
+    "xpath_number", "xpath_short", "xpath_string"
   )
 }

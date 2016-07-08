@@ -62,7 +62,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     "group.id" -> s"test-consumer-${Random.nextInt}-${System.currentTimeMillis}"
   ).asJava
 
-  private val preferredHosts = PreferConsistent
+  private val preferredHosts = LocationStrategies.PreferConsistent
 
   test("basic usage") {
     val topic = s"topicbasic-${Random.nextInt}-${System.currentTimeMillis}"

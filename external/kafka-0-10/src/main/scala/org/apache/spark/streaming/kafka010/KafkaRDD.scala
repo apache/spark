@@ -36,7 +36,7 @@ import org.apache.spark.storage.StorageLevel
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
  * @param kafkaParams Kafka
- * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+ * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
  * configuration parameters</a>. Requires "bootstrap.servers" to be set
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
@@ -66,7 +66,7 @@ private[spark] class KafkaRDD[K, V](
       " must be set to false for executor kafka params, else offsets may commit before processing")
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
-  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms", 256)
+  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms", 512)
   private val cacheInitialCapacity =
     conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
   private val cacheMaxCapacity =

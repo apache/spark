@@ -75,6 +75,29 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("elt") {
+    def testElt(result: String, n: java.lang.Integer, args: String*): Unit = {
+      checkEvaluation(
+        Elt(Literal.create(n, IntegerType) +: args.map(Literal.create(_, StringType))),
+        result)
+    }
+
+    testElt("hello", 1, "hello", "world")
+    testElt(null, 1, null, "world")
+    testElt(null, null, "hello", "world")
+
+    // Invalid ranages
+    testElt(null, 3, "hello", "world")
+    testElt(null, 0, "hello", "world")
+    testElt(null, -1, "hello", "world")
+
+    // type checking
+    assert(Elt(Seq.empty).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
+    assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
+    assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+  }
+
   test("StringComparison") {
     val row = create_row("abc", null)
     val c1 = 'a.string.at(0)
@@ -701,5 +724,28 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FindInSet(Literal("ab"), Literal("abc,b,ab,c,def")), 3)
     checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
     checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
+  }
+
+  test("Sentences") {
+    val nullString = Literal.create(null, StringType)
+    checkEvaluation(Sentences(nullString, nullString, nullString), null)
+    checkEvaluation(Sentences(nullString, nullString), null)
+    checkEvaluation(Sentences(nullString), null)
+    checkEvaluation(Sentences(Literal.create(null, NullType)), null)
+    checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
+    checkEvaluation(Sentences("", nullString), Seq.empty)
+    checkEvaluation(Sentences(""), Seq.empty)
+
+    val answer = Seq(
+      Seq("Hi", "there"),
+      Seq("The", "price", "was"),
+      Seq("But", "not", "now"))
+
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now."), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en"), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
+      answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXX", "YYY"),
+      answer)
   }
 }

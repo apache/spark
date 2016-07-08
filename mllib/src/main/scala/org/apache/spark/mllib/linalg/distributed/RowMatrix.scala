@@ -537,7 +537,7 @@ class RowMatrix @Since("1.0.0") (
   def tallSkinnyQR(computeQ: Boolean = false): QRDecomposition[RowMatrix, Matrix] = {
     val col = numCols().toInt
     // split rows horizontally into smaller matrices, and compute QR for each of them
-    val blockQRs = rows.glom().map { partRows =>
+    val blockQRs = rows.retag(classOf[Vector]).glom().filter(_.length != 0).map { partRows =>
       val bdm = BDM.zeros[Double](partRows.length, col)
       var i = 0
       partRows.foreach { row =>
@@ -548,10 +548,11 @@ class RowMatrix @Since("1.0.0") (
     }
 
     // combine the R part from previous results vertically into a tall matrix
-    val combinedR = blockQRs.treeReduce{ (r1, r2) =>
+    val combinedR = blockQRs.treeReduce { (r1, r2) =>
       val stackedR = BDM.vertcat(r1, r2)
       breeze.linalg.qr.reduced(stackedR).r
     }
+
     val finalR = Matrices.fromBreeze(combinedR.toDenseMatrix)
     val finalQ = if (computeQ) {
       try {

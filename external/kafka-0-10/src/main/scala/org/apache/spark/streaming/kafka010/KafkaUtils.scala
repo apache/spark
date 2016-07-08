@@ -34,7 +34,7 @@ import org.apache.spark.streaming.dstream._
 
 /**
  * :: Experimental ::
- * Companion object for constructing Kafka streams and RDDs
+ * object for constructing Kafka streams and RDDs
  */
 @Experimental
 object KafkaUtils extends Logging {
@@ -44,12 +44,12 @@ object KafkaUtils extends Logging {
    * Starting and ending offsets are specified in advance,
    * so that you can control exactly-once semantics.
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
-   *   see [[LocationStrategy]] for more details.
+   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   *   see [[LocationStrategies]] for more details.
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -83,12 +83,12 @@ object KafkaUtils extends Logging {
    * @param keyClass Class of the keys in the Kafka records
    * @param valueClass Class of the values in the Kafka records
    * @param kafkaParams Kafka
-   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
    * configuration parameters</a>. Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
-   *   see [[LocationStrategy]] for more details.
+   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   *   see [[LocationStrategies]] for more details.
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -110,10 +110,10 @@ object KafkaUtils extends Logging {
    * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
    *  of messages
    * per second that each '''partition''' will accept.
-   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
-   *   see [[LocationStrategy]] for more details.
-   * @param consumerStrategy In most cases, pass in [[Subscribe]],
-   *   see [[ConsumerStrategy]] for more details
+   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   *   see [[LocationStrategies]] for more details.
+   * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
+   *   see [[ConsumerStrategies]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -132,10 +132,10 @@ object KafkaUtils extends Logging {
    * each given Kafka topic/partition corresponds to an RDD partition.
    * @param keyClass Class of the keys in the Kafka records
    * @param valueClass Class of the values in the Kafka records
-   * @param locationStrategy In most cases, pass in [[PreferConsistent]],
-   *   see [[LocationStrategy]] for more details.
-   * @param consumerStrategy In most cases, pass in [[Subscribe]],
-   *   see [[ConsumerStrategy]] for more details
+   * @param locationStrategy In most cases, pass in LocationStrategies.preferConsistent,
+   *   see [[LocationStrategies]] for more details.
+   * @param consumerStrategy In most cases, pass in ConsumerStrategies.subscribe,
+   *   see [[ConsumerStrategies]] for more details
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
    */
@@ -161,7 +161,11 @@ object KafkaUtils extends Logging {
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
     // driver and executor should be in different consumer groups
-    val groupId = "spark-executor-" + kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
+    val originalGroupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
+    if (null == originalGroupId) {
+      logError(s"${ConsumerConfig.GROUP_ID_CONFIG} is null, you should probably set it")
+    }
+    val groupId = "spark-executor-" + originalGroupId
     logWarning(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
 

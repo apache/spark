@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -161,6 +164,46 @@ case class ConcatWs(children: Seq[Expression])
     }
   }
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(n, str1, str2, ...) - returns the n-th string, e.g. returns str2 when n is 2",
+  extended = "> SELECT _FUNC_(1, 'scala', 'java') FROM src LIMIT 1;\n" + "'scala'")
+case class Elt(children: Seq[Expression])
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
+  private lazy val indexExpr = children.head
+  private lazy val stringExprs = children.tail.toArray
+
+  /** This expression is always nullable because it returns null if index is out of range. */
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = StringType
+
+  override def inputTypes: Seq[DataType] = IntegerType +: Seq.fill(children.size - 1)(StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.size < 2) {
+      TypeCheckResult.TypeCheckFailure("elt function requires at least two arguments")
+    } else {
+      super[ImplicitCastInputTypes].checkInputDataTypes()
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val indexObj = indexExpr.eval(input)
+    if (indexObj == null) {
+      null
+    } else {
+      val index = indexObj.asInstanceOf[Int]
+      if (index <= 0 || index > stringExprs.length) {
+        null
+      } else {
+        stringExprs(index - 1).eval(input)
+      }
+    }
+  }
+}
+
 
 trait String2StringExpression extends ImplicitCastInputTypes {
   self: UnaryExpression =>
@@ -1146,4 +1189,66 @@ case class FormatNumber(x: Expression, d: Expression)
   }
 
   override def prettyName: String = "format_number"
+}
+
+/**
+ * Splits a string into arrays of sentences, where each sentence is an array of words.
+ * The 'lang' and 'country' arguments are optional, and if omitted, the default locale is used.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str[, lang, country]) - Splits str into an array of array of words.",
+  extended = "> SELECT _FUNC_('Hi there! Good morning.');\n  [['Hi','there'], ['Good','morning']]")
+case class Sentences(
+    str: Expression,
+    language: Expression = Literal(""),
+    country: Expression = Literal(""))
+  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+
+  def this(str: Expression) = this(str, Literal(""), Literal(""))
+  def this(str: Expression, language: Expression) = this(str, language, Literal(""))
+
+  override def nullable: Boolean = true
+  override def dataType: DataType =
+    ArrayType(ArrayType(StringType, containsNull = false), containsNull = false)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = str :: language :: country :: Nil
+
+  override def eval(input: InternalRow): Any = {
+    val string = str.eval(input)
+    if (string == null) {
+      null
+    } else {
+      val languageStr = language.eval(input).asInstanceOf[UTF8String]
+      val countryStr = country.eval(input).asInstanceOf[UTF8String]
+      val locale = if (languageStr != null && countryStr != null) {
+        new Locale(languageStr.toString, countryStr.toString)
+      } else {
+        Locale.getDefault
+      }
+      getSentences(string.asInstanceOf[UTF8String].toString, locale)
+    }
+  }
+
+  private def getSentences(sentences: String, locale: Locale) = {
+    val bi = BreakIterator.getSentenceInstance(locale)
+    bi.setText(sentences)
+    var idx = 0
+    val result = new ArrayBuffer[GenericArrayData]
+    while (bi.next != BreakIterator.DONE) {
+      val sentence = sentences.substring(idx, bi.current)
+      idx = bi.current
+
+      val wi = BreakIterator.getWordInstance(locale)
+      var widx = 0
+      wi.setText(sentence)
+      val words = new ArrayBuffer[UTF8String]
+      while (wi.next != BreakIterator.DONE) {
+        val word = sentence.substring(widx, wi.current)
+        widx = wi.current
+        if (Character.isLetterOrDigit(word.charAt(0))) words += UTF8String.fromString(word)
+      }
+      result += new GenericArrayData(words)
+    }
+    new GenericArrayData(result)
+  }
 }
