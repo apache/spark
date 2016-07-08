@@ -337,7 +337,7 @@ In addition to simple column references and expressions, DataFrames also have a 
 
 <div data-lang="r"  markdown="1">
 
-{% include_example untyped_transformations r/RSparkSQLExample.R %}
+{% include_example dataframe_operations r/RSparkSQLExample.R %}
 
 For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/index.html).
 

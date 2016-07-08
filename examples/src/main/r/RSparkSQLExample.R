@@ -24,16 +24,19 @@ sparkR.session()
 df <- read.json("examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame
+head(df)
+
+# Another method to print the first few rows and optionally truncate the printing of long values
 showDF(df)
 # $example off:create_DataFrames$
 
 
-# $example on:untyped_transformations$
+# $example on:dataframe_operations$
 # Create the DataFrame
 df <- read.json("examples/src/main/resources/people.json")
 
 # Show the content of the DataFrame
-showDF(df)
+head(df)
 ## age  name
 ## null Michael
 ## 30   Andy
@@ -46,31 +49,31 @@ printSchema(df)
 ## |-- name: string (nullable = true)
 
 # Select only the "name" column
-showDF(select(df, "name"))
+head(select(df, "name"))
 ## name
 ## Michael
 ## Andy
 ## Justin
 
 # Select everybody, but increment the age by 1
-showDF(select(df, df$name, df$age + 1))
+head(select(df, df$name, df$age + 1))
 ## name    (age + 1)
 ## Michael null
 ## Andy    31
 ## Justin  20
 
 # Select people older than 21
-showDF(where(df, df$age > 21))
+head(where(df, df$age > 21))
 ## age name
 ## 30  Andy
 
 # Count people by age
-showDF(count(groupBy(df, "age")))
+head(count(groupBy(df, "age")))
 ## age  count
 ## null 1
 ## 19   1
 ## 30   1
-# $example off:untyped_transformations$
+# $example off:dataframe_operations$
 
 
 # $example on:sql_query$
