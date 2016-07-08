@@ -115,6 +115,8 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
 
+  val quoteAll = getBool("quoteAll", false)
+
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'

@@ -751,15 +751,15 @@ class DataFrame(object):
 
     @since("1.3.1")
     def describe(self, *cols):
-        """Computes statistics for numeric columns.
+        """Computes statistics for numeric and string columns.
 
         This include count, mean, stddev, min, and max. If no columns are
-        given, this function computes statistics for all numerical columns.
+        given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no \
         guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
-        >>> df.describe().show()
+        >>> df.describe(['age']).show()
         +-------+------------------+
         |summary|               age|
         +-------+------------------+
@@ -769,7 +769,7 @@ class DataFrame(object):
         |    min|                 2|
         |    max|                 5|
         +-------+------------------+
-        >>> df.describe(['age', 'name']).show()
+        >>> df.describe().show()
         +-------+------------------+-----+
         |summary|               age| name|
         +-------+------------------+-----+
