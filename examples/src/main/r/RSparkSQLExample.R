@@ -18,7 +18,7 @@
 library(SparkR)
 
 # $example on:init_session$
-sparkR.session()
+sparkR.session(appName='MyApp', sparkConfig=list(spark.executor.memory="1g"))
 # $example off:init_session$
 
 
@@ -29,7 +29,7 @@ df <- read.json("examples/src/main/resources/people.json")
 head(df)
 
 # Another method to print the first few rows and optionally truncate the printing of long values
-head(df)
+showDF(df)
 # $example off:create_DataFrames$
 
 
