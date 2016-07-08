@@ -95,7 +95,6 @@ class DefaultSourceWithoutUserSpecifiedSchema
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     LastOptions.parameters = parameters
-    LastOptions.schema = None
     FakeRelation(sqlContext)
   }
 
@@ -105,7 +104,6 @@ class DefaultSourceWithoutUserSpecifiedSchema
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
     LastOptions.parameters = parameters
-    LastOptions.schema = None
     LastOptions.saveMode = mode
     FakeRelation(sqlContext)
   }
