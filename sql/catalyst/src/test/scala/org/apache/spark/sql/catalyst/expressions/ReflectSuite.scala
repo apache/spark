@@ -60,7 +60,7 @@ class ReflectSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(errorMsg.contains("not found") && errorMsg.contains("class"))
   }
 
-  test("method not found") {
+  test("method not found due to input type mismatch") {
     val ret = reflectExpr(staticClassName, "notfoundmethod").checkInputDataTypes()
     assert(ret.isFailure)
     val errorMsg = ret.asInstanceOf[TypeCheckFailure].message

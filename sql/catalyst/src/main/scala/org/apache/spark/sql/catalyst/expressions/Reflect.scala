@@ -32,6 +32,9 @@ import org.apache.spark.util.Utils
 /**
  * An expression that invokes a method on a class via reflection.
  *
+ * For now, only types defined in `Reflect.typeMapping` are supported (basically primitives
+ * and string) as input types, and the output is turned automatically to a string.
+ *
  * @param children the first element should be a literal string for the class name,
  *                 and the second element should be a literal string for the method name,
  *                 and the remaining are input arguments to the Java method.
@@ -39,7 +42,7 @@ import org.apache.spark.util.Utils
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(class,method[,arg1[,arg2..]]) calls method with reflection",
-  extended = "> SELECT _FUNC_('java.util.UUID', 'randomUUID');\nc33fb387-8500-4bfa-81d2-6e0e3e930df2")
+  extended = "> SELECT _FUNC_('java.util.UUID', 'randomUUID');\n c33fb387-8500-4bfa-81d2-6e0e3e930df2")
 // scalastyle:on line.size.limit
 case class Reflect(children: Seq[Expression])
   extends Expression with CodegenFallback {
@@ -70,7 +73,8 @@ case class Reflect(children: Seq[Expression])
     while (i < argExprs.length) {
       buffer(i) = argExprs(i).eval(input).asInstanceOf[Object]
       // Convert if necessary. Based on the types defined in typeMapping, string is the only
-      // type that needs conversion.
+      // type that needs conversion. If we support timestamps, dates, decimals, arrays, or maps
+      // in the future, proper conversion needs to happen here too.
       if (buffer(i).isInstanceOf[UTF8String]) {
         buffer(i) = buffer(i).toString
       }
