@@ -18,7 +18,7 @@
 library(SparkR)
 
 # $example on:init_session$
-sparkR.session(appName='MyApp', sparkConfig=list(spark.executor.memory="1g"))
+sparkR.session(appName = "MyApp", sparkConfig = list(spark.executor.memory = "1g"))
 # $example off:init_session$
 
 
