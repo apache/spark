@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -40,6 +39,24 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testExpr("<a><b>b</b></a>", "a/b = \"c\"", false)
     testExpr("<a><b>10</b></a>", "a/b < 10", false)
     testExpr("<a><b>10</b></a>", "a/b = 10", true)
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_short") {
@@ -51,9 +68,28 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     testExpr("<a>this is not a number</a>", "a", 0.toShort)
     testExpr("<a>try a boolean</a>", "a = 10", 0.toShort)
-    testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
+    testExpr(
+      "<a><b class=\"odd\">10000</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
-      5.toShort)
+      10004.toShort)
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_int") {
@@ -65,9 +101,28 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     testExpr("<a>this is not a number</a>", "a", 0)
     testExpr("<a>try a boolean</a>", "a = 10", 0)
-    testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
+    testExpr(
+      "<a><b class=\"odd\">100000</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
-      5)
+      100004)
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_long") {
@@ -79,9 +134,28 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     testExpr("<a>this is not a number</a>", "a", 0L)
     testExpr("<a>try a boolean</a>", "a = 10", 0L)
-    testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
+    testExpr(
+      "<a><b class=\"odd\">9000000000</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
-      5L)
+      9000000004L)
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_float") {
@@ -96,6 +170,24 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
       5.0F)
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_double") {
@@ -110,6 +202,24 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testExpr("<a><b class=\"odd\">1</b><b class=\"even\">2</b><b class=\"odd\">4</b><c>8</c></a>",
       "sum(a/b[@class=\"odd\"])",
       5.0)
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
   test("xpath_string") {
@@ -126,30 +236,43 @@ class XPathExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testExpr("<a><b>b1</b><b>b2</b></a>", "//b", "b1")
     testExpr("<a><b>b1</b><b>b2</b></a>", "a/b[1]", "b1")
     testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", "a/b[@id='b_2']", "b2")
+
+    testExpr("<a><b>b1</b><b id='b_2'>b2</b></a>", null, null)
+    testExpr(null, "a", null)
+    testExpr(null, null, null)
+
+    testExpr("", "a", null)
+    testExpr("<a></a>", "", null)
+    testExpr("", "", null)
+
+    // Test error message for invalid XML document
+    val e1 = intercept[RuntimeException] { testExpr("<a>/a>", "a", null) }
+    assert(e1.getCause.getMessage.contains("Invalid XML document") &&
+      e1.getCause.getMessage.contains("<a>/a>"))
+
+    // Test error message for invalid xpath
+    val e2 = intercept[RuntimeException] { testExpr("<a></a>", "!#$", null) }
+    assert(e2.getCause.getMessage.contains("Invalid XPath") &&
+      e2.getCause.getMessage.contains("!#$"))
   }
 
-  test("null handling") {
-    // We only do this for one expression since they all share the same common base implementation
-    checkEvaluation(
-      XPathLong(Literal.create(null, StringType), Literal.create(null, StringType)), null)
-    checkEvaluation(
-      XPathLong(Literal.create("", StringType), Literal.create(null, StringType)), null)
-    checkEvaluation(
-      XPathLong(Literal.create(null, StringType), Literal.create("", StringType)), null)
-  }
+  test("accept only literal path") {
+    def testExpr(exprCtor: (Expression, Expression) => Expression): Unit = {
+      // Validate that literal (technically this is foldable) paths are supported
+      val litPath = exprCtor(Literal("abcd"), Concat(Literal("/") :: Literal("/") :: Nil))
+      assert(litPath.checkInputDataTypes().isSuccess)
 
-  test("invalid xml handling") {
-    intercept[Exception] {
-      checkEvaluation(
-        XPathLong(Literal.create("<a>/a>", StringType), Literal.create("", StringType)), null)
+      // Validate that non-foldable paths are not supported.
+      val nonLitPath = exprCtor(Literal("abcd"), NonFoldableLiteral("/"))
+      assert(nonLitPath.checkInputDataTypes().isFailure)
     }
-  }
 
-  test("path cache invalidation") {
-    // This is a test to ensure the expression is not reusing the path for different strings
-    // We only do this for one expression since they all share the same common base implementation
-    val expr = XPathBoolean(Literal("<a><b>b</b></a>"), 'path.string.at(0))
-    checkEvaluation(expr, true, create_row("a/b"))
-    checkEvaluation(expr, false, create_row("a/c"))
+    testExpr(XPathBoolean)
+    testExpr(XPathShort)
+    testExpr(XPathInt)
+    testExpr(XPathLong)
+    testExpr(XPathFloat)
+    testExpr(XPathDouble)
+    testExpr(XPathString)
   }
 }
