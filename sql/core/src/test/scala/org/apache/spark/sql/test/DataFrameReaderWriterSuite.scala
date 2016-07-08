@@ -94,7 +94,6 @@ class DefaultSourceWithoutUserSpecifiedSchema
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    LastOptions.parameters = parameters
     FakeRelation(sqlContext)
   }
 
@@ -103,8 +102,6 @@ class DefaultSourceWithoutUserSpecifiedSchema
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation = {
-    LastOptions.parameters = parameters
-    LastOptions.saveMode = mode
     FakeRelation(sqlContext)
   }
 }
