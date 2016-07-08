@@ -96,7 +96,8 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.parquet")
 
 # $example on:source_json$
 df <- read.df("examples/src/main/resources/people.json", "json")
-write.df(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
+namesAndAges <- select(df, "name", "age")
+write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 # $example off:source_json$
 
 
