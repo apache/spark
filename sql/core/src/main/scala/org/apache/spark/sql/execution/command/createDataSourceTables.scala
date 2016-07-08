@@ -401,7 +401,7 @@ object CreateDataSourceTableUtils extends Logging {
       assert(relation.partitionSchema.isEmpty)
 
       var storage = CatalogStorageFormat(
-        locationUri = None,
+        locationUri = Some(relation.location.paths.map(_.toUri.toString).head),
         provider = Some("hive"),
         properties = options)
       serde.inputFormat.foreach(inFmt => storage = storage.withInputFormat(inFmt))

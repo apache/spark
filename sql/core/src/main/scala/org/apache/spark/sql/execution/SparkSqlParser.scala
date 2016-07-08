@@ -956,10 +956,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       provider = Some("hive"),
       properties = Map.empty)
     Option(ctx.createFileFormat).foreach(ctx => storage = getFileFormat(ctx, storage))
+    // if both file format and row format specifies serde, the one from row format wins.
     Option(ctx.rowFormat).foreach(ctx => storage = getRowFormat(ctx, storage))
 
     val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
     val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
+    // set default values for hive formats. Note that serde doesn't have default value, because we
+    // use the presence of the serde to decide whether to convert a table created by CTAS to a
+    // datasource table.
     if (storage.getInputFormat.isEmpty) {
       storage = storage.withInputFormat(defaultHiveSerde.flatMap(_.inputFormat)
         .getOrElse("org.apache.hadoop.mapred.TextInputFormat"))

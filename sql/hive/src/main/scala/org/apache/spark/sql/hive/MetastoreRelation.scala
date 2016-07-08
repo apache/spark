@@ -154,17 +154,17 @@ private[hive] case class MetastoreRelation(
   private def toHiveStorage(storage: CatalogStorageFormat, schema: Seq[FieldSchema]) = {
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     sd.setCols(schema.asJava)
-    catalogTable.storage.locationUri.foreach(sd.setLocation)
-    catalogTable.storage.getInputFormat.foreach(sd.setInputFormat)
-    catalogTable.storage.getOutputFormat.foreach(sd.setOutputFormat)
+    storage.locationUri.foreach(sd.setLocation)
+    storage.getInputFormat.foreach(sd.setInputFormat)
+    storage.getOutputFormat.foreach(sd.setOutputFormat)
 
     val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
     sd.setSerdeInfo(serdeInfo)
     // maps and lists should be set only after all elements are ready (see HIVE-7975)
-    catalogTable.storage.getSerde.foreach(serdeInfo.setSerializationLib)
+    storage.getSerde.foreach(serdeInfo.setSerializationLib)
 
     val serdeParameters = new java.util.HashMap[String, String]()
-    catalogTable.storage.getProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+    storage.getProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
     serdeInfo.setParameters(serdeParameters)
     sd
   }

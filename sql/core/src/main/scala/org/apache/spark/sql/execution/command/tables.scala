@@ -43,6 +43,7 @@ case class CreateHiveTableAsSelectLogicalPlan(
     tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
+  assert(tableDesc.storage.provider == Some("hive"))
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
@@ -119,6 +120,7 @@ case class CreateTableLikeCommand(
  * }}}
  */
 case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
+  assert(table.storage.provider == Some("hive"))
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
@@ -446,6 +448,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
         partCols.foreach(col => append(buffer, col, "", ""))
       }
     } else {
+      assert(table.storage.provider == Some("hive"))
       describeSchema(table.schema, buffer)
 
       if (table.partitionColumns.nonEmpty) {
@@ -744,6 +747,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       showCreateDataSourceTable(tableMetadata)
     } else {
+      assert(tableMetadata.storage.provider == Some("hive"))
       showCreateHiveTable(tableMetadata)
     }
 
