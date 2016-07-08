@@ -1812,7 +1812,7 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats2)[5, "age"], "30")
 
   # SPARK-16425: SparkR summary() fails on column of type logical
-  df <- withColumn(df, "boolean", df$age==30)
+  df <- withColumn(df, "boolean", df$age == 30)
   summary(df)
 
   # Test base::summary is working
