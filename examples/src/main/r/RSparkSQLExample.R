@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+library(SparkR)
+
 # $example on:init_session$
 sparkR.session()
 # $example off:init_session$
@@ -27,7 +29,7 @@ df <- read.json("examples/src/main/resources/people.json")
 head(df)
 
 # Another method to print the first few rows and optionally truncate the printing of long values
-showDF(df)
+head(df)
 # $example off:create_DataFrames$
 
 
@@ -76,6 +78,11 @@ head(count(groupBy(df, "age")))
 # $example off:dataframe_operations$
 
 
+# Create a DataFrame from json file
+path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
+peopleDF <- read.json(path)
+# Register this DataFrame as a table.
+createOrReplaceTempView(peopleDF, "table")
 # $example on:sql_query$
 df <- sql("SELECT * FROM table")
 # $example off:sql_query$
@@ -99,10 +106,10 @@ df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
 
 
 # $example on:load_programmatically$
-schemaPeople # The SparkDataFrame from the previous example.
+df <- read.df("examples/src/main/resources/people.json", "json")
 
 # SparkDataFrame can be saved as Parquet files, maintaining the schema information.
-write.parquet(schemaPeople, "people.parquet")
+write.parquet(df, "people.parquet")
 
 # Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a DataFrame.
@@ -111,15 +118,25 @@ parquetFile <- read.parquet("people.parquet")
 # Parquet files can also be used to create a temporary view and then used in SQL statements.
 createOrReplaceTempView(parquetFile, "parquetFile")
 teenagers <- sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+head(teenagers)
+## name
+## 1 Justin
+
 schema <- structType(structField("name", "string"))
 teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
 for (teenName in collect(teenNames)$name) {
   cat(teenName, "\n")
 }
+## Name: Michael
+## Name: Andy
+## Name: Justin
 # $example off:load_programmatically$
 
 
 # $example on:schema_merging$
+df1 <- createDataFrame(data.frame(single=c(12, 29), double=c(19, 23)))
+df2 <- createDataFrame(data.frame(double=c(19, 23), triple=c(23, 18)))
+
 # Create a simple DataFrame, stored into a partition directory
 write.df(df1, "data/test_table/key=1", "parquet", "overwrite")
 
@@ -134,9 +151,9 @@ printSchema(df3)
 # The final schema consists of all 3 columns in the Parquet files together
 # with the partitioning column appeared in the partition directory paths.
 # root
-# |-- single: int (nullable = true)
-# |-- double: int (nullable = true)
-# |-- triple: int (nullable = true)
+# |-- single: double (nullable = true)
+# |-- double: double (nullable = true)
+# |-- triple: double (nullable = true)
 # |-- key : int (nullable = true)
 # $example off:schema_merging$
 
@@ -159,6 +176,9 @@ createOrReplaceTempView(people, "people")
 
 # SQL statements can be run by using the sql methods.
 teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+head(teenagers)
+## name
+## 1 Justin
 # $example off:load_json_file$
 
 
