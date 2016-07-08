@@ -141,6 +141,7 @@ private[scheduler] class BlacklistTracker (
     // blacklist the node.  That is why we just remove this entry without doing any promotion to
     // the full app blacklist.
     stageIdToBlacklistedNodes.remove(stageId)
+    stageIdToNodeBlacklistedTasks.remove(stageId)
   }
 
   def taskSetFailed(stageId: Int): Unit = {
@@ -148,6 +149,7 @@ private[scheduler] class BlacklistTracker (
     // fine, the failures were just b/c the taskSet itself was bad (eg., bad user code)
     stageIdToExecToFailures.remove(stageId)
     stageIdToBlacklistedNodes.remove(stageId)
+    stageIdToNodeBlacklistedTasks.remove(stageId)
   }
 
   /**
@@ -206,7 +208,7 @@ private[scheduler] class BlacklistTracker (
       if (failures.failuresByTask.contains(indexInTaskSet)) 1 else 0
     }).sum
     logInfo(s"total failures on host ${info.host} = $failuresOnHost")
-    if (failuresOnHost > MAX_TASK_FAILURES_PER_NODE) {
+    if (failuresOnHost >= MAX_TASK_FAILURES_PER_NODE) {
       stageIdToNodeBlacklistedTasks.getOrElseUpdate(stageId, new HashMap())
         .getOrElseUpdate(info.host, new HashSet()) += indexInTaskSet
     }

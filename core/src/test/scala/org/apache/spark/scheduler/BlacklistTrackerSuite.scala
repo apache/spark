@@ -255,6 +255,10 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // of the internals on what to check (without the overhead of trying to trigger an OOM or
     // something).
     val (tracker, scheduler) = trackerFixture
+    when(scheduler.getHostForExecutor("0")).thenReturn("hostA")
+    when(scheduler.getHostForExecutor("1")).thenReturn("hostA")
+    when(scheduler.getExecutorsAliveOnHost("hostA")).thenReturn(Some(Set("0", "1")))
+
     // fail a couple of tasks in two stages
     for {
       stage <- 0 until 2
@@ -266,14 +270,15 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       tracker.taskFailed(stage, partition, new TaskInfo(tid, partition, 0, clock.getTimeMillis(),
         exec, "hostA", TaskLocality.ANY, false), scheduler)
     }
-
-    when(scheduler.getHostForExecutor("0")).thenReturn("hostA")
-    when(scheduler.getHostForExecutor("1")).thenReturn("hostA")
-    when(scheduler.getExecutorsAliveOnHost("hostA")).thenReturn(Some(Set("0", "1")))
+    // also want to fail one task on two different executors on the same node, to trigger
+    // (node, task) blacklist
+    tracker.taskFailed(0, 0, new TaskInfo(8, 0, 1, clock.getTimeMillis(), "1", "hostA",
+      TaskLocality.ANY, false), scheduler)
 
     // just make sure our test is even checking something useful -- we expect these data structures
     // to grow for running task sets with failed tasks
     assert(tracker.stageIdToExecToFailures.nonEmpty)
+    assert(tracker.stageIdToNodeBlacklistedTasks.nonEmpty)
     assert(tracker.stageIdToBlacklistedNodes.nonEmpty)
 
     // now say stage 0 fails, and stage 1 completes
@@ -283,5 +288,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     // datastructures should be empty again
     assert(tracker.stageIdToExecToFailures.isEmpty)
     assert(tracker.stageIdToBlacklistedNodes.isEmpty)
+    assert(tracker.stageIdToNodeBlacklistedTasks.isEmpty)
   }
 }
