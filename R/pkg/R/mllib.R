@@ -99,6 +99,14 @@ NULL
 #' @seealso \link{spark.isoreg}
 NULL
 
+#' S4 class that represents an ALSModel
+#'
+#' @param jobj a Java object reference to the backing Scala ALSModelWrapper
+#' @export
+#' @note KMeansModel since 2.0.0
+setClass("ALSModel", representation(jobj = "jobj"))
+
+
 #' Generalized Linear Models
 #'
 #' Fits generalized linear model against a Spark DataFrame.
@@ -1054,3 +1062,42 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
+
+#' Alternating Least Squares (ALS) for Collaborative Filtering
+#'
+#' \code{spark.als} learns latent factors in collaborative filtering via alternating least
+#' squares.
+#'
+#' @param data A SparkDataFrame for training
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#'                Note that operator '.' is not supported currently
+#' @return \code{spark.als} returns a fitted ALS model
+#' @rdname spark.als
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(ratings)
+#' model <- spark.als(df, rating ~ user + item)
+#'
+#' # get a summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predicted <- predict(model, df)
+#' showDF(predicted)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.als since 2.1.0
+setMethod("spark.als", signature(data = "SparkDataFrame", formula = "formula"),
+function(data, formula, ...) {
+    formula <- paste(deparse(formula), collapse = "")
+jobj <- callJStatic("org.apache.spark.ml.r.ALSModelWrapper",
+"fit", formula, data@sdf)
+return(new("ALSModelWrapper", jobj = jobj))
+})
