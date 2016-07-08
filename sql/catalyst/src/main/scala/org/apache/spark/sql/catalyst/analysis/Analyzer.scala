@@ -109,6 +109,8 @@ class Analyzer(
       TimeWindowing ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("LIMIT", Once,
+      ResolveLimits),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -2042,6 +2044,21 @@ object EliminateUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Union(children) if children.size == 1 => children.head
   }
+}
+
+/**
+ * Converts foldable numeric expressions to integers of [[GlobalLimit]] and [[LocalLimit]] operators
+ */
+object ResolveLimits extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case g @ GlobalLimit(limitExpr, _) if limitExpr.foldable && isNumeric(limitExpr.eval()) =>
+      g.copy(limitExpr = Literal(limitExpr.eval().asInstanceOf[Number].intValue(), IntegerType))
+    case l @ LocalLimit(limitExpr, _) if limitExpr.foldable && isNumeric(limitExpr.eval()) =>
+      l.copy(limitExpr = Literal(limitExpr.eval().asInstanceOf[Number].intValue(), IntegerType))
+  }
+
+  private def isNumeric(value: Any): Boolean =
+    scala.util.Try(value.asInstanceOf[Number].intValue()).isSuccess
 }
 
 /**

@@ -670,6 +670,26 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT CAST(1 AS Double)"),
+      mapData.collect().take(1).map(Row.fromTuple).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT CAST(1 AS BYTE)"),
+      mapData.collect().take(1).map(Row.fromTuple).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT CAST(1 AS LONG)"),
+      mapData.collect().take(1).map(Row.fromTuple).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT CAST(1 AS SHORT)"),
+      mapData.collect().take(1).map(Row.fromTuple).toSeq)
+
+    checkAnswer(
+      sql("SELECT * FROM mapData LIMIT CAST(1 AS FLOAT)"),
+      mapData.collect().take(1).map(Row.fromTuple).toSeq)
   }
 
   test("non-foldable expressions in LIMIT") {
@@ -681,10 +701,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Limit: unable to evaluate and cast expressions in limit clauses to Int") {
-    val e = intercept[AnalysisException] {
+    var e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT true")
     }.getMessage
-    assert(e.contains("number_rows in limit clause cannot be cast to integer:true"))
+    assert(e.contains("number_rows in limit clause cannot be cast to integer:\"true\""))
+
+    e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData LIMIT 'a'")
+    }.getMessage
+    assert(e.contains("number_rows in limit clause cannot be cast to integer:\"a\""))
   }
 
   test("negative in LIMIT or TABLESAMPLE") {

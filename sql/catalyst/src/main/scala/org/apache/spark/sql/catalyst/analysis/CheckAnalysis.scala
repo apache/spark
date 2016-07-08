@@ -50,14 +50,13 @@ trait CheckAnalysis extends PredicateHelper {
     if (!limitExpr.foldable) {
       failAnalysis(
         "The argument to the LIMIT clause must evaluate to a constant value. " +
-        s"Limit:${limitExpr.sql}")
+          s"Limit:${limitExpr.sql}")
     }
-    limitExpr.eval() match {
-      case o: Int if o >= 0 => // OK
-      case o: Int => failAnalysis(
-        s"number_rows in limit clause must be equal to or greater than 0. number_rows:$o")
-      case o => failAnalysis(
-        s"number_rows in limit clause cannot be cast to integer:$o")
+    limitExpr match {
+      case IntegerLiteral(limit) if limit >= 0 => // OK
+      case IntegerLiteral(limit) => failAnalysis(
+        s"number_rows in limit clause must be equal to or greater than 0. number_rows:$limit")
+      case o => failAnalysis(s"""number_rows in limit clause cannot be cast to integer:"$o".""")
     }
   }
 
