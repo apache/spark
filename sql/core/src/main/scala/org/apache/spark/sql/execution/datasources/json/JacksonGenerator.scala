@@ -33,7 +33,7 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
   // `ValueWriter`s for all fields of the schema
-  private val rootFieldWriters: Seq[ValueWriter] = schema.map(_.dataType).map(makeWriter)
+  private val rootFieldWriters: Array[ValueWriter] = schema.map(_.dataType).map(makeWriter).toArray
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
@@ -93,23 +93,17 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
     case st: StructType =>
       val fieldWriters = st.map(_.dataType).map(makeWriter)
       (row: SpecializedGetters, ordinal: Int) =>
-        writeObject {
-          writeFields(row.getStruct(ordinal, st.length), st, fieldWriters)
-        }
+        writeObject(writeFields(row.getStruct(ordinal, st.length), st, fieldWriters))
 
     case at: ArrayType =>
       val elementWriter = makeWriter(at.elementType)
       (row: SpecializedGetters, ordinal: Int) =>
-        writeArray {
-          writeArrayData(row.getArray(ordinal), elementWriter)
-        }
+        writeArray(writeArrayData(row.getArray(ordinal), elementWriter))
 
     case mt: MapType =>
       val valueWriter = makeWriter(mt.valueType)
       (row: SpecializedGetters, ordinal: Int) =>
-        writeObject {
-          writeMapData(row.getMap(ordinal), mt, valueWriter)
-        }
+        writeObject(writeMapData(row.getMap(ordinal), mt, valueWriter))
 
     // For UDT values, they should be in the SQL type's corresponding value type.
     // We should not see values in the user-defined class at here.
