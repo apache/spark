@@ -41,7 +41,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   }
 
   protected def checkEvaluation(
-      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+      originalExpr: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    val expression = originalExpr match {
+      case replaceable: RuntimeReplaceable => replaceable.replaced
+      case _ => originalExpr
+    }
+
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expression, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expression, catalystValue, inputRow)
@@ -63,6 +68,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         expected.asInstanceOf[Spread[Double]].isWithin(result)
       case (result: MapData, expected: MapData) =>
         result.keyArray() == expected.keyArray() && result.valueArray() == expected.valueArray()
+      case (result: Double, expected: Double) =>
+        if (expected.isNaN) result.isNaN else expected == result
+      case (result: Float, expected: Float) =>
+        if (expected.isNaN) result.isNaN else expected == result
       case _ =>
         result == expected
     }
