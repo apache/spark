@@ -85,7 +85,7 @@ object DataTypesExamples {
     val v2 = Vectors.dense(2.0, 20.0, 200.0)
     val v3 = Vectors.dense(3.0, 30.0, 300.0)
 
-    val rows: RDD[Vector] = sc.parallelize(Seq(v1, v2, v3), 1) // an RDD of local vectors
+    val rows: RDD[Vector] = sc.parallelize(Seq(v1, v2, v3)) // an RDD of local vectors
     // Create a RowMatrix from an RDD[Vector].
     val mat: RowMatrix = new RowMatrix(rows)
 
