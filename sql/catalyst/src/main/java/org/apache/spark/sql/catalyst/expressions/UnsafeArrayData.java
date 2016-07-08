@@ -392,9 +392,9 @@ public final class UnsafeArrayData extends ArrayData {
 
   private static UnsafeArrayData fromPrimitiveArray(
        Object arr, int offset, int length, int elementSize) {
-    final int headerInBytes = calculateHeaderPortionInBytes(length);
-    final int valueRegionInBytes = elementSize * length;
-    final int totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
+    final long headerInBytes = calculateHeaderPortionInBytes(length);
+    final long valueRegionInBytes = elementSize * length;
+    final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs * 8 > Integer.MAX_VALUE) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "it's too big.");

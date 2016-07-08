@@ -122,6 +122,15 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
     benchmark.addCase("Int")(writeIntArray)
     benchmark.addCase("Double")(writeDoubleArray)
     benchmark.run
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
+    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+
+    Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Int                                            135 /  180        154.9           6.5       1.0X
+    Double                                         195 /  300        107.8           9.3       0.7X
+    */
   }
 
   def getPrimitiveArray(iters: Int): Unit = {
