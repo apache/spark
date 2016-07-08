@@ -51,8 +51,13 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
       parser: JsonParser,
       dataType: DataType,
       token: JsonToken): Any = token match {
-    case null | VALUE_NULL => null
-    case _ if parser.getTextLength < 1 => null
+    case null | VALUE_NULL =>
+      null
+
+    case _ if parser.getTextLength < 1 =>
+      // guard the non string type
+      null
+
     case _ =>
     // We cannot parse this token based on the given data type. So, we throw a
     // SparkSQLJsonProcessingException and this exception will be caught by
@@ -80,9 +85,9 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
   }
 
   /**
-   * Parse the current token (and related children) according to a desired schema
-   * This is a wrapper for the method `convertField()` to handle a row wrapped
-   * with an array.
+   * Create a converter which converts the JSON documents held by the `JsonParser`
+   * to a value according to a desired schema. This is a wrapper for the method
+   * `makeConverter()` to handle a row wrapped with an array.
    */
   def makeRootConverter(dataType: DataType): ValueConverter = dataType match {
     case st: StructType =>
@@ -110,6 +115,10 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
     case _ => makeConverter(dataType)
   }
 
+  /**
+   * Create a converter which converts the JSON documents held by the `JsonParser`
+   * to a value according to a desired schema.
+   */
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
@@ -315,7 +324,6 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
 
   /**
    * Parse an object from the token stream into a new Row representing the schema.
-   *
    * Fields in the json that are not defined in the requested schema will be dropped.
    */
   private def convertObject(
@@ -352,6 +360,9 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
 
+  /**
+   * Parse an object as a Array
+   */
   private def convertArray(
       parser: JsonParser,
       fieldConverter: ValueConverter): ArrayData = {
@@ -363,6 +374,9 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
     new GenericArrayData(values.toArray)
   }
 
+  /**
+   * Parse the string JSON input to the set of [[InternalRow]]s.
+   */
   def parse(input: String): Seq[InternalRow] = {
     if (input.trim.isEmpty) {
       Nil
