@@ -682,7 +682,7 @@ object ParseUrl {
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query')
       '1'""")
 case class ParseUrl(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ExpectsInputTypes with CodegenFallback {
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
@@ -716,7 +716,7 @@ case class ParseUrl(children: Seq[Expression])
     if (children.size > 3 || children.size < 2) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName function requires two or three arguments")
     } else {
-      super[ImplicitCastInputTypes].checkInputDataTypes()
+      super[ExpectsInputTypes].checkInputDataTypes()
     }
   }
 
@@ -781,20 +781,22 @@ case class ParseUrl(children: Seq[Expression])
     if (evaluated.contains(null)) return null
     if (evaluated.size == 2) {
       parseUrlWithoutKey(evaluated(0), evaluated(1))
-    } else { // QUERY with key
-      if (evaluated(1) == QUERY) {
-        val query = parseUrlWithoutKey(evaluated(0), evaluated(1))
-        if (query ne null) {
-          if (cachedPattern ne null) {
-            extractValueFromQuery(query, cachedPattern)
-          } else {
-            extractValueFromQuery(query, getPattern(evaluated(2)))
-          }
-        } else {
-          null
-        }
+    } else {
+      // 3-arg, i.e. QUERY with key
+      assert(evaluated.size == 3)
+      if (evaluated(1) != QUERY) {
+        return null
+      }
+
+      val query = parseUrlWithoutKey(evaluated(0), evaluated(1))
+      if (query eq null) {
+        return null
+      }
+
+      if (cachedPattern ne null) {
+        extractValueFromQuery(query, cachedPattern)
       } else {
-        null
+        extractValueFromQuery(query, getPattern(evaluated(2)))
       }
     }
   }
