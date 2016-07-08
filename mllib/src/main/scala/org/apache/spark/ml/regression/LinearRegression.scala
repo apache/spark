@@ -862,46 +862,17 @@ class LinearRegressionSummary private[regression] (
  *    $$
  * </blockquote></p>
  *
- * @param coefficients The coefficients corresponding to the features.
  * @param labelStd The standard deviation value of the label.
- * @param labelMean The mean value of the label.
- * @param fitIntercept Whether to fit an intercept term.
- * @param featuresStd The standard deviation values of the features.
- * @param featuresMean The mean values of the features.
  */
 private class LeastSquaresAggregator(
-    coefficients: Vector,
-    labelStd: Double,
-    labelMean: Double,
-    fitIntercept: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    private val numFeatures: Int,
+    labelStd: Double) extends Serializable {
 
   private var totalCnt: Long = 0L
   private var weightSum: Double = 0.0
   private var lossSum = 0.0
 
-  private val (effectiveCoefficientsArray: Array[Double], offset: Double, dim: Int) = {
-    val coefficientsArray = coefficients.toArray.clone()
-    var sum = 0.0
-    var i = 0
-    val len = coefficientsArray.length
-    while (i < len) {
-      if (featuresStd(i) != 0.0) {
-        coefficientsArray(i) /=  featuresStd(i)
-        sum += coefficientsArray(i) * featuresMean(i)
-      } else {
-        coefficientsArray(i) = 0.0
-      }
-      i += 1
-    }
-    val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
-    (coefficientsArray, offset, coefficientsArray.length)
-  }
-
-  private val effectiveCoefficientsVector = Vectors.dense(effectiveCoefficientsArray)
-
-  private val gradientSumArray = Array.ofDim[Double](dim)
+  private val gradientSumArray = Array.ofDim[Double](numFeatures)
 
   /**
    * Add a new training instance to this LeastSquaresAggregator, and update the loss and gradient
@@ -910,10 +881,14 @@ private class LeastSquaresAggregator(
    * @param instance The instance of data point to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(instance: Instance): this.type = {
+  def add(
+      instance: Instance,
+      effectiveCoefficientsVector: Vector,
+      offset: Double,
+      featuresStd: Array[Double]): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(dim == features.size, s"Dimensions mismatch when adding new sample." +
-        s" Expecting $dim but got ${features.size}.")
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new sample." +
+        s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
@@ -945,8 +920,8 @@ private class LeastSquaresAggregator(
    * @return This LeastSquaresAggregator object.
    */
   def merge(other: LeastSquaresAggregator): this.type = {
-    require(dim == other.dim, s"Dimensions mismatch when merging with another " +
-      s"LeastSquaresAggregator. Expecting $dim but got ${other.dim}.")
+    require(numFeatures == other.numFeatures, s"Dimensions mismatch when merging with another " +
+      s"LeastSquaresAggregator. Expecting $numFeatures but got ${other.numFeatures}.")
 
     if (other.weightSum != 0) {
       totalCnt += other.totalCnt
@@ -956,7 +931,7 @@ private class LeastSquaresAggregator(
       var i = 0
       val localThisGradientSumArray = this.gradientSumArray
       val localOtherGradientSumArray = other.gradientSumArray
-      while (i < dim) {
+      while (i < numFeatures) {
         localThisGradientSumArray(i) += localOtherGradientSumArray(i)
         i += 1
       }
@@ -998,14 +973,35 @@ private class LeastSquaresCostFun(
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
+    val localFeaturesStd = featuresStd
+
+    val (effectiveCoefficientsArray: Array[Double], offset: Double) = {
+      val coefficientsArray = coefficients.toArray.clone()
+      var sum = 0.0
+      var i = 0
+      val len = coefficientsArray.length
+      while (i < len) {
+        if (featuresStd(i) != 0.0) {
+          coefficientsArray(i) /=  featuresStd(i)
+          sum += coefficientsArray(i) * featuresMean(i)
+        } else {
+          coefficientsArray(i) = 0.0
+        }
+        i += 1
+      }
+      val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
+      (coefficientsArray, offset)
+    }
+
+    val effectiveCoefficientsVector = Vectors.dense(effectiveCoefficientsArray)
 
     val leastSquaresAggregator = {
-      val seqOp = (c: LeastSquaresAggregator, instance: Instance) => c.add(instance)
+      val seqOp = (c: LeastSquaresAggregator, instance: Instance) =>
+        c.add(instance, effectiveCoefficientsVector, offset, localFeaturesStd)
       val combOp = (c1: LeastSquaresAggregator, c2: LeastSquaresAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LeastSquaresAggregator(coeffs, labelStd, labelMean, fitIntercept, featuresStd,
-          featuresMean))(seqOp, combOp)
+        new LeastSquaresAggregator(coeffs.size, labelStd))(seqOp, combOp)
     }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
