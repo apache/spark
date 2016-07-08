@@ -1086,6 +1086,28 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Splits condition expressions into pushDown predicates and stayUp predicates based on
+   * specific rules. Parts of the predicate that can be pushed beneath must satisfy the following
+   * conditions:
+   * 1. Deterministic.
+   * 2. Placed before any non-deterministic predicates.
+   * 3. Other specific rules.
+   *
+   * @return (pushDown, stayUp)
+   */
+  private def splitPushdownPredicates(
+      condition: Expression)(specificRules: (Expression) => Boolean) = {
+    val (candidates, containingNonDeterministic) =
+      splitConjunctivePredicates(condition).span(_.deterministic)
+
+    val (pushDown, rest) = candidates.partition { cond =>
+      specificRules(cond)
+    }
+
+    (pushDown, rest ++ containingNonDeterministic)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
@@ -1104,22 +1126,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
-    // pushed beneath must satisfy the following conditions:
-    // 1. All the expressions are part of window partitioning key. The expressions can be compound.
-    // 2. Deterministic.
-    // 3. Placed before any non-deterministic predicates.
+    // pushed beneath must satisfy the condition that all the expressions are part of window
+    // partitioning key. The expressions can be compound.
     case filter @ Filter(condition, w: Window)
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
 
-      val (candidates, containingNonDeterministic) =
-        splitConjunctivePredicates(condition).span(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
+      val (pushDown, stayUp) = splitPushdownPredicates(condition) { cond =>
         cond.references.subsetOf(partitionAttrs)
       }
-
-      val stayUp = rest ++ containingNonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1139,15 +1154,10 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (candidates, containingNonDeterministic) =
-        splitConjunctivePredicates(condition).span(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
+      val (pushDown, stayUp) = splitPushdownPredicates(condition) { cond =>
         val replaced = replaceAlias(cond, aliasMap)
         replaced.references.subsetOf(aggregate.child.outputSet)
       }
-
-      val stayUp = rest ++ containingNonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1203,14 +1213,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (candidates, containingNonDeterministic) =
-      splitConjunctivePredicates(filter.condition).span(_.deterministic)
-
-    val (pushDown, rest) = candidates.partition { cond =>
+    val (pushDown, stayUp) = splitPushdownPredicates(filter.condition) { cond =>
       cond.references.subsetOf(grandchild.outputSet)
     }
-
-    val stayUp = rest ++ containingNonDeterministic
 
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
