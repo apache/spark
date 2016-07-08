@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.broadcast.Broadcast
-
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
@@ -28,6 +26,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -926,7 +925,6 @@ private class LeastSquaresAggregator(
    * @return This LeastSquaresAggregator object.
    */
   def add(instance: Instance): this.type = {
-
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new sample." +
         s" Expecting $dim but got ${features.size}.")
@@ -1020,13 +1018,12 @@ private class LeastSquaresCostFun(
     val bcCoeffs = instances.context.broadcast(coeffs)
 
     val leastSquaresAggregator = {
-      val seqOp = (c: LeastSquaresAggregator, instance: Instance) =>
-        c.add(instance)
+      val seqOp = (c: LeastSquaresAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: LeastSquaresAggregator, c2: LeastSquaresAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LeastSquaresAggregator(bcCoeffs, labelStd, labelMean,
-          fitIntercept, bcFeaturesStd, bcFeaturesMean))(seqOp, combOp)
+        new LeastSquaresAggregator(bcCoeffs, labelStd, labelMean, fitIntercept, bcFeaturesStd,
+          bcFeaturesMean))(seqOp, combOp)
     }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
