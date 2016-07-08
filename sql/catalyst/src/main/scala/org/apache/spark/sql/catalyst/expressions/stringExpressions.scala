@@ -692,14 +692,21 @@ case class ParseUrl(children: Seq[Expression])
   // If the url is a constant, cache the URL object so that we don't need to convert url
   // from UTF8String to String to URL for every row.
   @transient private lazy val cachedUrl = children(0) match {
-    case Literal(url: UTF8String, _) => getUrl(url)
+    case Literal(url: UTF8String, _) => if (url ne null) getUrl(url) else null
     case _ => null
   }
 
   // If the key is a constant, cache the Pattern object so that we don't need to convert key
   // from UTF8String to String to StringBuilder to String to Pattern for every row.
   @transient private lazy val cachedPattern = children(2) match {
-    case Literal(key: UTF8String, _) => getPattern(key)
+    case Literal(key: UTF8String, _) => if (key ne null) getPattern(key) else null
+    case _ => null
+  }
+
+  // If the partToExtract is a constant, cache the Extract part function so that we don't need
+  // to check the partToExtract for every row.
+  @transient private lazy val cachedExtractPartFunc = children(1) match {
+    case Literal(part: UTF8String, _) => getExtractPartFunc(part)
     case _ => null
   }
 
@@ -725,6 +732,20 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
+  private def getExtractPartFunc(partToExtract: UTF8String): (URL) => String = {
+    partToExtract match {
+      case HOST => (url: URL) => url.getHost
+      case PATH => (url: URL) => url.getPath
+      case QUERY => (url: URL) => url.getQuery
+      case REF => (url: URL) => url.getRef
+      case PROTOCOL => (url: URL) => url.getProtocol
+      case FILE => (url: URL) => url.getFile
+      case AUTHORITY => (url: URL) => url.getAuthority
+      case USERINFO => (url: URL) => url.getUserInfo
+      case _ => (url: URL) => null
+    }
+  }
+
   private def extractValueFromQuery(query: UTF8String, pattern: Pattern): UTF8String = {
     val m = pattern.matcher(query.toString)
     if (m.find()) {
@@ -735,24 +756,10 @@ case class ParseUrl(children: Seq[Expression])
   }
 
   private def extractFromUrl(url: URL, partToExtract: UTF8String): UTF8String = {
-    if (partToExtract.equals(HOST)) {
-      UTF8String.fromString(url.getHost)
-    } else if (partToExtract.equals(PATH)) {
-      UTF8String.fromString(url.getPath)
-    } else if (partToExtract.equals(QUERY)) {
-      UTF8String.fromString(url.getQuery)
-    } else if (partToExtract.equals(REF)) {
-      UTF8String.fromString(url.getRef)
-    } else if (partToExtract.equals(PROTOCOL)) {
-      UTF8String.fromString(url.getProtocol)
-    } else if (partToExtract.equals(FILE)) {
-      UTF8String.fromString(url.getFile)
-    } else if (partToExtract.equals(AUTHORITY)) {
-      UTF8String.fromString(url.getAuthority)
-    } else if (partToExtract.equals(USERINFO)) {
-      UTF8String.fromString(url.getUserInfo)
+    if (cachedExtractPartFunc ne null) {
+      UTF8String.fromString(cachedExtractPartFunc.apply(url))
     } else {
-      null
+      UTF8String.fromString(getExtractPartFunc(partToExtract).apply(url))
     }
   }
 
