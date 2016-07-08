@@ -29,7 +29,7 @@ df <- read.json("examples/src/main/resources/people.json")
 head(df)
 
 # Another method to print the first few rows and optionally truncate the printing of long values
-showDF(df)
+head(df)
 # $example off:create_DataFrames$
 
 
