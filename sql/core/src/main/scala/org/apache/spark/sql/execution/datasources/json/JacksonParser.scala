@@ -45,6 +45,8 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
   private val rootConverter: ValueConverter = makeRootConverter(schema)
 
   private val factory = new JsonFactory()
+  options.setJacksonOptions(factory)
+
 
   private def failedConversion(
       parser: JsonParser,
