@@ -52,11 +52,12 @@ trait CheckAnalysis extends PredicateHelper {
         "The argument to the LIMIT clause must evaluate to a constant value. " +
         s"Limit:${limitExpr.sql}")
     }
-    val numRows = limitExpr.eval().asInstanceOf[Int]
-    if (numRows < 0) {
-      failAnalysis(
-        s"number_rows in limit clause must be equal to or greater than 0. " +
-          s"number_rows:$numRows")
+    limitExpr.eval() match {
+      case o: Int if o >= 0 => // OK
+      case o: Int => failAnalysis(
+        s"number_rows in limit clause must be equal to or greater than 0. number_rows:$o")
+      case o => failAnalysis(
+        s"number_rows in limit clause cannot be cast to integer:$o")
     }
   }
 
