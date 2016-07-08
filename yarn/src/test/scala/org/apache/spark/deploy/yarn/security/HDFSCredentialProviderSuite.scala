@@ -15,73 +15,75 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.token
+package org.apache.spark.deploy.yarn.security
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.Matchers
-import org.scalatest.PrivateMethodTester
+import org.scalatest.{Matchers, PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class HDFSTokenProviderSuite extends SparkFunSuite with PrivateMethodTester with Matchers {
+class HDFSCredentialProviderSuite
+    extends SparkFunSuite
+    with PrivateMethodTester
+    with Matchers {
   private val _nnsToAccess = PrivateMethod[Set[Path]]('nnsToAccess)
   private val _getTokenRenewer = PrivateMethod[String]('getTokenRenewer)
 
-  private var hdfsTokenProvider: HDFSTokenProvider = null
-  private var sparkConf: SparkConf = null
+  private def nnsToAccess(
+      hdfsCredentialProvider: HDFSCredentialProvider, sparkConf: SparkConf): Set[Path] = {
+    hdfsCredentialProvider invokePrivate _nnsToAccess(sparkConf)
+  }
 
-  override def beforeAll(): Unit = {
+  private def getTokenRenewer(
+      hdfsCredentialProvider: HDFSCredentialProvider, conf: Configuration): String = {
+    hdfsCredentialProvider invokePrivate _getTokenRenewer(conf)
+  }
+
+  private var hdfsCredentialProvider: HDFSCredentialProvider = null
+
+  override def beforeAll() {
     super.beforeAll()
-    sparkConf = new SparkConf()
-    hdfsTokenProvider = ConfigurableTokenManager.hdfsTokenProvider(sparkConf)
+
+    if (hdfsCredentialProvider == null) {
+      hdfsCredentialProvider = new HDFSCredentialProvider()
+    }
   }
 
-  override def afterAll(): Unit = {
-    ConfigurableTokenManager.configurableTokenManager(sparkConf).stop()
+  override def afterAll() {
+    if (hdfsCredentialProvider != null) {
+      hdfsCredentialProvider = null
+    }
+
     super.afterAll()
-  }
-
-  private def nnsToAccess(hdfsTokenProvider: HDFSTokenProvider): Set[Path] = {
-    hdfsTokenProvider invokePrivate _nnsToAccess()
-  }
-
-  private def getTokenRenewer(hdfsTokenProvider: HDFSTokenProvider, conf: Configuration): String = {
-    hdfsTokenProvider invokePrivate _getTokenRenewer(conf)
   }
 
   test("check access nns empty") {
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "")
-    hdfsTokenProvider.setNameNodesToAccess(sparkConf, Set())
-    nnsToAccess(hdfsTokenProvider) should be (Set())
+      .set("spark.yarn.access.namenodes", "")
+    nnsToAccess(hdfsCredentialProvider, sparkConf) should be (Set())
   }
 
   test("check access nns unset") {
-    val sparkConf = new SparkConf()
-    hdfsTokenProvider.setNameNodesToAccess(sparkConf, Set())
-    nnsToAccess(hdfsTokenProvider) should be (Set())
+    nnsToAccess(hdfsCredentialProvider, new SparkConf) should be (Set())
   }
 
   test("check access nns") {
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
-    hdfsTokenProvider.setNameNodesToAccess(sparkConf, Set())
-    nnsToAccess(hdfsTokenProvider) should be (Set(new Path("hdfs://nn1:8032")))
+      .set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
+    nnsToAccess(hdfsCredentialProvider, sparkConf) should be (Set(new Path("hdfs://nn1:8032")))
   }
 
   test("check access nns space") {
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
-    hdfsTokenProvider.setNameNodesToAccess(sparkConf, Set())
-    nnsToAccess(hdfsTokenProvider) should be (Set(new Path("hdfs://nn1:8032")))
+      .set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
+    nnsToAccess(hdfsCredentialProvider, sparkConf) should be (Set(new Path("hdfs://nn1:8032")))
   }
 
   test("check access two nns") {
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
-    hdfsTokenProvider.setNameNodesToAccess(sparkConf, Set())
-    nnsToAccess(hdfsTokenProvider) should be
+      .set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
+    nnsToAccess(hdfsCredentialProvider, sparkConf) should be
       (Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
   }
 
@@ -89,7 +91,7 @@ class HDFSTokenProviderSuite extends SparkFunSuite with PrivateMethodTester with
     val hadoopConf = new Configuration()
     hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
     hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
-    val renewer = getTokenRenewer(hdfsTokenProvider, hadoopConf)
+    val renewer = getTokenRenewer(hdfsCredentialProvider, hadoopConf)
     renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
   }
 
@@ -97,7 +99,7 @@ class HDFSTokenProviderSuite extends SparkFunSuite with PrivateMethodTester with
     val hadoopConf = new Configuration()
     val caught =
       intercept[SparkException] {
-        getTokenRenewer(hdfsTokenProvider, hadoopConf)
+        getTokenRenewer(hdfsCredentialProvider, hadoopConf)
       }
     assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }

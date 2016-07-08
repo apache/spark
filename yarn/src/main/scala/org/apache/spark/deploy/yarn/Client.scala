@@ -50,7 +50,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.token.ConfigurableTokenManager._
+import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -121,6 +121,9 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
+  private val credentialManager = new ConfigurableCredentialManager(sparkConf)
+  credentialManager.initialize()
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -128,7 +131,7 @@ private[spark] class Client(
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
-    configurableTokenManager(sparkConf).stop()
+    credentialManager.stop()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
   }
@@ -390,9 +393,22 @@ private[spark] class Client(
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
     val fs = destDir.getFileSystem(hadoopConf)
-    hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(destDir))
-    hdfsTokenProvider(sparkConf).setTokenRenewer(null)
-    configurableTokenManager(sparkConf).obtainTokens(hadoopConf, credentials)
+
+    // Merge credentials obtained from registered providers
+    var nearestTimeOfNextRenewal = Long.MaxValue
+    credentialManager.obtainCredentials(hadoopConf, credentials).foreach { t =>
+      if (t.isDefined && t.get < nearestTimeOfNextRenewal) {
+        nearestTimeOfNextRenewal = t.get
+      }
+    }
+
+    if (loginFromKeytab) {
+      sparkConf.set(CREDENTIALS_RENEWAL_TIME, nearestTimeOfNextRenewal)
+      val nearestTimeOfNextUpdate =
+        (nearestTimeOfNextRenewal - System.currentTimeMillis()) * 1.1 + System.currentTimeMillis()
+      sparkConf.set(CREDENTIALS_UPDATE_TIME, nearestTimeOfNextUpdate.toLong)
+    }
+
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
@@ -731,11 +747,6 @@ private[spark] class Client(
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
-      hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(stagingDirPath))
-      sparkConf.get(PRINCIPAL).foreach(hdfsTokenProvider(sparkConf).setTokenRenewer(_))
-      val minTokenRenewalInterval =
-        configurableTokenManager(sparkConf).getSmallestTokenRenewalInterval(hadoopConf)
-      sparkConf.set(TOKEN_RENEWAL_INTERVAL, minTokenRenewalInterval)
     }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*

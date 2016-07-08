@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.yarn.token
+package org.apache.spark.deploy.yarn.security
 
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
@@ -24,17 +24,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
-private[yarn] class HBaseTokenProvider extends ServiceTokenProvider with Logging {
+private[yarn] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
 
   override def serviceName: String = "hbase"
 
-  override def obtainTokensFromService(
-      sparkConf: SparkConf,
-      serviceConf: Configuration,
-      creds: Credentials): Array[Token[_]] = {
+  override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long] = {
+
     try {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
       val obtainToken = mirror.classLoader.
@@ -42,19 +39,19 @@ private[yarn] class HBaseTokenProvider extends ServiceTokenProvider with Logging
         getMethod("obtainToken", classOf[Configuration])
 
       logDebug("Attempting to fetch HBase security token.")
-      val token = obtainToken.invoke(null, hbaseConf(serviceConf))
+      val token = obtainToken.invoke(null, hbaseConf(hadoopConf))
         .asInstanceOf[Token[_ <: TokenIdentifier]]
       creds.addToken(token.getService, token)
-      Array(token)
     } catch {
       case NonFatal(e) =>
         logDebug(s"Failed to get token from service $serviceName", e)
-        Array.empty
     }
+
+    None
   }
 
-  override def isTokenRequired(conf: Configuration): Boolean = {
-    hbaseConf(conf).get("hbase.security.authentication") == "kerberos"
+  override def isCredentialRequired(hadoopConf: Configuration): Boolean = {
+    hbaseConf(hadoopConf).get("hbase.security.authentication") == "kerberos"
   }
 
   private def hbaseConf(conf: Configuration): Configuration = {

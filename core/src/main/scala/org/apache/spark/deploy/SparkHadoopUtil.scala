@@ -319,7 +319,7 @@ class SparkHadoopUtil extends Logging {
   /**
    * Stop the thread that does the delegation token updates.
    */
-  private[spark] def stopExecutorDelegationTokenRenewer(conf: SparkConf) {}
+  private[spark] def stopExecutorDelegationTokenRenewer() {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.

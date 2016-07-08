@@ -149,7 +149,7 @@ private[spark] class YarnClientSchedulerBackend(
     client.reportLauncherState(SparkAppHandle.State.FINISHED)
 
     super.stop()
-    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer(conf)
+    YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     client.stop()
     logInfo("Stopped")
   }

@@ -38,7 +38,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.token.ConfigurableTokenManager._
+import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
@@ -47,6 +47,8 @@ import org.apache.spark.util.Utils
  * Contains util methods to interact with Hadoop from spark.
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
+
+  private var credentialManager: ConfigurableCredentialManager = _
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -88,12 +90,18 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
-    configurableTokenManager(sparkConf).delegationTokenUpdater(conf)
-      .updateCredentialsIfRequired()
+    if (credentialManager == null) {
+      credentialManager = new ConfigurableCredentialManager(sparkConf)
+      credentialManager.initialize()
+    }
+    credentialManager.delegationTokenUpdater(conf).updateCredentialsIfRequired()
   }
 
-  private[spark] override def stopExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
-    configurableTokenManager(sparkConf).stop()
+  private[spark] override def stopExecutorDelegationTokenRenewer(): Unit = {
+    if (credentialManager != null) {
+      credentialManager.stop()
+      credentialManager = null
+    }
   }
 
   private[spark] def getContainerId: ContainerId = {

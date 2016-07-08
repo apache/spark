@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.yarn.token
+package org.apache.spark.deploy.yarn.security
 
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
@@ -27,7 +27,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.token.ConfigurableTokenManager._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.ThreadUtils
@@ -53,7 +52,8 @@ import org.apache.spark.util.ThreadUtils
  */
 private[yarn] class AMDelegationTokenRenewer(
     sparkConf: SparkConf,
-    hadoopConf: Configuration) extends Logging {
+    hadoopConf: Configuration,
+    credentialManager: ConfigurableCredentialManager) extends Logging {
 
   private var lastCredentialsFileSuffix = 0
 
@@ -68,6 +68,9 @@ private[yarn] class AMDelegationTokenRenewer(
   private val numFilesToKeep = sparkConf.get(CREDENTIAL_FILE_MAX_COUNT)
   private val freshHadoopConf =
     hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
+
+  @volatile private var timeOfNextRenewal =
+    sparkConf.get(CREDENTIALS_RENEWAL_TIME).getOrElse(Long.MaxValue)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -85,16 +88,14 @@ private[yarn] class AMDelegationTokenRenewer(
      * will synchronously create new ones.
      */
     def scheduleRenewal(runnable: Runnable): Unit = {
-      val credentials = UserGroupInformation.getCurrentUser.getCredentials
-      val renewalInterval = configurableTokenManager(sparkConf)
-        .getNearestTimeFromNowToRenewal(hadoopConf, 0.75, credentials)
       // Run now!
-      if (renewalInterval <= 0) {
+      val leftTime = timeOfNextRenewal - System.currentTimeMillis()
+      if (leftTime <= 0) {
         logInfo("HDFS tokens have expired, creating new tokens now.")
         runnable.run()
       } else {
-        logInfo(s"Scheduling login from keytab in $renewalInterval millis.")
-        delegationTokenRenewer.schedule(runnable, renewalInterval, TimeUnit.MILLISECONDS)
+        logInfo(s"Scheduling login from keytab in $leftTime millis.")
+        delegationTokenRenewer.schedule(runnable, leftTime, TimeUnit.MILLISECONDS)
       }
     }
 
@@ -172,9 +173,13 @@ private[yarn] class AMDelegationTokenRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        hdfsTokenProvider(sparkConf).setNameNodesToAccess(sparkConf, Set(dst))
-        hdfsTokenProvider(sparkConf).setTokenRenewer(null)
-        configurableTokenManager(sparkConf).obtainTokens(freshHadoopConf, tempCreds)
+        var nearestNextTime = Long.MaxValue
+        credentialManager.obtainCredentials(freshHadoopConf, tempCreds).foreach { nextTime =>
+           if (nextTime.isDefined && nextTime.get < nearestNextTime) {
+             nearestNextTime = nextTime.get
+           }
+        }
+        timeOfNextRenewal = nearestNextTime
         null
       }
     })
@@ -193,8 +198,14 @@ private[yarn] class AMDelegationTokenRenewer(
       }
     }
     val nextSuffix = lastCredentialsFileSuffix + 1
+    // Time of next update should be late than renewal,
+    // which is around new token issue date + 0.8 * renew interval
+    val timeOfNextUpdate =
+      (timeOfNextRenewal - System.currentTimeMillis()) * 1.1 + System.currentTimeMillis()
     val tokenPathStr =
-      credentialsFile + SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM + nextSuffix
+      credentialsFile + SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM +
+        timeOfNextUpdate.toLong.toString + SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM +
+          nextSuffix
     val tokenPath = new Path(tokenPathStr)
     val tempTokenPath = new Path(tokenPathStr + SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)
     logInfo("Writing out delegation tokens to " + tempTokenPath.toString)
