@@ -692,14 +692,14 @@ case class ParseUrl(children: Seq[Expression])
   // If the url is a constant, cache the URL object so that we don't need to convert url
   // from UTF8String to String to URL for every row.
   @transient private lazy val cachedUrl = children(0) match {
-    case Literal(url: UTF8String, _) => if (url ne null) getUrl(url) else null
+    case Literal(url: UTF8String, _) if url ne null => getUrl(url)
     case _ => null
   }
 
   // If the key is a constant, cache the Pattern object so that we don't need to convert key
   // from UTF8String to String to StringBuilder to String to Pattern for every row.
   @transient private lazy val cachedPattern = children(2) match {
-    case Literal(key: UTF8String, _) => if (key ne null) getPattern(key) else null
+    case Literal(key: UTF8String, _) if key ne null => getPattern(key)
     case _ => null
   }
 
