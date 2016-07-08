@@ -258,7 +258,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
     -Phive-thriftserver deploy
   ./dev/change-scala-version.sh 2.10
   $MVN -DzincPort=$ZINC_PORT -Dscala-2.10 --settings $tmp_settings \
-    -DskipTests $PUBLISH_PROFILES clean deploy
+    -DskipTests $PUBLISH_PROFILES -Phive-thriftserver clean deploy
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
@@ -297,7 +297,7 @@ if [[ "$1" == "publish-release" ]]; then
   ./dev/change-scala-version.sh 2.10
 
   $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
-    -DskipTests $PUBLISH_PROFILES clean install
+    -DskipTests $PUBLISH_PROFILES -Phive-thriftserver clean install
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
