@@ -54,7 +54,11 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     conn1.prepareStatement("insert into test.people values ('mary', 2)").executeUpdate()
     conn1.prepareStatement("drop table if exists test.people1").executeUpdate()
     conn1.prepareStatement(
-      "create table test.people1 (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)").executeUpdate()
+      "create table test.people1 (name TEXT(32) NOT NULL, `the id` INTEGER NOT NULL)")
+      .executeUpdate()
+    conn1.prepareStatement(
+      "create table test.orders (`order` TEXT(32) NOT NULL, `order id` INTEGER NOT NULL)")
+      .executeUpdate()
     conn1.commit()
 
     sql(
@@ -69,6 +73,13 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         |CREATE OR REPLACE TEMPORARY VIEW PEOPLE1
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE ORDERS
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url1', dbtable 'TEST.ORDERS', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
   }
 
@@ -176,5 +187,14 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     sql("INSERT OVERWRITE TABLE PEOPLE1 SELECT * FROM PEOPLE")
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).count())
     assert(2 === spark.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+  }
+
+  test("SPARK-14460: Insert into table with column containing space") {
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    df.write.insertInto("PEOPLE1")
+    assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+
+    df.write.insertInto("ORDERS")
+    assert(2 === sqlContext.read.jdbc(url1, "TEST.ORDERS", properties).count)
   }
 }
