@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+library(SparkR)
+
 # $example on:init_session$
 sparkR.session()
 # $example off:init_session$
@@ -116,11 +118,18 @@ parquetFile <- read.parquet("people.parquet")
 # Parquet files can also be used to create a temporary view and then used in SQL statements.
 createOrReplaceTempView(parquetFile, "parquetFile")
 teenagers <- sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+head(teenagers)
+## name
+## 1 Justin
+
 schema <- structType(structField("name", "string"))
 teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
 for (teenName in collect(teenNames)$name) {
   cat(teenName, "\n")
 }
+## Name: Michael
+## Name: Andy
+## Name: Justin
 # $example off:load_programmatically$
 
 
