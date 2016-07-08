@@ -91,8 +91,8 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
       val elementConverter = makeConverter(st)
       val fieldConverters = st.map(_.dataType).map(makeConverter)
       (parser: JsonParser) => parser.getCurrentToken match {
-        case START_ARRAY => convertArray(parser, elementConverter)
         case START_OBJECT => convertObject(parser, st, fieldConverters)
+        case START_ARRAY => convertArray(parser, elementConverter)
         case token => failedConversion(parser, st, token)
       }
 
@@ -111,48 +111,48 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
   }
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
-    case dt: BooleanType =>
+    case BooleanType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_TRUE => true
           case VALUE_FALSE => false
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: ByteType =>
+    case ByteType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getByteValue
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: ShortType =>
+    case ShortType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getShortValue
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: IntegerType =>
+    case IntegerType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getIntValue
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: LongType =>
+    case LongType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getLongValue
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: FloatType =>
+    case FloatType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
@@ -172,11 +172,11 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
               throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
             }
 
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: DoubleType =>
+    case DoubleType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
@@ -196,7 +196,7 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
               throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
             }
 
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
@@ -217,7 +217,7 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
         }
       }
 
-    case dt: TimestampType =>
+    case TimestampType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
@@ -228,11 +228,11 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
           case VALUE_NUMBER_INT =>
             parser.getLongValue * 1000000L
 
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: DateType =>
+    case DateType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
@@ -246,15 +246,15 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
               stringValue.toInt
             }
 
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
-    case dt: BinaryType =>
+    case BinaryType =>
       (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING => parser.getBinaryValue
-          case token => failedConversion(parser, dt, token)
+          case token => failedConversion(parser, dataType, token)
         }
       }
 
@@ -295,12 +295,12 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
         }
       }
 
-    case t: UserDefinedType[_] =>
-      makeConverter(t.sqlType)
+    case udt: UserDefinedType[_] =>
+      makeConverter(udt.sqlType)
 
-    case dt: DataType =>
+    case _ =>
       (parser: JsonParser) =>
-        failedConversion(parser, dt, parser.getCurrentToken)
+        failedConversion(parser, dataType, parser.getCurrentToken)
   }
 
   private def skipFieldNameTokenIfExists(parser: JsonParser)(f: => Any): Any = {
