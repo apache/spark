@@ -253,6 +253,15 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     rdd.count()
   }
 
+  test("SPARK-16304: Link error should not crash executor") {
+    sc = new SparkContext("local[1,2]", "test")
+    intercept[SparkException] {
+      sc.parallelize(1 to 2).foreach { i =>
+        throw new LinkageError()
+      }
+    }
+  }
+
   // TODO: Need to add tests with shuffle fetch failures.
 }
 

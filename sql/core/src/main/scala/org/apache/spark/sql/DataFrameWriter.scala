@@ -391,7 +391,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "batchsize" can be used to control the
+   *                             number of rows per insert.
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
@@ -536,6 +537,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
+   * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
+   * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be

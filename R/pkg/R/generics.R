@@ -469,6 +469,10 @@ setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect")
 #' @export
 setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 
+#' @rdname gapplyCollect
+#' @export
+setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })

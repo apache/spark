@@ -213,15 +213,35 @@ test_that("read csv as DataFrame", {
   mockLinesCsv <- c("year,make,model,comment,blank",
                    "\"2012\",\"Tesla\",\"S\",\"No comment\",",
                    "1997,Ford,E350,\"Go get one now they are going fast\",",
-                   "2015,Chevy,Volt")
+                   "2015,Chevy,Volt",
+                   "NA,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
-  # default "header" is false
-  df <- read.df(csvPath, "csv", header = "true")
-  expect_equal(count(df), 3)
+  # default "header" is false, inferSchema to handle "year" as "int"
+  df <- read.df(csvPath, "csv", header = "true", inferSchema = "true")
+  expect_equal(count(df), 4)
   expect_equal(columns(df), c("year", "make", "model", "comment", "blank"))
-  expect_equal(sort(unlist(collect(where(df, df$year == "2015")))),
-               sort(unlist(list(year = "2015", make = "Chevy", model = "Volt"))))
+  expect_equal(sort(unlist(collect(where(df, df$year == 2015)))),
+               sort(unlist(list(year = 2015, make = "Chevy", model = "Volt"))))
+
+  # since "year" is "int", let's skip the NA values
+  withoutna <- na.omit(df, how = "any", cols = "year")
+  expect_equal(count(withoutna), 3)
+
+  unlink(csvPath)
+  csvPath <- tempfile(pattern = "sparkr-test", fileext = ".csv")
+  mockLinesCsv <- c("year,make,model,comment,blank",
+                   "\"2012\",\"Tesla\",\"S\",\"No comment\",",
+                   "1997,Ford,E350,\"Go get one now they are going fast\",",
+                   "2015,Chevy,Volt",
+                   "Empty,Dummy,Placeholder")
+  writeLines(mockLinesCsv, csvPath)
+
+  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.string = "Empty")
+  expect_equal(count(df2), 4)
+  withoutna2 <- na.omit(df2, how = "any", cols = "year")
+  expect_equal(count(withoutna2), 3)
+  expect_equal(count(where(withoutna2, withoutna2$make == "Dummy")), 0)
 
   unlink(csvPath)
 })
@@ -1725,6 +1745,7 @@ test_that("mutate(), transform(), rename() and names()", {
 })
 
 test_that("read/write ORC files", {
+  setHiveContext(sc)
   df <- read.df(jsonPath, "json")
 
   # Test write.df and read.df
@@ -1741,6 +1762,7 @@ test_that("read/write ORC files", {
   expect_equal(count(orcDF), count(df))
 
   unlink(orcPath2)
+  unsetHiveContext()
 })
 
 test_that("read/write Parquet files", {
@@ -1808,6 +1830,10 @@ test_that("describe() and summarize() on a DataFrame", {
   stats2 <- summary(df)
   expect_equal(collect(stats2)[4, "name"], "Andy")
   expect_equal(collect(stats2)[5, "age"], "30")
+
+  # SPARK-16425: SparkR summary() fails on column of type logical
+  df <- withColumn(df, "boolean", df$age == 30)
+  summary(df)
 
   # Test base::summary is working
   expect_equal(length(summary(attenu, digits = 4)), 35)
@@ -2257,21 +2283,24 @@ test_that("repartition by columns on DataFrame", {
   expect_equal(nrow(df1), 2)
 })
 
-test_that("gapply() on a DataFrame", {
+test_that("gapply() and gapplyCollect() on a DataFrame", {
   df <- createDataFrame (
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
-  df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
+  df1 <- gapply(df, "a", function(key, x) { x }, schema(df))
   actual <- collect(df1)
   expect_identical(actual, expected)
+
+  df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
+  expect_identical(df1Collect, expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
   schema <- structType(structField("a", "integer"), structField("e", "boolean"))
   df2 <- gapply(
     df,
-    list(df$"a", df$"c"),
+    c(df$"a", df$"c"),
     function(key, x) {
       y <- data.frame(key[1], sum(x$b) > 2)
     },
@@ -2280,13 +2309,24 @@ test_that("gapply() on a DataFrame", {
   expected <- c(TRUE, TRUE)
   expect_identical(actual, expected)
 
+  df2Collect <- gapplyCollect(
+    df,
+    c(df$"a", df$"c"),
+    function(key, x) {
+      y <- data.frame(key[1], sum(x$b) > 2)
+      colnames(y) <- c("a", "e")
+      y
+    })
+    actual <- df2Collect$e
+    expect_identical(actual, expected)
+
   # Computes the arithmetic mean of the second column by grouping
   # on the first and third columns. Output the groupping value and the average.
   schema <-  structType(structField("a", "integer"), structField("c", "string"),
                structField("avg", "double"))
   df3 <- gapply(
     df,
-    list("a", "c"),
+    c("a", "c"),
     function(key, x) {
       y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
     },
@@ -2301,11 +2341,22 @@ test_that("gapply() on a DataFrame", {
   rownames(expected) <- NULL
   expect_identical(actual, expected)
 
+  df3Collect <- gapplyCollect(
+    df,
+    c("a", "c"),
+    function(key, x) {
+      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+      colnames(y) <- c("a", "c", "avg")
+      y
+    })
+  actual <- df3Collect[order(df3Collect$a), ]
+  expect_identical(actual$avg, expected$avg)
+
   irisDF <- suppressWarnings(createDataFrame (iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
   # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
   df4 <- gapply(
-    cols = list("Sepal_Length"),
+    cols = "Sepal_Length",
     irisDF,
     function(key, x) {
       y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)

@@ -244,7 +244,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       d: org.apache.mesos.SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     appId = frameworkId.getValue
     mesosExternalShuffleClient.foreach(_.init(appId))
-    logInfo("Registered as framework ID " + appId)
     markRegistered()
   }
 

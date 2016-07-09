@@ -486,8 +486,8 @@ class StructType(DataType):
                DataType object.
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
-        >>> struct2 = StructType([StructField("f1", StringType(), True),\
-         StructField("f2", StringType(), True, None)])
+        >>> struct2 = StructType([StructField("f1", StringType(), True), \\
+        ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
         >>> struct1 = StructType().add(StructField("f1", StringType(), True))

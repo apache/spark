@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka010;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.TopicPartition;
@@ -65,6 +66,8 @@ public class JavaKafkaRDDSuite implements Serializable {
     String topic1 = "topic1";
     String topic2 = "topic2";
 
+    Random random = new Random();
+
     createTopicAndSendData(topic1);
     createTopicAndSendData(topic2);
 
@@ -72,6 +75,8 @@ public class JavaKafkaRDDSuite implements Serializable {
     kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());
     kafkaParams.put("key.deserializer", StringDeserializer.class);
     kafkaParams.put("value.deserializer", StringDeserializer.class);
+    kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt() +
+      "-" + System.currentTimeMillis());
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),
@@ -96,14 +101,14 @@ public class JavaKafkaRDDSuite implements Serializable {
         sc,
         kafkaParams,
         offsetRanges,
-        PreferFixed.create(leaders)
+        LocationStrategies.PreferFixed(leaders)
     ).map(handler);
 
     JavaRDD<String> rdd2 = KafkaUtils.<String, String>createRDD(
         sc,
         kafkaParams,
         offsetRanges,
-        PreferConsistent.create()
+        LocationStrategies.PreferConsistent()
     ).map(handler);
 
     // just making sure the java user apis work; the scala tests handle logic corner cases
