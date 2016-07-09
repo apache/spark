@@ -148,8 +148,8 @@ class SessionCatalog(
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = formatDatabaseName(db)
-    if (dbName == DEFAULT_DATABASE) {
-      throw new AnalysisException(s"Can not drop default database")
+    if (dbName == DEFAULT_DATABASE || dbName == getCurrentDatabase) {
+      throw new AnalysisException(s"Can not drop `${DEFAULT_DATABASE}` or current database")
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
@@ -881,6 +881,7 @@ class SessionCatalog(
    */
   private[sql] def reset(): Unit = synchronized {
     val default = DEFAULT_DATABASE
+    setCurrentDatabase(default)
     listDatabases().filter(_ != default).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
@@ -904,7 +905,6 @@ class SessionCatalog(
       require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
       functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
     }
-    setCurrentDatabase(default)
   }
 
 }

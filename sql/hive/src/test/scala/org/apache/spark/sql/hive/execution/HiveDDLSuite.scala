@@ -472,6 +472,7 @@ class HiveDDLSuite
       sql(s"DROP TABLE $tabName")
 
       assert(tmpDir.listFiles.isEmpty)
+      sql("USE default")
       sql(s"DROP DATABASE $dbName")
       assert(!fs.exists(new Path(tmpDir.toString)))
     }
@@ -526,6 +527,7 @@ class HiveDDLSuite
           assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
         }
 
+        sql(s"USE default")
         val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
         if (tableExists && !cascade) {
           val message = intercept[AnalysisException] {
@@ -565,14 +567,18 @@ class HiveDDLSuite
         var message = intercept[AnalysisException] {
           sql("DROP DATABASE default")
         }.getMessage
-        assert(message.contains("Can not drop default database"))
+        assert(message.contains("Can not drop `default` or current database"))
 
         // SQLConf.CASE_SENSITIVE does not affect the result
         // because the Hive metastore is not case sensitive.
         message = intercept[AnalysisException] {
           sql("DROP DATABASE DeFault")
         }.getMessage
-        assert(message.contains("Can not drop default database"))
+        if (caseSensitive == "true") {
+          assert(message.contains("Can not drop default database"))
+        } else {
+          assert(message.contains("Can not drop `default` or current database"))
+        }
       }
     }
   }

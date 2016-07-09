@@ -154,7 +154,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            catalog.setCurrentDatabase(dbNameWithoutBackTicks)
             val expectedLocation =
               "file:" + appendTrailingSlash(path) + s"$dbNameWithoutBackTicks.db"
             assert(db1 == CatalogDatabase(
@@ -163,7 +162,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
               expectedLocation,
               Map.empty))
             sql(s"DROP DATABASE $dbName CASCADE")
-            assert(catalog.getCurrentDatabase != dbNameWithoutBackTicks)
             assert(!catalog.databaseExists(dbNameWithoutBackTicks))
           } finally {
             catalog.reset()
@@ -1272,13 +1270,20 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
-  test("drop default database") {
+  test("drop default or current database") {
+    sql("CREATE DATABASE temp")
+    sql("USE temp")
+    val m = intercept[AnalysisException] {
+      sql("DROP DATABASE temp")
+    }.getMessage
+    assert(m.contains("Can not drop `default` or current database"))
+
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         var message = intercept[AnalysisException] {
           sql("DROP DATABASE default")
         }.getMessage
-        assert(message.contains("Can not drop default database"))
+        assert(message.contains("Can not drop `default` or current database"))
 
         message = intercept[AnalysisException] {
           sql("DROP DATABASE DeFault")
@@ -1286,7 +1291,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         if (caseSensitive == "true") {
           assert(message.contains("Database 'DeFault' not found"))
         } else {
-          assert(message.contains("Can not drop default database"))
+          assert(message.contains("Can not drop `default` or current database"))
         }
       }
     }

@@ -93,11 +93,7 @@ case class DropDatabaseCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    catalog.dropDatabase(databaseName, ifExists, cascade)
-    if (catalog.getCurrentDatabase == databaseName) {
-      catalog.setCurrentDatabase(catalog.DEFAULT_DATABASE)
-    }
+    sparkSession.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
     Seq.empty[Row]
   }
 
