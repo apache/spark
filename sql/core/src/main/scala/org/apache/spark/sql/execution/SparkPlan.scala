@@ -149,8 +149,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * The list of subqueries are added to [[subqueryResults]].
    */
   protected def prepareSubqueries(): Unit = {
-    val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
+    val allSubqueries = expressions.flatMap(_.collect {
+      case e: ScalarSubquery if !e.isExecuted => e
+    }).distinct
     allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
+      e.updateExecutedState()
       val futureResult = Future {
         // Each subquery should return only one row (and one column). We take two here and throws
         // an exception later if the number of rows is greater than one.

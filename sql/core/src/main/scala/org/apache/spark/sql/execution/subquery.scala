@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A subquery that will return only one row and one column.
@@ -50,6 +53,13 @@ case class ScalarSubquery(
   // the first column in first row from `query`.
   @volatile private var result: Any = null
   @volatile private var updated: Boolean = false
+  @volatile private var executed: Boolean = false
+
+  def isExecuted: Boolean = executed
+
+  def updateExecutedState() : Unit = {
+    executed = true
+  }
 
   def updateResult(v: Any): Unit = {
     result = v
@@ -65,6 +75,31 @@ case class ScalarSubquery(
     require(updated, s"$this has not finished")
     Literal.create(result, dataType).doGenCode(ctx, ev)
   }
+
+  override def equals(o: Any): Boolean = o match {
+    case other: ScalarSubquery => this.eq(other)
+    case _ => false
+  }
+
+  override def hashCode: Int = exprId.hashCode()
+}
+
+/**
+ * A wrapper for reused uncorrelated ScalarSubquery to avoid the re-computing for subqueries with
+ * the same "canonical" logical plan in a query, because uncorrelated subqueries with the same
+ * "canonical" logical plan always produce the same results.
+ */
+case class ReusedScalarSubquery(
+    exprId: ExprId,
+    child: ScalarSubquery) extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+  override def toString: String = s"ReusedSubquery#${exprId.id} ($child)"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, c => c)
+
+  protected override def nullSafeEval(input: Any): Any = input
 }
 
 /**
@@ -72,10 +107,24 @@ case class ScalarSubquery(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
+    // Build a hash map using schema of subquery's logical plan to avoid O(N*N) sameResult calls.
+    val subqueryMap = mutable.HashMap[StructType, ArrayBuffer[(LogicalPlan, ScalarSubquery)]]()
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
-        ScalarSubquery(executedPlan, subquery.exprId)
+        val sameSchema = subqueryMap.getOrElseUpdate(
+          subquery.query.schema, ArrayBuffer[(LogicalPlan, ScalarSubquery)]())
+        val samePlan = sameSchema.find { case (e, _) =>
+          subquery.query.sameResult(e)
+        }
+        if (samePlan.isDefined) {
+          // Subqueries that have the same logical plan can be reused the same results.
+          ReusedScalarSubquery(subquery.exprId, samePlan.get._2)
+        } else {
+          val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+          val physicalSubquery = new ScalarSubquery(executedPlan, subquery.exprId)
+          sameSchema += ((subquery.plan, physicalSubquery))
+          physicalSubquery
+        }
     }
   }
 }
