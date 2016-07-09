@@ -179,7 +179,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final Timer openBlockRequestLatencyMillis = new Timer();
     // Time latency for executor registration latency in ms
     private final Timer registerExecutorRequestLatencyMillis = new Timer();
-    // Block transfer rate in mbps
+    // Block transfer rate in byte per second
     private final Meter blockTransferRateBytes = new Meter();
 
     private ShuffleMetrics() {
