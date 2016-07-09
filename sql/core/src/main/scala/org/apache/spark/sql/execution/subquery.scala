@@ -56,8 +56,8 @@ case class ScalarSubquery(
   // the first column in first row from `query`.
   @volatile private var result: Any = null
   @volatile private var updated: Boolean = false
-  @volatile private var evaluated: Boolean = false
-  @volatile private var futureResult: Future[Array[InternalRow]] = _
+  @transient private var evaluated: Boolean = false
+  @transient private var futureResult: Future[Array[InternalRow]] = _
 
   private def updateResult(v: Any): Unit = {
     result = v
