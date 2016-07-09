@@ -82,6 +82,29 @@ class DefaultSource
   }
 }
 
+/** Dummy provider with only RelationProvider and CreatableRelationProvider. */
+class DefaultSourceWithoutUserSpecifiedSchema
+  extends RelationProvider
+  with CreatableRelationProvider {
+
+  case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
+    override def schema: StructType = StructType(Seq(StructField("a", StringType)))
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+}
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -117,6 +140,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       .load()
       .write
       .format("org.apache.spark.sql.test")
+      .save()
+  }
+
+  test("resolve default source without extending SchemaRelationProvider") {
+    spark.read
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
+      .load()
+      .write
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
       .save()
   }
 
