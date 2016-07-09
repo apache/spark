@@ -35,6 +35,7 @@ import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVect
   Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
@@ -574,16 +575,14 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
-        .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration",
-          "gammaShape")
-        .head()
-      val vocabSize = data.getAs[Int](0)
-      val topicsMatrix = data.getAs[Matrix](1)
-      val docConcentration = data.getAs[Vector](2)
-      val topicConcentration = data.getAs[Double](3)
-      val gammaShape = data.getAs[Double](4)
+      val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
+      topicConcentration: Double, gammaShape: Double, topicDistributionCol: String) =
+        MLUtils.convertVectorColumnsToML(data, "vocabSize", "topicsMatrix",
+          "docConcentration", "topicConcentration", "gammaShape").
+          select("vocabSize", "topicsMatrix", "docConcentration",
+            "topicConcentration", "gammaShape").head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-        gammaShape)
+         gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
