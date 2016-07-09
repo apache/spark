@@ -238,7 +238,7 @@ class SparkSession private(
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkSession.setActiveSession(this)
     val encoder = Encoders.product[A]
-    Dataset.ofRows(self, ExternalRDD(rdd)(self)(encoder))
+    Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
   }
 
   /**
@@ -423,7 +423,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
-    Dataset[T](self, ExternalRDD(data)(self))
+    Dataset[T](self, ExternalRDD(data, self))
   }
 
   /**

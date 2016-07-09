@@ -76,7 +76,7 @@ object RDDConversions {
 
 private[sql] object ExternalRDD {
 
-  def apply[T: Encoder](rdd: RDD[T])(session: SparkSession): LogicalPlan = {
+  def apply[T: Encoder](rdd: RDD[T], session: SparkSession): LogicalPlan = {
     val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
     CatalystSerde.serialize[T](externalRdd)
   }
