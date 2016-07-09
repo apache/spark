@@ -154,6 +154,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+            catalog.setCurrentDatabase(dbNameWithoutBackTicks)
             val expectedLocation =
               "file:" + appendTrailingSlash(path) + s"$dbNameWithoutBackTicks.db"
             assert(db1 == CatalogDatabase(
@@ -162,6 +163,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
               expectedLocation,
               Map.empty))
             sql(s"DROP DATABASE $dbName CASCADE")
+            assert(catalog.getCurrentDatabase != dbNameWithoutBackTicks)
             assert(!catalog.databaseExists(dbNameWithoutBackTicks))
           } finally {
             catalog.reset()

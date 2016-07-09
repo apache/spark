@@ -49,6 +49,8 @@ class SessionCatalog(
     hadoopConf: Configuration) extends Logging {
   import CatalogTypes.TablePartitionSpec
 
+  val DEFAULT_DATABASE = "default"
+
   // For testing only.
   def this(
       externalCatalog: ExternalCatalog,
@@ -77,7 +79,7 @@ class SessionCatalog(
   // the corresponding item in the current database.
   @GuardedBy("this")
   protected var currentDb = {
-    val defaultName = "default"
+    val defaultName = DEFAULT_DATABASE
     val defaultDbDefinition =
       CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
     // Initialize default database if it doesn't already exist
@@ -146,7 +148,7 @@ class SessionCatalog(
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = formatDatabaseName(db)
-    if (dbName == "default") {
+    if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
@@ -878,7 +880,7 @@ class SessionCatalog(
    * This is mainly used for tests.
    */
   private[sql] def reset(): Unit = synchronized {
-    val default = "default"
+    val default = DEFAULT_DATABASE
     listDatabases().filter(_ != default).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
