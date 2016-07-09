@@ -94,7 +94,7 @@ case class ReusedScalarSubquery(
     child: ScalarSubquery) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType
-  override def toString: String = s"ReusedSubquery#${exprId.id} ($child)"
+  override def toString: String = s"ReusedSubquery#${exprId.id}($child)"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
