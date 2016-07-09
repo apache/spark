@@ -52,6 +52,7 @@ trait CheckAnalysis extends PredicateHelper {
         "The argument to the LIMIT clause must evaluate to a constant value. " +
           s"Limit:${limitExpr.sql}")
     }
+    // Analyzer rule ResolveLimits already converts limitExpr to integers.
     limitExpr match {
       case IntegerLiteral(limit) if limit >= 0 => // OK
       case IntegerLiteral(limit) => failAnalysis(
