@@ -665,6 +665,12 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.shuffleReadMetrics"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
       ) ++ Seq(
+        // New methods introduced in SPARK-8398 that expose hadoop Configuration
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.saveAsTextFile"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile")
+      ) ++ Seq(
         // SPARK-13643: Move functionality from SQLContext to SparkSession
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.getSchema")
       ) ++ Seq(
@@ -839,7 +845,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.regression.LeastSquaresCostFun.this"),
+          "org.apache.spark.ml.regression.LeastSquaresCostFun.this")
+      ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.sql.SQLContext.clearLastInstantiatedContext"),
         ProblemFilters.exclude[MissingMethodProblem](

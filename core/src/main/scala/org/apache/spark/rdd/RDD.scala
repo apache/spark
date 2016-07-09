@@ -28,7 +28,7 @@ import scala.reflect.{classTag, ClassTag}
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.io.{BytesWritable, NullWritable, Text}
 import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.mapred.TextOutputFormat
+import org.apache.hadoop.mapred.{JobConf, TextOutputFormat}
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
@@ -1412,7 +1412,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a text file, using string representations of elements.
    */
-  def saveAsTextFile(path: String): Unit = withScope {
+  def saveAsTextFile(path: String, conf: JobConf): Unit = withScope {
     // https://issues.apache.org/jira/browse/SPARK-2075
     //
     // NullWritable is a `Comparable` in Hadoop 1.+, so the compiler cannot find an implicit
@@ -1433,8 +1433,16 @@ abstract class RDD[T: ClassTag](
       }
     }
     RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
+      .saveAsHadoopFile(
+        path, classOf[NullWritable], classOf[Text],
+        classOf[TextOutputFormat[NullWritable, Text]], conf)
   }
+
+  /**
+   * Save this RDD as a text file, using string representations of elements.
+   */
+  def saveAsTextFile(path: String): Unit =
+    saveAsTextFile(path, new JobConf(sc.hadoopConfiguration))
 
   /**
    * Save this RDD as a compressed text file, using string representations of elements.
@@ -1457,11 +1465,17 @@ abstract class RDD[T: ClassTag](
   /**
    * Save this RDD as a SequenceFile of serialized objects.
    */
-  def saveAsObjectFile(path: String): Unit = withScope {
+  def saveAsObjectFile(path: String, conf: JobConf): Unit = withScope {
     this.mapPartitions(iter => iter.grouped(10).map(_.toArray))
       .map(x => (NullWritable.get(), new BytesWritable(Utils.serialize(x))))
-      .saveAsSequenceFile(path)
+      .saveAsSequenceFile(path, None, conf)
   }
+
+  /**
+   * Save this RDD as a SequenceFile of serialized objects.
+   */
+  def saveAsObjectFile(path: String): Unit =
+    saveAsObjectFile(path, new JobConf(sc.hadoopConfiguration))
 
   /**
    * Creates tuples of the elements in this RDD by applying `f`.

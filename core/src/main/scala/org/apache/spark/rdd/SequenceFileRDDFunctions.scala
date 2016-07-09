@@ -82,7 +82,8 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
    */
   def saveAsSequenceFile(
       path: String,
-      codec: Option[Class[_ <: CompressionCodec]] = None): Unit = self.withScope {
+      codec: Option[Class[_ <: CompressionCodec]],
+      conf: JobConf): Unit = self.withScope {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
     // TODO We cannot force the return type of `anyToWritable` be same as keyWritableClass and
@@ -95,18 +96,29 @@ class SequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable : ClassTag
     logInfo("Saving as sequence file of type (" + keyWritableClass.getSimpleName + "," +
       valueWritableClass.getSimpleName + ")" )
     val format = classOf[SequenceFileOutputFormat[Writable, Writable]]
-    val jobConf = new JobConf(self.context.hadoopConfiguration)
     if (!convertKey && !convertValue) {
-      self.saveAsHadoopFile(path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+      self.saveAsHadoopFile(path, keyWritableClass, valueWritableClass, format, conf, codec)
     } else if (!convertKey && convertValue) {
       self.map(x => (x._1, anyToWritable(x._2))).saveAsHadoopFile(
-        path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+        path, keyWritableClass, valueWritableClass, format, conf, codec)
     } else if (convertKey && !convertValue) {
       self.map(x => (anyToWritable(x._1), x._2)).saveAsHadoopFile(
-        path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+        path, keyWritableClass, valueWritableClass, format, conf, codec)
     } else if (convertKey && convertValue) {
       self.map(x => (anyToWritable(x._1), anyToWritable(x._2))).saveAsHadoopFile(
-        path, keyWritableClass, valueWritableClass, format, jobConf, codec)
+        path, keyWritableClass, valueWritableClass, format, conf, codec)
     }
   }
+
+  /**
+   * Output the RDD as a Hadoop SequenceFile using the Writable types we infer from the RDD's key
+   * and value types. If the key or value are Writable, then we use their classes directly;
+   * otherwise we map primitive types such as Int and Double to IntWritable, DoubleWritable, etc,
+   * byte arrays to BytesWritable, and Strings to Text. The `path` can be on any Hadoop-supported
+   * file system.
+   */
+  def saveAsSequenceFile(
+      path: String,
+      codec: Option[Class[_ <: CompressionCodec]] = None): Unit =
+    saveAsSequenceFile(path, codec, new JobConf(self.context.hadoopConfiguration))
 }
