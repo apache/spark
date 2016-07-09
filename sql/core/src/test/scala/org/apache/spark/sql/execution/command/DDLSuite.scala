@@ -1270,20 +1270,22 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
-  test("drop default or current database") {
+  test("drop current database") {
     sql("CREATE DATABASE temp")
     sql("USE temp")
     val m = intercept[AnalysisException] {
       sql("DROP DATABASE temp")
     }.getMessage
-    assert(m.contains("Can not drop `default` or current database"))
+    assert(m.contains("Can not drop current database `temp`"))
+  }
 
+  test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         var message = intercept[AnalysisException] {
           sql("DROP DATABASE default")
         }.getMessage
-        assert(message.contains("Can not drop `default` or current database"))
+        assert(message.contains("Can not drop default database"))
 
         message = intercept[AnalysisException] {
           sql("DROP DATABASE DeFault")
@@ -1291,7 +1293,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         if (caseSensitive == "true") {
           assert(message.contains("Database 'DeFault' not found"))
         } else {
-          assert(message.contains("Can not drop `default` or current database"))
+          assert(message.contains("Can not drop default database"))
         }
       }
     }

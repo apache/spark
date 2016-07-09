@@ -567,18 +567,14 @@ class HiveDDLSuite
         var message = intercept[AnalysisException] {
           sql("DROP DATABASE default")
         }.getMessage
-        assert(message.contains("Can not drop `default` or current database"))
+        assert(message.contains("Can not drop default database"))
 
         // SQLConf.CASE_SENSITIVE does not affect the result
         // because the Hive metastore is not case sensitive.
         message = intercept[AnalysisException] {
           sql("DROP DATABASE DeFault")
         }.getMessage
-        if (caseSensitive == "true") {
-          assert(message.contains("Can not drop default database"))
-        } else {
-          assert(message.contains("Can not drop `default` or current database"))
-        }
+        assert(message.contains("Can not drop default database"))
       }
     }
   }
