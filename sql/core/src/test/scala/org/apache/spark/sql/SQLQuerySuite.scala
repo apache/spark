@@ -2896,31 +2896,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
   }
-
-  test("SPARK-16456: Reuse the uncorrelated scalar subqueries with the same logical plan") {
-    withTempTable("t1", "t2", "t3") {
-      val df = (1 to 3).map(i => (i, i)).toDF("key", "value")
-      df.createOrReplaceTempView("t1")
-      df.createOrReplaceTempView("t2")
-      df.createOrReplaceTempView("t3")
-      checkAnswer(
-        sql(
-          """
-            |WITH max_test AS
-            |(
-            | SELECT max(key) as max_key FROM t1
-            |),
-            |max_test2 AS
-            |(
-            | SELECT max(key) as max_key FROM t1
-            |)
-            |SELECT key FROM t2
-            |WHERE key = (SELECT max_key FROM max_test) and value = (SELECT max_key FROM max_test)
-            |UNION ALL
-            |SELECT key FROM t3
-            |WHERE key = (SELECT max_key FROM max_test) and value = (SELECT max_key FROM max_test2)
-          """.stripMargin
-        ), Row(3) :: Row(3) :: Nil)
-    }
-  }
 }

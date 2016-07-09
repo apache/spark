@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
@@ -28,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A subquery that will return only one row and one column.
@@ -53,15 +56,10 @@ case class ScalarSubquery(
   // the first column in first row from `query`.
   @volatile private var result: Any = null
   @volatile private var updated: Boolean = false
-  @volatile private var executed: Boolean = false
+  @volatile private var evaluated: Boolean = false
+  @volatile private var futureResult: Future[Array[InternalRow]] = _
 
-  def isExecuted: Boolean = executed
-
-  def updateExecutedState() : Unit = {
-    executed = true
-  }
-
-  def updateResult(v: Any): Unit = {
+  private def updateResult(v: Any): Unit = {
     result = v
     updated = true
   }
@@ -76,12 +74,51 @@ case class ScalarSubquery(
     Literal.create(result, dataType).doGenCode(ctx, ev)
   }
 
+  /**
+   * Submit the subquery to be evaluated. No need to do if it has been evaluated before.
+   */
+  def submitSubqueryEvaluated(): Unit = synchronized {
+    if (!evaluated) {
+      futureResult = Future {
+        // Each subquery should return only one row (and one column). We take two here and throws
+        // an exception later if the number of rows is greater than one.
+        executedPlan.executeTake(2)
+      }(ScalarSubquery.subqueryExecutionContext)
+      evaluated = true
+    }
+  }
+
+  /**
+   * Blocks the thread until the evaluation of subquery has been finished.
+   */
+  def awaitSubqueryResult(): Unit = synchronized {
+    if (!updated) {
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
+      if (rows.length > 1) {
+        sys.error(s"more than one row returned by a subquery used as an expression:\n${plan}")
+      }
+      if (rows.length == 1) {
+        assert(rows(0).numFields == 1,
+          s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
+        updateResult(rows(0).get(0, dataType))
+      } else {
+        // If there is no rows returned, the result should be null.
+        updateResult(null)
+      }
+    }
+  }
+
   override def equals(o: Any): Boolean = o match {
     case other: ScalarSubquery => this.eq(other)
     case _ => false
   }
 
   override def hashCode: Int = exprId.hashCode()
+}
+
+object ScalarSubquery {
+  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 /**
