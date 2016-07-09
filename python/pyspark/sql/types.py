@@ -926,6 +926,23 @@ _type_mappings = {
     datetime.time: TimestampType,
 }
 
+# Mapping Python array types to Spark SQL DataType
+_array_type_mappings = {
+    'b': ByteType,
+    'B': ShortType,
+    'u': StringType,
+    'h': ShortType,
+    'H': IntegerType,
+    'i': IntegerType,
+    'I': LongType,
+    'l': LongType,
+    'L': LongType,
+    'q': LongType,
+    'Q': LongType,
+    'f': FloatType,
+    'd': DoubleType
+}
+
 if sys.version < "3":
     _type_mappings.update({
         unicode: StringType,
@@ -955,12 +972,14 @@ def _infer_type(obj):
                 return MapType(_infer_type(key), _infer_type(value), True)
         else:
             return MapType(NullType(), NullType(), True)
-    elif isinstance(obj, (list, array)):
+    elif isinstance(obj, list):
         for v in obj:
             if v is not None:
                 return ArrayType(_infer_type(obj[0]), True)
         else:
             return ArrayType(NullType(), True)
+    elif isinstance(obj, array):
+        return ArrayType(_array_type_mappings[obj.typecode](), True)
     else:
         try:
             return _infer_schema(obj)
