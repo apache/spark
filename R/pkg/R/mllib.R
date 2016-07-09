@@ -39,6 +39,14 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
+#' S4 class that represents an LDAModel
+#'
+#' @param jobj a Java object reference to the backing Scala LDAWrapper
+#' @export
+#' @note LDAModel since 2.1.0
+setClass("LDAModel", representation(jobj = "jobj"))
+
+
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
@@ -265,6 +273,61 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             rownames(tables) <- unlist(labels)
             colnames(tables) <- unlist(features)
             return(list(apriori = apriori, tables = tables))
+          })
+
+# Makes predictions from a Latent Dirichlet Allocation model or a model produced by spark.lda(),
+
+#' @param newData A SparkDataFrame for testing
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
+#' @rdname spark.lda
+#' @export
+#' @note predict(LDAModel) since 2.1.0
+setMethod("predict", signature(object = "LDAModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+          })
+
+# Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
+
+#' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
+#' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
+#'         \code{tables}, conditional probabilities given the target label
+#' @rdname spark.lda
+#' @export
+#' @note summary(LDAModel) since 2.1.0
+setMethod("summary", signature(object = "LDAModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "features")
+            labels <- callJMethod(jobj, "labels")
+            apriori <- callJMethod(jobj, "apriori")
+            apriori <- t(as.matrix(unlist(apriori)))
+            colnames(apriori) <- unlist(labels)
+            tables <- callJMethod(jobj, "tables")
+            tables <- matrix(tables, nrow = length(labels))
+            rownames(tables) <- unlist(labels)
+            colnames(tables) <- unlist(features)
+            return(list(apriori = apriori, tables = tables))
+          })
+
+# Saves the Latent Dirichlet Allocation model to the input path.
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.lda
+#' @export
+#' @seealso \link{read.ml}
+#' @note write.ml(LDAModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "LDAModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
           })
 
 #' K-Means Clustering Model
@@ -523,6 +586,8 @@ read.ml <- function(path) {
       return(new("GeneralizedLinearRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
       return(new("KMeansModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LDAWrapper")) {
+      return(new("LDAModel", jobj = jobj))
   } else {
     stop(paste("Unsupported model: ", jobj))
   }
@@ -570,6 +635,58 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
             return(new("AFTSurvivalRegressionModel", jobj = jobj))
           })
 
+#' Latent Dirichlet Allocation
+#'
+#' \code{spark.lda} fits a Latent Dirichlet Allocation model on
+#' a SparkDataFrame. Users can call \code{summary} to get a summary of the fitted LDA model,
+#' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
+#' save/load fitted models.
+#'
+#' @param data A SparkDataFrame for training
+#' @param features Features column name
+#' @param k Number of topics
+#' @param maxIter Maximum iterations
+#' @param optimizer Optimizer to train an LDA model, "online" or "em"
+#' @param seed Random seed
+#' @param subsamplingRate Subsampling rate
+#' @param topicConcentration
+#' @param docConcentration
+#' @param checkpointInterval
+#' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
+#' @rdname spark.lda
+#' @seealso survival: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(ovarian)
+#' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
+#'
+#' # get a summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predicted <- predict(model, df)
+#' showDF(predicted)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.lda since 2.1.0
+setMethod("spark.lda", signature(data = "SparkDataFrame", features = "character"),
+          #function(data, features = "features", k = 10, maxIter = 20, optimizer = c("online", "em"),
+          #         seed = 42, subsamplingRate = 0.05, topicConcentration, docConcentration,
+          #         checkpointInterval = 10) {
+
+            #jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit",
+            #                    data@sdf, features, k, maxIter, optimizer, seed, subsamplingRate,
+            #                    topicConcentration, docConcentration, checkpointInterval)
+          function(data, features = "features") {
+            jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features)
+            return(new("LDAModel", jobj = jobj))
+          })
 
 # Returns a summary of the AFT survival regression model produced by spark.survreg,
 # similarly to R's summary().

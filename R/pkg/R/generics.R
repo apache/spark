@@ -1280,6 +1280,10 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.lda", function(data, features, ...) { standardGeneric("spark.lda") })
+
 #' write.ml
 #' @rdname write.ml
 #' @export
