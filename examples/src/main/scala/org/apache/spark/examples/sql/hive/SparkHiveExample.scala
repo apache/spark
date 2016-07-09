@@ -14,24 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-// scalastyle:off println
 package org.apache.spark.examples.sql.hive
 
-import java.io.File
+// $example on:spark_hive$
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SparkSession
+// $example off:spark_hive$
 
-import com.google.common.io.{ByteStreams, Files}
+object SparkHiveExample {
 
-import org.apache.spark.sql._
-
-object HiveFromSpark {
+  // $example on:spark_hive$
   case class Record(key: Int, value: String)
-
-  // Copy kv1.txt file from classpath to temporary directory
-  val kv1Stream = HiveFromSpark.getClass.getResourceAsStream("/kv1.txt")
-  val kv1File = File.createTempFile("kv1", "txt")
-  kv1File.deleteOnExit()
-  ByteStreams.copy(kv1Stream, Files.newOutputStreamSupplier(kv1File))
+  // $example off:spark_hive$
 
   def main(args: Array[String]) {
     // When working with Hive, one must instantiate `SparkSession` with Hive support, including
@@ -41,43 +35,47 @@ object HiveFromSpark {
     // in the current directory and creates a directory configured by `spark.sql.warehouse.dir`,
     // which defaults to the directory `spark-warehouse` in the current directory that the spark
     // application is started.
-    val spark = SparkSession.builder
-      .appName("HiveFromSpark")
-      .enableHiveSupport()
-      .getOrCreate()
+
+    // $example on:spark_hive$
+    // warehouseLocation points to the default location for managed databases and tables
+    val warehouseLocation = "file:${system:user.dir}/spark-warehouse"
+
+    val spark = SparkSession
+        .builder()
+        .appName("Spark Hive Example")
+        .config("spark.sql.warehouse.dir", warehouseLocation)
+        .enableHiveSupport()
+        .getOrCreate()
 
     import spark.implicits._
     import spark.sql
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")
+    sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
     // Queries are expressed in HiveQL
-    println("Result of 'SELECT *': ")
-    sql("SELECT * FROM src").collect().foreach(println)
+    sql("SELECT * FROM src").show()
 
     // Aggregation queries are also supported.
-    val count = sql("SELECT COUNT(*) FROM src").collect().head.getLong(0)
-    println(s"COUNT(*): $count")
+    sql("SELECT COUNT(*) FROM src").show()
 
-    // The results of SQL queries are themselves RDDs and support all normal RDD functions.  The
-    // items in the RDD are of type Row, which allows you to access each column by ordinal.
-    val rddFromSql = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
+    // The results of SQL queries are themselves DataFrames and support all normal functions.
+    val sqlDF = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
-    println("Result of RDD.map:")
-    val rddAsStrings = rddFromSql.rdd.map {
+    // The items in DaraFrames are of type Row, which allows you to access each column by ordinal.
+    val stringsDS = sqlDF.map {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
+    stringsDS.show()
 
-    // You can also use RDDs to create temporary views within a HiveContext.
-    val rdd = spark.sparkContext.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
-    rdd.toDF().createOrReplaceTempView("records")
+    // You can also use DataFrames to create temporary views within a HiveContext.
+    val recordsDF = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
+    recordsDF.createOrReplaceTempView("records")
 
-    // Queries can then join RDD data with data stored in Hive.
-    println("Result of SELECT *:")
-    sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
+    // Queries can then join DataFrame data with data stored in Hive.
+    sql("SELECT * FROM records r JOIN src s ON r.key = s.key").show()
+    // $example off:spark_hive$
 
     spark.stop()
   }
 }
-// scalastyle:on println
