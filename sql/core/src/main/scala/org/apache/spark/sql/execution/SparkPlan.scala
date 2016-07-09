@@ -158,9 +158,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Blocks the thread until all subqueries finish evaluation.
    */
   protected def waitForSubqueries(): Unit = synchronized {
-    allSubqueries.foreach { e =>
-      e.awaitSubqueryResult()
-    }
+    allSubqueries.foreach(_.awaitSubqueryResult())
+    allSubqueries.clear()
   }
 
   /**
