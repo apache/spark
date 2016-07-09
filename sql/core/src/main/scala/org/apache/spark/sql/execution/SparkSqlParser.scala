@@ -1006,12 +1006,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     selectQuery match {
       case Some(q) =>
-        // Just use whatever is projected in the select statement as our schema
-        if (schema.nonEmpty) {
-          operationNotAllowed(
-            "Schema may not be specified in a Create Table As Select (CTAS) statement",
-            ctx)
-        }
         // Hive does not allow to use a CTAS statement to create a partitioned table.
         if (tableDesc.partitionColumnNames.nonEmpty) {
           val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
@@ -1020,6 +1014,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
             "CTAS statement."
           operationNotAllowed(errorMessage, ctx)
+        }
+        // Just use whatever is projected in the select statement as our schema
+        if (schema.nonEmpty) {
+          operationNotAllowed(
+            "Schema may not be specified in a Create Table As Select (CTAS) statement",
+            ctx)
         }
 
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
@@ -1035,7 +1035,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           CreateTableUsingAsSelect(
             tableIdent = tableDesc.identifier,
             provider = conf.defaultDataSourceName,
-            partitionColumns = tableDesc.partitionColumnNames.toArray,
+            partitionColumns = Array.empty[String],
             bucketSpec = None,
             mode = mode,
             options = optionsWithPath,
