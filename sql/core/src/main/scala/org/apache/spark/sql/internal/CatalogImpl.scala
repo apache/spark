@@ -138,21 +138,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    if (sessionCatalog.isTemporaryTable(TableIdentifier(tableName))) {
-      val columns = sessionCatalog.listTemporaryTableOutput(tableName).map { c =>
-        new Column(
-          name = c.name,
-          description = c.name,
-          dataType = c.dataType.catalogString,
-          nullable = c.nullable,
-          isPartition = false,
-          isBucket = false
-        )
-      }
-      CatalogImpl.makeDataset(columns, sparkSession)
-    } else {
-      listColumns(currentDatabase, tableName)
-    }
+    listColumns("", tableName)
   }
 
   /**
