@@ -34,14 +34,4 @@ private class ExternalShuffleServiceSource
   override val sourceName = "shuffleService"
 
   metricRegistry.registerAll(blockHandler.getAllMetrics)
-
-  metricRegistry.register(MetricRegistry.name("registeredExecutorsSize"),
-    new Gauge[Long] {
-      override def getValue: Long = blockHandler.getRegisteredExecutorsSize
-    })
-
-  metricRegistry.register(MetricRegistry.name("totalShuffleRequests"),
-    new Gauge[Long] {
-      override def getValue: Long = blockHandler.getTotalShuffleRequests
-    })
 }

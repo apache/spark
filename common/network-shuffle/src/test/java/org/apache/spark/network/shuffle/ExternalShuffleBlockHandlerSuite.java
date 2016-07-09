@@ -74,7 +74,6 @@ public class ExternalShuffleBlockHandlerSuite {
         .getMetrics()
         .get("registerExecutorRequestLatencyMillis");
     assertEquals(1, registerExecutorRequestLatencyMillis.getCount());
-    assertEquals(1, ((ExternalShuffleBlockHandler) handler).getTotalShuffleRequests());
   }
 
   @SuppressWarnings("unchecked")
@@ -82,8 +81,8 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testOpenShuffleBlocks() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3 * 1024 * 1024]));
-    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7 * 1024 * 1024]));
+    ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
+    ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
     when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
     ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
@@ -121,7 +120,6 @@ public class ExternalShuffleBlockHandlerSuite {
         .getMetrics()
         .get("blockTransferRateBytes");
     assertEquals(10, blockTransferRateBytes.getCount());
-    assertEquals(1, ((ExternalShuffleBlockHandler) handler).getTotalShuffleRequests());
   }
 
   @Test

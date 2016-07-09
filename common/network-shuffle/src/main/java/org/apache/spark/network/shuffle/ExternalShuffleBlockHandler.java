@@ -23,8 +23,8 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.jar.Pack200;
 
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
@@ -59,7 +59,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
-  // Shuffle service metrics setup
   private final ShuffleMetrics metrics;
 
   public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
@@ -89,7 +88,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       TransportClient client,
       RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
-      // Reset transferred block size metrics as zero
       final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
       try {
         OpenBlocks msg = (OpenBlocks) msgObj;
@@ -109,7 +107,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
                      client.getClientId(),
                      NettyUtils.getRemoteAddress(client.getChannel()));
         callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
-        metrics.blockTransferRateMBytes.mark(totalBlockSize / 1024 / 1024);
+        metrics.blockTransferRateBytes.mark(totalBlockSize);
       } finally {
         responseDelayContext.stop();
       }
@@ -132,14 +130,6 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
   public MetricSet getAllMetrics() {
     return metrics;
-  }
-
-  public long getRegisteredExecutorsSize() {
-    return blockManager.getRegisteredExecutorsSize();
-  }
-
-  public long getTotalShuffleRequests() {
-    return metrics.openBlockRequestLatencyMillis.getCount() + metrics.registerExecutorRequestLatencyMillis.getCount();
   }
 
   @Override
@@ -190,13 +180,19 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     // Time latency for executor registration latency in ms
     private final Timer registerExecutorRequestLatencyMillis = new Timer();
     // Block transfer rate in mbps
-    private final Meter blockTransferRateMBytes = new Meter();
+    private final Meter blockTransferRateBytes = new Meter();
 
     private ShuffleMetrics() {
       allMetrics = new HashMap<>();
       allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
       allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
-      allMetrics.put("blockTransferRateBytes", blockTransferRateMBytes);
+      allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
+      allMetrics.put("registeredExecutorsSize", new Gauge<Integer>() {
+        @Override
+        public Integer getValue() {
+          return blockManager.getRegisteredExecutorsSize();
+        }
+      });
     }
 
     @Override
