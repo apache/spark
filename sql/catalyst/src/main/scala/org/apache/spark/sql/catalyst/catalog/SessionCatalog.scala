@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
+  val INFORMATION_SCHEMA_DATABASE = "information_schema"
 }
 
 /**
@@ -153,6 +154,8 @@ class SessionCatalog(
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
+    } else if (dbName == INFORMATION_SCHEMA_DATABASE) {
+      throw new AnalysisException(s"Can not drop system database `$INFORMATION_SCHEMA_DATABASE`")
     } else if (dbName == getCurrentDatabase) {
       throw new AnalysisException(s"Can not drop current database `${dbName}`")
     }
@@ -173,7 +176,11 @@ class SessionCatalog(
 
   def databaseExists(db: String): Boolean = {
     val dbName = formatDatabaseName(db)
-    externalCatalog.databaseExists(dbName)
+    if (db == INFORMATION_SCHEMA_DATABASE) {
+      true
+    } else {
+      externalCatalog.databaseExists(dbName)
+    }
   }
 
   def listDatabases(): Seq[String] = {
@@ -253,9 +260,21 @@ class SessionCatalog(
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.getTable(db, table)
+    val normalizedName = normalizeTableIdentifier(name)
+    if (isTemporaryTable(normalizedName)) {
+      val tid = TableIdentifier(table)
+      CatalogTable(
+        identifier = tid,
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = tempTables(normalizedName.table).output.toStructType,
+        properties = Map(),
+        viewText = None)
+    } else {
+      requireDbExists(db)
+      requireTableExists(TableIdentifier(table, Some(db)))
+      externalCatalog.getTable(db, table)
+    }
   }
 
   /**
@@ -434,10 +453,11 @@ class SessionCatalog(
    */
   def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     synchronized {
-      val db = formatDatabaseName(name.database.getOrElse(currentDb))
-      val table = formatTableName(name.table)
+      val normalizedName = normalizeTableIdentifier(name)
+      val db = formatDatabaseName(normalizedName.database.getOrElse(currentDb))
+      val table = formatTableName(normalizedName.table)
       val relationAlias = alias.getOrElse(table)
-      if (name.database.isDefined || !tempTables.contains(table)) {
+      if (normalizedName.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         val view = Option(metadata.tableType).collect {
           case CatalogTableType.VIEW => name
@@ -460,7 +480,7 @@ class SessionCatalog(
   def tableExists(name: TableIdentifier): Boolean = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    if (isTemporaryTable(name)) {
+    if (isTemporaryTable(normalizeTableIdentifier(name))) {
       true
     } else {
       externalCatalog.tableExists(db, table)
@@ -478,6 +498,33 @@ class SessionCatalog(
   }
 
   /**
+   * Normalize TableIdentifier by consistently ensuring the following two rules.
+   * 1. System temporary views should have None as database.
+   * 2. System temporary views should have prefixed table names.
+   * Currently, only INFORMATION_SCHEMA has temporary views.
+   */
+  protected def normalizeTableIdentifier(name: TableIdentifier): TableIdentifier = synchronized {
+    if (name.database.isDefined) {
+      if (name.database.contains(INFORMATION_SCHEMA_DATABASE)) {
+        TableIdentifier(s"$INFORMATION_SCHEMA_DATABASE.${name.table}", None)
+      } else {
+        name
+      }
+    } else {
+      val tableName = formatTableName(name.table)
+      if (tableName.startsWith(INFORMATION_SCHEMA_DATABASE + ".")) {
+        TableIdentifier(tableName, None)
+      } else if (currentDb == INFORMATION_SCHEMA_DATABASE) {
+        TableIdentifier(s"$INFORMATION_SCHEMA_DATABASE.$tableName", None)
+      } else if (tempTables.contains(tableName)) {
+        TableIdentifier(tableName, None)
+      } else {
+        TableIdentifier(name.table, Some(currentDb))
+      }
+    }
+  }
+
+  /**
    * List all tables in the specified database, including temporary tables.
    */
   def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
@@ -491,8 +538,11 @@ class SessionCatalog(
     val dbTables =
       externalCatalog.listTables(dbName, pattern).map { t => TableIdentifier(t, Some(dbName)) }
     synchronized {
-      val _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
+      var _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
         .map { t => TableIdentifier(t) }
+      if (db != INFORMATION_SCHEMA_DATABASE) {
+        _tempTables = _tempTables.filterNot(_.table.startsWith(INFORMATION_SCHEMA_DATABASE + "."))
+      }
       dbTables ++ _tempTables
     }
   }
@@ -907,8 +957,8 @@ class SessionCatalog(
    */
   def reset(): Unit = synchronized {
     setCurrentDatabase(DEFAULT_DATABASE)
-    listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
-      dropDatabase(db, ignoreIfNotExists = false, cascade = true)
+    listDatabases().filter(x => x != DEFAULT_DATABASE && x != INFORMATION_SCHEMA_DATABASE).foreach {
+      db => dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
     listTables(DEFAULT_DATABASE).foreach { table =>
       dropTable(table, ignoreIfNotExists = false, purge = false)

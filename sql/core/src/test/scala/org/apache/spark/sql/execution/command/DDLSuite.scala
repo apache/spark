@@ -671,7 +671,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     catalog.setCurrentDatabase("dbx")
     // rename without explicitly specifying database
     sql("ALTER TABLE tab2 RENAME TO tab1")
-    assert(catalog.listTables("dbx") == Seq(tableIdent1))
+    assert(catalog.listTables("dbx").contains(tableIdent1))
+    assert(!catalog.listTables("dbx").contains(tableIdent2))
     // table to rename does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE dbx.does_not_exist RENAME TO tab2")
@@ -993,7 +994,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("CREATE DATABASE showdb1A")
 
     // check the result as well as its order
-    checkDataset(sql("SHOW DATABASES"), Row("default"), Row("showdb1a"), Row("showdb2b"))
+    checkDataset(
+      sql("SHOW DATABASES"),
+      Row("default"), Row("information_schema"), Row("showdb1a"), Row("showdb2b"))
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),
@@ -1588,6 +1591,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           assert(message.contains("Database 'DeFault' not found"))
         } else {
           assert(message.contains("Can not drop default database"))
+        }
+      }
+    }
+  }
+
+  test("drop information_schema database") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql(s"DROP DATABASE ${SessionCatalog.INFORMATION_SCHEMA_DATABASE}")
+        }.getMessage
+        assert(message.contains(
+          s"Can not drop system database `${SessionCatalog.INFORMATION_SCHEMA_DATABASE}`"))
+
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE Information_ScheMA")
+        }.getMessage
+        if (caseSensitive == "true") {
+          assert(message.contains("Database 'Information_ScheMA' not found"))
+        } else {
+          assert(message.contains(
+            s"Can not drop system database `${SessionCatalog.INFORMATION_SCHEMA_DATABASE}`"))
         }
       }
     }

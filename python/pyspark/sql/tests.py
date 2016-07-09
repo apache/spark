@@ -1536,10 +1536,10 @@ class SQLTests(ReusedPySparkTestCase):
         spark = self.spark
         spark.catalog._reset()
         databases = [db.name for db in spark.catalog.listDatabases()]
-        self.assertEquals(databases, ["default"])
+        self.assertEquals(databases, ["default", "information_schema"])
         spark.sql("CREATE DATABASE some_db")
         databases = [db.name for db in spark.catalog.listDatabases()]
-        self.assertEquals(sorted(databases), ["default", "some_db"])
+        self.assertEquals(sorted(databases), ["default", "information_schema", "some_db"])
 
     def test_list_tables(self):
         from pyspark.sql.catalog import Table

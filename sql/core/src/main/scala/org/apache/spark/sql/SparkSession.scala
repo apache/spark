@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.systemcatalog.InformationSchema
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
@@ -544,7 +545,11 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  @transient lazy val catalog: Catalog = new CatalogImpl(self)
+  @transient lazy val catalog: Catalog = {
+    val catalog = new CatalogImpl(self)
+    InformationSchema.registerInformationSchema(self)
+    catalog
+  }
 
   /**
    * Returns the specified table as a [[DataFrame]].
