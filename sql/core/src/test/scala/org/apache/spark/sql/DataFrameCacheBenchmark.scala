@@ -33,17 +33,9 @@ import org.apache.spark.util.Benchmark
  *    sql/core/target/spark-sql_*-tests.jar
  *    [float datasize scale] [double datasize scale] [master URL]
  */
-case class DataFrameCacheBenchmark(masterURL: String) {
-  val conf = new SparkConf()
-  val sc = new SparkContext(
-    (if (masterURL == null) "local[1]" else masterURL), "test-sql-context", conf)
-  val sqlContext = new SQLContext(sc)
-  import sqlContext.implicits._
+class DataFrameCacheBenchmark {
 
-  // Set default configs. Individual cases will change them if necessary.
-  sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
-
-  def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+  def withSQLConf(sqlContext: SQLContext, pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
     val currentValues = keys.map(key => Try(sqlContext.conf.getConfString(key)).toOption)
     (keys, values).zipped.foreach(sqlContext.conf.setConfString)
@@ -55,18 +47,20 @@ case class DataFrameCacheBenchmark(masterURL: String) {
     }
   }
 
-  def floatSumBenchmark(values: Int, iters: Int = 5): Unit = {
+  def floatSumBenchmark(sqlContext: SQLContext, values: Int, iters: Int = 5): Unit = {
+    import sqlContext.implicits._
+
     val suites = Seq(("InternalRow", "false"), ("ColumnVector", "true"))
 
     val benchmarkPT = new Benchmark("Float Sum with PassThrough cache", values, iters)
     val rand1 = new Random(511)
-    val dfPassThrough = sc.parallelize(0 to values - 1, 1)
+    val dfPassThrough = sqlContext.sparkContext.parallelize(0 to values - 1, 1)
       .map(i => rand1.nextFloat()).toDF().cache()
     dfPassThrough.count()       // force to create df.cache()
     suites.foreach {
       case (str, value) =>
         benchmarkPT.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
+          withSQLConf(sqlContext, SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
             dfPassThrough.agg(sum("value")).collect
           }
         }
@@ -86,18 +80,20 @@ case class DataFrameCacheBenchmark(masterURL: String) {
     System.gc()
   }
 
-  def doubleSumBenchmark(values: Int, iters: Int = 5): Unit = {
+  def doubleSumBenchmark(sqlContext: SQLContext, values: Int, iters: Int = 5): Unit = {
+    import sqlContext.implicits._
+
     val suites = Seq(("InternalRow", "false"), ("ColumnVector", "true"))
 
     val benchmarkPT = new Benchmark("Double Sum with PassThrough cache", values, iters)
     val rand1 = new Random(511)
-    val dfPassThrough = sc.parallelize(0 to values - 1, 1)
+    val dfPassThrough = sqlContext.sparkContext.parallelize(0 to values - 1, 1)
       .map(i => rand1.nextDouble()).toDF().cache()
     dfPassThrough.count()       // force to create df.cache()
     suites.foreach {
       case (str, value) =>
         benchmarkPT.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
+          withSQLConf(sqlContext, SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
             dfPassThrough.agg(sum("value")).collect
           }
         }
@@ -117,19 +113,27 @@ case class DataFrameCacheBenchmark(masterURL: String) {
     System.gc()
   }
 
-  def run(f: Int, d: Int): Unit = {
-    floatSumBenchmark(1024 * 1024 * f)
-    doubleSumBenchmark(1024 * 1024 * d)
+  def run(sqlContext: SQLContext, f: Int, d: Int): Unit = {
+    sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+
+    floatSumBenchmark(sqlContext, 1024 * 1024 * f)
+    doubleSumBenchmark(sqlContext, 1024 * 1024 * d)
   }
 }
 
 object DataFrameCacheBenchmark {
+  val F = 30
+  val D = 15
   def main(args: Array[String]): Unit = {
-    val f = if (args.length > 0) args(0).toInt else 30
-    val d = if (args.length > 1) args(1).toInt else 15
+    val f = if (args.length > 0) args(0).toInt else F
+    val d = if (args.length > 1) args(1).toInt else D
     val masterURL = if (args.length > 2) args(2) else "local[1]"
 
-    val benchmark = DataFrameCacheBenchmark(masterURL)
-    benchmark.run(f, d)
+    val conf = new SparkConf()
+    val sc = new SparkContext(masterURL, "DataFrameCacheBenchmark", conf)
+    val sqlContext = new SQLContext(sc)
+
+    val benchmark = new DataFrameCacheBenchmark
+    benchmark.run(sqlContext, f, d)
   }
 }
