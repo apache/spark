@@ -659,7 +659,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
     }
   }
   override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Number].intValue()
+    val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
@@ -680,7 +680,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
     }
   }
   override lazy val statistics: Statistics = {
-    val limit = limitExpr.eval().asInstanceOf[Number].intValue()
+    val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = if (limit == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).

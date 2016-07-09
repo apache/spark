@@ -670,26 +670,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM mapData LIMIT CAST(1 AS Double)"),
-      mapData.collect().take(1).map(Row.fromTuple).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM mapData LIMIT CAST(1 AS BYTE)"),
-      mapData.collect().take(1).map(Row.fromTuple).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM mapData LIMIT CAST(1 AS LONG)"),
-      mapData.collect().take(1).map(Row.fromTuple).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM mapData LIMIT CAST(1 AS SHORT)"),
-      mapData.collect().take(1).map(Row.fromTuple).toSeq)
-
-    checkAnswer(
-      sql("SELECT * FROM mapData LIMIT CAST(1 AS FLOAT)"),
-      mapData.collect().take(1).map(Row.fromTuple).toSeq)
   }
 
   test("non-foldable expressions in LIMIT") {
