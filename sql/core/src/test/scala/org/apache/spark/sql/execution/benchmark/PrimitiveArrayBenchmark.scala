@@ -38,7 +38,7 @@ import org.apache.spark.util.collection.unsafe.sort._
  */
 class PrimitiveArrayBenchmark extends BenchmarkBase {
 
-  test("Read array in Dataset") {
+  ignore("Read array in Dataset") {
     import sparkSession.implicits._
 
     val iters = 5
