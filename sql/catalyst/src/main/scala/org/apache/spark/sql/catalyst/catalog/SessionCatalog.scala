@@ -450,7 +450,7 @@ class SessionCatalog(
    */
   def tableExists(name: TableIdentifier): Boolean = synchronized {
     val table = formatTableName(name.table)
-    if (tempTables.contains(table)) {
+    if (name.database.getOrElse("").length == 0 && tempTables.contains(table)) {
       true
     } else {
       var db = formatDatabaseName(name.database.getOrElse(currentDb))
