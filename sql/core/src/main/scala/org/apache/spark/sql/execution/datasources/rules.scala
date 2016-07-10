@@ -206,7 +206,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
-      case c: CreateTableUsingAsSelect =>
+      case c: CreateTableAsSelect =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableDesc.identifier)) {

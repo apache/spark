@@ -310,7 +310,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
+   * Create a [[CreateTableUsing]] or a [[CreateTableAsSelect]] logical plan.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
@@ -355,7 +355,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         numBuckets = numBuckets,
         properties = options)
 
-      CreateTableUsingAsSelect(
+      CreateTableAsSelect(
         tableDesc = tableDesc, provider = provider, mode = mode, child = query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
@@ -1047,7 +1047,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           } else {
             Map.empty[String, String]
           }
-          CreateTableUsingAsSelect(
+          CreateTableAsSelect(
             tableDesc = tableDesc.copy(properties = tableProperties),
             provider = conf.defaultDataSourceName,
             mode = mode,

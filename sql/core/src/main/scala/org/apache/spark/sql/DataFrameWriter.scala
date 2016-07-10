@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 
 /**
@@ -384,7 +384,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           properties = extraOptions.toMap)
 
         val cmd =
-          CreateTableUsingAsSelect(
+          CreateTableAsSelect(
             tableDesc,
             source,
             mode,

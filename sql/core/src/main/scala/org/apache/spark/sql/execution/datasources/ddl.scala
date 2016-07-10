@@ -54,7 +54,7 @@ case class CreateTableUsing(
  * analyzer can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
-case class CreateTableUsingAsSelect(
+case class CreateTableAsSelect(
     tableDesc: CatalogTable,
     provider: String,
     mode: SaveMode,

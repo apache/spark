@@ -47,6 +47,7 @@ case class CreateHiveTableAsSelectLogicalPlan(
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
   override lazy val resolved: Boolean =
+    // This should be moved to Analyzer checking?
     tableDesc.identifier.database.isDefined &&
       tableDesc.schema.nonEmpty &&
       tableDesc.storage.serde.isDefined &&
