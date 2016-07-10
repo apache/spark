@@ -118,6 +118,7 @@ private[parquet] class CatalystPrimitiveConverter(val updater: ParentContainerUp
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class CatalystRowConverter(
+    schemaConverter: CatalystSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
     updater: ParentContainerUpdater)
@@ -291,9 +292,10 @@ private[parquet] class CatalystRowConverter(
         new CatalystMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
-        new CatalystRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
-          override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
-        })
+        new CatalystRowConverter(
+          schemaConverter, parquetType.asGroupType(), t, new ParentContainerUpdater {
+            override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
+          })
 
       case t =>
         throw new RuntimeException(
@@ -443,11 +445,20 @@ private[parquet] class CatalystRowConverter(
       val elementType = catalystSchema.elementType
       val parentName = parquetSchema.getName
 
-      if (isElementType(repeatedType, elementType, parentName)) {
+      // At this stage, we're not sure whether the repeated field maps to the element type or is
+      // just the syntactic repeated group of the 3-level standard LIST layout. Here we try to
+      // convert the repeated field into a Catalyst type to see whether the converted type matches
+      // the Catalyst array element type.
+      val guessedElementType = schemaConverter.convertField(repeatedType)
+
+      if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType)) {
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentArray += value
         })
       } else {
+        // If the repeated field corresponds to the syntactic group in the standard 3-level Parquet
+        // LIST layout, creates a new converter using the only child field of the repeated field.
+        assert(!repeatedType.isPrimitive && repeatedType.asGroupType().getFieldCount == 1)
         new ElementConverter(repeatedType.asGroupType().getType(0), elementType)
       }
     }
@@ -460,37 +471,6 @@ private[parquet] class CatalystRowConverter(
     // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
     // in row cells.
     override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
-
-    // scalastyle:off
-    /**
-     * Returns whether the given type is the element type of a list or is a syntactic group with
-     * one field that is the element type.  This is determined by checking whether the type can be
-     * a syntactic group and by checking whether a potential syntactic group matches the expected
-     * schema.
-     * {{{
-     *   <list-repetition> group <name> (LIST) {
-     *     repeated group list {                          <-- repeatedType points here
-     *       <element-repetition> <element-type> element;
-     *     }
-     *   }
-     * }}}
-     * In short, here we handle Parquet list backwards-compatibility rules on the read path.  This
-     * method is based on `AvroIndexedRecordConverter.isElementType`.
-     *
-     * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
-     */
-    // scalastyle:on
-    private def isElementType(
-        parquetRepeatedType: Type, catalystElementType: DataType, parentName: String): Boolean = {
-      (parquetRepeatedType, catalystElementType) match {
-        case (t: PrimitiveType, _) => true
-        case (t: GroupType, _) if t.getFieldCount > 1 => true
-        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == "array" => true
-        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == parentName + "_tuple" => true
-        case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
-        case _ => false
-      }
-    }
 
     /** Array element converter */
     private final class ElementConverter(parquetType: Type, catalystType: DataType)
