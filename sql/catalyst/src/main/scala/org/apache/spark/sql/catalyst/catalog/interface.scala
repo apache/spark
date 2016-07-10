@@ -244,8 +244,7 @@ trait CatalogRelation {
  */
 case class SimpleCatalogRelation(
     databaseName: String,
-    metadata: CatalogTable,
-    alias: Option[String] = None)
+    metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
   override def catalogTable: CatalogTable = metadata
@@ -261,7 +260,7 @@ case class SimpleCatalogRelation(
         CatalystSqlParser.parseDataType(f.dataType),
         // Since data can be dumped in randomly with no validation, everything is nullable.
         nullable = true
-      )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))
+      )(qualifier = Some(metadata.identifier.table))
     }
   }
 

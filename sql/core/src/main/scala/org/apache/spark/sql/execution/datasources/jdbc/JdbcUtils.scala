@@ -100,8 +100,9 @@ object JdbcUtils extends Logging {
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val columns = rddSchema.fields.map(_.name).mkString(",")
+  def insertStatement(conn: Connection, table: String, rddSchema: StructType, dialect: JdbcDialect)
+      : PreparedStatement = {
+    val columns = rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
     val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
     conn.prepareStatement(sql)
@@ -177,7 +178,7 @@ object JdbcUtils extends Logging {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
       }
-      val stmt = insertStatement(conn, table, rddSchema)
+      val stmt = insertStatement(conn, table, rddSchema, dialect)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -260,7 +261,7 @@ object JdbcUtils extends Logging {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field =>
-      val name = field.name
+      val name = dialect.quoteIdentifier(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")

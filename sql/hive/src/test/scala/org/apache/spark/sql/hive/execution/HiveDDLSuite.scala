@@ -391,6 +391,29 @@ class HiveDDLSuite
     }
   }
 
+  test("create view with mismatched schema") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW view1 (col1, col3) AS SELECT * FROM tab1")
+        }.getMessage
+        assert(e.contains("the SELECT clause (num: `1`) does not match")
+          && e.contains("CREATE VIEW (num: `2`)"))
+      }
+    }
+  }
+
+  test("create view with specified schema") {
+    withView("view1") {
+      sql("CREATE VIEW view1 (col1, col2) AS SELECT 1, 2")
+      checkAnswer(
+        sql("SELECT * FROM view1"),
+        Row(1, 2) :: Nil
+      )
+    }
+  }
+
   test("desc table for Hive table") {
     withTable("tab1") {
       val tabName = "tab1"

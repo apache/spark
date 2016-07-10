@@ -1564,8 +1564,8 @@ spark.sql("SET -v").show(n=200, truncate=False)
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-# sqlContext is an existing sqlContext.
-properties <- sql(sqlContext, "SET -v")
+sparkR.session()
+properties <- sql("SET -v")
 showDF(properties, numRows = 200, truncate = FALSE)
 {% endhighlight %}
 
