@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, MessageType, PrimitiveType, Type}
+import org.apache.parquet.schema.{GroupType, MessageType, Type}
 import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64}
 
@@ -113,12 +113,14 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
  *
+ * @param schemaConverter A utility converter used to convert Parquet types to Catalyst types.
  * @param parquetType Parquet schema of Parquet records
  * @param catalystType Spark SQL schema that corresponds to the Parquet record type. User-defined
  *        types should have been expanded.
  * @param updater An updater which propagates converted field values to the parent container
  */
 private[parquet] class ParquetRowConverter(
+    schemaConverter: ParquetSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
     updater: ParentContainerUpdater)
@@ -292,9 +294,10 @@ private[parquet] class ParquetRowConverter(
         new ParquetMapConverter(parquetType.asGroupType(), t, updater)
 
       case t: StructType =>
-        new ParquetRowConverter(parquetType.asGroupType(), t, new ParentContainerUpdater {
-          override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
-        })
+        new ParquetRowConverter(
+          schemaConverter, parquetType.asGroupType(), t, new ParentContainerUpdater {
+            override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
+          })
 
       case t =>
         throw new RuntimeException(
@@ -442,13 +445,22 @@ private[parquet] class ParquetRowConverter(
     private val elementConverter: Converter = {
       val repeatedType = parquetSchema.getType(0)
       val elementType = catalystSchema.elementType
-      val parent = parquetSchema
 
-      if (isElementType(repeatedType, elementType, parent)) {
+      // At this stage, we're not sure whether the repeated field maps to the element type or is
+      // just the syntactic repeated group of the 3-level standard LIST layout. Here we try to
+      // convert the repeated field into a Catalyst type to see whether the converted type matches
+      // the Catalyst array element type.
+      val guessedElementType = schemaConverter.convertField(repeatedType)
+
+      if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType)) {
+        // If the repeated field corresponds to the element type, creates a new converter using the
+        // type of the repeated field.
         newConverter(repeatedType, elementType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentArray += value
         })
       } else {
+        // If the repeated field corresponds to the syntactic group in the standard 3-level Parquet
+        // LIST layout, creates a new converter using the only child field of the repeated field.
         new ElementConverter(repeatedType.asGroupType().getType(0), elementType)
       }
     }
@@ -461,129 +473,6 @@ private[parquet] class ParquetRowConverter(
     // next value.  `Row.copy()` only copies row cells, it doesn't do deep copy to objects stored
     // in row cells.
     override def start(): Unit = currentArray = ArrayBuffer.empty[Any]
-
-    // scalastyle:off
-    /**
-     * Returns whether the given type is the element type of a list or is a syntactic group with
-     * one field that is the element type.  This is determined by checking whether the type can be
-     * a syntactic group and by checking whether a potential syntactic group matches the expected
-     * schema.
-     * {{{
-     *   <list-repetition> group <name> (LIST) {          <-- parent
-     *     repeated group list {                          <-- repeatedType
-     *       <element-repetition> <element-type> element;
-     *     }
-     *   }
-     * }}}
-     * In short, here we handle Parquet list backwards-compatibility rules on the read path.  This
-     * method is based on `AvroIndexedRecordConverter.isElementType`.
-     *
-     * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules
-     */
-    // scalastyle:on
-    private def isElementType(
-        parquetRepeatedType: Type, catalystElementType: DataType, parent: GroupType): Boolean = {
-      (parquetRepeatedType, catalystElementType) match {
-        case (t: PrimitiveType, _) =>
-          // For legacy 2-level list types with primitive element type, e.g.:
-          //
-          //    // List<Integer> (nullable list, non-null elements)
-          //    optional group my_list (LIST) {           <-- parent
-          //      repeated int32 element;                 <-- repeatedType
-          //    }
-          true
-
-        case (t: GroupType, _) if t.getFieldCount > 1 =>
-          // For legacy 2-level list types whose element type is a group type with 2 or more fields,
-          // e.g.:
-          //
-          //    // List<Tuple<String, Integer>> (nullable list, non-null elements)
-          //    optional group my_list (LIST) {           <-- parent
-          //      repeated group element {                <-- repeatedType
-          //        required binary str (UTF8);
-          //        required int32 num;
-          //      };
-          //    }
-          true
-
-        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == "array" =>
-          // For legacy 2-level list types generated by parquet-avro (Parquet version < 1.6.0),
-          // e.g.:
-          //
-          //    // List<OneTuple<String>> (nullable list, non-null elements)
-          //    optional group my_list (LIST) {           <-- parent
-          //      repeated group array {                  <-- repeatedType
-          //        required binary str (UTF8);
-          //      };
-          //    }
-          true
-
-        case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == parent.getName + "_tuple" =>
-          // For Parquet data generated by parquet-thrift, e.g.:
-          //
-          //    // List<OneTuple<String>> (nullable list, non-null elements)
-          //    optional group my_list (LIST) {           <-- parent
-          //      repeated group my_list_tuple {          <-- repeatedType
-          //        required binary str (UTF8);
-          //      };
-          //    }
-          true
-
-        case (t: GroupType, _)
-            if parent.getOriginalType == LIST &&
-              t.getFieldCount == 1 &&
-              t.getName == "list" &&
-              t.getFieldName(0) == "element" =>
-          // For standard 3-level list types, e.g.:
-          //
-          //    // List<String> (list nullable, elements non-null)
-          //    optional group my_list (LIST) {           <-- parent
-          //      repeated group list {                   <-- repeatedType
-          //        required binary element (UTF8);
-          //      }
-          //    }
-          //
-          // This case branch must appear before the next one. See comments of the next case branch
-          // for details.
-          false
-
-        case (t: GroupType, StructType(fields)) =>
-          // For legacy 2-level list types whose element type is a group type with a single field,
-          // e.g.:
-          //
-          //    // List<OneTuple<String>> (nullable list, non-null elements)
-          //    optional group my_list (LIST) {           <-- parent
-          //      repeated group list {                   <-- repeatedType
-          //        required binary str (UTF8);
-          //      };
-          //    }
-          //
-          // NOTE: This kind of schema is ambiguous. According to parquet-format spec, this schema
-          // can also be interpreted as `List<String>`. However, consider we have a Parquet file
-          // with the following legacy 2-level list type whose element type is a group type with
-          // 2 fields:
-          //
-          //    // List<Tuple<String, Integer>> (nullable list, non-null elements)
-          //    optional group my_list (LIST) {
-          //      repeated group list {
-          //        required binary str (UTF8);
-          //        required int32 num;
-          //      };
-          //    }
-          //
-          // It's perfectly legal and quite possible that the user level query only want to query a
-          // single column `str` from this file, and thus gives the first schema as requested
-          // schema. To disambiguate these two cases, we check to see whether the nested field name
-          // is a member of corresponding Catalyst struct field names.
-          //
-          // NOTE: The standard 3-level LIST layout also matches this pattern since the backwards-
-          // compatibility rules require that the names "list" and "element" are not mandatory,
-          // that's why we must check for standard layout before this case branch.
-          fields.map(_.name).contains(t.getFieldName(0))
-
-        case _ => false
-      }
-    }
 
     /** Array element converter */
     private final class ElementConverter(parquetType: Type, catalystType: DataType)
