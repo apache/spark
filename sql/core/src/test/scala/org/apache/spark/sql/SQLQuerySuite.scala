@@ -684,12 +684,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     var e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT true")
     }.getMessage
-    assert(e.contains("number_rows in limit clause cannot be cast to integer:\"true\""))
+    assert(e.contains("number_rows in limit clause must be integer. number_rows:\"true\""))
 
     e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT 'a'")
     }.getMessage
-    assert(e.contains("number_rows in limit clause cannot be cast to integer:\"a\""))
+    assert(e.contains("number_rows in limit clause must be integer. number_rows:\"a\""))
   }
 
   test("negative in LIMIT or TABLESAMPLE") {

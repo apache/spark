@@ -57,7 +57,7 @@ trait CheckAnalysis extends PredicateHelper {
       case o: Int => failAnalysis(
         s"number_rows in limit clause must be equal to or greater than 0. number_rows:$o")
       case o => failAnalysis(
-        s"""number_rows in limit clause cannot be cast to integer:\"$o\".""")
+        s"""number_rows in limit clause must be integer. number_rows:\"$o\".""")
     }
   }
 
