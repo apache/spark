@@ -23,15 +23,24 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.clustering.LDA
+import org.apache.spark.ml.clustering.{LDA, LDAModel}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private[r] class LDAWrapper private (val pipeline: PipelineModel) extends MLWritable {
+private[r] class LDAWrapper private (
+    val pipeline: PipelineModel,
+    val logLikelihood: Double,
+    val logPerplexity: Double) extends MLWritable {
+
+  private val lda: LDAModel = pipeline.stages(0).asInstanceOf[LDAModel]
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset)
+    pipeline.transform(dataset).drop(lda.getFeaturesCol)
   }
+
+  lazy val isDistributed = lda.isDistributed
+  lazy val described = lda.describeTopics()
+  lazy val vocabSize = lda.vocabSize
 
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
@@ -71,7 +80,10 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
     }
 
     val pipeline = new Pipeline().setStages(Array(lda))
-    new LDAWrapper(pipeline.fit(data))
+    val model = pipeline.fit(data)
+    val ldaModel = model.stages(0).asInstanceOf[LDAModel]
+
+    new LDAWrapper(model, ldaModel.logLikelihood(data), ldaModel.logPerplexity(data))
   }
 
   override def read: MLReader[LDAWrapper] = new LDAWrapperReader
@@ -84,7 +96,9 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadata = "class" -> instance.getClass.getName
+      val rMetadata = ("class" -> instance.getClass.getName) ~
+        ("logLikelihood" -> instance.logLikelihood) ~
+        ("logPerplexity" -> instance.logPerplexity)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
@@ -96,10 +110,16 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
     override def load(path: String): LDAWrapper = {
       implicit val format = DefaultFormats
+      val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadata = parse(rMetadataStr)
+      val logLikelihood = (rMetadata \ "logLikelihood").extract[Double]
+      val logPerplexity = (rMetadata \ "logPerplexity").extract[Double]
+
       val pipeline = PipelineModel.load(pipelinePath)
-      new LDAWrapper(pipeline)
+      new LDAWrapper(pipeline, logLikelihood, logPerplexity)
     }
   }
 }

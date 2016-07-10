@@ -297,18 +297,17 @@ setMethod("predict", signature(object = "LDAModel"),
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
-          function(object, ...) {
+          function(object, dict, ...) {
             jobj <- object@jobj
-            features <- callJMethod(jobj, "features")
-            labels <- callJMethod(jobj, "labels")
-            apriori <- callJMethod(jobj, "apriori")
-            apriori <- t(as.matrix(unlist(apriori)))
-            colnames(apriori) <- unlist(labels)
-            tables <- callJMethod(jobj, "tables")
-            tables <- matrix(tables, nrow = length(labels))
-            rownames(tables) <- unlist(labels)
-            colnames(tables) <- unlist(features)
-            return(list(apriori = apriori, tables = tables))
+            logLikelihood <- callJMethod(jobj, "logLikelihood")
+            logPerplexity <- callJMethod(jobj, "logPerplexity")
+            isDistributed <- callJMethod(jobj, "isDistributed")
+            vocabSize <- callJMethod(jobj, "vocabSize")
+            described <- dataFrame(callJMethod(jobj, "described"))
+            return(list(logLikelihood = logLikelihood, logPerplexity = logPerplexity,
+                        isDistributed = isDistributed, vocabSize = vocabSize,
+                        topicTopTerms = collect(select(described, "termIndices")),
+                        topicTopTermsWeights = collect(select(described, "termWeights"))))
           })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
