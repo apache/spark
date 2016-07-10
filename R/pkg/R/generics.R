@@ -1282,7 +1282,7 @@ setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spar
 
 #' @rdname spark.lda
 #' @export
-setGeneric("spark.lda", function(data, features, ...) { standardGeneric("spark.lda") })
+setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
 #' write.ml
 #' @rdname write.ml

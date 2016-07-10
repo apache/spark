@@ -658,8 +658,8 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(ovarian)
-#' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
+#' text <- read.df("path/to/data", source = "libsvm")
+#' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model
 #' summary(model)
@@ -675,16 +675,13 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' summary(savedModel)
 #' }
 #' @note spark.lda since 2.1.0
-setMethod("spark.lda", signature(data = "SparkDataFrame", features = "character"),
-          #function(data, features = "features", k = 10, maxIter = 20, optimizer = c("online", "em"),
-          #         seed = 42, subsamplingRate = 0.05, topicConcentration, docConcentration,
-          #         checkpointInterval = 10) {
-
-            #jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit",
-            #                    data@sdf, features, k, maxIter, optimizer, seed, subsamplingRate,
-            #                    topicConcentration, docConcentration, checkpointInterval)
-          function(data, features = "features") {
-            jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features)
+setMethod("spark.lda", signature(data = "SparkDataFrame"),
+          function(data, features = "features", k = 10, maxIter = 20, optimizer = c("online", "em"),
+                   subsamplingRate = 0.05, topicConcentration = -1, docConcentration = -1) {
+            optimizer <- match.arg(optimizer)
+            jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features,
+                                as.integer(k), as.integer(maxIter), optimizer, subsamplingRate,
+                                topicConcentration, as.array(docConcentration))
             return(new("LDAModel", jobj = jobj))
           })
 

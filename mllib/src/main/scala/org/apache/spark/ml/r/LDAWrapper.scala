@@ -38,30 +38,38 @@ private[r] class LDAWrapper private (val pipeline: PipelineModel) extends MLWrit
 
 private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
-  /*
-  def fit(data: DataFrame, features: String, k: Int, maxIter: Int, optimizer: String, seed: Long,
-          subsamplingRate: Double, topicConcentration: Double, docConcentration: Double,
-          checkpointInterval: Int): LDAWrapper = {
+  def fit(
+      data: DataFrame,
+      features: String,
+      k: Int,
+      maxIter: Int,
+      optimizer: String,
+      subsamplingRate: Double,
+      topicConcentration: Double,
+      docConcentration: Array[Double]): LDAWrapper = {
 
     val lda = new LDA()
-      .setCheckpointInterval(checkpointInterval)
-      .setDocConcentration(docConcentration)
-      .setTopicConcentration(topicConcentration)
       .setFeaturesCol(features)
-      .setOptimizer(optimizer)
       .setK(k)
       .setMaxIter(maxIter)
-      .setSeed(seed)
       .setSubsamplingRate(subsamplingRate)
 
-    val pipeline = new Pipeline().setStages(Array(lda))
+    if (topicConcentration != -1) {
+      lda.setTopicConcentration(topicConcentration)
+    } else {
+      // Auto-set topicConcentration
+    }
 
-    new LDAWrapper(pipeline.fit(data))
-  }
-  */
+    if (docConcentration.length == 1) {
+      if (docConcentration.head != -1) {
+        lda.setDocConcentration(docConcentration.head)
+      } else {
+        // Auto-set docConcentration
+      }
+    } else {
+      lda.setDocConcentration(docConcentration)
+    }
 
-  def fit(data: DataFrame, features: String): LDAWrapper = {
-    val lda = new LDA().setFeaturesCol(features)
     val pipeline = new Pipeline().setStages(Array(lda))
     new LDAWrapper(pipeline.fit(data))
   }
