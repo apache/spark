@@ -625,35 +625,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
-    withTempTable("mytable1") {
-      Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
-      withTable("gen__tmp") {
-        sql("create table gen__tmp as select key as a, value as b from mytable1")
-        checkAnswer(
-          sql("SELECT a, b from gen__tmp"),
-          sql("select key, value from mytable1").collect())
-      }
+    Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
 
-      withTable("gen__tmp") {
-        val e = intercept[AnalysisException] {
-          sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
-        }.getMessage
-        assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
-      }
+    sql("create table gen__tmp as select key as a, value as b from mytable1")
+    checkAnswer(
+      sql("SELECT a, b from gen__tmp"),
+      sql("select key, value from mytable1").collect())
+    sql("DROP TABLE gen__tmp")
 
-      withTable("gen__tmp") {
-        val e = intercept[AnalysisException] {
-          sql(
-            """
-              |CREATE TABLE gen__tmp
-              |PARTITIONED BY (key string)
-              |AS SELECT key, value FROM mytable1
-            """.stripMargin)
-        }.getMessage
-        assert(e.contains("A Create Table As Select (CTAS) statement is not allowed to " +
-          "create a partitioned table using Hive's file formats"))
-      }
+    intercept[AnalysisException] {
+      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
     }
+
+    sql("drop table mytable1")
   }
 
   test("command substitution") {
