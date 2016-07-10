@@ -9,7 +9,7 @@ Here we explain how to configure Spark Streaming to receive data from Kinesis.
 
 #### Configuring Kinesis
 
-A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or more shards following
+A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or more shards per the following
 [guide](http://docs.aws.amazon.com/kinesis/latest/dev/step-one-create-stream.html).
 
 
