@@ -427,17 +427,13 @@ class BlockMatrix @Since("1.3.0") (
     val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
     val rightMatrix = other.blocks.keys.collect()
 
-    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).map { case (rowIndex, arr) =>
-      (rowIndex, arr.map(b => b._2))
-    }
+    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
       ((rowIndex, colIndex), rightCounterpartsHelper.getOrElse(colIndex, Array()).map(b =>
         partitioner.getPartition((rowIndex, b))).toSet)
     }.toMap
 
-    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).map { case (colIndex, arr) =>
-      (colIndex, arr.map(b => b._1))
-    }
+    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
       ((rowIndex, colIndex), leftCounterpartsHelper.getOrElse(rowIndex, Array()).map(b =>
         partitioner.getPartition((b, colIndex))).toSet)
