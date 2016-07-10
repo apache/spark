@@ -447,12 +447,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case c: CreateTableUsingAsSelect =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
-            c.tableIdent,
+            c.tableDesc,
             c.provider,
-            c.partitionColumns,
-            c.bucketSpec,
             c.mode,
-            c.options,
             c.child)
         ExecutedCommandExec(cmd) :: Nil
 

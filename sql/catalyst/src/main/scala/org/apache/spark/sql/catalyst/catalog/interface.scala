@@ -137,14 +137,16 @@ case class CatalogTable(
     unsupportedFeatures: Seq[String] = Seq.empty) {
 
   // Verify that the provided columns are part of the schema
-  private val colNames = schema.map(_.name).toSet
-  private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
-    require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
-      s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
-  }
-  requireSubsetOfSchema(partitionColumnNames, "partition")
-  requireSubsetOfSchema(sortColumnNames, "sort")
-  requireSubsetOfSchema(bucketColumnNames, "bucket")
+  // TODO: this restriction should be checked at the end of Analyzer. When building CatalogTable,
+  // the initial version might violate it.
+  // private val colNames = schema.map(_.name).toSet
+  // private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
+  //   require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
+  //     s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
+  // }
+  // requireSubsetOfSchema(partitionColumnNames, "partition")
+  // requireSubsetOfSchema(sortColumnNames, "sort")
+  // requireSubsetOfSchema(bucketColumnNames, "bucket")
 
   /** Columns this table is partitioned by. */
   def partitionColumns: Seq[CatalogColumn] =

@@ -209,9 +209,9 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
       case c: CreateTableUsingAsSelect =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
-        if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
+        if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableDesc.identifier)) {
           // Need to remove SubQuery operator.
-          EliminateSubqueryAliases(catalog.lookupRelation(c.tableIdent)) match {
+          EliminateSubqueryAliases(catalog.lookupRelation(c.tableDesc.identifier)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _, _) =>
@@ -221,7 +221,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
               }
               if (srcRelations.contains(dest)) {
                 failAnalysis(
-                  s"Cannot overwrite table ${c.tableIdent} that is also being read from.")
+                  s"Cannot overwrite table ${c.tableDesc.identifier} that is also being read from.")
               } else {
                 // OK
               }
@@ -233,11 +233,10 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
         PartitioningUtils.validatePartitionColumn(
-          c.child.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
+          c.child.schema, c.tableDesc.partitionColumnNames, conf.caseSensitiveAnalysis)
 
         for {
-          spec <- c.bucketSpec
-          sortColumnName <- spec.sortColumnNames
+          sortColumnName <- c.tableDesc.sortColumnNames
           sortColumn <- c.child.schema.find(_.name == sortColumnName)
         } {
           if (!RowOrdering.isOrderable(sortColumn.dataType)) {

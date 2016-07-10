@@ -130,12 +130,9 @@ case class CreateDataSourceTableCommand(
  * }}}
  */
 case class CreateDataSourceTableAsSelectCommand(
-    tableIdent: TableIdentifier,
+    tableDesc: CatalogTable,
     provider: String,
-    partitionColumns: Array[String],
-    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
-    options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
 
@@ -146,31 +143,39 @@ case class CreateDataSourceTableAsSelectCommand(
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
     // the metastore.
-    if (!CreateDataSourceTableUtils.validateName(tableIdent.table)) {
-      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
-        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
+    if (!CreateDataSourceTableUtils.validateName(tableDesc.identifier.table)) {
+      throw new AnalysisException(s"Table name ${tableDesc.identifier.table} is not a valid name " +
+        s"for metastore. Metastore only accepts table name containing characters, numbers and _.")
     }
-    if (tableIdent.database.isDefined &&
-      !CreateDataSourceTableUtils.validateName(tableIdent.database.get)) {
-      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
-        s"for metastore. Metastore only accepts database name containing " +
+    if (tableDesc.identifier.database.isDefined &&
+      !CreateDataSourceTableUtils.validateName(tableDesc.identifier.database.get)) {
+      throw new AnalysisException(s"Database name ${tableDesc.identifier.database.get} is not " +
+        s"a valid name for metastore. Metastore only accepts database name containing " +
         s"characters, numbers and _.")
     }
 
-    val tableName = tableIdent.unquotedString
+    val tableName = tableDesc.identifier.unquotedString
     val sessionState = sparkSession.sessionState
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
-      if (!new CaseInsensitiveMap(options).contains("path")) {
+      if (!new CaseInsensitiveMap(tableDesc.properties).contains("path")) {
         isExternal = false
-        options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
+        tableDesc.properties +
+          ("path" -> sessionState.catalog.defaultTablePath(tableDesc.identifier))
       } else {
-        options
+        tableDesc.properties
       }
 
+    val bucketSpec: Option[BucketSpec] = if (tableDesc.numBuckets > 0) {
+      Option(BucketSpec(
+        tableDesc.numBuckets, tableDesc.bucketColumnNames, tableDesc.sortColumnNames))
+    } else {
+      None
+    }
+
     var existingSchema = Option.empty[StructType]
-    if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
+    if (sparkSession.sessionState.catalog.tableExists(tableDesc.identifier)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -187,7 +192,7 @@ case class CreateDataSourceTableAsSelectCommand(
           val dataSource = DataSource(
             sparkSession = sparkSession,
             userSpecifiedSchema = Some(query.schema.asNullable),
-            partitionColumns = partitionColumns,
+            partitionColumns = tableDesc.partitionColumnNames,
             bucketSpec = bucketSpec,
             className = provider,
             options = optionsWithPath)
@@ -195,13 +200,13 @@ case class CreateDataSourceTableAsSelectCommand(
           // inserting into (i.e. using the same compression).
 
           EliminateSubqueryAliases(
-            sessionState.catalog.lookupRelation(tableIdent)) match {
+            sessionState.catalog.lookupRelation(tableDesc.identifier)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               // check if the file formats match
               l.relation match {
                 case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
                   throw new AnalysisException(
-                    s"The file format of the existing table $tableIdent is " +
+                    s"The file format of the existing table ${tableDesc.identifier} is " +
                       s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
                       s"format `$provider`")
                 case _ =>
@@ -238,7 +243,7 @@ case class CreateDataSourceTableAsSelectCommand(
     val dataSource = DataSource(
       sparkSession,
       className = provider,
-      partitionColumns = partitionColumns,
+      partitionColumns = tableDesc.partitionColumnNames,
       bucketSpec = bucketSpec,
       options = optionsWithPath)
 
@@ -246,7 +251,7 @@ case class CreateDataSourceTableAsSelectCommand(
       dataSource.write(mode, df)
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to table ${tableIdent.identifier} in $mode mode", ex)
+        logError(s"Failed to write to table ${tableDesc.identifier} in $mode mode", ex)
         throw ex
     }
     if (createMetastoreTable) {
@@ -255,9 +260,9 @@ case class CreateDataSourceTableAsSelectCommand(
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
       CreateDataSourceTableUtils.createDataSourceTable(
         sparkSession = sparkSession,
-        tableIdent = tableIdent,
+        tableIdent = tableDesc.identifier,
         userSpecifiedSchema = Some(result.schema),
-        partitionColumns = partitionColumns,
+        partitionColumns = tableDesc.partitionColumnNames.toArray,
         bucketSpec = bucketSpec,
         provider = provider,
         options = optionsWithPath,
@@ -265,7 +270,7 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     // Refresh the cache of the table in the catalog.
-    sessionState.catalog.refreshTable(tableIdent)
+    sessionState.catalog.refreshTable(tableDesc.identifier)
     Seq.empty[Row]
   }
 }

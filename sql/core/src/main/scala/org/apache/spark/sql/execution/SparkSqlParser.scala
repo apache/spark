@@ -340,8 +340,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         SaveMode.ErrorIfExists
       }
 
+      val sortColumnNames = bucketSpec.map(_.sortColumnNames).getOrElse(Seq.empty)
+      val bucketColumnNames = bucketSpec.map(_.bucketColumnNames).getOrElse(Seq.empty)
+      val numBuckets = bucketSpec.map(_.numBuckets).getOrElse(-1)
+
+      val tableDesc = CatalogTable(
+        identifier = table,
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = Seq.empty[CatalogColumn],
+        partitionColumnNames = partitionColumnNames,
+        sortColumnNames = sortColumnNames,
+        bucketColumnNames = bucketColumnNames,
+        numBuckets = numBuckets,
+        properties = options)
+
       CreateTableUsingAsSelect(
-        table, provider, partitionColumnNames, bucketSpec, mode, options, query)
+        tableDesc = tableDesc, provider = provider, mode = mode, child = query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
       CreateTableUsing(
@@ -1025,20 +1040,17 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
         if (conf.convertCTAS && !hasStorageProperties) {
           val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
-          // are empty Maps.
-          val optionsWithPath = if (location.isDefined) {
+          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties are empty.
+          // When converting Hive Table to Data Source Table, ignore user-specified table properties
+          val tableProperties = if (location.isDefined) {
             Map("path" -> location.get)
           } else {
             Map.empty[String, String]
           }
           CreateTableUsingAsSelect(
-            tableIdent = tableDesc.identifier,
+            tableDesc = tableDesc.copy(properties = tableProperties),
             provider = conf.defaultDataSourceName,
-            partitionColumns = Array.empty[String],
-            bucketSpec = None,
             mode = mode,
-            options = optionsWithPath,
             q
           )
         } else {
