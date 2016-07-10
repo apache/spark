@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{Division, FunctionArgumentConversion}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -199,9 +201,20 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+    ruleTest(Seq(rule), initial, transformed)
+  }
+
+  private def ruleTest(
+      rules: Seq[Rule[LogicalPlan]],
+      initial: Expression,
+      transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", FixedPoint(3), rules: _*))
+    }
+
     comparePlans(
-      rule(Project(Seq(Alias(initial, "a")()), testRelation)),
+      analyzer.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
@@ -629,6 +642,26 @@ class TypeCoercionSuite extends PlanTest {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+  }
+
+  test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
+    "in aggregation function like sum") {
+    val rules = Seq(FunctionArgumentConversion, Division)
+    // Casts Integer to Double
+    ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
+    // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
+    // cast the right expression to Double.
+    ruleTest(rules, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
+    // Left expression is Int, right expression is Double
+    ruleTest(rules, sum(Divide(4, 3.0)), sum(Divide(Cast(4, DoubleType), Cast(3.0, DoubleType))))
+    // Casts Float to Double
+    ruleTest(
+      rules,
+      sum(Divide(4.0f, 3)),
+      sum(Divide(Cast(4.0f, DoubleType), Cast(3, DoubleType))))
+    // Left expression is Decimal, right expression is Int. Another rule DecimalPrecision will cast
+    // the right expression to Decimal.
+    ruleTest(rules, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
   }
 }
 

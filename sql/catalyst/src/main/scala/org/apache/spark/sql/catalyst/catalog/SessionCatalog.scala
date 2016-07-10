@@ -403,7 +403,7 @@ class SessionCatalog(
       val relation =
         if (name.database.isDefined || !tempTables.contains(table)) {
           val metadata = externalCatalog.getTable(db, table)
-          SimpleCatalogRelation(db, metadata, alias)
+          SimpleCatalogRelation(db, metadata)
         } else {
           tempTables(table)
         }
@@ -445,7 +445,7 @@ class SessionCatalog(
   /**
    * List all tables in the specified database, including temporary tables.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(formatDatabaseName(db), "*")
+  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
 
   /**
    * List all matching tables in the specified database, including temporary tables.
@@ -462,17 +462,17 @@ class SessionCatalog(
     }
   }
 
-  // TODO: It's strange that we have both refresh and invalidate here.
-
   /**
    * Refresh the cache entry for a metastore table, if any.
    */
-  def refreshTable(name: TableIdentifier): Unit = { /* no-op */ }
-
-  /**
-   * Invalidate the cache entry for a metastore table, if any.
-   */
-  def invalidateTable(name: TableIdentifier): Unit = { /* no-op */ }
+  def refreshTable(name: TableIdentifier): Unit = {
+    // Go through temporary tables and invalidate them.
+    // If the database is defined, this is definitely not a temp table.
+    // If the database is not defined, there is a good chance this is a temp table.
+    if (name.database.isEmpty) {
+      tempTables.get(name.table).foreach(_.refresh())
+    }
+  }
 
   /**
    * Drop all existing temporary tables.
@@ -841,21 +841,29 @@ class SessionCatalog(
   }
 
   /**
-   * List all functions in the specified database, including temporary functions.
+   * List all functions in the specified database, including temporary functions. This
+   * returns the function identifier and the scope in which it was defined (system or user
+   * defined).
    */
-  def listFunctions(db: String): Seq[FunctionIdentifier] = listFunctions(db, "*")
+  def listFunctions(db: String): Seq[(FunctionIdentifier, String)] = listFunctions(db, "*")
 
   /**
-   * List all matching functions in the specified database, including temporary functions.
+   * List all matching functions in the specified database, including temporary functions. This
+   * returns the function identifier and the scope in which it was defined (system or user
+   * defined).
    */
-  def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+  def listFunctions(db: String, pattern: String): Seq[(FunctionIdentifier, String)] = {
     val dbName = formatDatabaseName(db)
     requireDbExists(dbName)
     val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
       .map { f => FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    dbFunctions ++ loadedFunctions
+    val functions = dbFunctions ++ loadedFunctions
+    functions.map {
+      case f if FunctionRegistry.functionSet.contains(f.funcName) => (f, "SYSTEM")
+      case f => (f, "USER")
+    }
   }
 
 
@@ -877,7 +885,7 @@ class SessionCatalog(
     listTables(default).foreach { table =>
       dropTable(table, ignoreIfNotExists = false)
     }
-    listFunctions(default).foreach { func =>
+    listFunctions(default).map(_._1).foreach { func =>
       if (func.database.isDefined) {
         dropFunction(func, ignoreIfNotExists = false)
       } else {

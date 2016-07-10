@@ -326,6 +326,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                    "can not advance manual clock when a stream is not running")
             verify(currentStream.triggerClock.isInstanceOf[ManualClock],
                    s"can not advance clock of type ${currentStream.triggerClock.getClass}")
+            val clock = currentStream.triggerClock.asInstanceOf[ManualClock]
+            // Make sure we don't advance ManualClock too early. See SPARK-16002.
+            eventually("ManualClock has not yet entered the waiting state") {
+              assert(clock.isWaiting)
+            }
             currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
 
           case StopStream =>
@@ -353,7 +358,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
             try failAfter(streamingTimeout) {
-              val thrownException = intercept[ContinuousQueryException] {
+              val thrownException = intercept[StreamingQueryException] {
                 currentStream.awaitTermination()
               }
               eventually("microbatch thread not stopped after termination with failure") {
@@ -563,7 +568,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         case e: ExpectException[_] =>
           val thrownException =
             withClue(s"Did not throw ${e.t.runtimeClass.getSimpleName} when expected.") {
-              intercept[ContinuousQueryException] {
+              intercept[StreamingQueryException] {
                 failAfter(testTimeout) {
                   awaitTermFunc()
                 }

@@ -21,6 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -52,7 +53,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
-      DistinctAggregationRewriter) ::
+      RewriteDistinctAggregates) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -74,10 +75,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
-      SetOperationPushDown,
-      SamplePushDown,
+      PushThroughSetOperations,
+      PushProjectThroughSample,
       ReorderJoin,
-      OuterJoinElimination,
+      EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
@@ -99,7 +100,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
-      BinaryComparisonSimplification,
+      SimplifyBinaryComparison,
       PruneFilters,
       EliminateSorts,
       SimplifyCasts,
@@ -110,10 +111,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
-      EmbedSerializerInFilter,
-      RemoveAliasOnlyProject) ::
+      CombineTypedFilters) ::
     Batch("LocalRelation", fixedPoint,
-      ConvertToLocalRelation) ::
+      ConvertToLocalRelation,
+      PropagateEmptyRelation) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
@@ -148,10 +149,9 @@ class SimpleTestOptimizer extends Optimizer(
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
- * Pushes operations down into a Sample.
+ * Pushes projects down beneath Sample to enable column pruning with sampling.
  */
-object SamplePushDown extends Rule[LogicalPlan] {
-
+object PushProjectThroughSample extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down projection into sample
     case Project(projectList, Sample(lb, up, replace, seed, child)) =>
@@ -171,7 +171,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
       projectList: Seq[NamedExpression],
       childOutput: Seq[Attribute]): Boolean = {
     if (!projectList.forall(_.isInstanceOf[Alias]) || projectList.length != childOutput.length) {
-      return false
+      false
     } else {
       projectList.map(_.asInstanceOf[Alias]).zip(childOutput).forall { case (a, o) =>
         a.child match {
@@ -183,11 +183,9 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val aliasOnlyProject = plan.find { p =>
-      p match {
-        case Project(pList, child) if isAliasOnly(pList, child.output) => true
-        case _ => false
-      }
+    val aliasOnlyProject = plan.find {
+      case Project(pList, child) if isAliasOnly(pList, child.output) => true
+      case _ => false
     }
 
     aliasOnlyProject.map { case p: Project =>
@@ -209,15 +207,33 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-        if d.outputObjectType == s.inputObjectType =>
+        if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       // We will remove it later in RemoveAliasOnlyProject rule.
-      val objAttr =
-        Alias(s.child.output.head, s.child.output.head.name)(exprId = d.output.head.exprId)
+      val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
       Project(objAttr :: Nil, s.child)
+
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
-        if a.deserializer.dataType == s.inputObjectType =>
+        if a.deserializer.dataType == s.inputObjAttr.dataType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
+
+    // If there is a `SerializeFromObject` under typed filter and its input object type is same with
+    // the typed filter's deserializer, we can convert typed filter to normal filter without
+    // deserialization in condition, and push it down through `SerializeFromObject`.
+    // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
+    // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
+    case f @ TypedFilter(_, _, s: SerializeFromObject)
+        if f.deserializer.dataType == s.inputObjAttr.dataType =>
+      s.copy(child = f.withObjectProducerChild(s.child))
+
+    // If there is a `DeserializeToObject` upon typed filter and its output object type is same with
+    // the typed filter's deserializer, we can convert typed filter to normal filter without
+    // deserialization in condition, and pull it up through `DeserializeToObject`.
+    // e.g. `ds.filter(...).map(...)` can be optimized by this rule to save extra deserialization,
+    // but `ds.filter(...).as[AnotherType].map(...)` can not be optimized.
+    case d @ DeserializeToObject(_, _, f: TypedFilter)
+        if d.outputObjAttr.dataType == f.deserializer.dataType =>
+      f.withObjectProducerChild(d.copy(child = f.child))
   }
 }
 
@@ -292,7 +308,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
  */
-object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -540,12 +556,27 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] operators by keeping only the last one.
+ * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
+ * by keeping only the one.
+ * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
+ * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
+ * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
+ *    [[RepartitionByExpression]] with the expression and last number of partition.
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Case 1
     case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
       Repartition(numPartitions, shuffle, child)
+    // Case 2
+    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
+    // Case 3
+    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
+      r.copy(numPartitions = Some(numPartitions))
+    // Case 3
+    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
   }
 }
 
@@ -691,6 +722,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case c: Command =>
           stop = true
           c
+        // For outer join, although its output attributes are derived from its children, they are
+        // actually different attributes: the output of outer join is not always picked from its
+        // children, but can also be null.
+        // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
+        // of outer join.
+        case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
+          stop = true
+          j
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
             foldableMap(a)
@@ -796,16 +835,24 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
- * which is much faster
+ * Optimize IN predicates:
+ * 1. Removes literal repetitions.
+ * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
-          list.size > conf.optimizerInSetConversionThreshold =>
-        val hSet = list.map(e => e.eval(EmptyRow))
-        InSet(v, HashSet() ++ hSet)
+      case expr @ In(v, list) if expr.inSetConvertible =>
+        val newList = ExpressionSet(list).toSeq
+        if (newList.size > conf.optimizerInSetConversionThreshold) {
+          val hSet = newList.map(e => e.eval(EmptyRow))
+          InSet(v, HashSet() ++ hSet)
+        } else if (newList.size < list.size) {
+          expr.copy(list = newList)
+        } else { // newList.length == list.length
+          expr
+        }
     }
   }
 }
@@ -918,7 +965,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  */
-object BinaryComparisonSimplification extends Rule[LogicalPlan] with PredicateHelper {
+object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       // True with equality
@@ -1005,7 +1052,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
-          Filter(And(ac, nc), grandChild)
+          Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
@@ -1256,7 +1303,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
@@ -1640,54 +1687,30 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
 }
 
 /**
- * Typed [[Filter]] is by default surrounded by a [[DeserializeToObject]] beneath it and a
- * [[SerializeFromObject]] above it.  If these serializations can't be eliminated, we should embed
- * the deserializer in filter condition to save the extra serialization at last.
+ * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
+ * mering the filter functions into one conjunctive function.
  */
-object EmbedSerializerInFilter extends Rule[LogicalPlan] {
+object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject))
-      // SPARK-15632: Conceptually, filter operator should never introduce schema change. This
-      // optimization rule also relies on this assumption. However, Dataset typed filter operator
-      // does introduce schema changes in some cases. Thus, we only enable this optimization when
-      //
-      //  1. either input and output schemata are exactly the same, or
-      //  2. both input and output schemata are single-field schema and share the same type.
-      //
-      // The 2nd case is included because encoders for primitive types always have only a single
-      // field with hard-coded field name "value".
-      // TODO Cleans this up after fixing SPARK-15632.
-      if s.schema == d.child.schema || samePrimitiveType(s.schema, d.child.schema) =>
-
-      val numObjects = condition.collect {
-        case a: Attribute if a == d.output.head => a
-      }.length
-
-      if (numObjects > 1) {
-        // If the filter condition references the object more than one times, we should not embed
-        // deserializer in it as the deserialization will happen many times and slow down the
-        // execution.
-        // TODO: we can still embed it if we can make sure subexpression elimination works here.
-        s
-      } else {
-        val newCondition = condition transform {
-          case a: Attribute if a == d.output.head => d.deserializer
-        }
-        val filter = Filter(newCondition, d.child)
-
-        // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
-        // We will remove it later in RemoveAliasOnlyProject rule.
-        val objAttrs = filter.output.zip(s.output).map { case (fout, sout) =>
-          Alias(fout, fout.name)(exprId = sout.exprId)
-        }
-        Project(objAttrs, filter)
-      }
+    case t1 @ TypedFilter(_, _, t2 @ TypedFilter(_, _, child))
+        if t1.deserializer.dataType == t2.deserializer.dataType =>
+      TypedFilter(combineFilterFunction(t2.func, t1.func), t1.deserializer, child)
   }
 
-  def samePrimitiveType(lhs: StructType, rhs: StructType): Boolean = {
-    (lhs, rhs) match {
-      case (StructType(Array(f1)), StructType(Array(f2))) => f1.dataType == f2.dataType
-      case _ => false
+  private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
+    (func1, func2) match {
+      case (f1: FilterFunction[_], f2: FilterFunction[_]) =>
+        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+          f2.asInstanceOf[FilterFunction[Any]].call(input)
+      case (f1: FilterFunction[_], f2) =>
+        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+          f2.asInstanceOf[Any => Boolean](input)
+      case (f1, f2: FilterFunction[_]) =>
+        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
+          f2.asInstanceOf[FilterFunction[Any]].call(input)
+      case (f1, f2) =>
+        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
+          f2.asInstanceOf[Any => Boolean].apply(input)
     }
   }
 }

@@ -35,7 +35,7 @@ if __name__ == "__main__":
                           (Vectors.dense([0.0, 0.0]),),
                           (Vectors.dense([0.6, -1.1]),)],
                          ["features"])
-    px = PolynomialExpansion(degree=2, inputCol="features", outputCol="polyFeatures")
+    px = PolynomialExpansion(degree=3, inputCol="features", outputCol="polyFeatures")
     polyDF = px.transform(df)
     for expanded in polyDF.select("polyFeatures").take(3):
         print(expanded)

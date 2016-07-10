@@ -491,7 +491,7 @@ for examples of using Cassandra / HBase ```InputFormat``` and ```OutputFormat```
 
 RDDs support two types of operations: *transformations*, which create a new dataset from an existing one, and *actions*, which return a value to the driver program after running a computation on the dataset. For example, `map` is a transformation that passes each dataset element through a function and returns a new RDD representing the results. On the other hand, `reduce` is an action that aggregates all the elements of the RDD using some function and returns the final result to the driver program (although there is also a parallel `reduceByKey` that returns a distributed dataset).
 
-All transformations in Spark are <i>lazy</i>, in that they do not compute their results right away. Instead, they just remember the transformations applied to some base dataset (e.g. a file). The transformations are only computed when an action requires a result to be returned to the driver program. This design enables Spark to run more efficiently -- for example, we can realize that a dataset created through `map` will be used in a `reduce` and return only the result of the `reduce` to the driver, rather than the larger mapped dataset.
+All transformations in Spark are <i>lazy</i>, in that they do not compute their results right away. Instead, they just remember the transformations applied to some base dataset (e.g. a file). The transformations are only computed when an action requires a result to be returned to the driver program. This design enables Spark to run more efficiently. For example, we can realize that a dataset created through `map` will be used in a `reduce` and return only the result of the `reduce` to the driver, rather than the larger mapped dataset.
 
 By default, each transformed RDD may be recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting RDDs on disk, or replicated across multiple nodes.
 
@@ -618,7 +618,7 @@ class MyClass {
 }
 {% endhighlight %}
 
-Here, if we create a `new MyClass` and call `doStuff` on it, the `map` inside there references the
+Here, if we create a new `MyClass` instance and call `doStuff` on it, the `map` inside there references the
 `func1` method *of that `MyClass` instance*, so the whole object needs to be sent to the cluster. It is
 similar to writing `rdd.map(x => this.func1(x))`.
 
@@ -1156,7 +1156,7 @@ to disk, incurring the additional overhead of disk I/O and increased garbage col
 Shuffle also generates a large number of intermediate files on disk. As of Spark 1.3, these files
 are preserved until the corresponding RDDs are no longer used and are garbage collected.
 This is done so the shuffle files don't need to be re-created if the lineage is re-computed.
-Garbage collection may happen only after a long period time, if the application retains references
+Garbage collection may happen only after a long period of time, if the application retains references
 to these RDDs or if GC does not kick in frequently. This means that long-running Spark jobs may
 consume a large amount of disk space. The temporary storage directory is specified by the
 `spark.local.dir` configuration parameter when configuring the Spark context.
@@ -1219,6 +1219,11 @@ storage levels is:
 <tr>
   <td> MEMORY_ONLY_2, MEMORY_AND_DISK_2, etc.  </td>
   <td> Same as the levels above, but replicate each partition on two cluster nodes. </td>
+</tr>
+<tr>
+  <td> OFF_HEAP (experimental) </td>
+  <td> Similar to MEMORY_ONLY_SER, but store the data in
+    <a href="configuration.html#memory-management">off-heap memory</a>. This requires off-heap memory to be enabled. </td>
 </tr>
 </table>
 

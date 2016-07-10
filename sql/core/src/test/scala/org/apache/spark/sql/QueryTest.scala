@@ -238,6 +238,7 @@ abstract class QueryTest extends PlanTest {
       case _: ObjectConsumer => return
       case _: ObjectProducer => return
       case _: AppendColumns => return
+      case _: TypedFilter => return
       case _: LogicalRelation => return
       case p if p.getClass.getSimpleName == "MetastoreRelation" => return
       case _: MemoryPlan => return
@@ -323,8 +324,7 @@ abstract class QueryTest extends PlanTest {
           origin.child,
           l.tableName)(
           origin.cachedColumnBuffers,
-          l._statistics,
-          origin._batchStats)
+          origin.batchStats)
       case p =>
         p.transformExpressions {
           case s: SubqueryExpression =>

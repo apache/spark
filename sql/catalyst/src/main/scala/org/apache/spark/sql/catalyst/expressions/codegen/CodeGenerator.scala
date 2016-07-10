@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.io.ByteArrayInputStream
+import java.util.{Map => JavaMap}
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
-import org.codehaus.janino.ClassBodyEvaluator
+import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleCompiler}
+import org.codehaus.janino.util.ClassFile
 import scala.language.existentials
 
 import org.apache.spark.SparkEnv
@@ -128,6 +133,22 @@ class CodegenContext {
 
   def addMutableState(javaType: String, variableName: String, initCode: String): Unit = {
     mutableStates += ((javaType, variableName, initCode))
+  }
+
+  /**
+   * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
+   * that the variable is safely stored, which is important for (potentially) byte array backed
+   * data types like: UTF8String, ArrayData, MapData & InternalRow.
+   */
+  def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
+    val value = freshName(variableName)
+    addMutableState(javaType(dataType), value, "")
+    val code = dataType match {
+      case StringType => s"$value = $initCode.clone();"
+      case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
+      case _ => s"$value = $initCode;"
+    }
+    ExprCode(code, "false", value)
   }
 
   def declareMutableStates(): String = {
@@ -860,6 +881,7 @@ object CodeGenerator extends Logging {
 
     try {
       evaluator.cook("generated.java", code.body)
+      recordCompilationStats(evaluator)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -867,6 +889,38 @@ object CodeGenerator extends Logging {
         throw new Exception(msg, e)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
+  }
+
+  /**
+   * Records the generated class and method bytecode sizes by inspecting janino private fields.
+   */
+  private def recordCompilationStats(evaluator: ClassBodyEvaluator): Unit = {
+    // First retrieve the generated classes.
+    val classes = {
+      val resultField = classOf[SimpleCompiler].getDeclaredField("result")
+      resultField.setAccessible(true)
+      val loader = resultField.get(evaluator).asInstanceOf[ByteArrayClassLoader]
+      val classesField = loader.getClass.getDeclaredField("classes")
+      classesField.setAccessible(true)
+      classesField.get(loader).asInstanceOf[JavaMap[String, Array[Byte]]].asScala
+    }
+
+    // Then walk the classes to get at the method bytecode.
+    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
+    val codeAttrField = codeAttr.getDeclaredField("code")
+    codeAttrField.setAccessible(true)
+    classes.foreach { case (_, classBytes) =>
+      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
+      val cf = new ClassFile(new ByteArrayInputStream(classBytes))
+      cf.methodInfos.asScala.foreach { method =>
+        method.getAttributes().foreach { a =>
+          if (a.getClass.getName == codeAttr.getName) {
+            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(
+              codeAttrField.get(a).asInstanceOf[Array[Byte]].length)
+          }
+        }
+      }
+    }
   }
 
   /**
