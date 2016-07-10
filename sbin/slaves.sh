@@ -87,12 +87,12 @@ if [ "$SPARK_SSH_OPTS" = "" ]; then
   SPARK_SSH_OPTS="-o StrictHostKeyChecking=no"
 fi
 
-for slave in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
+echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d" | while read slave;  do
   if [ -n "${SPARK_SSH_FOREGROUND}" ]; then
-    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
+    ssh $SPARK_SSH_OPTS $slave $"${@// /\\ }" \
       2>&1 | sed "s/^/$slave: /"
   else
-    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
+    ssh $SPARK_SSH_OPTS $slave $"${@// /\\ }" \
       2>&1 | sed "s/^/$slave: /" &
   fi
   if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
