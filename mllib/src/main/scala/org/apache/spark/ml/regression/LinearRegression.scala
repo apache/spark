@@ -328,8 +328,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       }
 
       if (!state.actuallyConverged) {
-        logWarning("LinearRegression training fininshed but the result is not converged, " +
-          "the reason is: " + state.convergedReason.get.reason)
+        logWarning("LinearRegression training fininshed but the result " +
+          s"is not converged because: ${state.convergedReason.get.reason}")
       }
 
       /*
