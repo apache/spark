@@ -461,6 +461,7 @@ private[parquet] class ParquetRowConverter(
       } else {
         // If the repeated field corresponds to the syntactic group in the standard 3-level Parquet
         // LIST layout, creates a new converter using the only child field of the repeated field.
+        assert(!repeatedType.isPrimitive && repeatedType.asGroupType().getFieldCount == 1)
         new ElementConverter(repeatedType.asGroupType().getType(0), elementType)
       }
     }
