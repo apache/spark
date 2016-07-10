@@ -54,10 +54,10 @@ case class ScalarSubquery(
   override def toString: String = s"subquery#${exprId.id}"
 
   // the first column in first row from `query`.
-  @volatile private var result: Any = null
-  @volatile private var updated: Boolean = false
-  @transient private var evaluated: Boolean = false
-  @transient private var futureResult: Future[Array[InternalRow]] = _
+  @volatile private[this] var result: Any = null
+  @volatile private[this] var updated: Boolean = false
+  @transient private[this] var evaluated: Boolean = false
+  @transient private[this] var futureResult: Future[Array[InternalRow]] = _
 
   private def updateResult(v: Any): Unit = {
     result = v
