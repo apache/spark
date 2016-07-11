@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.reflect.Method
-
-import scala.util.Try
+import java.lang.reflect.{Method, Modifier}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -35,6 +33,12 @@ import org.apache.spark.util.Utils
  * For now, only types defined in `Reflect.typeMapping` are supported (basically primitives
  * and string) as input types, and the output is turned automatically to a string.
  *
+ * Note that unlike Hive's reflect function, this expression calls only static methods
+ * (i.e. does not support calling non-static methods).
+ *
+ * We should also look into how to consolidate this expression with
+ * [[org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke]] in the future.
+ *
  * @param children the first element should be a literal string for the class name,
  *                 and the second element should be a literal string for the method name,
  *                 and the remaining are input arguments to the Java method.
@@ -44,7 +48,7 @@ import org.apache.spark.util.Utils
   usage = "_FUNC_(class,method[,arg1[,arg2..]]) calls method with reflection",
   extended = "> SELECT _FUNC_('java.util.UUID', 'randomUUID');\n c33fb387-8500-4bfa-81d2-6e0e3e930df2")
 // scalastyle:on line.size.limit
-case class Reflect(children: Seq[Expression])
+case class CallMethodViaReflection(children: Seq[Expression])
   extends Expression with CodegenFallback {
 
   override def prettyName: String = "reflect"
@@ -58,7 +62,7 @@ case class Reflect(children: Seq[Expression])
     } else if (!classExists) {
       TypeCheckFailure(s"class $className not found")
     } else if (method == null) {
-      TypeCheckFailure(s"cannot find a method that matches the argument types in $className")
+      TypeCheckFailure(s"cannot find a static method that matches the argument types in $className")
     } else {
       TypeCheckSuccess
     }
@@ -80,7 +84,8 @@ case class Reflect(children: Seq[Expression])
       }
       i += 1
     }
-    UTF8String.fromString(String.valueOf(method.invoke(obj, buffer : _*)))
+    val ret = method.invoke(null, buffer : _*)
+    UTF8String.fromString(String.valueOf(ret))
   }
 
   @transient private lazy val argExprs: Array[Expression] = children.drop(2).toArray
@@ -89,23 +94,19 @@ case class Reflect(children: Seq[Expression])
   @transient private lazy val className = children(0).eval().asInstanceOf[UTF8String].toString
 
   /** True if the class exists and can be loaded. */
-  @transient private lazy val classExists = Reflect.classExists(className)
+  @transient private lazy val classExists = CallMethodViaReflection.classExists(className)
 
   /** The reflection method. */
   @transient lazy val method: Method = {
     val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
-    Reflect.findMethod(className, methodName, argExprs.map(_.dataType)).orNull
+    CallMethodViaReflection.findMethod(className, methodName, argExprs.map(_.dataType)).orNull
   }
-
-  /** If the class has a no-arg ctor, instantiate the object. Otherwise, obj is null. */
-  @transient private lazy val obj: Object =
-    Reflect.instantiate(className).orNull.asInstanceOf[Object]
 
   /** A temporary buffer used to hold intermediate results returned by children. */
   @transient private lazy val buffer = new Array[Object](argExprs.length)
 }
 
-object Reflect {
+object CallMethodViaReflection {
   /** Mapping from Spark's type to acceptable JVM types. */
   val typeMapping = Map[DataType, Seq[Class[_]]](
     BooleanType -> Seq(classOf[java.lang.Boolean], classOf[Boolean]),
@@ -131,7 +132,7 @@ object Reflect {
   }
 
   /**
-   * Finds a Java method using reflection that matches the given argument types,
+   * Finds a Java static method using reflection that matches the given argument types,
    * and whose return type is string.
    *
    * The types sequence must be the valid types defined in [[typeMapping]].
@@ -145,6 +146,9 @@ object Reflect {
       if (method.getName != methodName) {
         // Name must match
         false
+      } else if (!Modifier.isStatic(method.getModifiers)) {
+        // Method must be static
+        false
       } else if (candidateTypes.length != argTypes.length) {
         // Argument length must match
         false
@@ -157,18 +161,6 @@ object Reflect {
           }
         }
       }
-    }
-  }
-
-  /**
-   * Instantiates the class if there is a no-arg constructor.
-   * This is made public for unit testing.
-   */
-  def instantiate(className: String): Option[Any] = {
-    val clazz: Class[_] = Utils.classForName(className)
-    Try(clazz.getDeclaredConstructor()).toOption.flatMap { ctor =>
-      ctor.setAccessible(true)
-      Try(ctor.newInstance()).toOption
     }
   }
 }

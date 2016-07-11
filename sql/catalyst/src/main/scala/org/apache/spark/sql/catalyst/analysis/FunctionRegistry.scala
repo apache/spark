@@ -368,8 +368,8 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
-    expression[Reflect]("reflect"),
-    expression[Reflect]("java_method"),
+    expression[CallMethodViaReflection]("reflect"),
+    expression[CallMethodViaReflection]("java_method"),
 
     // grouping sets
     expression[Cube]("cube"),
