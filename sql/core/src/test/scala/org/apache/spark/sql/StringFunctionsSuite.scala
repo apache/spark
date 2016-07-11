@@ -349,4 +349,26 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.filter("b>0").selectExpr("format_number(a, b)"),
       Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
+
+  test("str_to_map function") {
+    val df1 = Seq(
+      ("a=1,b=2", "y"),
+      ("a=1,b=2,c=3", "y")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df1.selectExpr("str_to_map(a,',','=')"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
+      )
+    )
+
+    val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
+
+    checkAnswer(
+      df2.selectExpr("str_to_map(a)"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+  }
 }
