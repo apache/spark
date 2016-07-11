@@ -276,7 +276,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
 }
 
 @ExpressionDescription(
-  usage = "a _FUNC_ b - Divides a by b.",
+  usage = "a _FUNC_ b - Fraction Division a by b.",
   extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
 case class Divide(left: Expression, right: Expression)
     extends DivisionArithmetic {
