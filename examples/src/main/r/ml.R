@@ -22,7 +22,7 @@
 library(SparkR)
 
 # Initialize SparkSession
-sparkR.session(appName="SparkR-ML-example")
+sparkR.session(appName = "SparkR-ML-example")
 
 # $example on$
 ############################ spark.glm and glm ##############################################

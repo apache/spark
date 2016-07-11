@@ -403,7 +403,7 @@ class SessionCatalog(
       val relation =
         if (name.database.isDefined || !tempTables.contains(table)) {
           val metadata = externalCatalog.getTable(db, table)
-          SimpleCatalogRelation(db, metadata, alias)
+          SimpleCatalogRelation(db, metadata)
         } else {
           tempTables(table)
         }

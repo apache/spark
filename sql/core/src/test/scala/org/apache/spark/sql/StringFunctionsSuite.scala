@@ -228,6 +228,21 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("???hi", "hi???", "h", "h"))
   }
 
+  test("string parse_url function") {
+    val df = Seq[String](("http://userinfo@spark.apache.org/path?query=1#Ref"))
+      .toDF("url")
+
+    checkAnswer(
+      df.selectExpr(
+        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
+        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
+        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
+        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
+        "parse_url(url, 'QUERY', 'query')"),
+      Row("spark.apache.org", "/path", "query=1", "Ref",
+        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
+  }
+
   test("string repeat function") {
     val df = Seq(("hi", 2)).toDF("a", "b")
 
@@ -350,6 +365,26 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
   }
 
+  test("string sentences function") {
+    val df = Seq(("Hi there! The price was $1,234.56.... But, not now.", "en", "US"))
+      .toDF("str", "language", "country")
+
+    checkAnswer(
+      df.selectExpr("sentences(str, language, country)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    // Type coercion
+    checkAnswer(
+      df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    // Argument number exception
+    val m = intercept[AnalysisException] {
+      df.selectExpr("sentences()")
+    }.getMessage
+    assert(m.contains("Invalid number of arguments for function sentences"))
+  }
+
   test("str_to_map function") {
     val df1 = Seq(
       ("a=1,b=2", "y"),
@@ -370,5 +405,4 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.selectExpr("str_to_map(a)"),
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
-  }
 }
