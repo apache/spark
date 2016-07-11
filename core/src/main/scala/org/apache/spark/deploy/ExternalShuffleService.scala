@@ -50,10 +50,10 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
   private val transportConf =
-  SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
+    SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext =
-  new TransportContext(transportConf, blockHandler, true)
+    new TransportContext(transportConf, blockHandler, true)
 
   private var server: TransportServer = _
 
