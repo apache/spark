@@ -20,6 +20,7 @@ package org.apache.spark.ml.ann
 import java.util.Random
 
 import breeze.linalg.{*, axpy => Baxpy, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
+import breeze.linalg.support.CanTransformValues
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
@@ -246,17 +247,10 @@ private[ann] trait ActivationFunction extends Serializable {
  */
 private[ann] object ApplyInPlace {
 
-  // TODO: use Breeze UFunc
   def apply(x: BDM[Double], y: BDM[Double], func: Double => Double): Unit = {
-    var i = 0
-    while (i < x.rows) {
-      var j = 0
-      while (j < x.cols) {
-        y(i, j) = func(x(i, j))
-        j += 1
-      }
-      i += 1
-    }
+    y := x
+    val transformer = implicitly[CanTransformValues[BDM[Double], Double, Double]]
+    transformer.transform(y, func)
   }
 
   // TODO: use Breeze UFunc
