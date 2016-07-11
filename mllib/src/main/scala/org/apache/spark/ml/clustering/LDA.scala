@@ -18,6 +18,9 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+import org.json4s.JsonAST.JObject
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
@@ -575,16 +578,28 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
+      val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
-      topicConcentration: Double, gammaShape: Double, topicDistributionCol: String) =
-        MLUtils.convertVectorColumnsToML(data, "vocabSize", "topicsMatrix",
-          "docConcentration", "topicConcentration", "gammaShape").
-          select("vocabSize", "topicsMatrix", "docConcentration",
-            "topicConcentration", "gammaShape").head()
+      topicConcentration: Double, gammaShape: Double) = MLUtils.convertMatrixColumnsToML(
+        vectorConverted, "topicsMatrix").select("vocabSize", "topicsMatrix", "docConcentration",
+        "topicConcentration", "gammaShape").head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
          gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      implicit val format = DefaultFormats
+           metadata.params match {
+              case JObject(pairs) =>
+                  pairs.foreach { case (paramName, jsonValue) =>
+                      val variable =
+                        if (paramName == "topicDistribution") "topicDistributionCol" else paramName
+                      val param = model.getParam(variable)
+                      val value = param.jsonDecode(compact(render(jsonValue)))
+                      model.set(param, value)
+                    }
+              case _ =>
+               throw new IllegalArgumentException(
+                 s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
+           }
       model
     }
   }
