@@ -432,6 +432,39 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(catalog.tableExists(TableIdentifier("tbl3")))
   }
 
+  test("tableExists on temporary views") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val tempTable = Range(1, 10, 2, 10)
+    assert(!catalog.tableExists(TableIdentifier("view1")))
+    assert(!catalog.tableExists(TableIdentifier("view1", Some("default"))))
+    catalog.createTempView("view1", tempTable, overrideIfExists = false)
+    assert(catalog.tableExists(TableIdentifier("view1")))
+    assert(!catalog.tableExists(TableIdentifier("view1", Some("default"))))
+  }
+
+  test("getTableMetadata on temporary views") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val tempTable = Range(1, 10, 2, 10)
+    val m = intercept[AnalysisException] {
+      catalog.getTableMetadata(TableIdentifier("view1"))
+    }.getMessage
+    assert(m.contains("Table or view 'view1' not found in database 'default'"))
+
+    val m2 = intercept[AnalysisException] {
+      catalog.getTableMetadata(TableIdentifier("view1", Some("default")))
+    }.getMessage
+    assert(m2.contains("Table or view 'view1' not found in database 'default'"))
+
+    catalog.createTempView("view1", tempTable, overrideIfExists = false)
+    assert(catalog.getTableMetadata(TableIdentifier("view1")).identifier.table == "view1")
+    assert(catalog.getTableMetadata(TableIdentifier("view1")).schema(0).name == "id")
+
+    val m3 = intercept[AnalysisException] {
+      catalog.getTableMetadata(TableIdentifier("view1", Some("default")))
+    }.getMessage
+    assert(m3.contains("Table or view 'view1' not found in database 'default'"))
+  }
+
   test("list tables without pattern") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val tempTable = Range(1, 10, 2, 10)

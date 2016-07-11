@@ -234,6 +234,11 @@ class CatalogSuite
     testListColumns("tab1", dbName = None)
   }
 
+  test("list columns in temporary table") {
+    createTempTable("temp1")
+    spark.catalog.listColumns("temp1")
+  }
+
   test("list columns in database") {
     createDatabase("db1")
     createTable("tab1", Some("db1"))

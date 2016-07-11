@@ -22,7 +22,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -253,9 +253,27 @@ class SessionCatalog(
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    requireDbExists(db)
-    requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.getTable(db, table)
+    val tid = TableIdentifier(table)
+    if (isTemporaryTable(name)) {
+      CatalogTable(
+        identifier = tid,
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = tempTables(table).output.map { c =>
+          CatalogColumn(
+            name = c.name,
+            dataType = c.dataType.catalogString,
+            nullable = c.nullable,
+            comment = Option(c.name)
+          )
+        },
+        properties = Map(),
+        viewText = None)
+    } else {
+      requireDbExists(db)
+      requireTableExists(TableIdentifier(table, Some(db)))
+      externalCatalog.getTable(db, table)
+    }
   }
 
   /**
@@ -432,10 +450,10 @@ class SessionCatalog(
   def tableExists(name: TableIdentifier): Boolean = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      externalCatalog.tableExists(db, table)
+    if (isTemporaryTable(name)) {
+      true
     } else {
-      true // it's a temporary table
+      externalCatalog.tableExists(db, table)
     }
   }
 
