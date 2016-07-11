@@ -23,9 +23,6 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
-import scala.collection.mutable
-
-
 /**
  * The Percentile aggregate function computes the exact percentile(s) of expr at pc with range in
  * [0, 1].
