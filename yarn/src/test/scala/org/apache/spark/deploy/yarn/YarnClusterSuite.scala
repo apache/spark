@@ -310,7 +310,7 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
     val status = new File(args(1))
     var result = "failure"
     try {
-      SparkHadoopUtil.get.conf.get(propertyKeyValue(0)) should be (propertyKeyValue(1))
+      SparkHadoopUtil.get.conf.get(propertyKeyValue(0).drop(13)) should be (propertyKeyValue(1))
       result = "success"
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
