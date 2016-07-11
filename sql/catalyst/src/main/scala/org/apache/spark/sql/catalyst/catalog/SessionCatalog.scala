@@ -251,10 +251,10 @@ class SessionCatalog(
    * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
-    var db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     val tid = TableIdentifier(table)
-    if (db == "" && isTemporaryTable(tid)) {
+    if (name.database.isEmpty && isTemporaryTable(tid)) {
       CatalogTable(
         identifier = tid,
         tableType = CatalogTableType.VIEW,
@@ -270,7 +270,6 @@ class SessionCatalog(
         properties = Map(),
         viewText = None)
     } else {
-      db = if (db == "") currentDb else db
       requireDbExists(db)
       requireTableExists(TableIdentifier(table, Some(db)))
       externalCatalog.getTable(db, table)
@@ -449,12 +448,12 @@ class SessionCatalog(
    * contain the table.
    */
   def tableExists(name: TableIdentifier): Boolean = synchronized {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    if (name.database.getOrElse("").length == 0 && tempTables.contains(table)) {
+    if (name.database.isEmpty && tempTables.contains(table)) {
+      // This is a temporary table
       true
     } else {
-      var db = formatDatabaseName(name.database.getOrElse(currentDb))
-      db = if (db == "") currentDb else db
       externalCatalog.tableExists(db, table)
     }
   }
