@@ -75,3 +75,4 @@ class SimplifyCastsSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 }
+
