@@ -2040,8 +2040,6 @@ class Analyzer(
             fail(child, DateType, walkedTypePath)
           case (StringType, to: NumericType) =>
             fail(child, to, walkedTypePath)
-          case (from: ArrayType, to: ArrayType) if !from.containsNull =>
-            Cast(child, dataType)
           case _ => Cast(child, dataType.asNullable)
         }
       }
