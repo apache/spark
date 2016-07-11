@@ -676,24 +676,24 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT key > 3")
     }.getMessage
-    assert(e.contains("The argument to the LIMIT clause must evaluate to a constant value. " +
-      "Limit:(testdata.`key` > 3)"))
+    assert(e.contains("The limit expression must evaluate to a constant value, " +
+      "but got (testdata.`key` > 3)"))
   }
 
   test("Expressions in limit clause are not integer") {
     var e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT true")
     }.getMessage
-    assert(e.contains("number_rows in limit clause must be integer. number_rows:\"true\""))
+    assert(e.contains("The limit expression must be integer type, but got boolean"))
 
     e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT 'a'")
     }.getMessage
-    assert(e.contains("number_rows in limit clause must be integer. number_rows:\"a\""))
+    assert(e.contains("The limit expression must be integer type, but got string"))
   }
 
   test("negative in LIMIT or TABLESAMPLE") {
-    val expected = "number_rows in limit clause must be equal to or greater than 0. number_rows:-1"
+    val expected = "The limit expression must be equal to or greater than 0, but got -1"
     var e = intercept[AnalysisException] {
       sql("SELECT * FROM testData TABLESAMPLE (-1 rows)")
     }.getMessage

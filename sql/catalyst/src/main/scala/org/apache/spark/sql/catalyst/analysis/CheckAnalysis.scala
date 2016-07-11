@@ -47,17 +47,17 @@ trait CheckAnalysis extends PredicateHelper {
   }
 
   private def checkLimitClause(limitExpr: Expression): Unit = {
-    if (!limitExpr.foldable) {
-      failAnalysis(
-        "The argument to the LIMIT clause must evaluate to a constant value. " +
-        s"Limit:${limitExpr.sql}")
-    }
-    limitExpr.eval() match {
-      case o: Int if o >= 0 => // OK
-      case o: Int => failAnalysis(
-        s"number_rows in limit clause must be equal to or greater than 0. number_rows:$o")
-      case o => failAnalysis(
-        s"""number_rows in limit clause must be integer. number_rows:\"$o\".""")
+    limitExpr match {
+      case e if !e.foldable => failAnalysis(
+        "The limit expression must evaluate to a constant value, but got " +
+          limitExpr.sql)
+      case e if e.dataType != IntegerType => failAnalysis(
+        s"The limit expression must be integer type, but got " +
+          e.dataType.simpleString)
+      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
+        "The limit expression must be equal to or greater than 0, but got " +
+          e.eval().asInstanceOf[Int])
+      case e => // OK
     }
   }
 
