@@ -885,15 +885,14 @@ class SessionCatalog(
    * This is mainly used for tests.
    */
   private[sql] def reset(): Unit = synchronized {
-    val default = DEFAULT_DATABASE
-    setCurrentDatabase(default)
-    listDatabases().filter(_ != default).foreach { db =>
+    setCurrentDatabase(DEFAULT_DATABASE)
+    listDatabases().filter(_ != DEFAULT_DATABASE).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
-    listTables(default).foreach { table =>
+    listTables(DEFAULT_DATABASE).foreach { table =>
       dropTable(table, ignoreIfNotExists = false)
     }
-    listFunctions(default).map(_._1).foreach { func =>
+    listFunctions(DEFAULT_DATABASE).map(_._1).foreach { func =>
       if (func.database.isDefined) {
         dropFunction(func, ignoreIfNotExists = false)
       } else {
