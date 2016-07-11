@@ -23,8 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
 import org.apache.spark.sql.types.UserDefinedType
 
 
@@ -32,12 +31,24 @@ private[sql] case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
-  extends LeafExecNode {
+  extends LeafExecNode with ColumnarBatchScan {
+
+  override val supportCodegen: Boolean = relation.useColumnarBatches
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    if (relation.useColumnarBatches) {
+      // HACK ALERT: This is actually an RDD[CachedColumnarBatch].
+      // We're taking advantage of Scala's type erasure here to pass these batches along.
+      Seq(relation.cachedColumnBuffers
+        .asInstanceOf[RDD[CachedColumnarBatch]]
+        .map(_.columnarBatch)
+        .asInstanceOf[RDD[InternalRow]])
+    } else {
+      Seq()
+    }
+  }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
-
-  private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 
@@ -113,6 +124,8 @@ private[sql] case class InMemoryTableScanExec(
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
+    assert(!relation.useColumnarBatches)
+    assert(relation.cachedColumnBuffers != null)
     val numOutputRows = longMetric("numOutputRows")
 
     if (enableAccumulators) {
@@ -125,7 +138,7 @@ private[sql] case class InMemoryTableScanExec(
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
     val relOutput: AttributeSeq = relation.output
-    val buffers = relation.cachedColumnBuffers
+    val buffers = relation.cachedColumnBuffers.asInstanceOf[RDD[CachedBatchBytes]]
 
     buffers.mapPartitionsInternal { cachedBatchIterator =>
       val partitionFilter = newPredicate(
@@ -179,4 +192,5 @@ private[sql] case class InMemoryTableScanExec(
       columnarIterator
     }
   }
+
 }

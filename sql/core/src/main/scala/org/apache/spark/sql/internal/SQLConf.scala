@@ -91,6 +91,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CACHE_CODEGEN = SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.codegen")
+    .internal()
+    .doc("When true, use generated code to build column batches for caching. This is only " +
+      "supported for basic types and improves caching performance for such types.")
+    .booleanConf
+    .createWithDefault(true)
+
   val PREFER_SORTMERGEJOIN = SQLConfigBuilder("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")

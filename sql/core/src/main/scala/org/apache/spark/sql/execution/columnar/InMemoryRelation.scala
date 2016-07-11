@@ -30,8 +30,38 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
+
+
+/**
+ * An abstract representation of a cached batch of rows.
+ */
+private[columnar] trait CachedBatch
+
+
+/**
+ * A cached batch of rows stored as a list of byte arrays, one for each column.
+ *
+ * @param numRows The total number of rows in this batch
+ * @param buffers The serialized buffers for serialized columns
+ * @param stats The stat of columns
+ */
+private[columnar] case class CachedBatchBytes(
+    numRows: Int,
+    buffers: Array[Array[Byte]],
+    stats: InternalRow)
+  extends CachedBatch
+
+
+/**
+ * A cached batch of rows stored as a [[ColumnarBatch]].
+ */
+private[columnar] case class CachedColumnarBatch(columnarBatch: ColumnarBatch)
+  extends CachedBatch
 
 
 private[sql] object InMemoryRelation {
@@ -46,15 +76,11 @@ private[sql] object InMemoryRelation {
 
 
 /**
- * CachedBatch is a cached batch of rows.
+ * Container for a physical plan that should be cached in memory.
  *
- * @param numRows The total number of rows in this batch
- * @param buffers The buffers for serialized columns
- * @param stats The stat of columns
+ * This batches the rows from that plan into [[CachedBatch]]es that are later consumed by
+ * [[InMemoryTableScanExec]].
  */
-private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
-
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
@@ -66,6 +92,17 @@ private[sql] case class InMemoryRelation(
     private[sql] val batchStats: CollectionAccumulator[InternalRow] =
       child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
   extends logical.LeafNode with MultiInstanceRelation {
+
+  /**
+   * If true, store the input rows using [[CachedColumnarBatch]]es, which are generally faster.
+   * If false, store the input rows using [[CachedBatchBytes]].
+   */
+  private[columnar] val useColumnarBatches: Boolean = {
+    val enabled = child.sqlContext.conf.getConf(SQLConf.CACHE_CODEGEN)
+    // Fallback to storing the rows as bytes if the schema has non-primitive types
+    val supported = output.forall { a => GenerateColumnarBatch.isSupported(a.dataType) }
+    enabled && supported
+  }
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
@@ -92,23 +129,33 @@ private[sql] case class InMemoryRelation(
     }
   }
 
-  // If the cached column buffers were not passed in, we calculate them in the constructor.
-  // As in Spark, the actual work of caching is lazy.
-  if (_cachedColumnBuffers == null) {
-    buildBuffers()
+  /**
+   * Batch the input rows into [[CachedBatch]]es.
+   */
+  private def buildColumnBuffers(): RDD[CachedBatch] = {
+    val buffers =
+      if (useColumnarBatches) {
+        buildColumnarBatches()
+      } else {
+        buildColumnBytes()
+      }
+    buffers.setName(
+      tableName.map { n => s"In-memory table $n" }
+        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
+    buffers.asInstanceOf[RDD[CachedBatch]]
   }
 
-  def recache(): Unit = {
-    _cachedColumnBuffers.unpersist()
-    _cachedColumnBuffers = null
-    buildBuffers()
-  }
-
-  private def buildBuffers(): Unit = {
+  /**
+   * Batch the input rows into [[CachedBatchBytes]] built using [[ColumnBuilder]]s.
+   *
+   * This handles complex types and compression, but is more expensive than
+   * [[buildColumnarBatches]], which generates code to build the buffers.
+   */
+  private def buildColumnBytes(): RDD[CachedBatchBytes] = {
     val output = child.output
-    val cached = child.execute().mapPartitionsInternal { rowIterator =>
-      new Iterator[CachedBatch] {
-        def next(): CachedBatch = {
+    child.execute().mapPartitionsInternal { rowIterator =>
+      new Iterator[CachedBatchBytes] {
+        def next(): CachedBatchBytes = {
           val columnBuilders = output.map { attribute =>
             ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
           }.toArray
@@ -143,7 +190,7 @@ private[sql] case class InMemoryRelation(
             .flatMap(_.values))
 
           batchStats.add(stats)
-          CachedBatch(rowCount, columnBuilders.map { builder =>
+          CachedBatchBytes(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
         }
@@ -151,11 +198,30 @@ private[sql] case class InMemoryRelation(
         def hasNext: Boolean = rowIterator.hasNext
       }
     }.persist(storageLevel)
+  }
 
-    cached.setName(
-      tableName.map(n => s"In-memory table $n")
-        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
-    _cachedColumnBuffers = cached
+  /**
+   * Batch the input rows using [[ColumnarBatch]]es.
+   *
+   * Compared with [[buildColumnBytes]], this provides a faster implementation of memory
+   * scan because both the read path and the write path are generated. This only supports
+   * basic primitive types and does not compress data, however.
+   */
+  private def buildColumnarBatches(): RDD[CachedColumnarBatch] = {
+    val schema = StructType.fromAttributes(child.output)
+    child.execute().mapPartitionsInternal { rows =>
+      new GenerateColumnarBatch(schema, batchSize).generate(rows).map { b =>
+        CachedColumnarBatch(b)
+      }
+    }.persist(storageLevel)
+  }
+
+  def recache(): Unit = {
+    if (_cachedColumnBuffers != null) {
+      _cachedColumnBuffers.unpersist()
+      _cachedColumnBuffers = null
+    }
+    _cachedColumnBuffers = buildColumnBuffers()
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
@@ -176,7 +242,15 @@ private[sql] case class InMemoryRelation(
         batchStats).asInstanceOf[this.type]
   }
 
-  def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
+  /**
+   * Return lazily cached batches of rows in the original plan.
+   */
+  def cachedColumnBuffers: RDD[CachedBatch] = {
+    if (_cachedColumnBuffers == null) {
+      _cachedColumnBuffers = buildColumnBuffers()
+    }
+    _cachedColumnBuffers
+  }
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, batchStats)
