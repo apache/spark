@@ -65,7 +65,7 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  private def testUnspportedMetadataOnly(name: String, sqls: String*): Unit = {
+  private def testNotMetadataOnly(name: String, sqls: String*): Unit = {
     test(name) {
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
         sqls.foreach { case q => assertNotMetadataOnlyQuery(sql(q)) }
@@ -101,20 +101,20 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
     "select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2",
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
-  testUnspportedMetadataOnly(
+  testNotMetadataOnly(
     "OptimizeMetadataOnlyQuery test: unsupported for non-partition columns",
     "select col1 from srcpart group by col1",
     "select partcol1, max(col1) from srcpart group by partcol1",
     "select partcol1, count(distinct col1) from srcpart group by partcol1",
     "select distinct partcol1, col1 from srcpart")
 
-  testUnspportedMetadataOnly(
+  testNotMetadataOnly(
     "OptimizeMetadataOnlyQuery test: unsupported for non-distinct aggregate function on " +
     "partition columns",
     "select partcol1, sum(partcol2) from srcpart group by partcol1",
     "select partcol1, count(partcol2) from srcpart group by partcol1")
 
-  testUnspportedMetadataOnly(
+  testNotMetadataOnly(
     "OptimizeMetadataOnlyQuery test: unsupported for GroupingSet/Union operator",
     "select partcol1, max(partcol2) from srcpart where partcol1 = 0 group by rollup (partcol1)",
     "select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
