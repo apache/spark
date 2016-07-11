@@ -692,14 +692,20 @@ private[spark] object RandomForest extends Logging {
       node.stats
     }
 
+    val validFeatureSplits =
+      Range(0, binAggregates.metadata.numFeaturesPerNode).view.map { featureIndexIdx =>
+        if (featuresForNode.nonEmpty) {
+          (featureIndexIdx, featuresForNode.get.apply(featureIndexIdx))
+        } else {
+          (featureIndexIdx, featureIndexIdx)
+        }
+      }.withFilter { case (featureIndexIdx, featureIndex) =>
+        binAggregates.metadata.numSplits(featureIndex) != 0
+      }
+
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     val (bestSplit, bestSplitStats) =
-      Range(0, binAggregates.metadata.numFeaturesPerNode).map { featureIndexIdx =>
-        val featureIndex = if (featuresForNode.nonEmpty) {
-          featuresForNode.get.apply(featureIndexIdx)
-        } else {
-          featureIndexIdx
-        }
+      validFeatureSplits.map { case (featureIndexIdx, featureIndex) =>
         val numSplits = binAggregates.metadata.numSplits(featureIndex)
         if (binAggregates.metadata.isContinuous(featureIndex)) {
           // Cumulative sum (scanLeft) of bin statistics.
@@ -712,7 +718,7 @@ private[spark] object RandomForest extends Logging {
             splitIndex += 1
           }
           // Find best split.
-          if (numSplits == 0) {
+          if (numSplits == 0 && false) {
             (new ContinuousSplit(featureIndex, Double.MinValue),
               ImpurityStats.getInvalidImpurityStats(binAggregates.getParentImpurityCalculator()))
           } else {
@@ -959,7 +965,7 @@ private[spark] object RandomForest extends Logging {
    *                 NOTE: `metadata.numbins` will be changed accordingly
    *                       if there are not enough splits to be found
    * @param featureIndex feature index to find splits
-   * @return array of splits
+   * @return array of split thresholds
    */
   private[tree] def findSplitsForContinuousFeature(
       featureSamples: Iterable[Double],

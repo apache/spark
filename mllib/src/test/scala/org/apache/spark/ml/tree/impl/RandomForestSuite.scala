@@ -114,7 +114,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       )
       val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits.length === 2)
+      assert(splits === Array(1.0, 2.0))
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
     }
@@ -128,9 +128,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       )
       val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits.length === 2)
-      assert(splits(0) === 2.0)
-      assert(splits(1) === 3.0)
+      assert(splits === Array(2.0, 3.0))
     }
 
     // find splits when most samples close to the maximum
@@ -142,8 +140,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       )
       val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits.length === 1)
-      assert(splits(0) === 1.0)
+      assert(splits === Array(1.0))
     }
 
     // find splits for constant feature
@@ -173,7 +170,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           maxDepth = 2,
           numClasses = 100,
           maxBins = 100,
-          categoricalFeaturesInfo = Map(0 -> 2, 1 -> 5))
+          categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
