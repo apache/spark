@@ -1099,7 +1099,7 @@ for details.
 </tr>
 </table>
 
-Spark provide asynchronous actions to execute two or more actions concurrently, these actions are execute asynchronously without blocking calling thread. Refer to the RDD API doc for asynchronous actions ([Scala](api/scala/index.html#org.apache.spark.rdd.AsyncRDDActions),[Java](api/java/org/apache/spark/rdd/AsyncRDDActions.html))
+Spark RDD API also exposes asynchronous versions of some actions like foreach, collect, count etc. which return a handle immediately to the caller which can be used to wait for its completion.
 
 
 ### Shuffle operations
