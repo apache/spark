@@ -191,7 +191,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(false,
       mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
       appArgs = Seq("spark.hadoop.key=value", result.getAbsolutePath()),
-      extraConf = Map(("spark.hadoop.key", "value")))
+      extraConf = Map("spark.hadoop.key" -> "value"))
     checkResult(finalState, result)
   }
 
@@ -294,8 +294,8 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       // scalastyle:off println
       System.err.println(
         s"""
-           |Invalid command line: ${args.mkString(" ")}
-           |
+        |Invalid command line: ${args.mkString(" ")}
+        |
         |Usage: YarnClusterDriverUseSparkHadoopUtilConf [propertyKey=value] [result file]
         """.stripMargin)
       // scalastyle:on println
