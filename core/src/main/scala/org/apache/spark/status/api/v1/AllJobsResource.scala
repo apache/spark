@@ -68,7 +68,12 @@ private[v1] object AllJobsResource {
       listener: JobProgressListener,
       includeStageDetails: Boolean): JobData = {
     listener.synchronized {
-      val lastStageInfo = listener.stageIdToInfo.get(job.stageIds.max)
+      val lastStageInfo =
+        if (job.stageIds.isEmpty) {
+          None
+        } else {
+          listener.stageIdToInfo.get(job.stageIds.max)
+        }
       val lastStageData = lastStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }

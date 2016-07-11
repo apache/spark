@@ -407,7 +407,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     val relationWithAlias =
       SubqueryAlias(alias,
         SubqueryAlias("tbl1",
-          SimpleCatalogRelation("db2", tableMetadata, Some(alias))))
+          SimpleCatalogRelation("db2", tableMetadata)))
     assert(catalog.lookupRelation(
       TableIdentifier("tbl1", Some("db2")), alias = None) == relation)
     assert(catalog.lookupRelation(

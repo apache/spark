@@ -725,4 +725,78 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(FindInSet(Literal("abf"), Literal("abc,b,ab,c,def")), 0)
     checkEvaluation(FindInSet(Literal("ab,"), Literal("abc,b,ab,c,def")), 0)
   }
+
+  test("ParseUrl") {
+    def checkParseUrl(expected: String, urlStr: String, partToExtract: String): Unit = {
+      checkEvaluation(
+        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract))), expected)
+    }
+    def checkParseUrlWithKey(
+        expected: String,
+        urlStr: String,
+        partToExtract: String,
+        key: String): Unit = {
+      checkEvaluation(
+        ParseUrl(Seq(Literal(urlStr), Literal(partToExtract), Literal(key))), expected)
+    }
+
+    checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
+    checkParseUrl("/path", "http://spark.apache.org/path?query=1", "PATH")
+    checkParseUrl("query=1", "http://spark.apache.org/path?query=1", "QUERY")
+    checkParseUrl("Ref", "http://spark.apache.org/path?query=1#Ref", "REF")
+    checkParseUrl("http", "http://spark.apache.org/path?query=1", "PROTOCOL")
+    checkParseUrl("/path?query=1", "http://spark.apache.org/path?query=1", "FILE")
+    checkParseUrl("spark.apache.org:8080", "http://spark.apache.org:8080/path?query=1", "AUTHORITY")
+    checkParseUrl("userinfo", "http://userinfo@spark.apache.org/path?query=1", "USERINFO")
+    checkParseUrlWithKey("1", "http://spark.apache.org/path?query=1", "QUERY", "query")
+
+    // Null checking
+    checkParseUrl(null, null, "HOST")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", null)
+    checkParseUrl(null, null, null)
+    checkParseUrl(null, "test", "HOST")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", "NO")
+    checkParseUrl(null, "http://spark.apache.org/path?query=1", "USERINFO")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "HOST", "query")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "quer")
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", null)
+    checkParseUrlWithKey(null, "http://spark.apache.org/path?query=1", "QUERY", "")
+
+    // exceptional cases
+    intercept[java.util.regex.PatternSyntaxException] {
+      evaluate(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
+        Literal("QUERY"), Literal("???"))))
+    }
+
+    // arguments checking
+    assert(ParseUrl(Seq(Literal("1"))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal("3"), Literal("4")))
+      .checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal(1), Literal("2"))).checkInputDataTypes().isFailure)
+    assert(ParseUrl(Seq(Literal("1"), Literal("2"), Literal(3))).checkInputDataTypes().isFailure)
+  }
+
+  test("Sentences") {
+    val nullString = Literal.create(null, StringType)
+    checkEvaluation(Sentences(nullString, nullString, nullString), null)
+    checkEvaluation(Sentences(nullString, nullString), null)
+    checkEvaluation(Sentences(nullString), null)
+    checkEvaluation(Sentences(Literal.create(null, NullType)), null)
+    checkEvaluation(Sentences("", nullString, nullString), Seq.empty)
+    checkEvaluation(Sentences("", nullString), Seq.empty)
+    checkEvaluation(Sentences(""), Seq.empty)
+
+    val answer = Seq(
+      Seq("Hi", "there"),
+      Seq("The", "price", "was"),
+      Seq("But", "not", "now"))
+
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now."), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en"), answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "en", "US"),
+      answer)
+    checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXX", "YYY"),
+      answer)
+  }
 }
