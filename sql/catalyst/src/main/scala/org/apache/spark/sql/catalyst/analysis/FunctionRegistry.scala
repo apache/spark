@@ -236,7 +236,6 @@ object FunctionRegistry {
     expression[Subtract]("-"),
     expression[Multiply]("*"),
     expression[Divide]("/"),
-    expression[IntegerDivide]("div"),
     expression[Remainder]("%"),
 
     // aggregate functions
