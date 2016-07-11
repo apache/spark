@@ -285,6 +285,12 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val DROP_IGNORENONEXIST = SQLConfigBuilder("spark.sql.drop.ignorenonexistent")
+    .doc("When true, Do not throw an exception if DROP TABLE/VIEW/Index/Function specifies a " +
+      "non-existent table/view/index/function.")
+    .booleanConf
+    .createWithDefault(true)
+
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = SQLConfigBuilder("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
@@ -630,6 +636,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
   def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
+
+  def dropIgnoreNonExist: Boolean = getConf(DROP_IGNORENONEXIST)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 

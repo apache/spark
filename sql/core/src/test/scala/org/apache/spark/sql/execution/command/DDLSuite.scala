@@ -782,9 +782,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
     sql("DROP TABLE IF EXISTS dbx.tab1")
-    intercept[AnalysisException] {
-      sql("DROP TABLE dbx.tab1")
-    }
+    sql("DROP TABLE dbx.tab1")
   }
 
   test("drop view") {
@@ -1132,7 +1130,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (a='2')")
     }
     // partition to drop does not exist
-    intercept[AnalysisException] {
+    maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE tab1 DROP PARTITION (a='300')")
     }
     maybeWrapException(isDatasourceTable) {
@@ -1415,6 +1413,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(sql("show system functions").count() === numFunctions)
       assert(sql("show all functions").count() === numFunctions + 1L)
       assert(sql("show user functions").count() === 1L)
+    }
+  }
+
+  test("test drop ignore non-exist for DROP TABLE/VIEW/Function/Partitions") {
+    withTable("tbl") {
+      withSQLConf(SQLConf.DROP_IGNORENONEXIST.key -> "false") {
+        sql("CREATE TABLE tbl(a INT, b INT) USING parquet PARTITIONED BY (a)")
+        intercept[AnalysisException] {
+          sql("DROP TABLE nonExistTable")
+        }
+        intercept[AnalysisException] {
+          sql("DROP VIEW nonExistView")
+        }
+        intercept[AnalysisException] {
+          sql("DROP Function nonExistFunction")
+        }
+        intercept[AnalysisException] {
+          sql("ALTER TABLE tbl DROP IF EXISTS PARTITION (a=1)")
+        }
+      }
     }
   }
 }

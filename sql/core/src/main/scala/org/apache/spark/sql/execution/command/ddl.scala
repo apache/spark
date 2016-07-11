@@ -183,8 +183,9 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val ignoreIfNotExists = ifExists || sparkSession.sqlContext.conf.dropIgnoreNonExist
     if (!catalog.tableExists(tableName)) {
-      if (!ifExists) {
+      if (!ignoreIfNotExists) {
         val objectName = if (isView) "View" else "Table"
         throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
       }
@@ -207,7 +208,7 @@ case class DropTableCommand(
         case NonFatal(e) => log.warn(e.toString, e)
       }
       catalog.refreshTable(tableName)
-      catalog.dropTable(tableName, ifExists)
+      catalog.dropTable(tableName, ignoreIfNotExists)
     }
     Seq.empty[Row]
   }
@@ -418,7 +419,8 @@ case class AlterTableDropPartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
+    val ignoreIfNotExists = ifExists || sparkSession.sqlContext.conf.dropIgnoreNonExist
+    catalog.dropPartitions(tableName, specs, ignoreIfNotExists)
     Seq.empty[Row]
   }
 
