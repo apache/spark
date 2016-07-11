@@ -25,7 +25,8 @@ import org.apache.spark.util.Benchmark
 /**
  * Benchmark [[GenericArrayData]] for specialized representation with primitive type
  * To run this:
- *  build/sbt "sql/test-only *benchmark.GenericArrayDataBenchmark"
+ *  1. replace ignore(...) with test(...)
+ *  2. build/sbt "sql/test-only *benchmark.GenericArrayDataBenchmark"
  *
  * Benchmarks in this file are skipped in normal builds.
  */
@@ -284,14 +285,5 @@ class GenericArrayDataBenchmark extends BenchmarkBase {
   ignore("read elements in GenericArrayData") {
     readGenericIntArray(100)
     readGenericDoubleArray(100)
-  }
-
-  def main(args: Array[String]): Unit = {
-    allocateGenericIntArray(20)
-    allocateGenericDoubleArray(20)
-    getPrimitiveIntArray(50)
-    getPrimitiveDoubleArray(50)
-    readGenericIntArray(20)
-    readGenericDoubleArray(20)
   }
 }
