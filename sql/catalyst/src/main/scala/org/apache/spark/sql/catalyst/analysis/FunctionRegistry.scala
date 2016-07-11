@@ -264,6 +264,7 @@ object FunctionRegistry {
     expression[VarianceSamp]("var_samp"),
     expression[CollectList]("collect_list"),
     expression[CollectSet]("collect_set"),
+    expression[NumericHistogram]("histogram_numeric"),
 
     // string functions
     expression[Ascii]("ascii"),
