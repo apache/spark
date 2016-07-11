@@ -37,6 +37,7 @@ object JdbcUtils extends Logging {
   // the property names are case sensitive
   val JDBC_BATCH_FETCH_SIZE = "fetchsize"
   val JDBC_BATCH_INSERT_SIZE = "batchsize"
+  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
@@ -139,8 +140,8 @@ object JdbcUtils extends Logging {
 
   /**
    * Saves a partition of a DataFrame to the JDBC database.  This is done in
-   * a single database transaction in order to avoid repeatedly inserting
-   * data as much as possible.
+   * a single database transaction (unless isolation level is "NONE")
+   * in order to avoid repeatedly inserting data as much as possible.
    *
    * It is still theoretically possible for rows in a DataFrame to be
    * inserted into the database more than once if a stage somehow fails after
@@ -158,7 +159,8 @@ object JdbcUtils extends Logging {
       rddSchema: StructType,
       nullTypes: Array[Int],
       batchSize: Int,
-      dialect: JdbcDialect): Iterator[Byte] = {
+      dialect: JdbcDialect,
+      isolationLevel: Int): Iterator[Byte] = {
     require(batchSize >= 1,
       s"Invalid value `${batchSize.toString}` for parameter " +
       s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
@@ -166,7 +168,7 @@ object JdbcUtils extends Logging {
     val conn = getConnection()
     var committed = false
     val supportsTransactions = try {
-      conn.getMetaData.supportsTransactions()
+      isolationLevel != Connection.TRANSACTION_NONE && conn.getMetaData.supportsTransactions()
     } catch {
       case NonFatal(e) =>
         logWarning("Exception while detecting transaction support", e)
@@ -176,9 +178,7 @@ object JdbcUtils extends Logging {
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
-        // Allow even dirty reads to avoid locking; consistent with how, say, file-based
-        // outputs would be readable while writing
-        conn.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED)
+        conn.setTransactionIsolation(isolationLevel)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
       try {
@@ -287,9 +287,17 @@ object JdbcUtils extends Logging {
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
     val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
-    df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
-    }
+    val isolationLevel =
+      properties.getProperty(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
+        case "NONE" => Connection.TRANSACTION_NONE
+        case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
+        case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
+        case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
+        case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
+      }
+    df.foreachPartition(iterator => savePartition(
+      getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
+    )
   }
 
 }
