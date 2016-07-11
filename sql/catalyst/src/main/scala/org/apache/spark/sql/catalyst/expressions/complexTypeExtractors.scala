@@ -113,7 +113,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def toString: String = {
     val fieldName = if (resolved) childSchema(ordinal).name else s"_$ordinal"
-    s"$child.${name.getOrElse(fieldName)}"
+    s"($child).${name.getOrElse(fieldName)}"
   }
 
   override def sql: String =
