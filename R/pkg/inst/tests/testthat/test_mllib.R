@@ -453,3 +453,36 @@ test_that("spark.survreg", {
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })
+
+test_that("spark.lda", {
+  text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
+  model <- spark.lda(text, optimizer = "em")
+
+  stats <- summary(model)
+  isDistributed <- stats$isDistributed
+  likelihood <- stats$logLikelihood
+  perplexity <- stats$logPerplexity
+  vocabSize <- stats$vocabSize
+  topics <- stats$topicTopTerms
+  weights <- stats$topicTopTermsWeights
+
+  expect_false(isDistributed)
+  expect_true(likelihood <= 0 & is.finite(likelihood))
+  expect_true(perplexity >= 0 & is.finite(perplexity))
+  expect_equal(vocabSize, 11)
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  stats2 <- summary(model2)
+
+  expect_false(stats2$isDistributed)
+  expect_equal(likelihood, stats2$logLikelihood)
+  expect_equal(perplexity, stats2$logPerplexity)
+  expect_equal(vocabSize, stats2$vocabSize)
+
+  unlink(modelPath)
+})
