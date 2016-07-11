@@ -45,7 +45,7 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     val n = 1024 * 1024
     val rows = 15
 
-    val benchmark = new Benchmark("Read primnitive array", n)
+    val benchmark = new Benchmark("Read primitive array", n)
 
     val rand = new Random(511)
     val intDS = sparkSession.sparkContext.parallelize(0 until rows, 1)
@@ -75,7 +75,7 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.10.4
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
 
-    Read primnitive array:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Read primitive array:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
     Read int array in Dataset                      400 /  492          2.6         381.5       1.0X
     Read double array in Dataset                   788 /  870          1.3         751.4       0.5X
