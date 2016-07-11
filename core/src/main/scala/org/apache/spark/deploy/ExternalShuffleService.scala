@@ -58,8 +58,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private var server: TransportServer = _
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
-
-
+  
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
     new ExternalShuffleBlockHandler(conf, null)
