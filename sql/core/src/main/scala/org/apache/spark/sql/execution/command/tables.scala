@@ -408,10 +408,19 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    describeSchema(catalog.lookupRelation(table).schema, result)
-
-    if (!catalog.isTemporaryTable(table)) {
+    if (catalog.isTemporaryTable(table)) {
+      describeSchema(catalog.lookupRelation(table).schema, result)
+    } else {
       val metadata = catalog.getTableMetadata(table)
+
+      val schema = if (DDLUtils.isDatasourceTable(metadata)) {
+        DDLUtils.getSchemaFromTableProperties(metadata)
+          .getOrElse(catalog.lookupRelation(table).schema)
+      } else {
+        catalog.lookupRelation(table).schema
+      }
+      describeSchema(schema, result)
+
       if (isExtended) {
         describeExtended(metadata, result)
       } else if (isFormatted) {
