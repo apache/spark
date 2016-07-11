@@ -27,16 +27,28 @@ import org.apache.spark.util.Benchmark
  * Benchmark [[PrimitiveArray]] for DataFrame and Dataset program using primitive array
  * To run this:
  *  1. replace ignore(...) with test(...)
+<<<<<<< 1daa9216fe2a928d9c0b6153b12b043fac3c4fa0
  *  2. build/sbt "sql/test-only *benchmark.PrimitiveArrayBenchmark"
+=======
+ *  2. build/sbt "sql/test-only *benchmark.PrimitiveArrayDataBenchmark"
+>>>>>>> update
  *
  * Benchmarks in this file are skipped in normal builds.
  */
 class PrimitiveArrayBenchmark extends BenchmarkBase {
+<<<<<<< 1daa9216fe2a928d9c0b6153b12b043fac3c4fa0
 
   def writeDatasetArray(iters: Int): Unit = {
     import sparkSession.implicits._
 
     val count = 1024 * 1024 * 2
+=======
+
+  def showArray(iters: Int): Unit = {
+    import sparkSession.implicits._
+
+    val count = 1024 * 1024 * 24
+>>>>>>> update
 
     val sc = sparkSession.sparkContext
     val primitiveIntArray = Array.fill[Int](count)(65535)
@@ -67,6 +79,7 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
     benchmark.addCase("Double")(doubleArray)
     benchmark.run
     /*
+<<<<<<< 1daa9216fe2a928d9c0b6153b12b043fac3c4fa0
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     Write an array in Dataset:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
@@ -78,6 +91,19 @@ class PrimitiveArrayBenchmark extends BenchmarkBase {
 
   ignore("Write an array in Dataset") {
     writeDatasetArray(4)
+=======
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.0.4-301.fc22.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
+    Read an array in DataFrame:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    Int                                            502 /  530         50.1          20.0       1.0X
+    Double                                        1111 / 1170         22.7          44.1       0.5X
+    */
+  }
+
+  ignore("Read an array in DataFrame") {
+    showArray(1)
+>>>>>>> update
   }
 
   def writeArray(iters: Int): Unit = {
