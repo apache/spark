@@ -450,8 +450,7 @@ class SessionCatalog(
   def tableExists(name: TableIdentifier): Boolean = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    if (name.database.isEmpty && tempTables.contains(table)) {
-      // This is a temporary table
+    if (isTemporaryTable(name)) {
       true
     } else {
       externalCatalog.tableExists(db, table)
