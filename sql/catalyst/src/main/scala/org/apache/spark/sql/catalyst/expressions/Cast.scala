@@ -477,7 +477,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case DoubleType => castToDoubleCode(from)
 
     case array: ArrayType =>
-      castArrayCode(from.asInstanceOf[ArrayType], array, ctx)
+      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_]
@@ -823,10 +823,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       (c, evPrim, evNull) => s"$evPrim = (double) $c;"
   }
 
-  private[this] def castArrayCode(fromArrayType: ArrayType, toArrayType: ArrayType,
-      ctx: CodegenContext): CastFunction = {
-    val fromType = fromArrayType.elementType
-    val toType = toArrayType.elementType
+  private[this] def castArrayCode(
+      fromType: DataType, toType: DataType, ctx: CodegenContext): CastFunction = {
     val elementCast = nullSafeCastFunction(fromType, toType, ctx)
     val arrayClass = classOf[GenericArrayData].getName
     val fromElementNull = ctx.freshName("feNull")
@@ -837,38 +835,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val j = ctx.freshName("j")
     val values = ctx.freshName("values")
 
-    val isPrimitiveFrom = ctx.isPrimitiveType(fromType)
-    val ArrayType(_, containsNullFrom) = fromArrayType
-    val isPrimitiveTo = ctx.isPrimitiveType(toType)
-    val ArrayType(_, containsNullTo) = toArrayType
-
     (c, evPrim, evNull) =>
-      if (isPrimitiveFrom && !containsNullFrom && isPrimitiveTo && !containsNullTo) {
-        // ensure no null in input and output primitive arrays
-        val javaDTFrom = ctx.javaType(fromType)
-        val javaDTTo = ctx.javaType(toType)
-        if (javaDTFrom == javaDTTo) {
-          val boxedTypeTo = ctx.primitiveTypeName(javaDTTo)
-          s"""
-           final ${javaDTTo}[] $values = $c.to${boxedTypeTo}Array();
-           $evPrim = new $arrayClass($values);
-         """
-        } else {
-          s"""
-           final int $size = $c.numElements();
-           final ${javaDTTo}[] $values = new ${javaDTTo}[$c.numElements()];
-           for (int $j = 0; $j < $size; $j ++) {
-             ${ctx.javaType(fromType)} $fromElementPrim =
-             ${ctx.getValue(c, fromType, j)};
-             ${castCode(ctx, fromElementPrim,
-                 "false", toElementPrim, toElementNull, toType, elementCast)}
-             $values[$j] = $toElementPrim;
-           }
-           $evPrim = new $arrayClass($values);
-         """
-        }
-      } else {
-        s"""
+      s"""
         final int $size = $c.numElements();
         final Object[] $values = new Object[$size];
         for (int $j = 0; $j < $size; $j ++) {
@@ -888,14 +856,12 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
           }
         }
         $evPrim = new $arrayClass($values);
-        """
-      }
+      """
   }
 
   private[this] def castMapCode(from: MapType, to: MapType, ctx: CodegenContext): CastFunction = {
-    val keysCast = castArrayCode(ArrayType(from.keyType, false), ArrayType(to.keyType, false), ctx)
-    val valuesCast =
-      castArrayCode(ArrayType(from.valueType, true), ArrayType(to.valueType, true), ctx)
+    val keysCast = castArrayCode(from.keyType, to.keyType, ctx)
+    val valuesCast = castArrayCode(from.valueType, to.valueType, ctx)
 
     val mapClass = classOf[ArrayBasedMapData].getName
 
