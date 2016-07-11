@@ -86,9 +86,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/pyth
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/R/sparkR.session.html) class. To initialize a basic `SparkSession`, just call `sparkR.session()`:
 
-{% highlight r %}
-sparkR.session()
-{% endhighlight %}
+{% include_example init_session r/RSparkSQLExample.R %}
 
 Note that when invoked for the first time, `sparkR.session()` initializes a global `SparkSession` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SparkSession` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SparkSession` instance around.
 </div>
@@ -155,12 +153,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% highlight r %}
-df <- read.json("examples/src/main/resources/people.json")
-
-# Displays the content of the DataFrame
-showDF(df)
-{% endhighlight %}
+{% include_example create_DataFrames r/RSparkSQLExample.R %}
 
 </div>
 </div>
@@ -343,50 +336,8 @@ In addition to simple column references and expressions, DataFrames also have a 
 </div>
 
 <div data-lang="r"  markdown="1">
-{% highlight r %}
-# Create the DataFrame
-df <- read.json("examples/src/main/resources/people.json")
 
-# Show the content of the DataFrame
-showDF(df)
-## age  name
-## null Michael
-## 30   Andy
-## 19   Justin
-
-# Print the schema in a tree format
-printSchema(df)
-## root
-## |-- age: long (nullable = true)
-## |-- name: string (nullable = true)
-
-# Select only the "name" column
-showDF(select(df, "name"))
-## name
-## Michael
-## Andy
-## Justin
-
-# Select everybody, but increment the age by 1
-showDF(select(df, df$name, df$age + 1))
-## name    (age + 1)
-## Michael null
-## Andy    31
-## Justin  20
-
-# Select people older than 21
-showDF(where(df, df$age > 21))
-## age name
-## 30  Andy
-
-# Count people by age
-showDF(count(groupBy(df, "age")))
-## age  count
-## null 1
-## 19   1
-## 30   1
-
-{% endhighlight %}
+{% include_example dataframe_operations r/RSparkSQLExample.R %}
 
 For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/index.html).
 
@@ -429,11 +380,9 @@ df = spark.sql("SELECT * FROM table")
 <div data-lang="r"  markdown="1">
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
 
-{% highlight r %}
-df <- sql("SELECT * FROM table")
-{% endhighlight %}
-</div>
+{% include_example sql_query r/RSparkSQLExample.R %}
 
+</div>
 </div>
 
 
@@ -888,10 +837,7 @@ df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
 
 <div data-lang="r"  markdown="1">
 
-{% highlight r %}
-df <- read.df("examples/src/main/resources/users.parquet")
-write.df(select(df, "name", "favorite_color"), "namesAndFavColors.parquet")
-{% endhighlight %}
+{% include_example source_parquet r/RSparkSQLExample.R %}
 
 </div>
 </div>
@@ -937,12 +883,7 @@ df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
 </div>
 <div data-lang="r"  markdown="1">
 
-{% highlight r %}
-
-df <- read.df("examples/src/main/resources/people.json", "json")
-write.df(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
-
-{% endhighlight %}
+{% include_example source_json r/RSparkSQLExample.R %}
 
 </div>
 </div>
@@ -978,9 +919,7 @@ df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet
 
 <div data-lang="r"  markdown="1">
 
-{% highlight r %}
-df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
-{% endhighlight %}
+{% include_example direct_query r/RSparkSQLExample.R %}
 
 </div>
 </div>
@@ -1133,26 +1072,7 @@ for teenName in teenNames.collect():
 
 <div data-lang="r"  markdown="1">
 
-{% highlight r %}
-
-schemaPeople # The SparkDataFrame from the previous example.
-
-# SparkDataFrame can be saved as Parquet files, maintaining the schema information.
-write.parquet(schemaPeople, "people.parquet")
-
-# Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
-# The result of loading a parquet file is also a DataFrame.
-parquetFile <- read.parquet("people.parquet")
-
-# Parquet files can also be used to create a temporary view and then used in SQL statements.
-createOrReplaceTempView(parquetFile, "parquetFile")
-teenagers <- sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-schema <- structType(structField("name", "string"))
-teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
-for (teenName in collect(teenNames)$name) {
-  cat(teenName, "\n")
-}
-{% endhighlight %}
+{% include_example load_programmatically r/RSparkSQLExample.R %}
 
 </div>
 
@@ -1315,27 +1235,7 @@ df3.printSchema()
 
 <div data-lang="r"  markdown="1">
 
-{% highlight r %}
-
-# Create a simple DataFrame, stored into a partition directory
-write.df(df1, "data/test_table/key=1", "parquet", "overwrite")
-
-# Create another DataFrame in a new partition directory,
-# adding a new column and dropping an existing column
-write.df(df2, "data/test_table/key=2", "parquet", "overwrite")
-
-# Read the partitioned table
-df3 <- read.df("data/test_table", "parquet", mergeSchema="true")
-printSchema(df3)
-
-# The final schema consists of all 3 columns in the Parquet files together
-# with the partitioning column appeared in the partition directory paths.
-# root
-# |-- single: int (nullable = true)
-# |-- double: int (nullable = true)
-# |-- triple: int (nullable = true)
-# |-- key : int (nullable = true)
-{% endhighlight %}
+{% include_example schema_merging r/RSparkSQLExample.R %}
 
 </div>
 
@@ -1601,25 +1501,8 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% highlight r %}
-# A JSON dataset is pointed to by path.
-# The path can be either a single text file or a directory storing text files.
-path <- "examples/src/main/resources/people.json"
-# Create a DataFrame from the file(s) pointed to by path
-people <- read.json(path)
+{% include_example load_json_file r/RSparkSQLExample.R %}
 
-# The inferred schema can be visualized using the printSchema() method.
-printSchema(people)
-# root
-#  |-- age: long (nullable = true)
-#  |-- name: string (nullable = true)
-
-# Register this DataFrame as a table.
-createOrReplaceTempView(people, "people")
-
-# SQL statements can be run by using the sql methods.
-teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-{% endhighlight %}
 </div>
 
 <div data-lang="sql"  markdown="1">
@@ -1734,16 +1617,8 @@ results = spark.sql("FROM src SELECT key, value").collect()
 
 When working with Hive one must instantiate `SparkSession` with Hive support. This
 adds support for finding tables in the MetaStore and writing queries using HiveQL.
-{% highlight r %}
-# enableHiveSupport defaults to TRUE
-sparkR.session(enableHiveSupport = TRUE)
-sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
-# Queries can be expressed in HiveQL.
-results <- collect(sql("FROM src SELECT key, value"))
-
-{% endhighlight %}
+{% include_example hive_table r/RSparkSQLExample.R %}
 
 </div>
 </div>
@@ -1920,11 +1795,7 @@ df = spark.read.format('jdbc').options(url='jdbc:postgresql:dbserver', dbtable='
 
 <div data-lang="r"  markdown="1">
 
-{% highlight r %}
-
-df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
-
-{% endhighlight %}
+{% include_example jdbc r/RSparkSQLExample.R %}
 
 </div>
 
