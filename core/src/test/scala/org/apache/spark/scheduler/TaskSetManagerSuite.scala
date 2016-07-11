@@ -490,12 +490,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
 
     {
-      val offerResult = manager.resourceOffer("exec3", "host1", NODE_LOCAL)
+      val offerResult = manager.resourceOffer("exec3", "host3", ANY)
       assert(offerResult.isDefined)
       assert(offerResult.get.index === 0)
       assert(offerResult.get.executorId === "exec3")
 
-      assert(manager.resourceOffer("exec3", "host1", NODE_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
 
       // Cause exec3 to fail : failure 4
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)

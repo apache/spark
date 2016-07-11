@@ -319,7 +319,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // setup our mock blacklist:
     // stage 0 is blacklisted on node "host1"
-    // stage 1 is blacklist on executor "executor3"
+    // stage 1 is blacklisted on executor "executor3"
     // stage 0, part 0 is blacklisted on executor 0
     // (later stubs take precedence over earlier ones)
     when(blacklist.isNodeBlacklisted(anyString())).thenReturn(false)
@@ -328,8 +328,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     when(blacklist.isNodeBlacklistedForStage("host1", 0)).thenReturn(true)
     when(blacklist.isExecutorBlacklistedForStage(anyInt(), anyString())).thenReturn(false)
     when(blacklist.isExecutorBlacklistedForStage(1, "executor3")).thenReturn(true)
-    when(blacklist.isExecutorBlacklisted(anyString(), anyInt(), anyInt())).thenReturn(false)
-    when(blacklist.isExecutorBlacklisted("executor0", 0, 0)).thenReturn(true)
+    when(blacklist.isExecutorBlacklistedForTask(anyString(), anyInt(), anyInt())).thenReturn(false)
+    when(blacklist.isExecutorBlacklistedForTask("executor0", 0, 0)).thenReturn(true)
 
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     // these verifications are tricky b/c we reference them multiple times -- also invoked when we
@@ -348,13 +348,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       // the node blacklist should ensure we never check the task blacklist.  This is important
       // for performance, otherwise we end up changing an O(1) operation into a
       // O(numPendingTasks) one
-      verify(blacklist, never).isExecutorBlacklisted(exec, 0, part)
+      verify(blacklist, never).isExecutorBlacklistedForTask(exec, 0, part)
     }
 
     // similarly, the executor blacklist for an entire stage should prevent us from ever checking
     // the blacklist for specific parts in a stage.
     (0 to 1).foreach { part =>
-      verify(blacklist, never).isExecutorBlacklisted("executor3", 1, part)
+      verify(blacklist, never).isExecutorBlacklistedForTask("executor3", 1, part)
     }
 
     // we should schedule all tasks.
@@ -444,7 +444,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     when(blacklist.isExecutorBlacklisted("executor3")).thenReturn(true)
     when(blacklist.isNodeBlacklistedForStage(anyString(), anyInt())).thenReturn(false)
     when(blacklist.isExecutorBlacklistedForStage(anyInt(), anyString())).thenReturn(false)
-    when(blacklist.isExecutorBlacklisted(anyString(), anyInt(), anyInt())).thenReturn(false)
+    when(blacklist.isExecutorBlacklistedForTask(anyString(), anyInt(), anyInt())).thenReturn(false)
 
     val stageToTsm = (0 to 2).map { stageId =>
       val tsm = taskScheduler.taskSetManagerForAttempt(stageId, 0).get
@@ -459,7 +459,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
     verify(blacklist, never()).isNodeBlacklistedForStage(anyString(), anyInt())
     verify(blacklist, never()).isExecutorBlacklistedForStage(anyInt(), anyString())
-    verify(blacklist, never()).isExecutorBlacklisted(anyString(), anyInt(), anyInt())
+    verify(blacklist, never()).isExecutorBlacklistedForTask(anyString(), anyInt(), anyInt())
 
     // we should have aborted the existing stages, since they aren't schedulable
     (0 to 2).foreach { stageId =>

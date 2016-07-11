@@ -250,8 +250,8 @@ private[spark] class TaskSetManager(
       indexOffset -= 1
       val index = list(indexOffset)
       val taskBlacklisted = blacklistTracker.map { bl =>
-        bl.isNodeBlacklisted(host, stageId, index) ||
-          bl.isExecutorBlacklisted(execId, stageId, index)
+        bl.isNodeBlacklistedForTask(host, stageId, index) ||
+          bl.isExecutorBlacklistedForTask(execId, stageId, index)
       }.getOrElse(false)
       if (!taskBlacklisted) {
         // This should almost always be list.trimEnd(1) to remove tail
@@ -282,8 +282,8 @@ private[spark] class TaskSetManager(
 
     def canRunOnHost(index: Int): Boolean = {
       !hasAttemptOnHost(index, host) && blacklistTracker.map { bl =>
-        !bl.isNodeBlacklisted(host, stageId, index) &&
-          !bl.isExecutorBlacklisted(execId, stageId, index)
+        !bl.isNodeBlacklistedForTask(host, stageId, index) &&
+          !bl.isExecutorBlacklistedForTask(execId, stageId, index)
       }.getOrElse(true)
     }
 
@@ -614,12 +614,12 @@ private[spark] class TaskSetManager(
         executorsByHost.foreach { case (host, execs) =>
           if (!blacklist.isNodeBlacklisted(host) &&
                 !blacklist.isNodeBlacklistedForStage(host, stage) &&
-                !blacklist.isNodeBlacklisted(host, stage, indexInTaskSet)) {
+                !blacklist.isNodeBlacklistedForTask(host, stage, indexInTaskSet)) {
             execs.foreach { exec =>
               if (
                 !blacklist.isExecutorBlacklisted(exec) &&
                   !blacklist.isExecutorBlacklistedForStage(stage, exec) &&
-                  !blacklist.isExecutorBlacklisted(exec, stage, indexInTaskSet)
+                  !blacklist.isExecutorBlacklistedForTask(exec, stage, indexInTaskSet)
               ) {
                 // we've found some executor this task can run on.  Its possible that some *other*
                 // task isn't schedulable anywhere, but we will discover that in some later call,

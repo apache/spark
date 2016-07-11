@@ -66,7 +66,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
     this(sc, maxTaskFailures, TaskSchedulerImpl.createBlacklistTracker(sc.conf),
-      clock = new SystemClock, isLocal)
+      clock = new SystemClock, isLocal = isLocal)
   }
 
   val conf = sc.conf
@@ -162,7 +162,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   override def start() {
     backend.start()
-    blacklistTracker.map(_.start())
+    blacklistTracker.foreach(_.start())
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
@@ -255,11 +255,11 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
     manager.parent.removeSchedulable(manager)
     if (success) {
-      blacklistTracker.map(_.taskSetSucceeded(manager.taskSet.stageId, this))
+      blacklistTracker.foreach(_.taskSetSucceeded(manager.taskSet.stageId, this))
       logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
         s" ${manager.parent.name}")
     } else {
-      blacklistTracker.map(_.taskSetFailed(manager.taskSet.stageId))
+      blacklistTracker.foreach(_.taskSetFailed(manager.taskSet.stageId))
       logInfo(s"Removed TaskSet ${manager.taskSet.id}, since it failed, from pool" +
         s" ${manager.parent.name}")
     }

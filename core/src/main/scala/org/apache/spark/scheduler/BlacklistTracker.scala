@@ -23,6 +23,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.util.Clock
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
@@ -47,16 +48,11 @@ private[scheduler] class BlacklistTracker (
     conf: SparkConf,
     clock: Clock = new SystemClock()) extends Logging {
 
-  private val MAX_TASK_FAILURES_PER_NODE =
-    conf.getInt("spark.blacklist.maxTaskFailuresPerNode", 2)
-  private val MAX_FAILURES_PER_EXEC =
-    conf.getInt("spark.blacklist.maxFailedTasksPerExecutor", 2)
-  private val MAX_FAILURES_PER_EXEC_STAGE =
-    conf.getInt("spark.blacklist.maxFailedTasksPerExecutorStage", 2)
-  private val MAX_FAILED_EXEC_PER_NODE =
-    conf.getInt("spark.blacklist.maxFailedExecutorsPerNode", 2)
-  private val MAX_FAILED_EXEC_PER_NODE_STAGE =
-    conf.getInt("spark.blacklist.maxFailedExecutorsPerNodeStage", 2)
+  private val MAX_TASK_FAILURES_PER_NODE = conf.get(config.MAX_TASK_FAILURES_PER_NODE)
+  private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
+  private val MAX_FAILURES_PER_EXEC_STAGE = conf.get(config.MAX_FAILURES_PER_EXEC_STAGE)
+  private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
+  private val MAX_FAILED_EXEC_PER_NODE_STAGE = conf.get(config.MAX_FAILED_EXEC_PER_NODE_STAGE)
   val EXECUTOR_RECOVERY_MILLIS = BlacklistTracker.getBlacklistExpiryTime(conf)
 
   // a count of failed tasks for each executor.  Only counts failures after tasksets complete
@@ -154,7 +150,9 @@ private[scheduler] class BlacklistTracker (
 
   /**
    * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
-   * the executor is blacklisted overall (or anything to do with the node the executor is on).
+   * the executor is blacklisted overall (or anything to do with the node the executor is on).  That
+   * is to keep this method as fast as possible in the inner-loop of the scheduler, where those
+   * filters will already have been applied.
    */
   def isExecutorBlacklistedForStage(
       stageId: Int,
@@ -171,6 +169,10 @@ private[scheduler] class BlacklistTracker (
     stageIdToBlacklistedNodes.get(stageId).map(_.contains(node)).getOrElse(false)
   }
 
+  /**
+   * Get the full set of nodes that are blacklisted.  Unlike other methods in this class, this *IS*
+   * thread-safe -- no lock required on a taskScheduler.
+   */
   def nodeBlacklist(): Set[String] = {
     _nodeBlacklist.get()
   }
@@ -185,7 +187,7 @@ private[scheduler] class BlacklistTracker (
       info: TaskInfo,
       scheduler: TaskSchedulerImpl): Unit = {
     // no-op intentionally, included just for symmetry.  success to failure ratio is irrelevant, we
-    // just blacklist based on failures.  Furthermore, one success does not previous
+    // just blacklist based on failures.  Furthermore, one success does not clear previous
     // failures, since the bad node / executor may not fail *every* time
   }
 
@@ -197,7 +199,7 @@ private[scheduler] class BlacklistTracker (
     val stageFailures = stageIdToExecToFailures.getOrElseUpdate(stageId, new HashMap())
     val failureStatus = stageFailures.getOrElseUpdate(info.executorId, new FailureStatus())
     failureStatus.totalFailures += 1
-    failureStatus.failuresByTask += indexInTaskSet
+    failureStatus.tasksWithFailures += indexInTaskSet
 
     // check if this task has also failed on other executors on the same host, and if so, blacklist
     // this task from the host
@@ -205,9 +207,8 @@ private[scheduler] class BlacklistTracker (
       exec <- scheduler.getExecutorsAliveOnHost(info.host).getOrElse(Set()).toSeq
       failures <- stageFailures.get(exec)
     } yield {
-      if (failures.failuresByTask.contains(indexInTaskSet)) 1 else 0
+      if (failures.tasksWithFailures.contains(indexInTaskSet)) 1 else 0
     }).sum
-    logInfo(s"total failures on host ${info.host} = $failuresOnHost")
     if (failuresOnHost >= MAX_TASK_FAILURES_PER_NODE) {
       stageIdToNodeBlacklistedTasks.getOrElseUpdate(stageId, new HashMap())
         .getOrElseUpdate(info.host, new HashSet()) += indexInTaskSet
@@ -215,10 +216,10 @@ private[scheduler] class BlacklistTracker (
 
 
     if (failureStatus.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
-      // this executor has been pushed into the blacklist for this stage.  Lets check if it pushes
+      // This executor has been pushed into the blacklist for this stage.  Let's check if it pushes
       // the whole node into the blacklist
       val blacklistedExecutors =
-        stageFailures.filter{_._2.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE}
+        stageFailures.filter(_._2.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE)
       if (blacklistedExecutors.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
         logInfo(s"Blacklisting ${info.host} for stage $stageId")
         stageIdToBlacklistedNodes.getOrElseUpdate(stageId, new HashSet()) += info.host
@@ -229,34 +230,31 @@ private[scheduler] class BlacklistTracker (
   /**
    * Return true if this executor is blacklisted for the given task.  This does *not*
    * need to return true if the executor is blacklisted for the entire stage, or blacklisted
-   * altogether.
+   * altogether.  That is to keep this method as fast as possible in the inner-loop of the
+   * scheduler, where those filters will have already been applied.
    */
-  def isExecutorBlacklisted(
+  def isExecutorBlacklistedForTask(
       executorId: String,
       stageId: Int,
       indexInTaskSet: Int): Boolean = {
-    // intentionally avoiding .getOrElse(..., new HashMap()) to avoid lots of object
-    // creation, since this method gets called a *lot*
-    stageIdToExecToFailures.get(stageId) match {
-      case Some(stageFailures) =>
-        stageFailures.get(executorId) match {
-          case Some(failures) =>
-            failures.failuresByTask.contains(indexInTaskSet)
-          case None =>
-            false
-        }
-      case None =>
-        false
-    }
+    stageIdToExecToFailures.get(stageId)
+      .flatMap(_.get(executorId))
+      .map(_.tasksWithFailures.contains(indexInTaskSet))
+      .getOrElse(false)
   }
 
-  def isNodeBlacklisted(
+  def isNodeBlacklistedForTask(
       node: String,
       stageId: Int,
       indexInTaskSet: Int): Boolean = {
-    stageIdToNodeBlacklistedTasks.get(stageId).flatMap { nodeToFailures =>
-      nodeToFailures.get(node).map{_.contains(indexInTaskSet)}
-    }.getOrElse(false)
+    val n = stageIdToNodeBlacklistedTasks.get(stageId)
+      .flatMap(_.get(node))
+      .map(_.contains(indexInTaskSet))
+      .getOrElse(false)
+    if (n) {
+      logInfo(s"blacklisting $stageId, $indexInTaskSet on node $node")
+    }
+    n
   }
 
   def removeExecutor(executorId: String): Unit = {
@@ -270,9 +268,6 @@ private[scheduler] class BlacklistTracker (
 
 
 private[scheduler] object BlacklistTracker extends Logging {
-  val LEGACY_TIMEOUT_CONF = "spark.scheduler.executorTaskBlacklistTime"
-  val EXPIRY_TIMEOUT_CONF = "spark.scheduler.blacklist.recoverPeriod"
-  val ENABLED_CONF = "spark.scheduler.blacklist.enabled"
 
   /**
    * Return true if the blacklist is enabled, based on the following order of preferences:
@@ -283,40 +278,53 @@ private[scheduler] object BlacklistTracker extends Logging {
    *   - on for distributed modes (including local-cluster)
    */
   def isBlacklistEnabled(conf: SparkConf): Boolean = {
-    val isEnabled = conf.get(ENABLED_CONF, null)
-    if (isEnabled == null) {
+    conf.get(config.BLACKLIST_ENABLED) match {
+      case Some(isEnabled) =>
+        isEnabled
+      case None =>
       // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
       // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
-      val legacyTimeout = conf.getLong(LEGACY_TIMEOUT_CONF, 0L)
-      if (legacyTimeout > 0) {
-        // mostly this is necessary just for tests, since real users that want the blacklist will
-        // get it anyway by default
-        logWarning(s"Turning on blacklisting due to legacy configuration: $LEGACY_TIMEOUT_CONF > 0")
-        true
-      } else {
-        // local-cluster is *not* considered local for these purposes, we still want the blacklist
-        // enabled by default
-        !Utils.isLocalMaster(conf)
+        val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
+      conf.getOption(legacyKey) match {
+        case Some(legacyTimeout) =>
+          if (legacyTimeout.toLong > 0) {
+            // mostly this is necessary just for tests, since real users that want the blacklist
+            // will get it anyway by default
+            logWarning(s"Turning on blacklisting due to legacy configuration:" +
+              s" $legacyKey > 0")
+            true
+          } else {
+            logWarning(s"Turning off blacklisting due to legacy configuaration:" +
+              s" $legacyKey == 0")
+            false
+          }
+        case None =>
+          // local-cluster is *not* considered local for these purposes, we still want the blacklist
+          // enabled by default
+          !Utils.isLocalMaster(conf)
       }
-    } else {
-      // always take whatever value is explicitly set by the user
-      isEnabled.toBoolean
     }
   }
 
   def getBlacklistExpiryTime(conf: SparkConf): Long = {
-    conf.getTimeAsMs(BlacklistTracker.EXPIRY_TIMEOUT_CONF,
-      conf.get(BlacklistTracker.LEGACY_TIMEOUT_CONF, (60 * 60 * 1000).toString))
+    val timeoutConf = conf.get(config.BLACKLIST_EXPIRY_TIMEOUT_CONF)
+    val legacyTimeoutConf = conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF)
+    (timeoutConf, legacyTimeoutConf) match {
+      case (Some(x), _) => x
+      case (None, Some(y)) => y
+      case (None, None) =>
+        Utils.timeStringAsMs("1h")
+    }
   }
 }
 
 /** Failures for one executor, within one taskset */
 private[scheduler] final class FailureStatus {
   /** index of the tasks in the taskset that have failed on this executor. */
-  val failuresByTask = HashSet[Int]()
+  val tasksWithFailures = HashSet[Int]()
   var totalFailures = 0
 
   override def toString(): String = {
-    s"totalFailures = $totalFailures; tasksFailed = $failuresByTask"
+    s"totalFailures = $totalFailures; tasksFailed = $tasksWithFailures"
   }
 }
