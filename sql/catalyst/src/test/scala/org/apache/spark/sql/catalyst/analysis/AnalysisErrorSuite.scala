@@ -355,7 +355,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
-    "number_rows in limit clause must be equal to or greater than 0. number_rows:-1" :: Nil
+    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
   )
 
   errorTest(
