@@ -472,6 +472,7 @@ class HiveDDLSuite
       sql(s"DROP TABLE $tabName")
 
       assert(tmpDir.listFiles.isEmpty)
+      sql("USE default")
       sql(s"DROP DATABASE $dbName")
       assert(!fs.exists(new Path(tmpDir.toString)))
     }
@@ -526,6 +527,7 @@ class HiveDDLSuite
           assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
         }
 
+        sql(s"USE default")
         val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
         if (tableExists && !cascade) {
           val message = intercept[AnalysisException] {

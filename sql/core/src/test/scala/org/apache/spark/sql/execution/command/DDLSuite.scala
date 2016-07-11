@@ -1270,6 +1270,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
+  test("drop current database") {
+    sql("CREATE DATABASE temp")
+    sql("USE temp")
+    val m = intercept[AnalysisException] {
+      sql("DROP DATABASE temp")
+    }.getMessage
+    assert(m.contains("Can not drop current database `temp`"))
+  }
+
   test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
