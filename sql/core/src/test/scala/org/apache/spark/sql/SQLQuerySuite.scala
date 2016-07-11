@@ -680,7 +680,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "Limit:(testdata.`key` > 3)"))
   }
 
-  test("Limit: unable to evaluate and cast expressions in limit clauses to Int") {
+  test("Expressions in limit clause are not integer") {
     var e = intercept[AnalysisException] {
       sql("SELECT * FROM testData LIMIT true")
     }.getMessage
