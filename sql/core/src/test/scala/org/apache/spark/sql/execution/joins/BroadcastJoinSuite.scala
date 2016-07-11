@@ -153,4 +153,38 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       cases.foreach(assertBroadcastJoin)
     }
   }
+
+  test("select hint") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    import org.apache.spark.sql.catalyst.dsl.plans._
+    import org.apache.spark.sql.catalyst.parser.ParseException
+    import org.apache.spark.sql.catalyst.plans._
+    import org.apache.spark.sql.catalyst.plans.logical._
+    import org.apache.spark.sql.catalyst.expressions._
+    import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t JOIN u ON a = b"),
+      table("t").join(BroadcastHint(table("u")), Inner, Option(EqualTo('a, 'b))).select(star()))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(t) */ * FROM t JOIN u ON a = b"),
+      BroadcastHint(table("t")).join(table("u"), Inner, Option(EqualTo('a, 'b))).select(star()))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(t, u) */ * FROM t JOIN u ON a = b"),
+      BroadcastHint(table("t")).join(BroadcastHint(table("u")), Inner, Option(EqualTo('a, 'b)))
+        .select(star()))
+
+    // Hive compatibility: Wrong tables should be ignored in HINT silently.
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(xxx, yyy) */ * FROM t JOIN u ON a = b"),
+      table("t").join(table("u"), Inner, Option(EqualTo('a, 'b))).select(star()))
+
+    // Hive compatibility: Missing table raises ParseException.
+    val m = intercept[ParseException] {
+      parsePlan("SELECT /*+ MAPJOIN() */ * FROM t JOIN u ON a = b")
+    }.getMessage
+    assert(m.contains("mismatched input ')'"))
+  }
 }

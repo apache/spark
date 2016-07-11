@@ -338,13 +338,21 @@ querySpecification
        (RECORDREADER recordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | ((kind=SELECT setQuantifier? namedExpressionSeq fromClause?
+    | ((kind=SELECT hint? setQuantifier? namedExpressionSeq fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
        aggregation?
        (HAVING having=booleanExpression)?
        windows?)
+    ;
+
+hint
+    : '/*+' mapJoinHint '*/'
+    ;
+
+mapJoinHint
+    : MAPJOIN '(' broadcastedTables+=tableIdentifier (',' broadcastedTables+=tableIdentifier)* ')'
     ;
 
 fromClause
@@ -661,6 +669,7 @@ nonReserved
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+    | MAPJOIN
     ;
 
 SELECT: 'SELECT';
@@ -713,6 +722,7 @@ RIGHT: 'RIGHT';
 FULL: 'FULL';
 NATURAL: 'NATURAL';
 ON: 'ON';
+MAPJOIN: 'MAPJOIN';
 LATERAL: 'LATERAL';
 WINDOW: 'WINDOW';
 OVER: 'OVER';
@@ -945,8 +955,12 @@ SIMPLE_COMMENT
     : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
     ;
 
+BRACKETED_EMPTY_COMMENT
+    : '/**/' -> channel(HIDDEN)
+    ;
+
 BRACKETED_COMMENT
-    : '/*' .*? '*/' -> channel(HIDDEN)
+    : '/*' ~[+] .*? '*/' -> channel(HIDDEN)
     ;
 
 WS

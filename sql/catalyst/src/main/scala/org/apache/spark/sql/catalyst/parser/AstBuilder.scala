@@ -339,8 +339,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.SELECT =>
         // Regular select
 
+        // Broadcast hints
+        var withBroadcastedTable = relation
+        if (ctx.hint != null) {
+          val broadcastedTables =
+            hint.mapJoinHint.broadcastedTables.asScala.map(visitTableIdentifier)
+          for (table <- broadcastedTables) {
+            var stop = false
+            withBroadcastedTable = withBroadcastedTable.transformDown {
+              case r @ BroadcastHint(UnresolvedRelation(_, _)) => r
+              case r @ UnresolvedRelation(t, _) if !stop && t == table =>
+                stop = true
+                BroadcastHint(r)
+            }
+          }
+        }
+
         // Add lateral views.
-        val withLateralView = ctx.lateralView.asScala.foldLeft(relation)(withGenerate)
+        val withLateralView = ctx.lateralView.asScala.foldLeft(withBroadcastedTable)(withGenerate)
 
         // Add where.
         val withFilter = withLateralView.optionalMap(where)(filter)
