@@ -249,11 +249,18 @@ tablePropertyList
     ;
 
 tableProperty
-    : key=tablePropertyKey (EQ? value=STRING)?
+    : key=tablePropertyKey (EQ? value=tablePropertyValue)?
     ;
 
 tablePropertyKey
     : identifier ('.' identifier)*
+    | STRING
+    ;
+
+tablePropertyValue
+    : INTEGER_VALUE
+    | DECIMAL_VALUE
+    | booleanValue
     | STRING
     ;
 
