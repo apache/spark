@@ -408,6 +408,7 @@ pyspark_ml = Module(
         "pyspark.ml.tuning",
         "pyspark.ml.tests",
         "pyspark.ml.evaluation",
+        "pyspark.ml.stat.distribution",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
