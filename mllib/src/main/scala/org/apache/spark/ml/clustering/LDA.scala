@@ -84,7 +84,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *     - Values should be >= 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
-   * @group param
+    *
+    * @group param
    */
   @Since("1.6.0")
   final val docConcentration = new DoubleArrayParam(this, "docConcentration",
@@ -125,7 +126,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *     - Value should be >= 0
    *     - default = (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
-   * @group param
+    *
+    * @group param
    */
   @Since("1.6.0")
   final val topicConcentration = new DoubleParam(this, "topicConcentration",
@@ -553,13 +555,6 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
   private[LocalLDAModel]
   class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
 
-    private case class Data(
-        vocabSize: Int,
-        topicsMatrix: Matrix,
-        docConcentration: Vector,
-        topicConcentration: Double,
-        gammaShape: Double)
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val oldModel = instance.oldLocalModel
@@ -570,36 +565,52 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     }
   }
 
+  private case class Data(
+                           vocabSize: Int,
+                           topicsMatrix: Matrix,
+                           docConcentration: Vector,
+                           topicConcentration: Double,
+                           gammaShape: Double)
+
   private class LocalLDAModelReader extends MLReader[LocalLDAModel] {
 
     private val className = classOf[LocalLDAModel].getName
 
     override def load(path: String): LocalLDAModel = {
+      // Import implicits for Dataset Encoder
+      val sparkSession = super.sparkSession
+      import sparkSession.implicits._
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
-      topicConcentration: Double, gammaShape: Double) = MLUtils.convertMatrixColumnsToML(
-        vectorConverted, "topicsMatrix").select("vocabSize", "topicsMatrix", "docConcentration",
-        "topicConcentration", "gammaShape").head()
+        topicConcentration: Double, gammaShape: Double) = MLUtils.convertMatrixColumnsToML(
+        vectorConverted, "topicsMatrix").as[Data]
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-         gammaShape)
+        gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
-      implicit val format = DefaultFormats
-           metadata.params match {
-              case JObject(pairs) =>
-                  pairs.foreach { case (paramName, jsonValue) =>
-                      val variable =
-                        if (paramName == "topicDistribution") "topicDistributionCol" else paramName
-                      val param = model.getParam(variable)
-                      val value = param.jsonDecode(compact(render(jsonValue)))
-                      model.set(param, value)
-                    }
-              case _ =>
-               throw new IllegalArgumentException(
-                 s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
+
+      metadata.sparkVersion match {
+        case "1.6" =>
+          implicit val format = DefaultFormats
+          metadata.params match {
+           case JObject(pairs) =>
+             pairs.foreach { case (paramName, jsonValue) =>
+               val origParam =
+                 if (paramName == "topicDistribution") "topicDistributionCol" else paramName
+               val param = model.getParam(origParam)
+               val value = param.jsonDecode(compact(render(jsonValue)))
+               model.set(param, value)
+             }
+           case _ =>
+             throw new IllegalArgumentException(
+               s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
            }
+        case "2.x" =>
+          DefaultParamsReader.getAndSetParams(model, metadata)
+      }
       model
     }
   }
