@@ -404,6 +404,10 @@ trait CheckAnalysis extends PredicateHelper {
                  |in operator ${operator.simpleString}
                """.stripMargin)
 
+          case Hint(_, _, _) =>
+            throw new IllegalStateException(
+              "logical hint operator should have been removed by analyzer")
+
           case _ => // Analysis successful!
         }
     }
