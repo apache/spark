@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -419,19 +420,29 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
 
-  override def nullSafeEval(str: Any, delim1: Any, delim2: Any): Any = {
-    val array = str.asInstanceOf[UTF8String]
-      .split(delim1.asInstanceOf[UTF8String], -1)
-      .map { kv =>
-        val arr = kv.split(delim2.asInstanceOf[UTF8String], 2)
-        if(arr.length < 2) {
-          Array(arr(0), null)
-        } else {
-          arr
+  override def eval(input: InternalRow): Any = {
+    val exprs = children
+    val value1 = exprs(0).eval(input)
+    if (value1 != null) {
+      val value2 = exprs(1).eval(input)
+      if (value2 != null) {
+        val value3 = exprs(2).eval(input)
+        if (value3 != null) {
+          val array = value1.asInstanceOf[UTF8String]
+            .split(value2.asInstanceOf[UTF8String], -1)
+            .map { kv =>
+              val arr = kv.split(value3.asInstanceOf[UTF8String], 2)
+              if(arr.length < 2) {
+                Array(arr(0), null)
+              } else {
+                arr
+              }
+            }
+          return ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
         }
       }
-
-    ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
+    }
+    throw new AnalysisException("All arguments should be a string literal.")
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
