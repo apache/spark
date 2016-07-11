@@ -41,113 +41,76 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   private def assertMetadataOnlyQuery(df: DataFrame): Unit = {
-    val localRelations = df.queryExecution.optimizedPlan.collect {
-      case l @ LocalRelation(_, _) => l
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
+      val localRelations = df.queryExecution.optimizedPlan.collect {
+        case l@LocalRelation(_, _) => l
+      }
+      assert(localRelations.size == 1)
     }
-    assert(localRelations.size == 1)
   }
 
   private def assertNotMetadataOnlyQuery(df: DataFrame): Unit = {
-    val localRelations = df.queryExecution.optimizedPlan.collect {
-      case l @ LocalRelation(_, _) => l
+    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
+      val localRelations = df.queryExecution.optimizedPlan.collect {
+        case l@LocalRelation(_, _) => l
+      }
+      assert(localRelations.size == 0)
     }
-    assert(localRelations.size == 0)
   }
 
   test("OptimizeMetadataOnlyQuery test: aggregate expression is partition columns") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertMetadataOnlyQuery(sql("select partcol1 from srcpart group by partcol1"))
-      assertMetadataOnlyQuery(
-        sql("select partcol2 from srcpart where partcol1 = 0 group by partcol2"))
-    }
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
-      assertNotMetadataOnlyQuery(sql("select partcol1 from srcpart group by partcol1"))
-      assertNotMetadataOnlyQuery(
-        sql("select partcol2 from srcpart where partcol1 = 0 group by partcol2"))
-    }
+    assertMetadataOnlyQuery(sql("select partcol1 from srcpart group by partcol1"))
+    assertMetadataOnlyQuery(
+      sql("select partcol2 from srcpart where partcol1 = 0 group by partcol2"))
   }
 
   test("OptimizeMetadataOnlyQuery test: distinct aggregate function on partition columns") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertMetadataOnlyQuery(
-        sql("SELECT partcol1, count(distinct partcol2) FROM srcpart group by partcol1"))
-      assertMetadataOnlyQuery(
-        sql("SELECT partcol1, count(distinct partcol2) FROM srcpart where partcol1 = 0 " +
-          "group by partcol1"))
-    }
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
-      assertNotMetadataOnlyQuery(
-        sql("SELECT partcol1, count(distinct partcol2) FROM srcpart group by partcol1"))
-      assertNotMetadataOnlyQuery(
-        sql("SELECT partcol1, count(distinct partcol2) FROM srcpart where partcol1 = 0 " +
-          "group by partcol1"))
-    }
+    assertMetadataOnlyQuery(
+      sql("SELECT partcol1, count(distinct partcol2) FROM srcpart group by partcol1"))
+    assertMetadataOnlyQuery(
+      sql("SELECT partcol1, count(distinct partcol2) FROM srcpart where partcol1 = 0 " +
+        "group by partcol1"))
   }
 
   test("OptimizeMetadataOnlyQuery test: distinct on partition columns") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertMetadataOnlyQuery(sql("select distinct partcol1, partcol2 from srcpart"))
-      assertMetadataOnlyQuery(
-        sql("select distinct c1 from (select partcol1 + 1 as c1 from srcpart " +
-          "where partcol1 = 0) t"))
-    }
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
-      assertNotMetadataOnlyQuery(sql("select distinct partcol1, partcol2 from srcpart"))
-      assertNotMetadataOnlyQuery(
-        sql("select distinct c1 from (select partcol1 + 1 as c1 from srcpart " +
-          "where partcol1 = 0) t"))
-    }
+    assertMetadataOnlyQuery(sql("select distinct partcol1, partcol2 from srcpart"))
+    assertMetadataOnlyQuery(
+      sql("select distinct c1 from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t"))
   }
 
   test("OptimizeMetadataOnlyQuery test: aggregate function on partition columns " +
     "which have same result w or w/o DISTINCT keyword.") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertMetadataOnlyQuery(sql("select max(partcol1) from srcpart"))
-      assertMetadataOnlyQuery(sql("select max(partcol1) from srcpart where partcol1 = 0"))
-      assertMetadataOnlyQuery(
-        sql("select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2"))
-      assertMetadataOnlyQuery(
-        sql("select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t"))
-    }
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
-      assertNotMetadataOnlyQuery(sql("select max(partcol1) from srcpart"))
-      assertNotMetadataOnlyQuery(sql("select max(partcol1) from srcpart where partcol1 = 0"))
-      assertNotMetadataOnlyQuery(
-        sql("select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2"))
-      assertNotMetadataOnlyQuery(
-        sql("select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t"))
-    }
+    assertMetadataOnlyQuery(sql("select max(partcol1) from srcpart"))
+    assertMetadataOnlyQuery(sql("select min(partcol1) from srcpart where partcol1 = 0"))
+    assertMetadataOnlyQuery(sql("select first(partcol1) from srcpart"))
+    assertMetadataOnlyQuery(sql("select last(partcol1) from srcpart where partcol1 = 0"))
+    assertMetadataOnlyQuery(
+      sql("select partcol2, min(partcol1) from srcpart where partcol1 = 0 group by partcol2"))
+    assertMetadataOnlyQuery(
+      sql("select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t"))
   }
 
   test("OptimizeMetadataOnlyQuery test: unsupported for non-partition columns") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertNotMetadataOnlyQuery(sql("select col1 from srcpart group by col1"))
-      assertNotMetadataOnlyQuery(
-        sql("select partcol1, max(col1) from srcpart group by partcol1"))
-      assertNotMetadataOnlyQuery(
-        sql("select partcol1, count(distinct col1) from srcpart group by partcol1"))
-      assertNotMetadataOnlyQuery(sql("select distinct partcol1, col1 from srcpart"))
-    }
+    assertNotMetadataOnlyQuery(sql("select col1 from srcpart group by col1"))
+    assertNotMetadataOnlyQuery(sql("select partcol1, max(col1) from srcpart group by partcol1"))
+    assertNotMetadataOnlyQuery(
+      sql("select partcol1, count(distinct col1) from srcpart group by partcol1"))
+    assertNotMetadataOnlyQuery(sql("select distinct partcol1, col1 from srcpart"))
   }
 
   test("OptimizeMetadataOnlyQuery test: unsupported for non-distinct aggregate function on " +
     "partition columns") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertNotMetadataOnlyQuery(
-        sql("select partcol1, sum(partcol2) from srcpart group by partcol1"))
-      assertNotMetadataOnlyQuery(
-        sql("select partcol1, count(partcol2) from srcpart group by partcol1"))
-    }
+    assertNotMetadataOnlyQuery(sql("select partcol1, sum(partcol2) from srcpart group by partcol1"))
+    assertNotMetadataOnlyQuery(
+      sql("select partcol1, count(partcol2) from srcpart group by partcol1"))
   }
 
   test("OptimizeMetadataOnlyQuery test: unsupported for GroupingSet/Union operator") {
-    withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
-      assertNotMetadataOnlyQuery(
-        sql("select partcol1, max(partcol2) from srcpart where partcol1 = 0 " +
-          "group by rollup (partcol1)"))
-      assertNotMetadataOnlyQuery(
-        sql("select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
-          "select partcol2 from srcpart where partcol1 = 1) t group by partcol2"))
-    }
+    assertNotMetadataOnlyQuery(
+      sql("select partcol1, max(partcol2) from srcpart where partcol1 = 0 " +
+        "group by rollup (partcol1)"))
+    assertNotMetadataOnlyQuery(
+      sql("select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
+        "select partcol2 from srcpart where partcol1 = 1) t group by partcol2"))
   }
 }

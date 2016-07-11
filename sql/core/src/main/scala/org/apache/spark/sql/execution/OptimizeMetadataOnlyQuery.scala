@@ -55,10 +55,12 @@ case class OptimizeMetadataOnlyQuery(
           })
           val isAllDistinctAgg = aggFunctions.forall { agg =>
             agg.isDistinct || (agg.aggregateFunction match {
-              // `Max` and `Min` are always distinct aggregate functions no matter they have
-              // DISTINCT keyword or not, as the result will be same.
+              // `Max`, `Min`, `First` and `Last` are always distinct aggregate functions no matter
+              // they have DISTINCT keyword or not, as the result will be same.
               case _: Max => true
               case _: Min => true
+              case _: First => true
+              case _: Last => true
               case _ => false
             })
           }
