@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.xml;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.StringReader;
 
 import javax.xml.namespace.QName;
 import javax.xml.xpath.XPath;
@@ -44,7 +43,7 @@ public class UDFXPathUtil {
   private XPathExpression expression = null;
   private String oldPath = null;
 
-  public Object eval(String xml, String path, QName qname) {
+  public Object eval(String xml, String path, QName qname) throws XPathExpressionException {
     if (xml == null || path == null || qname == null) {
       return null;
     }
@@ -57,7 +56,7 @@ public class UDFXPathUtil {
       try {
         expression = xpath.compile(path);
       } catch (XPathExpressionException e) {
-        expression = null;
+        throw new RuntimeException("Invalid XPath '" + path + "'" + e.getMessage(), e);
       }
       oldPath = path;
     }
@@ -67,36 +66,35 @@ public class UDFXPathUtil {
     }
 
     reader.set(xml);
-
     try {
       return expression.evaluate(inputSource, qname);
     } catch (XPathExpressionException e) {
-      throw new RuntimeException ("Invalid expression '" + oldPath + "'", e);
+      throw new RuntimeException("Invalid XML document: " + e.getMessage() + "\n" + xml, e);
     }
   }
 
-  public Boolean evalBoolean(String xml, String path) {
+  public Boolean evalBoolean(String xml, String path) throws XPathExpressionException {
     return (Boolean) eval(xml, path, XPathConstants.BOOLEAN);
   }
 
-  public String evalString(String xml, String path) {
+  public String evalString(String xml, String path) throws XPathExpressionException {
     return (String) eval(xml, path, XPathConstants.STRING);
   }
 
-  public Double evalNumber(String xml, String path) {
+  public Double evalNumber(String xml, String path) throws XPathExpressionException {
     return (Double) eval(xml, path, XPathConstants.NUMBER);
   }
 
-  public Node evalNode(String xml, String path) {
+  public Node evalNode(String xml, String path) throws XPathExpressionException {
     return (Node) eval(xml, path, XPathConstants.NODE);
   }
 
-  public NodeList evalNodeList(String xml, String path) {
+  public NodeList evalNodeList(String xml, String path) throws XPathExpressionException {
     return (NodeList) eval(xml, path, XPathConstants.NODESET);
   }
 
   /**
-   * Reusable, non-threadsafe version of {@link StringReader}.
+   * Reusable, non-threadsafe version of {@link java.io.StringReader}.
    */
   public static class ReusableStringReader extends Reader {
 
@@ -117,20 +115,22 @@ public class UDFXPathUtil {
 
     /** Check to make sure that the stream has not been closed */
     private void ensureOpen() throws IOException {
-      if (str == null)
+      if (str == null) {
         throw new IOException("Stream closed");
+      }
     }
 
     @Override
     public int read() throws IOException {
       ensureOpen();
-      if (next >= length)
+      if (next >= length) {
         return -1;
+      }
       return str.charAt(next++);
     }
 
     @Override
-    public int read(char cbuf[], int off, int len) throws IOException {
+    public int read(char[] cbuf, int off, int len) throws IOException {
       ensureOpen();
       if ((off < 0) || (off > cbuf.length) || (len < 0)
         || ((off + len) > cbuf.length) || ((off + len) < 0)) {
@@ -138,8 +138,9 @@ public class UDFXPathUtil {
       } else if (len == 0) {
         return 0;
       }
-      if (next >= length)
+      if (next >= length) {
         return -1;
+      }
       int n = Math.min(length - next, len);
       str.getChars(next, next + n, cbuf, off);
       next += n;
@@ -149,8 +150,9 @@ public class UDFXPathUtil {
     @Override
     public long skip(long ns) throws IOException {
       ensureOpen();
-      if (next >= length)
+      if (next >= length) {
         return 0;
+      }
       // Bound skip by beginning and end of the source
       long n = Math.min(length - next, ns);
       n = Math.max(-next, n);
