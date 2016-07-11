@@ -44,6 +44,9 @@ object StronglyConnectedComponents {
     // graph we are going to work with in our iterations
     var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache()
 
+    // sccGraph needs to be materialized every iteration
+    var sccGraphCountVertices = 0L
+
     var numVertices = sccWorkGraph.numVertices
     var iter = 0
     while (sccWorkGraph.numVertices > 0 && iter < numIter) {
@@ -64,7 +67,10 @@ object StronglyConnectedComponents {
         // write values to sccGraph
         sccGraph = sccGraph.outerJoinVertices(finalVertices) {
           (vid, scc, opt) => opt.getOrElse(scc)
-        }
+        }.cache()
+        // count on vertices in order to materialize sccGraph
+        sccGraphCountVertices = sccGraph.vertices.count()
+
         // only keep vertices that are not final
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
       } while (sccWorkGraph.numVertices < numVertices)
@@ -106,6 +112,9 @@ object StronglyConnectedComponents {
           }
         },
         (final1, final2) => final1 || final2)
+        // cache and materialize sccGraph every iteration
+        sccGraph.cache()
+        sccGraphCountVertices = sccGraph.vertices.count()
     }
     sccGraph
   }
