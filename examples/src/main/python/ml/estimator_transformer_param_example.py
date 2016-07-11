@@ -82,9 +82,12 @@ if __name__ == "__main__":
     # Note that model2.transform() outputs a "myProbability" column instead of the usual
     # 'probability' column since we renamed the lr.probabilityCol parameter previously.
     prediction = model2.transform(test)
-    selected = prediction.select("features", "label", "myProbability", "prediction")
-    for row in selected.collect():
-        print(row)
+    result = prediction.select("features", "label", "myProbability", "prediction") \
+        .collect()
+
+    for row in result:
+        print("features=%s, label=%s -> prob=%s, prediction=%s"
+              % (row.features, row.label, row.myProbability, row.prediction))
     # $example off$
 
     spark.stop()
