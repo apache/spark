@@ -254,7 +254,7 @@ class SessionCatalog(
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     val tid = TableIdentifier(table)
-    if (name.database.isEmpty && isTemporaryTable(tid)) {
+    if (isTemporaryTable(name)) {
       CatalogTable(
         identifier = tid,
         tableType = CatalogTableType.VIEW,
