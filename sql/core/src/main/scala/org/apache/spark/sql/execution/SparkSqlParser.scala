@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.DataType
 
@@ -905,8 +905,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a table, returning either a [[CreateTableCommand]] or a
-   * [[CreateHiveTableAsSelectLogicalPlan]].
+   * Create a table, returning either a [[CreateTableCommand]] or a [[CreateTableAsSelect]].
    *
    * This is not used to create datasource tables, which is handled through
    * "CREATE TABLE ... USING ...".
@@ -1019,6 +1018,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties = properties,
       comment = comment)
 
+    val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+
     selectQuery match {
       case Some(q) =>
         // Just use whatever is projected in the select statement as our schema
@@ -1038,24 +1039,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         }
 
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
-        if (conf.convertCTAS && !hasStorageProperties) {
-          val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties are empty.
-          // When converting Hive Table to Data Source Table, ignore user-specified table properties
-          val tableProperties = if (location.isDefined) {
-            Map("path" -> location.get)
-          } else {
-            Map.empty[String, String]
-          }
-          CreateTableAsSelect(
-            tableDesc = tableDesc.copy(properties = tableProperties),
-            provider = conf.defaultDataSourceName,
-            mode = mode,
-            q
-          )
-        } else {
-          CreateHiveTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
-        }
+
+        val provider =
+          if (conf.convertCTAS && !hasStorageProperties) conf.defaultDataSourceName else "hive"
+
+        CreateTableAsSelect(
+          tableDesc = tableDesc,
+          provider = provider,
+          mode = mode,
+          child = q)
+
       case None => CreateTableCommand(tableDesc, ifNotExists)
     }
   }

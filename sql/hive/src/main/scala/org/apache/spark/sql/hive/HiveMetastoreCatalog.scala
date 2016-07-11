@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
-import org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.orc.OrcFileFormat
@@ -437,24 +436,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.
-      case p: LogicalPlan if !p.childrenResolved => p
-      case p: LogicalPlan if p.resolved => p
+      case p: LogicalPlan if !p.resolved => p
 
-      case p @ CreateHiveTableAsSelectLogicalPlan(table, child, allowExisting) =>
-        val desc = if (table.storage.serde.isEmpty) {
-          // add default serde
-          table.withNewStorage(
-            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-        } else {
-          table
-        }
-
-        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
-
+      case p @ CreateTableAsSelect(tableDesc, provider, mode, child) if provider == "hive" =>
+        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableDesc.identifier)
         execution.CreateHiveTableAsSelectCommand(
-          desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
+          tableDesc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
           child,
-          allowExisting)
+          mode)
     }
   }
 }

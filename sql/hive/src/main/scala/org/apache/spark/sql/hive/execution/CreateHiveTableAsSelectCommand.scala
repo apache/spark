@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -31,14 +31,16 @@ import org.apache.spark.sql.hive.MetastoreRelation
  *
  * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
- * @param ignoreIfExists allow continue working if it's already exists, otherwise
- *                      raise exception
+ * @param mode specifies the behavior when data or table already exists. Options include:
+ *   - `SaveMode.Ignore`: ignore the operation (i.e. no-op).
+ *   - `SaveMode.ErrorIfExists`: default option, throw an exception at runtime.
+ *   - `SaveMode.Overwrite` and `SaveMode.Append`: N/A
  */
 private[hive]
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
-    ignoreIfExists: Boolean)
+    mode: SaveMode)
   extends RunnableCommand {
 
   private val tableIdentifier = tableDesc.identifier
@@ -83,7 +85,9 @@ case class CreateHiveTableAsSelectCommand(
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
     if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
-      if (ignoreIfExists) {
+      // CTAS in SQL does not expose these two options to users.
+      assert(mode == SaveMode.Ignore || mode == SaveMode.ErrorIfExists)
+      if (mode == SaveMode.Ignore) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {
         throw new AnalysisException(s"$tableIdentifier already exists.")

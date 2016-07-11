@@ -159,7 +159,9 @@ case class CreateDataSourceTableAsSelectCommand(
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
-      if (!new CaseInsensitiveMap(tableDesc.properties).contains("path")) {
+      if (tableDesc.storage.locationUri.nonEmpty) {
+        tableDesc.properties + ("path" -> tableDesc.storage.locationUri.get)
+      } else if (!new CaseInsensitiveMap(tableDesc.properties).contains("path")) {
         isExternal = false
         tableDesc.properties +
           ("path" -> sessionState.catalog.defaultTablePath(tableDesc.identifier))
