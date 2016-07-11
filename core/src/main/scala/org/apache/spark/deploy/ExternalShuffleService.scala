@@ -21,9 +21,9 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
@@ -58,7 +58,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private var server: TransportServer = _
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
-  
+
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
     new ExternalShuffleBlockHandler(conf, null)
