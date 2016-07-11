@@ -163,6 +163,7 @@ public class VectorizedColumnReader {
       } else {
         if (total <= 0) break;
       }
+
       if (leftInPage == 0) {
         readPage();
         leftInPage = (int) (endOfPageValueCount - valuesRead);
@@ -574,6 +575,80 @@ public class VectorizedColumnReader {
     }
   }
 
+  private ColumnVector findInnerElementWithDefLevel(ColumnVector column, int defLevel) {
+    while (true) {
+      if (column == null) {
+        return null;
+      }
+      ColumnVector parent = column.getParentColumn();
+      if (parent != null && parent.getDefLevel() == defLevel) {
+        ColumnVector outside = parent.getParentColumn();
+        if (outside == null || outside.getDefLevel() < defLevel) {
+          return column;
+        }
+      }
+      column = parent;
+    }
+  }
+
+  private ColumnVector findHiddenInnerElementWithDefLevel(ColumnVector column, int defLevel) {
+    while (true) {
+      if (column == null) {
+        return null;
+      }
+      ColumnVector parent = column.getParentColumn();
+      if (parent != null && parent.getDefLevel() <= defLevel) {
+        ColumnVector outside = parent.getParentColumn();
+        if (outside == null || outside.getDefLevel() < defLevel) {
+          return column;
+        }
+      }
+      column = parent;
+    }
+  }
+
+  private boolean isLegacyArray(ColumnVector column) {
+    ColumnVector parent = column.getNearestParentArrayColumn();
+    if (parent == null) {
+      return false;
+    } else if (parent.getRepLevel() <= maxRepLevel && parent.getDefLevel() < maxDefLevel) {
+      return true;
+    }
+    return false;
+  }
+
+  private void increaseRowId(Map<Integer, Integer> rowIds, int level) {
+    int rowId = 0;
+    if (rowIds.containsKey(level)) {
+      rowId = rowIds.get(level);
+    }
+    rowIds.put(level, rowId + 1);
+  }
+
+  private void insertNullRecord(
+      ColumnVector column,
+      Map<Integer, Integer> rowIds,
+      Map<Integer, Integer> reptitionMap) {
+    int repLevel = column.getRepLevel();
+
+    if (repLevel == 0) {
+      repLevel = 1;
+    }
+
+    int rowId = 0;
+    if (rowIds.containsKey(repLevel)) {
+      rowId = rowIds.get(repLevel);
+    }
+
+    if (reptitionMap.containsKey(repLevel)) {
+      rowId += reptitionMap.get(repLevel);
+      reptitionMap.put(repLevel, 0);
+    }
+
+    column.putNull(rowId);
+    rowIds.put(repLevel, rowId + 1);
+  }
+
   /**
    * Reads repetition level for each value and updates length and offset info for above columns,
    * recursively.
@@ -587,21 +662,25 @@ public class VectorizedColumnReader {
     // Keeps repetition levels and corresponding repetition counts.
     Map<Integer, Integer> reptitionMap = new HashMap<Integer, Integer>();
 
+    for (int i = 0; i <= maxRepLevel; i++) {
+      reptitionMap.put(i, 0);
+    }
+
     if (column.getParentColumn() != null) {
-      int prevRepLevel = -1;
+      boolean newBeginning = true;
 
       for (int i = 0; i < valuesReadInPage; i++) {
         int repLevel = repetitionLevelColumn.nextInt();
         int defLevel = definitionLevelColumn.nextInt();
 
-        if (prevRepLevel >= 0) {
+        if (!newBeginning) {
           // When a new record begins at lower repetition level,
           // we insert array into repeated column.
           if (repLevel < maxRepLevel) {
             insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
           }
         }
-        prevRepLevel = repLevel;
+        newBeginning = false;
 
         // When definition level is less than max definition level,
         // there is a null value.
@@ -611,66 +690,88 @@ public class VectorizedColumnReader {
             offset = offsets.get(maxRepLevel);
           }
 
-          if (column.getParentColumn().getDefLevel() == maxDefLevel && maxRepLevel > 0) {
-            insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
-            offsets.put(maxRepLevel, offset + 1);
-            prevRepLevel = -1;
-          } else if (defLevel == 0) {
-            // A null record at root level.
-            // Obtain most-top column (repetition level 1).
-            ColumnVector topColumn = column.getParentColumn();
-            while (topColumn.getParentColumn() != null) {
-              topColumn = topColumn.getParentColumn();
-            }
-            // Get its current row id.
-            int rowId = 0;
-            if (rowIds.containsKey(1)) {
-              rowId = rowIds.get(1);
-            }
-            // Add up previously accumulated count for repetition level 1.
-            // Otherwise, we will override previous non-null records.
-            int repCount = 0;
-            if (reptitionMap.containsKey(1)) {
-              repCount = reptitionMap.get(1);
-            }
-            reptitionMap.put(1, 0);
-            rowId += repCount;
-            // Insert null record and increase row id.
-            topColumn.putNull(rowId);
-            rowIds.put(1, rowId + 1);
-
-            // Increse row id at later repetition levels.
-            for (int j = 2; j <= maxRepLevel; j++) {
-              rowId = 0;
-              if (rowIds.containsKey(j)) {
-                rowId = rowIds.get(j);
+          // The null value is defined at the root level.
+          // Insert a null record.
+          if (repLevel == 0 && defLevel == 0) {
+            ColumnVector parent = column.getParentColumn();
+            if (parent != null && parent.getDefLevel() == maxDefLevel
+              && parent.getRepLevel() == maxRepLevel) {
+              // A repeated element at root level.
+              // E.g., The repeatedPrimitive at the following schema.
+              // Going to insert an empty record.
+              // messageType: message spark_schema {
+              //   optional int32 optionalPrimitive;
+              //   required int32 requiredPrimitive;
+              //
+              //   repeated int32 repeatedPrimitive;
+              //
+              //   optional group optionalMessage {
+              //     optional int32 someId;
+              //   }
+              //   required group requiredMessage {
+              //     optional int32 someId;
+              //   }
+              //   repeated group repeatedMessage {
+              //     optional int32 someId;
+              //   }
+              // }
+              insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
+            } else {
+              // Obtain most outside column.
+              ColumnVector topColumn = column.getParentColumn();
+              while (topColumn.getParentColumn() != null) {
+                topColumn = topColumn.getParentColumn();
               }
-              rowIds.put(j, rowId + 1);
-            }
 
+              insertNullRecord(topColumn, rowIds, reptitionMap);
+            }
             // Move to next offset in max repetition level as we processed the current value.
             offsets.put(maxRepLevel, offset + 1);
+            newBeginning = true;
+          } else if (isLegacyArray(column) &&
+            column.getNearestParentArrayColumn().getDefLevel() == defLevel) {
+            // For a legacy array, if a null is defined at the repeated group column, it actually
+            // means an element with null value.
 
-            prevRepLevel = -1;
-          } else if (repLevel == maxRepLevel) {
-            // A null value at max repetition level.
-            // This null value is repeated in a wrapping group. Simply increase repetition count.
-            int repCount = 0;
-            if (reptitionMap.containsKey(repLevel)) {
-              repCount = reptitionMap.get(repLevel);
-            }
-            reptitionMap.put(repLevel, repCount + 1);
+            reptitionMap.put(maxRepLevel, reptitionMap.get(maxRepLevel) + 1);
+          } else if (!column.getParentColumn().isArray() &&
+            column.getParentColumn().getDefLevel() == defLevel) {
+            // A null element defined in the wrapping non-repeated group.
+            increaseRowId(rowIds, 1);
           } else {
-            // Null value at definition level > 0.
-            int repCount = 0;
-            if (reptitionMap.containsKey(maxRepLevel)) {
-              repCount = reptitionMap.get(maxRepLevel);
+            // An empty element defined in outside group.
+            // E.g., the element in the following schema.
+            // messageType: message spark_schema {
+            //   required int32 index;
+            //   optional group col {
+            //     optional float f1;
+            //     optional group f2 (LIST) {
+            //       repeated group list {
+            //         optional boolean element;
+            //       }
+            //     }
+            //   }
+            // }
+            ColumnVector parent = findInnerElementWithDefLevel(column, defLevel);
+            if (parent != null) {
+              // Found the group with the same definition level.
+              // Insert a null record at definition level.
+              // E.g, R=0, D=1 for above schema.
+              insertNullRecord(parent, rowIds, reptitionMap);
+              offsets.put(maxRepLevel, offset + 1);
+              newBeginning = true;
+            } else {
+              // Found the group with lower definition level.
+              // Insert an empty record.
+              // E.g, R=0, D=2 for above schema.
+              parent = findHiddenInnerElementWithDefLevel(column, defLevel);
+              insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
+              offsets.put(maxRepLevel, offset + 1);
+              newBeginning = true;
             }
-            reptitionMap.put(maxRepLevel, repCount + 1);
           }
         } else {
           // Determine the repetition level of non-null values.
-
           // A new record begins with non-null value.
           if (maxRepLevel == 0) {
             // A required record at root level.
@@ -690,7 +791,7 @@ public class VectorizedColumnReader {
           }
         }
       }
-      if (prevRepLevel >= 0) {
+      if (!newBeginning) {
         insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, 0);
       }
     }
