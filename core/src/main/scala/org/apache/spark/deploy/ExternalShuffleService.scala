@@ -42,23 +42,23 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 private[deploy]
 class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
   extends Logging {
+  protected val masterMetricsSystem =
+    MetricsSystem.createMetricsSystem("shuffleService", sparkConf, securityManager)
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
 
   private val transportConf =
-    SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
+  SparkTransportConf.fromSparkConf(sparkConf, "shuffle", numUsableCores = 0)
   private val blockHandler = newShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext =
-    new TransportContext(transportConf, blockHandler, true)
+  new TransportContext(transportConf, blockHandler, true)
 
   private var server: TransportServer = _
 
   private val shuffleServiceSource = new ExternalShuffleServiceSource(blockHandler)
 
-  protected val masterMetricsSystem =
-    MetricsSystem.createMetricsSystem("shuffleService", sparkConf, securityManager)
 
   /** Create a new shuffle block handler. Factored out for subclasses to override. */
   protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
