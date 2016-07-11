@@ -181,7 +181,7 @@ Note that jars or python files that are passed to spark-submit should be URIs re
 # Mesos Run Modes
 
 Spark can run over Mesos in two modes: "coarse-grained" (default) and
-"fine-grained".
+"fine-grained" (deprecated).
 
 ## Coarse-Grained
 
@@ -213,7 +213,12 @@ the application.  To configure your job to dynamically adjust to its
 resource requirements, look into
 [Dynamic Allocation](#dynamic-resource-allocation-with-mesos).
 
-## Fine-Grained
+## Fine-Grained (deprecated)
+
+**NOTE:** Fine-grained mode is deprecated as of Spark 2.0.0.  Consider
+ using [Dynamic Allocation](#dynamic-resource-allocation-with-mesos)
+ for some of the benefits.  For a full explanation see
+ [SPARK-11857](https://issues.apache.org/jira/browse/SPARK-11857)
 
 In "fine-grained" mode, each Spark task inside the Spark executor runs
 as a separate Mesos task. This allows multiple instances of Spark (and

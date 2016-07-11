@@ -660,16 +660,49 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("limit") {
     checkAnswer(
-      sql("SELECT * FROM testData LIMIT 10"),
+      sql("SELECT * FROM testData LIMIT 9 + 1"),
       testData.take(10).toSeq)
 
     checkAnswer(
-      sql("SELECT * FROM arrayData LIMIT 1"),
+      sql("SELECT * FROM arrayData LIMIT CAST(1 AS Integer)"),
       arrayData.collect().take(1).map(Row.fromTuple).toSeq)
 
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("non-foldable expressions in LIMIT") {
+    val e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData LIMIT key > 3")
+    }.getMessage
+    assert(e.contains("The limit expression must evaluate to a constant value, " +
+      "but got (testdata.`key` > 3)"))
+  }
+
+  test("Expressions in limit clause are not integer") {
+    var e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData LIMIT true")
+    }.getMessage
+    assert(e.contains("The limit expression must be integer type, but got boolean"))
+
+    e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData LIMIT 'a'")
+    }.getMessage
+    assert(e.contains("The limit expression must be integer type, but got string"))
+  }
+
+  test("negative in LIMIT or TABLESAMPLE") {
+    val expected = "The limit expression must be equal to or greater than 0, but got -1"
+    var e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData TABLESAMPLE (-1 rows)")
+    }.getMessage
+    assert(e.contains(expected))
+
+    e = intercept[AnalysisException] {
+      sql("SELECT * FROM testData LIMIT -1")
+    }.getMessage
+    assert(e.contains(expected))
   }
 
   test("CTE feature") {
