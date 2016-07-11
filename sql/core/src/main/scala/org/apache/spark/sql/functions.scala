@@ -613,6 +613,25 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns the exact percentile(s) of the expression in a group at pc with
+   * range in [0, 1].
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  def percentile(e: Column, pc: Seq[Double]): Column =
+    withAggregateFunction {Percentile(e.expr, pc)}
+
+  /**
+   * Aggregate function: returns the exact percentile(s) of the column in a group at pc with range
+   * in [0, 1].
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  def percentile(columnName: String, pc: Seq[Double]): Column = percentile(Column(columnName), pc)
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
