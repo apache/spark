@@ -1,17 +1,37 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ml.fpm
 
 import org.apache.hadoop.fs.Path
-import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
-import org.apache.spark.ml.param.{ParamMap, Params}
-import org.apache.spark.ml.util._
-import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.mllib.fpm.{AssociationRules, FPGrowth => MLlibFPGrowth, FPGrowthModel => MLlibFPGrowthModel}
-import org.apache.spark.sql._
-import org.apache.spark.sql.types.{ArrayType, StructType}
 
-trait FPGrowthParams extends Params with HasFeaturesCol with HasPredictionCol {
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.fpm.{FPGrowth => MLlibFPGrowth, FPGrowthModel => MLlibFPGrowthModel}
+import org.apache.spark.mllib.fpm.AssociationRules.Rule
+import org.apache.spark.sql.{DataFrame, _}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
+
+
+private[fpm] trait FPGrowthParams extends Params with HasFeaturesCol with HasPredictionCol {
 
   /**
    * Validates and transforms the input schema.
@@ -19,12 +39,23 @@ trait FPGrowthParams extends Params with HasFeaturesCol with HasPredictionCol {
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-
-    val inputType = schema($(featuresCol)).dataType
-    require(inputType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType, but got $inputType.")
-    SchemaUtils.appendColumn(schema, $(predictionCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new ArrayType(StringType, false))
+    SchemaUtils.appendColumn(schema, $(predictionCol), new ArrayType(StringType, false))
   }
+
+  /**
+   * the minimal support level of the frequent pattern
+   * Default: 0.3
+   * @group param
+   */
+  @Since("2.1.0")
+  val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
+    "the minimal support level of the frequent pattern")
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getMinSupport: Double = $(minSupport)
+
 }
 
 class FPGrowth @Since("2.1.0") (
@@ -34,9 +65,15 @@ class FPGrowth @Since("2.1.0") (
   @Since("2.1.0")
   def this() = this(Identifiable.randomUID("FPGrowth"))
 
+  /** @group setParam */
+  @Since("2.1.0")
+  def setMinSupport(value: Double): this.type = set(minSupport, value)
+
   def fit(dataset: Dataset[_]): FPGrowthModel = {
-    val data = dataset.select($(featuresCol)).rdd.map(r => r.getAs[Seq[Any]](0).toArray)
-    val parentModel = new MLlibFPGrowth().run(data)
+    val data = dataset.select($(featuresCol)).rdd.map(r => r.getAs[Array[String]](0))
+    val parentModel = new MLlibFPGrowth()
+      .setMinSupport($(minSupport))
+      .run(data)
     copyValues(new FPGrowthModel(uid, parentModel))
   }
 
@@ -53,9 +90,33 @@ class FPGrowthModel private[ml] (
     private val parentModel: MLlibFPGrowthModel[_])
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
+  /**
+   * minimal confidence for generating Association Rule
+   * Default: 0.8
+   * @group param
+   */
+  @Since("2.1.0")
+  val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
+    "minimal confidence for generating Association Rule")
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getMinConfidence: Double = $(minConfidence)
+
+  /** @group setParam */
+  @Since("2.1.0")
+  def setMinConfidence(value: Double): this.type = set(minConfidence, value)
+
   @Since("2.1.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    dataset.toDF()
+    val associationRules = generateAssociationRules().map(r =>
+      new Rule(r.getAs[Array[String]](0), r.getAs[Array[String]](1), r.getDouble(2))
+    ).collect()
+    // For each rule, examine the input items and summarize the consequents
+    val predictUDF = udf((items: Seq[String]) => associationRules.flatMap( r =>
+      if (r.antecedent.forall(items.contains(_))) r.consequent else Array.empty[String]
+    ))
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   @Since("2.1.0")
@@ -63,7 +124,7 @@ class FPGrowthModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-    @Since("1.5.0")
+  @Since("2.1.0")
   override def copy(extra: ParamMap): FPGrowthModel = {
     val copied = new FPGrowthModel(uid, parentModel)
     copyValues(copied, extra)
@@ -75,13 +136,11 @@ class FPGrowthModel private[ml] (
     parentModel.freqItemsets.map(f => (f.items.map(_.toString), f.freq)).toDF("items", "freq")
   }
 
-  def generateAssociationRules(confidence: Double): DataFrame = {
-    val sqlContext = SQLContext.getOrCreate(parentModel.freqItemsets.sparkContext)
-    import sqlContext.implicits._
-    val associationRules = new AssociationRules().setMinConfidence(confidence)
-    associationRules.run(parentModel.freqItemsets)
-      .map(r => (r.antecedent.map(_.toString), r.consequent.map(_.toString), r.confidence))
-      .toDF("antecedent",  "consequent", "confidence")
+  def generateAssociationRules(): DataFrame = {
+    val associationRules = new AssociationRules()
+      .setMinConfidence($(minConfidence))
+      .setMinSupport($(minSupport))
+    associationRules.run(getFreqItemsets)
   }
 
   @Since("2.1.0")
@@ -91,10 +150,10 @@ class FPGrowthModel private[ml] (
 
 
 object FPGrowthModel extends MLReadable[FPGrowthModel] {
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def read: MLReader[FPGrowthModel] = new FPGrowthModelReader
 
-  @Since("2.0.0")
+  @Since("2.1.0")
   override def load(path: String): FPGrowthModel = super.load(path)
 
   /** [[MLWriter]] instance for [[FPGrowthModel]] */
