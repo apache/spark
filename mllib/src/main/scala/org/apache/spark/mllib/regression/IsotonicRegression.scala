@@ -35,6 +35,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.RangePartitioner
 
 /**
  * Regression model for isotonic regression.
@@ -408,8 +409,12 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    */
   private def parallelPoolAdjacentViolators(
       input: RDD[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
-    val parallelStepResult = input
-      .sortBy(x => (x._2, x._1))
+    val keyedInput = input
+      .map(x => x._2 -> x)
+    val parallelStepResult = keyedInput
+      .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
+      .values
+      .mapPartitions( _.toSeq.sortBy(x => (x._2, x._1)).toIterator)
       .glom()
       .flatMap(poolAdjacentViolators)
       .collect()
