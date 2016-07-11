@@ -1099,8 +1099,7 @@ for details.
 </tr>
 </table>
 
-Spark provide asynchronous actions to execute two or more actions concurrently, these actions are execute asynchronously without blocking calling thread. 
-The following table lists some of the asynchronous actions supported by Spark. Refer to the RDD API doc ([Scala](api/scala/index.html#org.apache.spark.rdd.AsyncRDDActions),[Java](api/java/org/apache/spark/rdd/AsyncRDDActions.html))
+Spark provide asynchronous actions to execute two or more actions concurrently, these actions are execute asynchronously without blocking calling thread. Refer to the RDD API doc for asynchronous actions ([Scala](api/scala/index.html#org.apache.spark.rdd.AsyncRDDActions),[Java](api/java/org/apache/spark/rdd/AsyncRDDActions.html))
 
 
 ### Shuffle operations
