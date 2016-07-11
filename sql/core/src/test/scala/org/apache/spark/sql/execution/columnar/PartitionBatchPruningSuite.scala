@@ -142,17 +142,23 @@ class PartitionBatchPruningSuite
 
   // With disable IN_MEMORY_PARTITION_PRUNING option
   test("disable IN_MEMORY_PARTITION_PRUNING") {
-    spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, false)
+    withSQLConf(SQLConf.IN_MEMORY_PARTITION_PRUNING.key -> "false") {
+      val df = sql("SELECT key FROM pruningData WHERE key = 1")
+      val result = df.collect().map(_ (0)).toArray
+      assert(result.length === 1)
 
-    val df = sql("SELECT key FROM pruningData WHERE key = 1")
-    val result = df.collect().map(_(0)).toArray
-    assert(result.length === 1)
-
-    val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+      val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
-    assert(readPartitions === 5)
-    assert(readBatches === 10)
+      assert(readPartitions === 5)
+      assert(readBatches === 10)
+    }
+  }
+
+  test("illegal COLUMN_BATCH_SIZE") {
+    withSQLConf(SQLConf.COLUMN_BATCH_SIZE.key -> "0") {
+      sql("SELECT key FROM pruningData WHERE").show()
+    }
   }
 
   def checkBatchPruning(
