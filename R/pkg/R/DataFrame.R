@@ -2587,8 +2587,8 @@ setMethod("saveAsTable",
 
 #' summary
 #'
-#' Computes statistics for numeric columns.
-#' If no columns are given, this function computes statistics for all numerical columns.
+#' Computes statistics for numeric and string columns.
+#' If no columns are given, this function computes statistics for all numerical or string columns.
 #'
 #' @param x A SparkDataFrame to be computed.
 #' @param col A string of name
@@ -2622,8 +2622,7 @@ setMethod("describe",
 setMethod("describe",
           signature(x = "SparkDataFrame"),
           function(x) {
-            colList <- as.list(c(columns(x)))
-            sdf <- callJMethod(x@sdf, "describe", colList)
+            sdf <- callJMethod(x@sdf, "describe", list())
             dataFrame(sdf)
           })
 
