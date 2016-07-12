@@ -160,9 +160,13 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-
+    // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
+    // some expression is reusing variable names across different instances.
+    // This behavior is tested in ExpressionEvalHelperSuite.
     val plan = generateProject(
-      GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
+      GenerateUnsafeProjection.generate(
+        Alias(expression, s"Optimized($expression)1")() ::
+          Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
 
     val unsafeRow = plan(inputRow)
@@ -170,13 +174,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
     if (expected == null) {
       if (!unsafeRow.isNullAt(0)) {
-        val expectedRow = InternalRow(expected)
+        val expectedRow = InternalRow(expected, expected)
         fail("Incorrect evaluation in unsafe mode: " +
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
       }
     } else {
-      val lit = InternalRow(expected)
-      val expectedRow = UnsafeProjection.create(Array(expression.dataType)).apply(lit)
+      val lit = InternalRow(expected, expected)
+      val expectedRow =
+        UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
       if (unsafeRow != expectedRow) {
         fail("Incorrect evaluation in unsafe mode: " +
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
