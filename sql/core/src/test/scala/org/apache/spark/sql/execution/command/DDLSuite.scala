@@ -1426,17 +1426,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql("ALTER TABLE tbl DROP PARTITION (part1 = 1)")
       }
       withSQLConf(SQLConf.DROP_IGNORENONEXIST.key -> "false") {
-        intercept[AnalysisException] {
-          sql("DROP TABLE nonExistTable")
-        }
-        intercept[AnalysisException] {
-          sql("DROP VIEW nonExistView")
-        }
-        intercept[AnalysisException] {
-          sql("DROP Function nonExistFunction")
-        }
-        intercept[AnalysisException] {
-          sql("ALTER TABLE tbl DROP PARTITION (part1 = 1)")
+        val doNotIgnoreNonExistentSqls = Seq(
+          "DROP TABLE nonExistTable",
+          "DROP VIEW nonExistView",
+          "DROP Function nonExistFunction",
+          "ALTER TABLE tbl DROP PARTITION (part1 = 1)")
+        doNotIgnoreNonExistentSqls.foreach { case q =>
+          intercept[AnalysisException] { sql(q) }
         }
       }
     }
