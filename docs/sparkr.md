@@ -286,6 +286,7 @@ head(collect(df1))
 ##### dapplyCollect
 Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function
 should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+<div data-lang="r"  markdown="1">
 {% highlight r %}
 
 # Convert waiting time from hours to seconds.
