@@ -273,6 +273,19 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         serdeProperties = options)
     }
 
+    def hasPartitionColumns(relation: BaseRelation): Boolean = relation match {
+      case hadoopFsRelation: HadoopFsRelation =>
+        try {
+          hadoopFsRelation.partitionColumns.nonEmpty
+        } catch {
+          case _: java.io.FileNotFoundException =>
+            // When we reach here, it is possible that underlying dir for the table
+            // has not been created. So, there is no partition.
+            false
+        }
+      case _ => false
+    }
+
     def newHiveCompatibleMetastoreTable(relation: HadoopFsRelation, serde: HiveSerDe): HiveTable = {
       def schemaToHiveColumn(schema: StructType): Seq[HiveColumn] = {
         schema.map { field =>
@@ -284,12 +297,14 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       }
 
       assert(partitionColumns.isEmpty)
-      assert(relation.partitionColumns.isEmpty)
+      assert(!hasPartitionColumns(relation))
 
       HiveTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        schema = schemaToHiveColumn(relation.schema),
+        // Since the table is not partitioned, we use dataSchema instead of using schema,
+        // which will trigger partition discovery on the path that may not be created.
+        schema = schemaToHiveColumn(relation.dataSchema),
         partitionColumns = Nil,
         tableType = tableType,
         properties = tableProperties.toMap,
@@ -311,35 +326,27 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
+      case (Some(serde), relation: HadoopFsRelation)
+        if relation.paths.length == 1 && !hasPartitionColumns(relation) =>
+        val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
+        val message =
+          s"Persisting data source relation $qualifiedTableName with a single input path " +
+            s"into Hive metastore in Hive compatible format. Input path: ${relation.paths.head}."
+        (Some(hiveTable), message)
+
+      case (Some(serde), relation: HadoopFsRelation) if hasPartitionColumns(relation) =>
+        val message =
+          s"Persisting partitioned data source relation $qualifiedTableName into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+            "Input path(s): " + relation.paths.mkString("\n", "\n", "")
+        (None, message)
+
       case (Some(serde), relation: HadoopFsRelation) =>
-        val canConvertToHiveMetadata = {
-          try {
-            relation.paths.length == 1 && relation.partitionColumns.isEmpty
-          } catch {
-            case _: java.io.FileNotFoundException =>
-              // When we reach here, it is possible that underlying dir for the table
-              // has not been created.
-              false
-          }
-        }
-        if (canConvertToHiveMetadata) {
-          val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
-          val message =
-            s"Persisting data source relation $qualifiedTableName with a single input path " +
-              s"into Hive metastore in Hive compatible format. Input path: ${relation.paths.head}."
-          (Some(hiveTable), message)
-        } else {
-          val message = if (relation.paths.length == 1) {
-            s"Persisting partitioned data source relation $qualifiedTableName into " +
-              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-              "Input path(s): " + relation.paths.mkString("\n", "\n", "")
-          } else {
-            s"Persisting data source relation $qualifiedTableName into " +
-              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-              s"Input paths: " + relation.paths.mkString("\n", "\n", "")
-          }
-          (None, message)
-        }
+        val message =
+          s"Persisting data source relation $qualifiedTableName with multiple input paths into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+            s"Input paths: " + relation.paths.mkString("\n", "\n", "")
+        (None, message)
 
       case (Some(serde), _) =>
         val message =
