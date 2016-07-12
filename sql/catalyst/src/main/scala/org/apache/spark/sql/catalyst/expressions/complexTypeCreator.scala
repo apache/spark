@@ -404,7 +404,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
     "Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
   extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression {
+  extends TernaryExpression with CodegenFallback{
 
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal(":"))
@@ -422,7 +422,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     if (children.map(_.dataType).forall(_ == StringType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"String To Map's all arguments should be string literal.")
+      TypeCheckResult.TypeCheckFailure(s"String To Map's all arguments should be of type string.")
     }
   }
 
@@ -431,46 +431,13 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
       .split(delim1.asInstanceOf[UTF8String], -1)
       .map { kv =>
         val arr = kv.split(delim2.asInstanceOf[UTF8String], 2)
-        if(arr.length < 2) {
+        if (arr.length < 2) {
           Array(arr(0), null)
         } else {
           arr
         }
       }
-    ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-
-    nullSafeCodeGen(ctx, ev, (text, pairDelim, keyValueDelim) => {
-      val arrayClass = classOf[GenericArrayData].getName
-      val mapClass = classOf[ArrayBasedMapData].getName
-
-      val keyArray = ctx.freshName("keyArray")
-      val valueArray = ctx.freshName("valueArray")
-      val tempArray = ctx.freshName("tempArray")
-      val keyValue = ctx.freshName("keyValue")
-      val i = ctx.freshName("i")
-
-      s"""
-        UTF8String[] $tempArray = ($text).split($pairDelim, -1);
-
-        UTF8String[] $keyArray = new UTF8String[$tempArray.length];
-        UTF8String[] $valueArray = new UTF8String[$tempArray.length];
-
-        for (int $i = 0; $i < $tempArray.length; $i++) {
-          UTF8String[] $keyValue = ($tempArray[$i]).split($keyValueDelim, 2);
-          $keyArray[$i] = $keyValue[0];
-          if ($keyValue.length < 2) {
-            $valueArray[$i] = null;
-          } else {
-            $valueArray[$i] = $keyValue[1];
-          }
-        }
-
-        ${ev.value} = new $mapClass(new $arrayClass($keyArray), new $arrayClass($valueArray));
-      """
-    })
+    ArrayBasedMapData(array.map(_ (0)), array.map(_ (1)))
   }
 
   override def prettyName: String = "str_to_map"
