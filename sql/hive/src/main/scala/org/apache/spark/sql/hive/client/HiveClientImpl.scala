@@ -406,8 +406,9 @@ private[hive] class HiveClientImpl(
   override def dropTable(
       dbName: String,
       tableName: String,
-      ignoreIfNotExists: Boolean): Unit = withHiveState {
-    client.dropTable(dbName, tableName, true, ignoreIfNotExists)
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withHiveState {
+    shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
   }
 
   override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
@@ -429,7 +430,8 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = withHiveState {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
     // do the check at first and collect all the matching partitions
@@ -450,7 +452,7 @@ private[hive] class HiveClientImpl(
     matchingParts.foreach { partition =>
       try {
         val deleteData = true
-        client.dropPartition(db, table, partition, deleteData)
+        shim.dropPartition(client, db, table, partition, deleteData, purge)
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer -- droppedParts
