@@ -190,8 +190,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(false,
       mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
+<<<<<<< 7f968867ff61c6b1a007874ee7e3a7421d94d373
       appArgs = Seq("key=value", result.getAbsolutePath()),
       extraConf = Map("spark.hadoop.key" -> "value"))
+=======
+      appArgs = Seq("spark.hadoop.key=value", result.getAbsolutePath()),
+      extraConf = Map(("spark.hadoop.key", "value")))
+>>>>>>> add a unit test
     checkResult(finalState, result)
   }
 
@@ -294,9 +299,15 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       // scalastyle:off println
       System.err.println(
         s"""
+<<<<<<< 7f968867ff61c6b1a007874ee7e3a7421d94d373
         |Invalid command line: ${args.mkString(" ")}
         |
         |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value] [result file]
+=======
+           |Invalid command line: ${args.mkString(" ")}
+           |
+        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [propertyKey=value] [result file]
+>>>>>>> add a unit test
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -306,11 +317,19 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn test using SparkHadoopUtil's conf"))
 
+<<<<<<< 7f968867ff61c6b1a007874ee7e3a7421d94d373
     val kv = args(0).split("=")
     val status = new File(args(1))
     var result = "failure"
     try {
       SparkHadoopUtil.get.conf.get(kv(0)) should be (kv(1))
+=======
+    val propertyKeyValue = args(0).split("=")
+    val status = new File(args(1))
+    var result = "failure"
+    try {
+      SparkHadoopUtil.get.conf.get(propertyKeyValue(0)) should be (propertyKeyValue(1))
+>>>>>>> add a unit test
       result = "success"
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
