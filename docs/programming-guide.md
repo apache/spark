@@ -1101,6 +1101,9 @@ for details.
 </tr>
 </table>
 
+Spark RDD API also exposes asynchronous versions of some actions like foreach, collect, count etc. which return a handle immediately to the caller which can be used to wait for its completion.
+
+
 ### Shuffle operations
 
 Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's
