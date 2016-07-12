@@ -237,10 +237,8 @@ class SparkSession private(
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkSession.setActiveSession(this)
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    val encoder = Encoders.product[A]
+    Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
   }
 
   /**
@@ -425,11 +423,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
-    val enc = encoderFor[T]
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d))
-    val plan = LogicalRDD(attributes, encoded)(self)
-    Dataset[T](self, plan)
+    Dataset[T](self, ExternalRDD(data, self))
   }
 
   /**

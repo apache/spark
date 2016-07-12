@@ -63,6 +63,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         expected.asInstanceOf[Spread[Double]].isWithin(result)
       case (result: MapData, expected: MapData) =>
         result.keyArray() == expected.keyArray() && result.valueArray() == expected.valueArray()
+      case (result: Double, expected: Double) =>
+        if (expected.isNaN) result.isNaN else expected == result
+      case (result: Float, expected: Float) =>
+        if (expected.isNaN) result.isNaN else expected == result
       case _ =>
         result == expected
     }

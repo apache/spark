@@ -1270,6 +1270,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
+  test("drop current database") {
+    sql("CREATE DATABASE temp")
+    sql("USE temp")
+    val m = intercept[AnalysisException] {
+      sql("DROP DATABASE temp")
+    }.getMessage
+    assert(m.contains("Can not drop current database `temp`"))
+  }
+
   test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
@@ -1311,6 +1320,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       data.write.partitionBy("length").saveAsTable("rectangles2")
       assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
       assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    }
+  }
+
+  test("create temporary view with mismatched schema") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE TEMPORARY VIEW view1 (col1, col3) AS SELECT * FROM tab1")
+        }.getMessage
+        assert(e.contains("the SELECT clause (num: `1`) does not match")
+          && e.contains("CREATE VIEW (num: `2`)"))
+      }
+    }
+  }
+
+  test("create temporary view with specified schema") {
+    withView("view1") {
+      sql("CREATE TEMPORARY VIEW view1 (col1, col2) AS SELECT 1, 2")
+      checkAnswer(
+        sql("SELECT * FROM view1"),
+        Row(1, 2) :: Nil
+      )
     }
   }
 

@@ -311,8 +311,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
-   *
-   * TODO add bucketing and partitioning.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
@@ -413,7 +411,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
     val properties = ctx.tableProperty.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
-      val value = Option(property.value).map(string).orNull
+      val value = visitTablePropertyValue(property.value)
       key -> value
     }
     // Check for duplicate property names.
@@ -426,7 +424,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   private def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
     val props = visitTablePropertyList(ctx)
-    val badKeys = props.filter { case (_, v) => v == null }.keys
+    val badKeys = props.collect { case (key, null) => key }
     if (badKeys.nonEmpty) {
       operationNotAllowed(
         s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
@@ -457,6 +455,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       string(key.STRING)
     } else {
       key.getText
+    }
+  }
+
+  /**
+   * A table property value can be String, Integer, Boolean or Decimal. This function extracts
+   * the property value based on whether its a string, integer, boolean or decimal literal.
+   */
+  override def visitTablePropertyValue(value: TablePropertyValueContext): String = {
+    if (value == null) {
+      null
+    } else if (value.STRING != null) {
+      string(value.STRING)
+    } else if (value.booleanValue != null) {
+      value.getText.toLowerCase
+    } else {
+      value.getText
     }
   }
 

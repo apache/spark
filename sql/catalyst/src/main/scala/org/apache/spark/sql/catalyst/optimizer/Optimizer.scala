@@ -556,12 +556,27 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] operators by keeping only the last one.
+ * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
+ * by keeping only the one.
+ * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
+ * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
+ * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
+ *    [[RepartitionByExpression]] with the expression and last number of partition.
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Case 1
     case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
       Repartition(numPartitions, shuffle, child)
+    // Case 2
+    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
+    // Case 3
+    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
+      r.copy(numPartitions = Some(numPartitions))
+    // Case 3
+    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
   }
 }
 
@@ -820,16 +835,24 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
- * which is much faster
+ * Optimize IN predicates:
+ * 1. Removes literal repetitions.
+ * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
-          list.size > conf.optimizerInSetConversionThreshold =>
-        val hSet = list.map(e => e.eval(EmptyRow))
-        InSet(v, HashSet() ++ hSet)
+      case expr @ In(v, list) if expr.inSetConvertible =>
+        val newList = ExpressionSet(list).toSeq
+        if (newList.size > conf.optimizerInSetConversionThreshold) {
+          val hSet = newList.map(e => e.eval(EmptyRow))
+          InSet(v, HashSet() ++ hSet)
+        } else if (newList.size < list.size) {
+          expr.copy(list = newList)
+        } else { // newList.length == list.length
+          expr
+        }
     }
   }
 }

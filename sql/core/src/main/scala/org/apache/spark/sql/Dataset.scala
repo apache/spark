@@ -228,6 +228,15 @@ class Dataset[T] private[sql](
     }
   }
 
+  private def aggregatableColumns: Seq[Expression] = {
+    schema.fields
+      .filter(f => f.dataType.isInstanceOf[NumericType] || f.dataType.isInstanceOf[StringType])
+      .map { n =>
+        queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver)
+          .get
+      }
+  }
+
   /**
    * Compose the string representing rows for output
    *
@@ -1886,8 +1895,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
-   * If no columns are given, this function computes statistics for all numerical columns.
+   * Computes statistics for numeric and string columns, including count, mean, stddev, min, and
+   * max. If no columns are given, this function computes statistics for all numerical or string
+   * columns.
    *
    * This function is meant for exploratory data analysis, as we make no guarantee about the
    * backward compatibility of the schema of the resulting Dataset. If you want to
@@ -1920,7 +1930,7 @@ class Dataset[T] private[sql](
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols =
-      (if (cols.isEmpty) numericColumns.map(usePrettyExpression(_).sql) else cols).toList
+      (if (cols.isEmpty) aggregatableColumns.map(usePrettyExpression(_).sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>

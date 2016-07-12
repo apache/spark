@@ -82,6 +82,29 @@ class DefaultSource
   }
 }
 
+/** Dummy provider with only RelationProvider and CreatableRelationProvider. */
+class DefaultSourceWithoutUserSpecifiedSchema
+  extends RelationProvider
+  with CreatableRelationProvider {
+
+  case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
+    override def schema: StructType = StructType(Seq(StructField("a", StringType)))
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+}
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -117,6 +140,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       .load()
       .write
       .format("org.apache.spark.sql.test")
+      .save()
+  }
+
+  test("resolve default source without extending SchemaRelationProvider") {
+    spark.read
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
+      .load()
+      .write
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
       .save()
   }
 
@@ -415,6 +447,20 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
       }
     }
+  }
+
+  test("pmod with partitionBy") {
+    val spark = this.spark
+    import spark.implicits._
+
+    case class Test(a: Int, b: String)
+    val data = Seq((0, "a"), (1, "b"), (1, "a"))
+    spark.createDataset(data).createOrReplaceTempView("test")
+    sql("select * from test distribute by pmod(_1, 2)")
+      .write
+      .partitionBy("_2")
+      .mode("overwrite")
+      .parquet(dir)
   }
 
   private def testRead(
