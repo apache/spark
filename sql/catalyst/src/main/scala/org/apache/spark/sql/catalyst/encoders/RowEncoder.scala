@@ -269,7 +269,7 @@ object RowEncoder {
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
-          MapObjects(deserializerFor(_), input, et, dataType),
+          MapObjects(deserializerFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
