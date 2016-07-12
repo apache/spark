@@ -194,7 +194,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
 
 /**
  * :: Experimental ::
- * CrossValidatorModel contains the model that achieved the highest average cross-validation
+ * CrossValidatorModel contains the model with the highest average cross-validation
  * metric across folds and uses this model to transform input data. CrossValidatorModel
  * also tracks the metrics for each param map evaluated.
  *
