@@ -672,8 +672,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val q = df.writeStream.queryName("file_explain").format("memory").start()
         .asInstanceOf[StreamExecution]
       try {
-        assert("N/A" === q.explainInternal(false))
-        assert("N/A" === q.explainInternal(true))
+        assert("No physical plan. Waiting for data." === q.explainInternal(false))
+        assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
         val tempFile = Utils.tempFileWith(new File(tmp, "text"))
         val finalFile = new File(src, tempFile.getName)

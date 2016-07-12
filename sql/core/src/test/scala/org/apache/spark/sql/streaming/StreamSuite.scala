@@ -251,8 +251,8 @@ class StreamSuite extends StreamTest {
     val q = df.writeStream.queryName("memory_explain").format("memory").start()
       .asInstanceOf[StreamExecution]
     try {
-      assert("N/A" === q.explainInternal(false))
-      assert("N/A" === q.explainInternal(true))
+      assert("No physical plan. Waiting for data." === q.explainInternal(false))
+      assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
       inputData.addData("abc")
       q.processAllAvailable()
