@@ -77,22 +77,22 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   testMetadataOnly(
-    "aggregate expression is partition columns",
+    "Aggregate expression is partition columns",
     "select partcol1 from srcpart group by partcol1",
     "select partcol2 from srcpart where partcol1 = 0 group by partcol2")
 
   testMetadataOnly(
-    "distinct aggregate function on partition columns",
+    "Distinct aggregate function on partition columns",
     "SELECT partcol1, count(distinct partcol2) FROM srcpart group by partcol1",
     "SELECT partcol1, count(distinct partcol2) FROM srcpart where partcol1 = 0 group by partcol1")
 
   testMetadataOnly(
-    "distinct on partition columns",
+    "Distinct on partition columns",
     "select distinct partcol1, partcol2 from srcpart",
     "select distinct c1 from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
   testMetadataOnly(
-    "aggregate function on partition columns which have same result w or w/o DISTINCT keyword.",
+    "Aggregate function on partition columns which have same result w or w/o DISTINCT keyword",
     "select max(partcol1) from srcpart",
     "select min(partcol1) from srcpart where partcol1 = 0",
     "select first(partcol1) from srcpart",
@@ -101,20 +101,19 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
     "select max(c1) from (select partcol1 + 1 as c1 from srcpart where partcol1 = 0) t")
 
   testNotMetadataOnly(
-    "unsupported for non-partition columns",
+    "Don't optimize metadata only query for non-partition columns",
     "select col1 from srcpart group by col1",
     "select partcol1, max(col1) from srcpart group by partcol1",
     "select partcol1, count(distinct col1) from srcpart group by partcol1",
     "select distinct partcol1, col1 from srcpart")
 
   testNotMetadataOnly(
-    "unsupported for non-distinct aggregate function on " +
-    "partition columns",
+    "Don't optimize metadata only query for non-distinct aggregate function on partition columns",
     "select partcol1, sum(partcol2) from srcpart group by partcol1",
     "select partcol1, count(partcol2) from srcpart group by partcol1")
 
   testNotMetadataOnly(
-    "unsupported for GroupingSet/Union operator",
+    "Don't optimize metadata only query for GroupingSet/Union operator",
     "select partcol1, max(partcol2) from srcpart where partcol1 = 0 group by rollup (partcol1)",
     "select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
       "select partcol2 from srcpart where partcol1 = 1) t group by partcol2")
