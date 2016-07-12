@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
@@ -356,14 +356,12 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 
 
 /**
- * :: Experimental ::
  * Model fitted by [[LDA]].
  *
  * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
  * @param sparkSession  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
-@Experimental
 sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
@@ -512,14 +510,11 @@ sealed abstract class LDAModel private[ml] (
 
 
 /**
- * :: Experimental ::
- *
  * Local (non-distributed) model fitted by [[LDA]].
  *
  * This model stores the inferred topics only; it does not store info about the training dataset.
  */
 @Since("1.6.0")
-@Experimental
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -599,8 +594,6 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
 
 
 /**
- * :: Experimental ::
- *
  * Distributed model fitted by [[LDA]].
  * This type of model is currently only produced by Expectation-Maximization (EM).
  *
@@ -611,7 +604,6 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
  *                             [[copy()]] cheap.
  */
 @Since("1.6.0")
-@Experimental
 class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -747,8 +739,6 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 
 
 /**
- * :: Experimental ::
- *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
  * Terminology:
@@ -771,7 +761,6 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *       (Wikipedia)]]
  */
 @Since("1.6.0")
-@Experimental
 class LDA @Since("1.6.0") (
     @Since("1.6.0") override val uid: String)
   extends Estimator[LDAModel] with LDAParams with DefaultParamsWritable {
