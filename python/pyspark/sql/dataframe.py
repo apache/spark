@@ -1402,8 +1402,8 @@ class DataFrame(object):
     def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
 
-        :param col: a string name of the column to drop, or a
-            :class:`Column` to drop.
+        :param cols: a string name of the column to drop, or a
+            :class:`Column` to drop, or a list of string name of the columns to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
@@ -1417,8 +1417,7 @@ class DataFrame(object):
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
         [Row(age=5, name=u'Bob', height=85)]
 
-        >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name) \\
-        ...     .drop('age', 'height').collect()
+        >>> df.join(df2, 'name', 'inner').drop('age', 'height').collect()
         [Row(name=u'Bob')]
         """
         if len(cols) == 1:
