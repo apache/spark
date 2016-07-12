@@ -275,40 +275,61 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             return(list(apriori = apriori, tables = tables))
           })
 
-# Makes predictions from a Latent Dirichlet Allocation model or a model produced by spark.lda(),
+# Returns posterior probabilities from a Latent Dirichlet Allocation model produced by spark.lda()
 
-#' @param newData A SparkDataFrame for testing
-#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
-#' "prediction"
+#' @param object An LDA model produced by spark.lda()
+#' @param data A SparkDataFrame for testing
+#' @return \code{spark.posterior} returns a SparkDataFrame containing posterior probabilities
+#'         vectors named "topicDistribution"
 #' @rdname spark.lda
 #' @export
-#' @note predict(LDAModel) since 2.1.0
-setMethod("predict", signature(object = "LDAModel"),
-          function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+#' @note spark.posterior(LDAModel) since 2.1.0
+setMethod("spark.posterior", signature(object = "LDAModel", data = "SparkDataFrame"),
+          function(object, data) {
+            return(dataFrame(callJMethod(object@jobj, "transform", data@sdf)))
           })
 
 # Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
 
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
-#' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
-#'         \code{tables}, conditional probabilities given the target label
+#' @return \code{summary} returns a list containing \code{docConcentration},
+#'         \code{topicConcentration}, \code{likelihood}, \code{perplexity}, \code{isDistributed},
+#'         \code{vocabSize},  \code{topicTopTerms} and \code{topicTopTermsWeights}.
 #' @rdname spark.lda
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
           function(object, dict, ...) {
             jobj <- object@jobj
-            logLikelihood <- callJMethod(jobj, "logLikelihood")
-            logPerplexity <- callJMethod(jobj, "logPerplexity")
+            docConcentration <- callJMethod(jobj, "docConcentration")
+            topicConcentration <- callJMethod(jobj, "topicConcentration")
+            likelihood <- callJMethod(jobj, "likelihood")
+            perplexity <- callJMethod(jobj, "perplexity")
             isDistributed <- callJMethod(jobj, "isDistributed")
             vocabSize <- callJMethod(jobj, "vocabSize")
             described <- dataFrame(callJMethod(jobj, "described"))
-            return(list(logLikelihood = logLikelihood, logPerplexity = logPerplexity,
+            return(list(docConcentration = unlist(docConcentration),
+                        topicConcentration = topicConcentration,
+                        likelihood = likelihood, perplexity = perplexity,
                         isDistributed = isDistributed, vocabSize = vocabSize,
                         topicTopTerms = collect(select(described, "termIndices")),
                         topicTopTermsWeights = collect(select(described, "termWeights"))))
           })
+
+# Returns the perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
+
+#' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
+#' @param data A SparkDataFrame for computing
+#' @return \code{spark.perplexity} returns the perplexity of given SparkDataFrame, or the perplexity
+#'         of training data if missing argument data.
+#' @rdname spark.lda
+#' @export
+#' @note summary(LDAModel) since 2.1.0
+setMethod("spark.perplexity", signature(object = "LDAModel"),
+          function(object, data) {
+            return(ifelse(missing(data), callJMethod(object@jobj, "perplexity"),
+                   callJMethod(object@jobj, "perplexityFor", data@sdf)))
+         })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
 

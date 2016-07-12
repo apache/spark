@@ -25,7 +25,9 @@ exportMethods("glm",
               "fitted",
               "spark.naiveBayes",
               "spark.survreg",
-              "spark.lda")
+              "spark.lda",
+              "spark.posterior",
+              "spark.perplexity")
 
 # Job group lifecycle management methods
 export("setJobGroup",

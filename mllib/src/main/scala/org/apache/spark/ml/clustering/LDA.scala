@@ -386,6 +386,10 @@ sealed abstract class LDAModel private[ml] (
   @Since("1.6.0")
   protected def getModel: OldLDAModel
 
+  private[ml] def getEffectiveDocConcentration: Array[Double] = getModel.docConcentration.toArray
+
+  private[ml] def getEffectiveTopicConcentration: Double = getModel.topicConcentration
+
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).

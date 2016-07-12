@@ -1284,6 +1284,15 @@ setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spar
 #' @export
 setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.posterior", function(object, data, ...) { standardGeneric("spark.posterior") })
+
+#' @rdname spark.lda
+#' @export
+setGeneric("spark.perplexity", function(object, ...) { standardGeneric("spark.perplexity") })
+
+
 #' write.ml
 #' @rdname write.ml
 #' @export

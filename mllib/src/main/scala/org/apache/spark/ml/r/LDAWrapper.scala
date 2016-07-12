@@ -29,18 +29,26 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class LDAWrapper private (
     val pipeline: PipelineModel,
-    val logLikelihood: Double,
-    val logPerplexity: Double) extends MLWritable {
+    val likelihood: Double,
+    val perplexity: Double) extends MLWritable {
 
   private val lda: LDAModel = pipeline.stages(0).asInstanceOf[LDAModel]
+  private val preprocessor: PipelineModel =
+    new PipelineModel(s"${pipeline.uid}-preprocessor", pipeline.stages.dropRight(1))
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset).drop(lda.getFeaturesCol)
   }
 
-  lazy val isDistributed = lda.isDistributed
-  lazy val described = lda.describeTopics()
-  lazy val vocabSize = lda.vocabSize
+  def perplexityFor(data: Dataset[_]): Double = {
+    math.exp(lda.logPerplexity(preprocessor.transform(data)))
+  }
+
+  lazy val isDistributed: Boolean = lda.isDistributed
+  lazy val described: DataFrame = lda.describeTopics()
+  lazy val vocabSize: Int = lda.vocabSize
+  lazy val docConcentration: Array[Double] = lda.getEffectiveDocConcentration
+  lazy val topicConcentration: Double = lda.getEffectiveTopicConcentration
 
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
@@ -83,7 +91,8 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
     val model = pipeline.fit(data)
     val ldaModel = model.stages(0).asInstanceOf[LDAModel]
 
-    new LDAWrapper(model, ldaModel.logLikelihood(data), ldaModel.logPerplexity(data))
+    new LDAWrapper(
+      model, math.exp(ldaModel.logLikelihood(data)), math.exp(ldaModel.logPerplexity(data)))
   }
 
   override def read: MLReader[LDAWrapper] = new LDAWrapperReader
@@ -97,8 +106,8 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("logLikelihood" -> instance.logLikelihood) ~
-        ("logPerplexity" -> instance.logPerplexity)
+        ("likelihood" -> instance.likelihood) ~
+        ("perplexity" -> instance.perplexity)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
@@ -115,8 +124,8 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
-      val logLikelihood = (rMetadata \ "logLikelihood").extract[Double]
-      val logPerplexity = (rMetadata \ "logPerplexity").extract[Double]
+      val logLikelihood = (rMetadata \ "likelihood").extract[Double]
+      val logPerplexity = (rMetadata \ "perplexity").extract[Double]
 
       val pipeline = PipelineModel.load(pipelinePath)
       new LDAWrapper(pipeline, logLikelihood, logPerplexity)
