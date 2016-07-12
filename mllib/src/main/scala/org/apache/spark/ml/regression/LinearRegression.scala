@@ -263,7 +263,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     // if y is constant (rawYStd is zero), then y cannot be scaled. In this case
-    // setting yStd=1.0 ensures that y is not scaled anymore in l-bfgs algorithm.
+    // setting yStd=abs(yMean) ensures that y is not scaled anymore in l-bfgs algorithm.
     val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
