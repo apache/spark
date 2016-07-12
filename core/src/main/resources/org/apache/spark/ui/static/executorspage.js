@@ -80,7 +80,7 @@ $(document).ajaxStart(function(){
 
 function createTemplateURI() {
     var parser = document.createElement('a');
-    var words = parser.baseURI.split('/');
+    var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
     if(ind > 0) {
         var appId = words[ind + 1];
@@ -95,7 +95,7 @@ function createTemplateURI() {
 
 function createRESTEndPoint() {
     var parser = document.createElement('a');
-    var words = parser.baseURI.split('/');
+    var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
     if(ind > 0) {
         var appId = words[ind + 1];
