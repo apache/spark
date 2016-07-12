@@ -190,7 +190,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(false,
       mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
-      appArgs = Seq("spark.hadoop.key=value", result.getAbsolutePath()),
+      appArgs = Seq("key=value", result.getAbsolutePath()),
       extraConf = Map("spark.hadoop.key" -> "value"))
     checkResult(finalState, result)
   }
@@ -296,7 +296,7 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [propertyKey=value] [result file]
+        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value] [result file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -306,11 +306,11 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn test using SparkHadoopUtil's conf"))
 
-    val propertyKeyValue = args(0).split("=")
+    val kv = args(0).split("=")
     val status = new File(args(1))
     var result = "failure"
     try {
-      SparkHadoopUtil.get.conf.get(propertyKeyValue(0).drop(13)) should be (propertyKeyValue(1))
+      SparkHadoopUtil.get.conf.get(kv(0)) should be (kv(1))
       result = "success"
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
