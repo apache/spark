@@ -144,10 +144,11 @@ class ValidatorParams(HasSeed):
 class CrossValidator(Estimator, ValidatorParams):
     """
 
-    CrossValidator begins by splitting the dataset into a set of non-overlapping randomly
-    partitioned folds which are used as separate training and test datasets e.g., with k=3 folds,
-    CrossValidator will generate 3 (training, test) dataset pairs, each of which uses 2/3 of
-    the data for training and 1/3 for testing. Each fold is used as the test set exactly once.
+    K-fold cross validation performs model selection by splitting the dataset into a set of
+    non-overlapping randomly partitioned folds which are used as separate training and test datasets
+    e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
+    each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
+    test set exactly once.
 
 
     >>> from pyspark.ml.classification import LogisticRegression
