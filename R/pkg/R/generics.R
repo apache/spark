@@ -1255,7 +1255,6 @@ setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.gl
 #' @export
 setGeneric("glm")
 
-#' predict
 #' @rdname predict
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
@@ -1291,7 +1290,6 @@ setGeneric("spark.posterior", function(object, data, ...) { standardGeneric("spa
 #' @rdname spark.lda
 #' @export
 setGeneric("spark.perplexity", function(object, ...) { standardGeneric("spark.perplexity") })
-
 
 #' write.ml
 #' @rdname write.ml

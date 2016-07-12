@@ -349,12 +349,19 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
           if (partitionLengthInSpill > 0) {
-            InputStream partitionInputStream =
-              new LimitedInputStream(spillInputStreams[i], partitionLengthInSpill);
-            if (compressionCodec != null) {
-              partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
+            InputStream partitionInputStream = null;
+            boolean innerThrewException = true;
+            try {
+              partitionInputStream =
+                  new LimitedInputStream(spillInputStreams[i], partitionLengthInSpill, false);
+              if (compressionCodec != null) {
+                partitionInputStream = compressionCodec.compressedInputStream(partitionInputStream);
+              }
+              ByteStreams.copy(partitionInputStream, mergedFileOutputStream);
+              innerThrewException = false;
+            } finally {
+              Closeables.close(partitionInputStream, innerThrewException);
             }
-            ByteStreams.copy(partitionInputStream, mergedFileOutputStream);
           }
         }
         mergedFileOutputStream.flush();

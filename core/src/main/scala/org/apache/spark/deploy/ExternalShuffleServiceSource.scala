@@ -15,18 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.deploy
 
-import org.apache.spark.sql.test.SharedSQLContext
+import javax.annotation.concurrent.ThreadSafe
+
+import com.codahale.metrics.{Gauge, MetricRegistry}
+
+import org.apache.spark.metrics.source.Source
+import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 
 /**
- * End-to-end tests for XML expressions.
+ * Provides metrics source for external shuffle service
  */
-class XmlFunctionsSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
+@ThreadSafe
+private class ExternalShuffleServiceSource
+(blockHandler: ExternalShuffleBlockHandler) extends Source {
+  override val metricRegistry = new MetricRegistry()
+  override val sourceName = "shuffleService"
 
-  test("xpath_boolean") {
-    val df = Seq("<a><b>b</b></a>" -> "a/b").toDF("xml", "path")
-    checkAnswer(df.selectExpr("xpath_boolean(xml, path)"), Row(true))
-  }
+  metricRegistry.registerAll(blockHandler.getAllMetrics)
 }

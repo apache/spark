@@ -288,6 +288,7 @@ object FunctionRegistry {
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
+    expression[ParseUrl]("parse_url"),
     expression[FormatString]("printf"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
@@ -309,7 +310,15 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
+    expression[XPathDouble]("xpath_double"),
+    expression[XPathDouble]("xpath_number"),
+    expression[XPathFloat]("xpath_float"),
+    expression[XPathInt]("xpath_int"),
+    expression[XPathLong]("xpath_long"),
+    expression[XPathShort]("xpath_short"),
+    expression[XPathString]("xpath_string"),
 
     // datetime functions
     expression[AddMonths]("add_months"),

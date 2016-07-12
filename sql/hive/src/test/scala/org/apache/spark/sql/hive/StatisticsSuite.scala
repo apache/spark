@@ -165,7 +165,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tempTable"), ignoreIfNotExists = true)
+      TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
   }
 
   test("estimates the size of a test MetastoreRelation") {

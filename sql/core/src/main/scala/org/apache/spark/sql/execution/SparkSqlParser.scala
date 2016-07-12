@@ -622,13 +622,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Create a [[DropTableCommand]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.PURGE != null) {
-      operationNotAllowed("DROP TABLE ... PURGE", ctx)
-    }
     DropTableCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.EXISTS != null,
-      ctx.VIEW != null)
+      ctx.VIEW != null,
+      ctx.PURGE != null)
   }
 
   /**
@@ -768,13 +766,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.VIEW != null) {
       operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
     }
-    if (ctx.PURGE != null) {
-      operationNotAllowed("ALTER TABLE ... DROP PARTITION ... PURGE", ctx)
-    }
     AlterTableDropPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ctx.EXISTS != null)
+      ctx.EXISTS != null,
+      ctx.PURGE != null)
   }
 
   /**
