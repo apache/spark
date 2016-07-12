@@ -48,6 +48,7 @@ class BlockReplicationObjectives extends SparkFunSuite with Matchers {
     logInfo(s"Optimal peers : ${optimalPeers}")
     logInfo(s"Objectives met : ${objectivesMet}")
     assert(optimalPeers.size == 1)
+    assert(objectivesMet.size == 3)
   }
 
   test("peers in 3 racks") {
