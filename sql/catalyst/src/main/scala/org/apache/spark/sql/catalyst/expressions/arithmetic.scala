@@ -229,9 +229,6 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
     }
   }
 
-  // Used by doGenCode
-  protected def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String
-
   /**
    * Special case handling due to division by 0 => null.
    */
@@ -244,7 +241,12 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
       s"${eval2.value} == 0"
     }
     val javaType = ctx.javaType(dataType)
-    val division = divide(eval1, eval2, javaType)
+    val divide = if (dataType.isInstanceOf[DecimalType] || dataType.isInstanceOf[DoubleType]) {
+      s"${eval1.value}.$decimalMethod(${eval2.value})"
+    } else {
+      s"($javaType)(${eval1.value} $decimalMethod ${eval2.value})"
+    }
+
     if (!left.nullable && !right.nullable) {
       ev.copy(code = s"""
         ${eval2.code}
@@ -254,7 +256,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
           ${ev.isNull} = true;
         } else {
           ${eval1.code}
-          ${ev.value} = $division;
+          ${ev.value} = $divide;
         }""")
     } else {
       ev.copy(code = s"""
@@ -268,7 +270,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
           if (${eval1.isNull}) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = $division;
+            ${ev.value} = $divide;
           }
         }""")
     }
@@ -285,15 +287,6 @@ case class Divide(left: Expression, right: Expression)
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
-
-  // Used by doGenCode
-  protected override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
-    if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
-    } else {
-      s"($javaType)(${eval1.value} $symbol ${eval2.value})"
-    }
-  }
 }
 
 @ExpressionDescription(
@@ -306,11 +299,6 @@ case class IntegerDivide(left: Expression, right: Expression)
 
   override def symbol: String = "div"
   override def decimalMethod: String = "/"
-
-  // Used by doGenCode
-  protected override def divide(eval1: ExprCode, eval2: ExprCode, javaType: String): String = {
-    s"($javaType)(${eval1.value} $decimalMethod (${eval2.value}))"
-  }
 }
 
 @ExpressionDescription(
