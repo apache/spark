@@ -119,7 +119,7 @@ public class YarnShuffleService extends AuxiliaryService {
    * Start the shuffle server with the given configuration.
    */
   @Override
-  protected void serviceInit(Configuration conf) {
+  protected void serviceInit(Configuration conf) throws Exception {
     _conf = conf;
 
     // In case this NM was killed while there were running spark applications, we need to restore
@@ -131,15 +131,11 @@ public class YarnShuffleService extends AuxiliaryService {
       new File(getRecoveryPath().toUri().getPath(), RECOVERY_FILE_NAME);
 
     TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
+    blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-    try {
-      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
-    } catch (Exception e) {
-      logger.error("Failed to initialize external shuffle service", e);
-    }
-
     List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
       secretManager = new ShuffleSecretManager();
