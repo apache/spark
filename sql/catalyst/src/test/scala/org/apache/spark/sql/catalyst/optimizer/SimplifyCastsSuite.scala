@@ -53,6 +53,27 @@ class SimplifyCastsSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("nullable to non-nullable array cast") {
+    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val array_intNull = Literal.create(
+      Seq(1, 2, null, 4, 5), ArrayType(IntegerType, true))
+    val plan = input.select(array_intNull
+      .cast(ArrayType(IntegerType, false)).as('a)).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.resolved === false)
+  }
+
+  test("nullable to nullable array cast") {
+    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val array_intNull = Literal.create(
+      Seq(1, 2, null, 4, 5), ArrayType(IntegerType, true))
+    val plan = input.select(array_intNull
+      .cast(ArrayType(IntegerType, true)).as('a)).analyze
+    val optimized = Optimize.execute(plan)
+    val expected = input.select(array_intNull.as('a)).analyze
+    comparePlans(optimized, expected)
+  }
+
   test("non-nullable to non-nullable map cast") {
     val input = LocalRelation('m.array(MapType(StringType, StringType, false)))
     val map_notNull = Literal.create(
@@ -72,6 +93,27 @@ class SimplifyCastsSuite extends PlanTest {
       .cast(MapType(StringType, StringType, true)).as('m)).analyze
     val optimized = Optimize.execute(plan)
     val expected = input.select(map_notNull.as('m)).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("nullable to non-nullable map cast") {
+    val input = LocalRelation('m.array(MapType(StringType, StringType, true)))
+    val map_Null = Literal.create(
+      Map("a" -> "123", "b" -> null, "c" -> "f"), MapType(StringType, StringType, true))
+    val plan = input.select(map_Null
+      .cast(MapType(StringType, StringType, false)).as('m)).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.resolved === false)
+  }
+
+  test("nullable to nullable map cast") {
+    val input = LocalRelation('m.array(MapType(StringType, StringType, true)))
+    val map_Null = Literal.create(
+      Map("a" -> "123", "b" -> null, "c" -> "f"), MapType(StringType, StringType, true))
+    val plan = input.select(map_Null
+      .cast(MapType(StringType, StringType, true)).as('m)).analyze
+    val optimized = Optimize.execute(plan)
+    val expected = input.select(map_Null.as('m)).analyze
     comparePlans(optimized, expected)
   }
 }
