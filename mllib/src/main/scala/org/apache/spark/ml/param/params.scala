@@ -29,8 +29,8 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.linalg.JsonVectorConverter
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.Identifiable
 
 /**
