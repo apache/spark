@@ -24,7 +24,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 
 /**
- * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
+ * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  *
  * Usage: JavaStructuredNetworkWordCount <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
@@ -40,7 +40,7 @@ public final class JavaStructuredNetworkWordCount {
 
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
-      System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
+      System.err.println("Usage: JavaStructuredNetworkWordCount <hostname> <port>");
       System.exit(1);
     }
 
