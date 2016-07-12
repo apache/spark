@@ -343,3 +343,14 @@ export("partitionBy",
 
 export("window.partitionBy",
        "window.orderBy")
+
+
+S3method(print, jobj)
+S3method(print, structField)
+S3method(print, structType)
+S3method(print, summary.GeneralizedLinearRegressionModel)
+S3method(structField, character)
+S3method(structField, jobj)
+S3method(structType, jobj)
+S3method(structType, structField)
+# window.orderBy window.partitionBy
