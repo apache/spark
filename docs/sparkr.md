@@ -263,7 +263,7 @@ In SparkR, we support several kinds of User-Defined Functions:
 ##### dapply
 Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
 and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function
-should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match the R function's output.
+should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match to [data types of R function's output fields](#data-type-mapping-between-r-and-spark).
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -285,9 +285,7 @@ head(collect(df1))
 
 ##### dapplyCollect
 Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function
-should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` only can be used if the
-output of UDF run on all the partitions can fit in driver memory.
-<div data-lang="r"  markdown="1">
+should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
 {% highlight r %}
 
 # Convert waiting time from hours to seconds.
@@ -312,7 +310,82 @@ head(ldf, 3)
 Apply a function to each group of a `SparkDataFrame`. The function is to be applied to each group of the `SparkDataFrame` and should have only two parameters: grouping key and R `data.frame` corresponding to
 that key. The groups are chosen from `SparkDataFrame`s column(s).
 The output of function should be a `data.frame`. Schema specifies the row format of the resulting
-`SparkDataFrame`. It must match the R function's output.
+`SparkDataFrame`. It must represent R function's output schema on the basis of Spark data types. The column names of each output field in the schema are set by user. Bellow data type mapping between R
+and Spark.
+
+#### Data type mapping between R and Spark
+<table class="table">
+<tr><th>R</th><th>Spark</th></tr>
+<tr>
+  <td>byte</td>
+  <td>byte</td>
+</tr>
+<tr>
+  <td>integer</td>
+  <td>integer</td>
+</tr>
+<tr>
+  <td>float</td>
+  <td>float</td>
+</tr>
+<tr>
+  <td>double</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>numeric</td>
+  <td>double</td>
+</tr>
+<tr>
+  <td>character</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>string</td>
+  <td>string</td>
+</tr>
+<tr>
+  <td>binary</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>raw</td>
+  <td>binary</td>
+</tr>
+<tr>
+  <td>logical</td>
+  <td>boolean</td>
+</tr>
+<tr>
+  <td>timestamp</td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td>date</td>
+  <td>date</td>
+</tr>
+<tr>
+  <td>array</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>list</td>
+  <td>array</td>
+</tr>
+<tr>
+  <td>map</td>
+  <td>map</td>
+</tr>
+<tr>
+  <td>env</td>
+  <td>map</td>
+</tr>
+<tr>
+  <td>struct</td>
+  <td>struct</td>
+</tr>
+</table>
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -338,7 +411,7 @@ head(collect(arrange(result, "max_eruption", decreasing = TRUE)))
 </div>
 
 ##### gapplyCollect
-Like `gapply`, applies a function to each partition of a `SparkDataFrame` and collect the result back to R data.frame. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can only be used if the output of UDF run on all the partitions can fit in driver memory.
+Like `gapply`, applies a function to each partition of a `SparkDataFrame` and collect the result back to R data.frame. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
