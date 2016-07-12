@@ -50,6 +50,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var weightSum: Double = 0.0
   private var weightSquareSum: Double = 0.0
   private var nnz: Array[Double] = _
+  private var cnnz: Array[Long] = _
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
 
@@ -75,6 +76,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currM2 = Array.ofDim[Double](n)
       currL1 = Array.ofDim[Double](n)
       nnz = Array.ofDim[Double](n)
+      cnnz = Array.ofDim[Long](n)
       currMax = Array.fill[Double](n)(Double.MinValue)
       currMin = Array.fill[Double](n)(Double.MaxValue)
     }
@@ -87,6 +89,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localCurrM2 = currM2
     val localCurrL1 = currL1
     val localNnz = nnz
+    val localCnnz = cnnz
     val localCurrMax = currMax
     val localCurrMin = currMin
     instance.foreachActive { (index, value) =>
@@ -106,6 +109,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         localCurrL1(index) += weight * math.abs(value)
 
         localNnz(index) += weight
+        localCnnz(index) += 1
       }
     }
 
@@ -135,6 +139,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         val thisNnz = nnz(i)
         val otherNnz = other.nnz(i)
         val totalNnz = thisNnz + otherNnz
+        val totalCnnz = cnnz(i) + other.cnnz(i)
         if (totalNnz != 0.0) {
           val deltaMean = other.currMean(i) - currMean(i)
           // merge mean together
@@ -150,6 +155,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
           currMin(i) = math.min(currMin(i), other.currMin(i))
         }
         nnz(i) = totalNnz
+        cnnz(i) = totalCnnz
         i += 1
       }
     } else if (weightSum == 0.0 && other.weightSum != 0.0) {
@@ -162,6 +168,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       this.weightSum = other.weightSum
       this.weightSquareSum = other.weightSquareSum
       this.nnz = other.nnz.clone()
+      this.cnnz = other.cnnz.clone()
       this.currMax = other.currMax.clone()
       this.currMin = other.currMin.clone()
     }
@@ -239,7 +246,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if ((nnz(i) < weightSum) && (currMax(i) < 0.0)) currMax(i) = 0.0
+      if ((cnnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
       i += 1
     }
     Vectors.dense(currMax)
@@ -255,7 +262,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if ((nnz(i) < weightSum) && (currMin(i) > 0.0)) currMin(i) = 0.0
+      if ((cnnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
       i += 1
     }
     Vectors.dense(currMin)
