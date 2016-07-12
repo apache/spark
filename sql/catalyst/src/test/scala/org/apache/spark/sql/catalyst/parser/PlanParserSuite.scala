@@ -467,4 +467,21 @@ class PlanParserSuite extends PlanTest {
       parsePlan("SELECT /*+ INDEX(t emp_job_ix) */ * FROM t"),
       Hint("INDEX", Seq("t", "emp_job_ix"), table("t")).select(star()))
   }
+
+  test("broadcast join syntax") {
+    comparePlans(
+      parsePlan("SELECT * FROM t LEFT OUTER JOIN BROADCAST s"),
+      Hint("BROADCAST_RIGHT", Seq.empty[String], Join(table("t"), table("s"), LeftOuter, None))
+        .select(star()))
+
+    comparePlans(
+      parsePlan("SELECT * FROM t LEFT OUTER JOIN BROADCAST RIGHT s"),
+      Hint("BROADCAST_RIGHT", Seq.empty[String], Join(table("t"), table("s"), LeftOuter, None))
+        .select(star()))
+
+    comparePlans(
+      parsePlan("SELECT * FROM t LEFT OUTER JOIN BROADCAST LEFT s"),
+      Hint("BROADCAST_LEFT", Seq.empty[String], Join(table("t"), table("s"), LeftOuter, None))
+        .select(star()))
+  }
 }

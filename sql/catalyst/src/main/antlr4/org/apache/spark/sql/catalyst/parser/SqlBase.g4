@@ -383,8 +383,8 @@ setQuantifier
 
 relation
     : left=relation
-      ((CROSS | joinType) JOIN right=relation joinCriteria?
-      | NATURAL joinType JOIN right=relation
+      ((CROSS | joinType) JOIN broadcast=broadcastType? right=relation joinCriteria?
+      | NATURAL joinType JOIN broadcast=broadcastType? right=relation
       )                                           #joinRelation
     | relationPrimary                             #relationDefault
     ;
@@ -396,6 +396,11 @@ joinType
     | RIGHT OUTER?
     | FULL OUTER?
     | LEFT? ANTI
+    ;
+
+broadcastType
+    : BROADCAST left=LEFT
+    | BROADCAST RIGHT?
     ;
 
 joinCriteria
@@ -670,6 +675,7 @@ nonReserved
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+    | BROADCAST
     ;
 
 SELECT: 'SELECT';
@@ -722,6 +728,7 @@ RIGHT: 'RIGHT';
 FULL: 'FULL';
 NATURAL: 'NATURAL';
 ON: 'ON';
+BROADCAST: 'BROADCAST';
 LATERAL: 'LATERAL';
 WINDOW: 'WINDOW';
 OVER: 'OVER';

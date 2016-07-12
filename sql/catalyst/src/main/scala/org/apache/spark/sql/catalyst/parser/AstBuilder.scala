@@ -402,7 +402,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * separated) relations here, these get converted into a single plan by condition-less inner join.
    */
   override def visitFromClause(ctx: FromClauseContext): LogicalPlan = withOrigin(ctx) {
-    val from = ctx.relation.asScala.map(plan).reduceLeft(Join(_, _, Inner, None))
+    val relationPlan = ctx.relation.asScala.map {
+      case jrc: JoinRelationContext if jrc.broadcast != null =>
+        if (jrc.broadcast.left == null) { // default
+          Hint("BROADCAST_RIGHT", Seq.empty[String], plan(jrc))
+        } else {
+          Hint("BROADCAST_LEFT", Seq.empty[String], plan(jrc))
+        }
+      case x => plan(x)
+    }
+    val from = relationPlan.reduceLeft(Join(_, _, Inner, None))
     ctx.lateralView.asScala.foldLeft(from)(withGenerate)
   }
 
