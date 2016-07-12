@@ -413,8 +413,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
     val parallelStepResult = keyedInput
       .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
       .values
-      .mapPartitions( _.toSeq.sortBy(x => (x._2, x._1)).toIterator)
-      .glom()
+      .mapPartitions( p => Iterator(p.toSeq.sortBy(x => (x._2, x._1)).toArray))
       .flatMap(poolAdjacentViolators)
       .collect()
       .sortBy(x => (x._2, x._1)) // Sort again because collect() doesn't promise ordering.
