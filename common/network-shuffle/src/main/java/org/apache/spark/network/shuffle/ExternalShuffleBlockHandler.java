@@ -97,7 +97,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         long totalBlockSize = 0;
         for (String blockId : msg.blockIds) {
           final ManagedBuffer block = blockManager.getBlockData(msg.appId, msg.execId, blockId);
-          totalBlockSize += block.size();
+          totalBlockSize += block != null ? block.size() : 0;
           blocks.add(block);
         }
         long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
