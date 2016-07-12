@@ -123,6 +123,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      None,
       System.currentTimeMillis()))
 
     val executionUIData = listener.executionIdToData(0)
@@ -259,6 +260,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      None,
       System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -289,6 +291,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      None,
       System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -330,6 +333,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      None,
       System.currentTimeMillis()))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -369,7 +373,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     // These are largely just boilerplate unrelated to what we're trying to test.
     val df = createTestDataFrame
     val executionStart = SparkListenerSQLExecutionStart(
-      0, "", "", "", SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan), 0)
+      0, "", "", "", SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan), None, 0)
     val stageInfo = createStageInfo(0, 0)
     val jobStart = SparkListenerJobStart(0, 0, Seq(stageInfo), createProperties(0))
     val stageSubmitted = SparkListenerStageSubmitted(stageInfo)

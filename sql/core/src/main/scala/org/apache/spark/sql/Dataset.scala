@@ -2945,7 +2945,10 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: => LogicalPlan): Dataset[U] = {
-    Dataset(sparkSession, logicalPlan)
+    val dataset: Dataset[U] = Dataset(sparkSession, logicalPlan)
+    // Copy the original sql text for checking in the web UI.
+    dataset.logicalPlan.sqlText = queryExecution.logical.sqlText
+    dataset
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */

@@ -65,13 +65,18 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   }
 
   /** Creates LogicalPlan for a given SQL string. */
-  override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitSingleStatement(parser.singleStatement()) match {
-      case plan: LogicalPlan => plan
-      case _ =>
-        val position = Origin(None, None)
-        throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
+  override def parsePlan(sqlText: String): LogicalPlan = {
+    val logicalPlan = parse(sqlText) { parser =>
+      astBuilder.visitSingleStatement(parser.singleStatement()) match {
+        case plan: LogicalPlan => plan
+        case _ =>
+          val position = Origin(None, None)
+          throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
+      }
     }
+    // Record the original sql text in the top logical plan for checking in the web UI.
+    logicalPlan.sqlText = Some(sqlText)
+    logicalPlan
   }
 
   /** Get the builder (visitor) which converts a ParseTree into an AST. */
