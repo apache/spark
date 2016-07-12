@@ -417,6 +417,6 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       sql("select str_to_map(null,null)").collect()
     }.getMessage
 
-    assert(Seq(m1, m2, m3).forall(_.contains("all arguments should be of type string.")))
+    assert(Seq(m1, m2, m3).forall(_.contains("all arguments must be of type string.")))
   }
 }
