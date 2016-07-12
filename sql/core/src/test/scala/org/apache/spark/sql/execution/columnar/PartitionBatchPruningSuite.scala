@@ -155,9 +155,16 @@ class PartitionBatchPruningSuite
     }
   }
 
-  test("illegal COLUMN_BATCH_SIZE") {
+  test("illegal values of COLUMN_BATCH_SIZE") {
     withSQLConf(SQLConf.COLUMN_BATCH_SIZE.key -> "0") {
-      sql("SELECT key FROM pruningData WHERE").show()
+      withTempTable("test") {
+        spark.sql("select key from pruningData").createOrReplaceTempView("test")
+        val e = intercept[IllegalArgumentException] {
+          spark.catalog.cacheTable("test")
+        }.getMessage
+        assert(e.contains(
+          "The minimal number of spark.sql.inMemoryColumnarStorage.batchSize is 1, but got 0"))
+      }
     }
   }
 
