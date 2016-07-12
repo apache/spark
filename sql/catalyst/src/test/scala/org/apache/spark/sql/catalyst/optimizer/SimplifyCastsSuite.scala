@@ -32,7 +32,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable to non-nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
+    val input = LocalRelation('a.array(ArrayType(IntegerType)))
     val array_intPrimitive = Literal.create(
       Seq(1, 2, 3, 4, 5), ArrayType(IntegerType, false))
     val plan = input.select(array_intPrimitive
@@ -43,7 +43,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable to nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
+    val input = LocalRelation('a.array(ArrayType(IntegerType)))
     val array_intPrimitive = Literal.create(
       Seq(1, 2, 3, 4, 5), ArrayType(IntegerType, false))
     val plan = input.select(array_intPrimitive
@@ -54,7 +54,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable to non-nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val input = LocalRelation('a.array(ArrayType(IntegerType)))
     val array_intNull = Literal.create(
       Seq(1, 2, null, 4, 5), ArrayType(IntegerType, true))
     val plan = input.select(array_intNull
@@ -64,7 +64,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable to nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val input = LocalRelation('a.array(ArrayType(IntegerType)))
     val array_intNull = Literal.create(
       Seq(1, 2, null, 4, 5), ArrayType(IntegerType, true))
     val plan = input.select(array_intNull
@@ -75,7 +75,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable to non-nullable map cast") {
-    val input = LocalRelation('m.array(MapType(StringType, StringType, false)))
+    val input = LocalRelation('m.array(MapType(StringType, StringType)))
     val map_notNull = Literal.create(
       Map("a" -> "123", "b" -> "true", "c" -> "f"), MapType(StringType, StringType, false))
     val plan = input.select(map_notNull
@@ -86,7 +86,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable to nullable map cast") {
-    val input = LocalRelation('m.array(MapType(StringType, StringType, false)))
+    val input = LocalRelation('m.array(MapType(StringType, StringType)))
     val map_notNull = Literal.create(
       Map("a" -> "123", "b" -> "true", "c" -> "f"), MapType(StringType, StringType, false))
     val plan = input.select(map_notNull
@@ -97,7 +97,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable to non-nullable map cast") {
-    val input = LocalRelation('m.array(MapType(StringType, StringType, true)))
+    val input = LocalRelation('m.array(MapType(StringType, StringType)))
     val map_Null = Literal.create(
       Map("a" -> "123", "b" -> null, "c" -> "f"), MapType(StringType, StringType, true))
     val plan = input.select(map_Null
@@ -107,7 +107,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable to nullable map cast") {
-    val input = LocalRelation('m.array(MapType(StringType, StringType, true)))
+    val input = LocalRelation('m.array(MapType(StringType, StringType)))
     val map_Null = Literal.create(
       Map("a" -> "123", "b" -> null, "c" -> "f"), MapType(StringType, StringType, true))
     val plan = input.select(map_Null
