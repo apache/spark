@@ -24,9 +24,12 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("reflect and java_method") {
     val df = Seq((1, "one")).toDF("a", "b")
+    val className = ReflectClass.getClass.getName.stripSuffix("$")
     checkAnswer(
-      df.selectExpr("reflect('org.apache.spark.sql.ReflectClass', 'method1', a, b)"),
-      Row("m1one"))
+      df.selectExpr(
+        s"reflect('$className', 'method1', a, b)",
+        s"java_method('$className', 'method1', a, b)"),
+      Row("m1one", "m1one"))
   }
 }
 

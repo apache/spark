@@ -42,7 +42,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   import CallMethodViaReflection._
 
   // Get rid of the $ so we are getting the companion object's name.
-  private val staticClassName = ReflectStaticClass.getClass.getName.replace("$", "")
+  private val staticClassName = ReflectStaticClass.getClass.getName.stripSuffix("$")
   private val dynamicClassName = classOf[ReflectDynamicClass].getName
 
   test("findMethod via reflection for static methods") {
