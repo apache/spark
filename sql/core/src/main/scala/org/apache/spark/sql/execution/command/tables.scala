@@ -413,13 +413,14 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     } else {
       val metadata = catalog.getTableMetadata(table)
 
-      val schema = if (DDLUtils.isDatasourceTable(metadata)) {
-        DDLUtils.getSchemaFromTableProperties(metadata)
-          .getOrElse(catalog.lookupRelation(table).schema)
+      if (DDLUtils.isDatasourceTable(metadata)) {
+        DDLUtils.getSchemaFromTableProperties(metadata) match {
+          case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, result)
+          case None => describeSchema(catalog.lookupRelation(table).schema, result)
+        }
       } else {
-        catalog.lookupRelation(table).schema
+        describeSchema(metadata.schema, result)
       }
-      describeSchema(schema, result)
 
       if (isExtended) {
         describeExtended(metadata, result)
