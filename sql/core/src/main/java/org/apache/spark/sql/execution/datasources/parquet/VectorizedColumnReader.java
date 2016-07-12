@@ -141,12 +141,12 @@ public class VectorizedColumnReader {
     while (true) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
-      // When we reach the end of this page, we update repetition info of this column
+      // When we reach the end of this page, we construct nested records of this column
       // and then read next page.
       if (leftInPage == 0) {
-        // Update repetition info for this column.
+        // Constructs nested records if needed.
         if (valuesReadInPage > 0 && isNestedColumn) {
-          updateReptitionInfo(column, rowIds, offsets, valuesReadInPage, total);
+          constructNestedRecords(column, rowIds, offsets, valuesReadInPage, total);
           if (rowIds.containsKey(1)) {
             repeatedRowId = rowIds.get(1);
           }
@@ -507,7 +507,14 @@ public class VectorizedColumnReader {
   }
 
   /**
-   * Inserts arrays into parent repeated columns.
+   * Inserts records into parent columns of a column. These parent columns are repeated columns. As
+   * the real data are read into the column, we only need to insert array into its repeated columns.
+   * @param column The ColumnVector which the data in the page are read into.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param offsets The beginning offsets in columns which we use to construct nested records.
+   * @param reptitionMap Mapping between repetition levels and their corresponding counts.
+   * @param total The total number of rows to construct.
+   * @param repLevel The current repetition level.
    */
   private void insertRepeatedArray(
       ColumnVector column,
@@ -522,10 +529,9 @@ public class VectorizedColumnReader {
       parentRepeatedColumn = parentRepeatedColumn.getNearestParentArrayColumn();
       if (parentRepeatedColumn != null) {
         int parentColRepLevel = parentRepeatedColumn.getRepLevel();
-        // Only process the parent columns whose repetition levels are equal to or more than
-        // the given repetition level (less than or equal to max repetition level).
-        // E.g., when the current repetition level is 1 and max repetition level us 2,
-        // we only add arrays into the column whose repetition level is 1.
+        // The current repetition level means the beginning level of the current value. Thus,
+        // we only need to insert array into the parent columns whose repetition levels are
+        // equal to or more than the given repetition level.
         if (parentColRepLevel >= repLevel) {
           // Current row id at this column.
           int rowId = 0;
@@ -562,6 +568,7 @@ public class VectorizedColumnReader {
             reptitionMap.put(curRepLevel - 1, nextRepCount + 1);
           }
 
+          // In vectorization, the most outside repeated element is at the reptition 1.
           if (curRepLevel == 1 && rowId == total) {
             return;
           }
@@ -575,6 +582,13 @@ public class VectorizedColumnReader {
     }
   }
 
+  /**
+   * Finds the outside element of an inner element which is defined as Catalyst DataType,
+   * with the specified definition level.
+   * @param column The column as the beginning level for looking up the inner element.
+   * @param defLevel The specified definition level.
+   * @return the column which is the outside group element of the inner element.
+   */
   private ColumnVector findInnerElementWithDefLevel(ColumnVector column, int defLevel) {
     while (true) {
       if (column == null) {
@@ -591,6 +605,13 @@ public class VectorizedColumnReader {
     }
   }
 
+  /**
+   * Finds the outside element of the inner element which is not defined as Catalyst DataType,
+   * with the specified definition level.
+   * @param column The column as the beginning level for looking up the inner element.
+   * @param defLevel The specified definition level.
+   * @return the column which is the outside group element of the inner element.
+   */
   private ColumnVector findHiddenInnerElementWithDefLevel(ColumnVector column, int defLevel) {
     while (true) {
       if (column == null) {
@@ -607,6 +628,11 @@ public class VectorizedColumnReader {
     }
   }
 
+  /**
+   * Checks if the given column is a legacy array in Parquet schema.
+   * @param column The column we want to check if it is legacy array.
+   * @return whether the given column is a legacy array in Parquet schema.
+   */
   private boolean isLegacyArray(ColumnVector column) {
     ColumnVector parent = column.getNearestParentArrayColumn();
     if (parent == null) {
@@ -617,6 +643,11 @@ public class VectorizedColumnReader {
     return false;
   }
 
+  /**
+   * Increases row id for a specified repetition level.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param level repetition level.
+   */
   private void increaseRowId(Map<Integer, Integer> rowIds, int level) {
     int rowId = 0;
     if (rowIds.containsKey(level)) {
@@ -625,6 +656,12 @@ public class VectorizedColumnReader {
     rowIds.put(level, rowId + 1);
   }
 
+  /**
+   * Inserts a null record at specified column.
+   * @param column The ColumnVector which the data in the page are read into.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param reptitionMap Mapping between repetition levels and their corresponding counts.
+   */
   private void insertNullRecord(
       ColumnVector column,
       Map<Integer, Integer> rowIds,
@@ -650,10 +687,15 @@ public class VectorizedColumnReader {
   }
 
   /**
-   * Reads repetition level for each value and updates length and offset info for above columns,
-   * recursively.
+   * Iterates the values of definition and repetition levels for the values read in the page,
+   * and constructs nested records accordingly.
+   * @param column The ColumnVector which the data in the page are read into.
+   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
+   * @param offsets The beginning offsets in columns which we use to construct nested records.
+   * @param valuesReadInPage The number of values read in the current page.
+   * @param total The total number of rows to construct.
    */
-  private void updateReptitionInfo(
+  private void constructNestedRecords(
       ColumnVector column,
       Map<Integer, Integer> rowIds,
       Map<Integer, Integer> offsets,
