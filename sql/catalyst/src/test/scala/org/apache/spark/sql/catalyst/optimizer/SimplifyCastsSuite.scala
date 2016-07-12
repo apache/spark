@@ -60,7 +60,7 @@ class SimplifyCastsSuite extends PlanTest {
     val plan = input.select(array_intNull
       .cast(ArrayType(IntegerType, false)).as('a)).analyze
     val optimized = Optimize.execute(plan)
-    assert(optimized.resolved === false)
+    comparePlans(optimized, plan)
   }
 
   test("nullable to nullable array cast") {
@@ -103,7 +103,7 @@ class SimplifyCastsSuite extends PlanTest {
     val plan = input.select(map_Null
       .cast(MapType(StringType, StringType, false)).as('m)).analyze
     val optimized = Optimize.execute(plan)
-    assert(optimized.resolved === false)
+    comparePlans(optimized, plan)
   }
 
   test("nullable to nullable map cast") {
