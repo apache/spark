@@ -86,6 +86,7 @@ class Analyzer(
       WindowsSubstitution,
       EliminateUnions),
     Batch("Resolution", fixedPoint,
+      ResolveHint ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveDeserializer ::
@@ -1782,6 +1783,29 @@ class Analyzer(
             .map { case (_, expr) => IsNull(expr) }
             .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
           inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
+      }
+    }
+  }
+
+  /**
+   * Resolve Hints.
+   */
+  object ResolveHint extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case logical: LogicalPlan => logical transformDown {
+        case h @ Hint(name, parameters, child) if name.equalsIgnoreCase("MAPJOIN") =>
+          var resolvedChild = child
+          for (table <- parameters) {
+            var stop = false
+            resolvedChild = child.transformDown {
+              case r @ BroadcastHint(UnresolvedRelation(_, _)) => r
+              case r @ UnresolvedRelation(t, _) if !stop && t.table == table =>
+                stop = true
+                BroadcastHint(r)
+            }
+          }
+          resolvedChild
+        case Hint(_, _, child) => child // Remove unrecognized hint.
       }
     }
   }

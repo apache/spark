@@ -339,24 +339,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.SELECT =>
         // Regular select
 
-        // Broadcast hints
-        var withBroadcastedTable = relation
-        if (ctx.hint != null) {
-          val broadcastedTables =
-            hint.mapJoinHint.broadcastedTables.asScala.map(visitTableIdentifier)
-          for (table <- broadcastedTables) {
-            var stop = false
-            withBroadcastedTable = withBroadcastedTable.transformDown {
-              case r @ BroadcastHint(UnresolvedRelation(_, _)) => r
-              case r @ UnresolvedRelation(t, _) if !stop && t == table =>
-                stop = true
-                BroadcastHint(r)
-            }
-          }
-        }
+        // Add hints.
+        val withHint = relation.optionalMap(ctx.hint)(withHints)
 
         // Add lateral views.
-        val withLateralView = ctx.lateralView.asScala.foldLeft(withBroadcastedTable)(withGenerate)
+        val withLateralView = ctx.lateralView.asScala.foldLeft(withHint)(withGenerate)
 
         // Add where.
         val withFilter = withLateralView.optionalMap(where)(filter)
@@ -521,6 +508,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         groupByExpressions
       }
       Aggregate(mappedGroupByExpressions, selectExpressions, query)
+    }
+  }
+
+  /**
+   * Add a Hint to a logical plan.
+   */
+  private def withHints(
+      ctx: HintContext,
+      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val stmt = ctx.hintStatement
+    val name = stmt.hintName.getText
+    if (stmt.parameter1 != null && stmt.parameter2 != null) {
+      Hint(name, Seq(stmt.parameter1.getText, stmt.parameter2.getText), relation)
+    } else if (stmt.identifierList != null) {
+      Hint(name, visitIdentifierList(stmt.identifierList), relation)
+    } else {
+      Hint(name, Seq.empty[String], relation)
     }
   }
 

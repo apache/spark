@@ -354,6 +354,14 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override lazy val statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
+/**
+ * A general hint for the child.
+ * a pair of (name, parameters).
+ */
+case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
 case class InsertIntoTable(
     table: LogicalPlan,
     partition: Map[String, Option[String]],

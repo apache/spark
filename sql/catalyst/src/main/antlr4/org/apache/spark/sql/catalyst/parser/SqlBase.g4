@@ -348,11 +348,12 @@ querySpecification
     ;
 
 hint
-    : '/*+' mapJoinHint '*/'
+    : '/*+' hintStatement '*/'
     ;
 
-mapJoinHint
-    : MAPJOIN '(' broadcastedTables+=tableIdentifier (',' broadcastedTables+=tableIdentifier)* ')'
+hintStatement
+    : hintName=identifier identifierList
+    | hintName=identifier '(' parameter1=identifier parameter2=identifier ')'
     ;
 
 fromClause
@@ -669,7 +670,6 @@ nonReserved
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
-    | MAPJOIN
     ;
 
 SELECT: 'SELECT';
@@ -722,7 +722,6 @@ RIGHT: 'RIGHT';
 FULL: 'FULL';
 NATURAL: 'NATURAL';
 ON: 'ON';
-MAPJOIN: 'MAPJOIN';
 LATERAL: 'LATERAL';
 WINDOW: 'WINDOW';
 OVER: 'OVER';

@@ -447,4 +447,24 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select a, b from db.c where x !> 1",
       table("db", "c").where('x <= 1).select('a, 'b))
   }
+
+  test("select hint syntax") {
+    // Hive compatibility: Missing parameter raises ParseException.
+    val m = intercept[ParseException] {
+      parsePlan("SELECT /*+ HINT() */ * FROM t")
+    }.getMessage
+    assert(m.contains("no viable alternative at input"))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t"),
+      Hint("MAPJOIN", Seq("u"), table("t")).select(star()))
+
+    comparePlans(
+      parsePlan("SELECT /*+ STREAMTABLE(a,b,c) */ * FROM t"),
+      Hint("STREAMTABLE", Seq("a", "b", "c"), table("t")).select(star()))
+
+    comparePlans(
+      parsePlan("SELECT /*+ INDEX(t emp_job_ix) */ * FROM t"),
+      Hint("INDEX", Seq("t", "emp_job_ix"), table("t")).select(star()))
+  }
 }

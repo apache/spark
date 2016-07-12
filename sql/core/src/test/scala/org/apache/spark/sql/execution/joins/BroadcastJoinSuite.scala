@@ -154,37 +154,24 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("select hint") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-    import org.apache.spark.sql.catalyst.dsl.plans._
-    import org.apache.spark.sql.catalyst.parser.ParseException
-    import org.apache.spark.sql.catalyst.plans._
-    import org.apache.spark.sql.catalyst.plans.logical._
-    import org.apache.spark.sql.catalyst.expressions._
-    import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
+  test("MAPJOIN Hint") {
+    import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join}
 
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(u) */ * FROM t JOIN u ON a = b"),
-      table("t").join(BroadcastHint(table("u")), Inner, Option(EqualTo('a, 'b))).select(star()))
+    spark.range(10).createOrReplaceTempView("t")
+    spark.range(10).createOrReplaceTempView("u")
 
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(t) */ * FROM t JOIN u ON a = b"),
-      BroadcastHint(table("t")).join(table("u"), Inner, Option(EqualTo('a, 'b))).select(star()))
+    val plan1 = sql("SELECT /*+ MAPJOIN(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+      .optimizedPlan
+    val plan2 = sql("SELECT /*+ MAPJOIN(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+      .optimizedPlan
+    val plan3 = sql("SELECT /*+ MAPJOIN(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+      .optimizedPlan
 
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(t, u) */ * FROM t JOIN u ON a = b"),
-      BroadcastHint(table("t")).join(BroadcastHint(table("u")), Inner, Option(EqualTo('a, 'b)))
-        .select(star()))
-
-    // Hive compatibility: Wrong tables should be ignored in HINT silently.
-    comparePlans(
-      parsePlan("SELECT /*+ MAPJOIN(xxx, yyy) */ * FROM t JOIN u ON a = b"),
-      table("t").join(table("u"), Inner, Option(EqualTo('a, 'b))).select(star()))
-
-    // Hive compatibility: Missing table raises ParseException.
-    val m = intercept[ParseException] {
-      parsePlan("SELECT /*+ MAPJOIN() */ * FROM t JOIN u ON a = b")
-    }.getMessage
-    assert(m.contains("mismatched input ')'"))
+    assert(plan1.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
+    assert(!plan1.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+    assert(!plan2.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
+    assert(plan2.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+    assert(!plan3.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
+    assert(!plan3.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
   }
 }
