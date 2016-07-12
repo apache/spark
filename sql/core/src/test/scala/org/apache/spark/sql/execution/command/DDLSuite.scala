@@ -1416,10 +1416,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("test drop ignore non-exist for DROP TABLE/VIEW/Function/Partitions") {
+  test("SPARK-16497 Don't throw an exception if drop non-existent TABLE/VIEW/Function/Partitions") {
     withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 INT, col2 INT) PARTITIONED BY (part1 INT)")
+      withSQLConf(SQLConf.DROP_IGNORENONEXIST.key -> "true") {
+        sql("DROP TABLE nonExistTable")
+        sql("DROP VIEW nonExistView")
+        sql("DROP Function nonExistFunction")
+        sql("ALTER TABLE tbl DROP PARTITION (part1 = 1)")
+      }
       withSQLConf(SQLConf.DROP_IGNORENONEXIST.key -> "false") {
-        sql("CREATE TABLE tbl(a INT, b INT) USING parquet PARTITIONED BY (a)")
         intercept[AnalysisException] {
           sql("DROP TABLE nonExistTable")
         }
@@ -1430,7 +1436,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql("DROP Function nonExistFunction")
         }
         intercept[AnalysisException] {
-          sql("ALTER TABLE tbl DROP IF EXISTS PARTITION (a=1)")
+          sql("ALTER TABLE tbl DROP PARTITION (part1 = 1)")
         }
       }
     }
