@@ -76,6 +76,16 @@ case class OptimizeMetadataOnlyQuery(
   }
 
   /**
+   * Returns the partition attributes of the table relation plan.
+   */
+  private def getPartitionAttrs(
+      partitionColumnNames: Seq[String],
+      relation: LogicalPlan): Seq[Attribute] = {
+    val partColumns = partitionColumnNames.map(_.toLowerCase).toSet
+    relation.output.filter(a => partColumns.contains(a.name.toLowerCase))
+  }
+
+  /**
    * Transform the given plan, find its table scan nodes that matches the given relation, and then
    * replace the table scan node with its corresponding partition values.
    */
@@ -86,14 +96,12 @@ case class OptimizeMetadataOnlyQuery(
       case plan if plan eq relation =>
         relation match {
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
-            val partAttrs = PartitionedRelation.getPartitionAttrs(
-              fsRelation.partitionSchema.map(_.name), l)
+            val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(filters = Nil)
             LocalRelation(partAttrs, partitionData.map(_.values))
 
           case relation: CatalogRelation =>
-            val partAttrs = PartitionedRelation.getPartitionAttrs(
-              relation.catalogTable.partitionColumnNames, relation)
+            val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
             val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
                 Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
@@ -116,17 +124,17 @@ case class OptimizeMetadataOnlyQuery(
    * deterministic expressions, and returns result after reaching the partitioned table relation
    * node.
    */
-  private[execution] object PartitionedRelation {
+  object PartitionedRelation {
 
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
       case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)
         if fsRelation.partitionSchema.nonEmpty =>
         val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-        Some(AttributeSet(partAttrs), l)
+        Some(partAttrs, l)
 
       case relation: CatalogRelation if relation.catalogTable.partitionColumnNames.nonEmpty =>
         val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
-        Some(AttributeSet(partAttrs), relation)
+        Some(partAttrs, relation)
 
       case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
         unapply(child).flatMap { case (partAttrs, relation) =>
@@ -144,10 +152,11 @@ case class OptimizeMetadataOnlyQuery(
     /**
      * Returns the partition attributes of the table relation plan.
      */
-    def getPartitionAttrs(partitionColumnNames: Seq[String], relation: LogicalPlan)
-        : Seq[Attribute] = {
+    private def getPartitionAttrs(
+        partitionColumnNames: Seq[String],
+        relation: LogicalPlan): AttributeSet = {
       val partColumns = partitionColumnNames.map(_.toLowerCase).toSet
-      relation.output.filter(a => partColumns.contains(a.name.toLowerCase))
+      AttributeSet(relation.output.filter(a => partColumns.contains(a.name.toLowerCase)))
     }
   }
 }
