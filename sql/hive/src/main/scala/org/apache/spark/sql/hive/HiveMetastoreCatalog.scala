@@ -279,7 +279,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           hadoopFsRelation.partitionColumns.nonEmpty
         } catch {
           case _: java.io.FileNotFoundException =>
-            // When we reach here, it is possible that underlying dir for the table
+            // When we reach here, it is possible that the underlying dir for the table
             // has not been created. So, there is no partition.
             false
         }
@@ -302,8 +302,9 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       HiveTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        // Since the table is not partitioned, we use dataSchema instead of using schema,
-        // which will trigger partition discovery on the path that may not be created.
+        // Since the table is not partitioned, we use dataSchema instead of using schema.
+        // Using schema which will trigger partition discovery on the path that
+        // may not be created.
         schema = schemaToHiveColumn(relation.dataSchema),
         partitionColumns = Nil,
         tableType = tableType,

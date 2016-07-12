@@ -707,9 +707,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       options = Map("path" -> "an invalid path"),
       isExternal = false)
 
-    invalidateTable("test_drop_table_with_invalid_path")
-
-    sql("DROP TABLE IF EXISTS test_drop_table_with_invalid_path")
+    sql("DROP TABLE test_drop_table_with_invalid_path")
   }
 
   test("SPARK-6024 wide schema support") {
@@ -729,7 +727,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           isExternal = false)
 
         invalidateTable("wide_schema")
-
 
         val actualSchema = table("wide_schema").schema
         assert(schema === actualSchema)
