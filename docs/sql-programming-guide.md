@@ -435,6 +435,7 @@ a `DataFrame` can be created programmatically with three steps.
 by `SparkSession`.
 
 For example:
+
 {% include_example programmatic_schema scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
 </div>
 
@@ -452,6 +453,7 @@ a `Dataset<Row>` can be created programmatically with three steps.
 by `SparkSession`.
 
 For example:
+
 {% include_example programmatic_schema java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
 </div>
 

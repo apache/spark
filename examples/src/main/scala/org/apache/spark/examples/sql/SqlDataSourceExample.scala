@@ -24,10 +24,10 @@ object SqlDataSourceExample {
 
   def main(args: Array[String]) {
     val spark = SparkSession
-        .builder()
-        .appName("Spark SQL Data Soures Example")
-        .config("spark.some.config.option", "some-value")
-        .getOrCreate()
+      .builder()
+      .appName("Spark SQL Data Soures Example")
+      .config("spark.some.config.option", "some-value")
+      .getOrCreate()
 
     runBasicDataSourceExample(spark)
     runBasicParquetExample(spark)
@@ -70,6 +70,11 @@ object SqlDataSourceExample {
     parquetFileDF.createOrReplaceTempView("parquetFile")
     val namesDF = spark.sql("SELECT name FROM parquetFile WHERE age BETWEEN 13 AND 19")
     namesDF.map(attributes => "Name: " + attributes(0)).show()
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
     // $example off:basic_parquet_example$
   }
 
@@ -120,6 +125,11 @@ object SqlDataSourceExample {
     // SQL statements can be run by using the sql methods provided by spark
     val teenagerNamesDF = spark.sql("SELECT name FROM people WHERE age BETWEEN 13 AND 19")
     teenagerNamesDF.show()
+    // +------+
+    // |  name|
+    // +------+
+    // |Justin|
+    // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
     // an RDD[String] storing one JSON object per string
@@ -127,6 +137,11 @@ object SqlDataSourceExample {
       """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
     val otherPeople = spark.read.json(otherPeopleRDD)
     otherPeople.show()
+    // +---------------+----+
+    // |        address|name|
+    // +---------------+----+
+    // |[Columbus,Ohio]| Yin|
+    // +---------------+----+
     // $example off:json_dataset$
   }
 

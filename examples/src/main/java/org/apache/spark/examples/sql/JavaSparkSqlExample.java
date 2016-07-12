@@ -55,6 +55,11 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 // $example off:programmatic_schema$
 
+// $example on:untyped_ops$
+// col("...") is preferable to df.col("...")
+import static org.apache.spark.sql.functions.col;
+// $example off:untyped_ops$
+
 public class JavaSparkSqlExample {
   // $example on:create_ds$
   public static class Person implements Serializable {
@@ -82,10 +87,10 @@ public class JavaSparkSqlExample {
   public static void main(String[] args) {
     // $example on:init_session$
     SparkSession spark = SparkSession
-        .builder()
-        .appName("Java Spark SQL Example")
-        .config("spark.some.config.option", "some-value")
-        .getOrCreate();
+      .builder()
+      .appName("Java Spark SQL Example")
+      .config("spark.some.config.option", "some-value")
+      .getOrCreate();
     // $example off:init_session$
 
     runBasicDataFrameExample(spark);
@@ -102,10 +107,13 @@ public class JavaSparkSqlExample {
 
     // Displays the content of the DataFrame to stdout
     df.show();
-    // age  name
-    // null Michael
-    // 30   Andy
-    // 19   Justin
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
     // $example off:create_df$
 
     // $example on:untyped_ops$
@@ -117,29 +125,41 @@ public class JavaSparkSqlExample {
 
     // Select only the "name" column
     df.select("name").show();
-    // name
-    // Michael
-    // Andy
-    // Justin
+    // +-------+
+    // |   name|
+    // +-------+
+    // |Michael|
+    // |   Andy|
+    // | Justin|
+    // +-------+
 
     // Select everybody, but increment the age by 1
-    df.select(df.col("name"), df.col("age").plus(1)).show();
-    // name    (age + 1)
-    // Michael null
-    // Andy    31
-    // Justin  20
+    df.select(col("name"), col("age").plus(1)).show();
+    // +-------+---------+
+    // |   name|(age + 1)|
+    // +-------+---------+
+    // |Michael|     null|
+    // |   Andy|       31|
+    // | Justin|       20|
+    // +-------+---------+
 
     // Select people older than 21
-    df.filter(df.col("age").gt(21)).show();
-    // age name
-    // 30  Andy
+    df.filter(col("age").gt(21)).show();
+    // +---+----+
+    // |age|name|
+    // +---+----+
+    // | 30|Andy|
+    // +---+----+
 
     // Count people by age
     df.groupBy("age").count().show();
-    // age  count
-    // null 1
-    // 19   1
-    // 30   1
+    // +----+-----+
+    // | age|count|
+    // +----+-----+
+    // |  19|    1|
+    // |null|    1|
+    // |  30|    1|
+    // +----+-----+
     // $example off:untyped_ops$
 
     // $example on:run_sql$
@@ -148,6 +168,13 @@ public class JavaSparkSqlExample {
 
     Dataset<Row> sqlDF = spark.sql("SELECT * FROM people");
     sqlDF.show();
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
     // $example off:run_sql$
   }
 
@@ -161,10 +188,15 @@ public class JavaSparkSqlExample {
     // Encoders are created for Java beans
     Encoder<Person> personEncoder = Encoders.bean(Person.class);
     Dataset<Person> javaBeanDS = spark.createDataset(
-        Collections.singletonList(person),
-        personEncoder
+      Collections.singletonList(person),
+      personEncoder
     );
     javaBeanDS.show();
+    // +---+----+
+    // |age|name|
+    // +---+----+
+    // | 32|Andy|
+    // +---+----+
 
     // Encoders for most common types are provided in class Encoders
     Encoder<Integer> integerEncoder = Encoders.INT();
@@ -181,6 +213,13 @@ public class JavaSparkSqlExample {
     String path = "examples/src/main/resources/people.json";
     Dataset<Person> peopleDS = spark.read().json(path).as(personEncoder);
     peopleDS.show();
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
     // $example off:create_ds$
   }
 
@@ -188,18 +227,18 @@ public class JavaSparkSqlExample {
     // $example on:schema_inferring$
     // Create an RDD of Person objects from a text file
     JavaRDD<Person> peopleRDD = spark.read()
-        .textFile("examples/src/main/resources/people.txt")
-        .javaRDD()
-        .map(new Function<String, Person>() {
-          @Override
-          public Person call(String line) throws Exception {
-            String[] parts = line.split(",");
-            Person person = new Person();
-            person.setName(parts[0]);
-            person.setAge(Integer.parseInt(parts[1].trim()));
-            return person;
-          }
-        });
+      .textFile("examples/src/main/resources/people.txt")
+      .javaRDD()
+      .map(new Function<String, Person>() {
+        @Override
+        public Person call(String line) throws Exception {
+          String[] parts = line.split(",");
+          Person person = new Person();
+          person.setName(parts[0]);
+          person.setAge(Integer.parseInt(parts[1].trim()));
+          return person;
+        }
+      });
 
     // Apply a schema to an RDD of JavaBeans to get a DataFrame
     Dataset<Row> peopleDF = spark.createDataFrame(peopleRDD, Person.class);
@@ -218,6 +257,11 @@ public class JavaSparkSqlExample {
       }
     }, stringEncoder);
     teenagerNamesByIndexDF.show();
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
 
     // or by field name
     Dataset<String> teenagerNamesByFieldDF = teenagersDF.map(new MapFunction<Row, String>() {
@@ -227,6 +271,11 @@ public class JavaSparkSqlExample {
       }
     }, stringEncoder);
     teenagerNamesByFieldDF.show();
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
     // $example off:schema_inferring$
   }
 
@@ -234,8 +283,8 @@ public class JavaSparkSqlExample {
     // $example on:programmatic_schema$
     // Create an RDD
     JavaRDD<String> peopleRDD = spark.sparkContext()
-        .textFile("examples/src/main/resources/people.txt", 1)
-        .toJavaRDD();
+      .textFile("examples/src/main/resources/people.txt", 1)
+      .toJavaRDD();
 
     // The schema is encoded in a string
     String schemaString = "name age";
@@ -275,6 +324,13 @@ public class JavaSparkSqlExample {
       }
     }, Encoders.STRING());
     namesDS.show();
+    // +-------------+
+    // |        value|
+    // +-------------+
+    // |Name: Michael|
+    // |   Name: Andy|
+    // | Name: Justin|
+    // +-------------+
     // $example off:programmatic_schema$
   }
 }

@@ -41,11 +41,11 @@ object SparkHiveExample {
     val warehouseLocation = "file:${system:user.dir}/spark-warehouse"
 
     val spark = SparkSession
-        .builder()
-        .appName("Spark Hive Example")
-        .config("spark.sql.warehouse.dir", warehouseLocation)
-        .enableHiveSupport()
-        .getOrCreate()
+      .builder()
+      .appName("Spark Hive Example")
+      .config("spark.sql.warehouse.dir", warehouseLocation)
+      .enableHiveSupport()
+      .getOrCreate()
 
     import spark.implicits._
     import spark.sql
@@ -55,9 +55,21 @@ object SparkHiveExample {
 
     // Queries are expressed in HiveQL
     sql("SELECT * FROM src").show()
+    // +---+-------+
+    // |key|  value|
+    // +---+-------+
+    // |238|val_238|
+    // | 86| val_86|
+    // |311|val_311|
+    // ...
 
     // Aggregation queries are also supported.
     sql("SELECT COUNT(*) FROM src").show()
+    // +--------+
+    // |count(1)|
+    // +--------+
+    // |    500 |
+    // +--------+
 
     // The results of SQL queries are themselves DataFrames and support all normal functions.
     val sqlDF = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
@@ -67,6 +79,13 @@ object SparkHiveExample {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
     stringsDS.show()
+    // +--------------------+
+    // |               value|
+    // +--------------------+
+    // |Key: 0, Value: val_0|
+    // |Key: 0, Value: val_0|
+    // |Key: 0, Value: val_0|
+    // ...
 
     // You can also use DataFrames to create temporary views within a HiveContext.
     val recordsDF = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
@@ -74,6 +93,13 @@ object SparkHiveExample {
 
     // Queries can then join DataFrame data with data stored in Hive.
     sql("SELECT * FROM records r JOIN src s ON r.key = s.key").show()
+    // +---+------+---+------+
+    // |key| value|key| value|
+    // +---+------+---+------+
+    // |  2| val_2|  2| val_2|
+    // |  2| val_2|  2| val_2|
+    // |  4| val_4|  4| val_4|
+    // ...
     // $example off:spark_hive$
 
     spark.stop()

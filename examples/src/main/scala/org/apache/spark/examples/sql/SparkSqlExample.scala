@@ -41,10 +41,10 @@ object SparkSqlExample {
   def main(args: Array[String]) {
     // $example on:init_session$
     val spark = SparkSession
-        .builder()
-        .appName("Spark SQL Example")
-        .config("spark.some.config.option", "some-value")
-        .getOrCreate()
+      .builder()
+      .appName("Spark SQL Example")
+      .config("spark.some.config.option", "some-value")
+      .getOrCreate()
 
     // For implicit conversions like converting RDDs to DataFrames
     import spark.implicits._
@@ -64,13 +64,18 @@ object SparkSqlExample {
 
     // Displays the content of the DataFrame to stdout
     df.show()
-    // age  name
-    // null Michael
-    // 30   Andy
-    // 19   Justin
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
     // $example off:create_df$
 
     // $example on:untyped_ops$
+    // This import is needed to use the $-notation
+    import spark.implicits._
     // Print the schema in a tree format
     df.printSchema()
     // root
@@ -79,29 +84,41 @@ object SparkSqlExample {
 
     // Select only the "name" column
     df.select("name").show()
-    // name
-    // Michael
-    // Andy
-    // Justin
+    // +-------+
+    // |   name|
+    // +-------+
+    // |Michael|
+    // |   Andy|
+    // | Justin|
+    // +-------+
 
     // Select everybody, but increment the age by 1
-    df.select(df("name"), df("age") + 1).show()
-    // name    (age + 1)
-    // Michael null
-    // Andy    31
-    // Justin  20
+    df.select($"name", $"age" + 1).show()
+    // +-------+---------+
+    // |   name|(age + 1)|
+    // +-------+---------+
+    // |Michael|     null|
+    // |   Andy|       31|
+    // | Justin|       20|
+    // +-------+---------+
 
     // Select people older than 21
-    df.filter(df("age") > 21).show()
-    // age name
-    // 30  Andy
+    df.filter($"age" > 21).show()
+    // +---+----+
+    // |age|name|
+    // +---+----+
+    // | 30|Andy|
+    // +---+----+
 
     // Count people by age
     df.groupBy("age").count().show()
-    // age  count
-    // null 1
-    // 19   1
-    // 30   1
+    // +----+-----+
+    // | age|count|
+    // +----+-----+
+    // |  19|    1|
+    // |null|    1|
+    // |  30|    1|
+    // +----+-----+
     // $example off:untyped_ops$
 
     // $example on:run_sql$
@@ -110,6 +127,13 @@ object SparkSqlExample {
 
     val sqlDF = spark.sql("SELECT * FROM people")
     sqlDF.show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
     // $example off:run_sql$
   }
 
@@ -119,6 +143,11 @@ object SparkSqlExample {
     // Encoders are created for case classes
     val caseClassDS = Seq(Person("Andy", 32)).toDS()
     caseClassDS.show()
+    // +----+---+
+    // |name|age|
+    // +----+---+
+    // |Andy| 32|
+    // +----+---+
 
     // Encoders for most common types are automatically provided by importing spark.implicits._
     val primitiveDS = Seq(1, 2, 3).toDS()
@@ -128,6 +157,13 @@ object SparkSqlExample {
     val path = "examples/src/main/resources/people.json"
     val peopleDS = spark.read.json(path).as[Person]
     peopleDS.show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
     // $example off:create_ds$
   }
 
@@ -138,10 +174,10 @@ object SparkSqlExample {
 
     // Create an RDD of Person objects from a text file, convert it to a Dataframe
     val peopleDF = spark.sparkContext
-        .textFile("examples/src/main/resources/people.txt")
-        .map(_.split(","))
-        .map(attributes => Person(attributes(0), attributes(1).trim.toInt))
-        .toDF()
+      .textFile("examples/src/main/resources/people.txt")
+      .map(_.split(","))
+      .map(attributes => Person(attributes(0), attributes(1).trim.toInt))
+      .toDF()
     // Register the DataFrame as a temporary view
     peopleDF.createOrReplaceTempView("people")
 
@@ -150,9 +186,19 @@ object SparkSqlExample {
 
     // The columns of a row in the result can be accessed by field index
     teenagersDF.map(teenager => "Name: " + teenager(0)).show()
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
 
     // or by field name
     teenagersDF.map(teenager => "Name: " + teenager.getAs[String]("name")).show()
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
 
     // No pre-defined encoders for Dataset[Map[K,V]], define explicitly
     implicit val mapEncoder = org.apache.spark.sql.Encoders.kryo[Map[String, Any]]
@@ -176,13 +222,13 @@ object SparkSqlExample {
 
     // Generate the schema based on the string of schema
     val fields = schemaString.split(" ")
-        .map(fieldName => StructField(fieldName, StringType, nullable = true))
+      .map(fieldName => StructField(fieldName, StringType, nullable = true))
     val schema = StructType(fields)
 
     // Convert records of the RDD (people) to Rows
     val rowRDD = peopleRDD
-        .map(_.split(","))
-        .map(attributes => Row(attributes(0), attributes(1).trim))
+      .map(_.split(","))
+      .map(attributes => Row(attributes(0), attributes(1).trim))
 
     // Apply the schema to the RDD
     val peopleDF = spark.createDataFrame(rowRDD, schema)
@@ -196,6 +242,13 @@ object SparkSqlExample {
     // The results of SQL queries are DataFrames and support all the normal RDD operations
     // The columns of a row in the result can be accessed by field index or by field name
     results.map(attributes => "Name: " + attributes(0)).show()
+    // +-------------+
+    // |        value|
+    // +-------------+
+    // |Name: Michael|
+    // |   Name: Andy|
+    // | Name: Justin|
+    // +-------------+
     // $example off:programmatic_schema$
   }
 }
