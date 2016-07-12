@@ -151,6 +151,7 @@ case class DropFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val ignoreIfNotExists = ifExists || sparkSession.sqlContext.conf.dropIgnoreNonExist
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
@@ -159,12 +160,12 @@ case class DropFunctionCommand(
       if (FunctionRegistry.builtin.functionExists(functionName)) {
         throw new AnalysisException(s"Cannot drop native function '$functionName'")
       }
-      catalog.dropTempFunction(functionName, ifExists)
+      catalog.dropTempFunction(functionName, ignoreIfNotExists)
     } else {
       // We are dropping a permanent function.
       catalog.dropFunction(
         FunctionIdentifier(functionName, databaseName),
-        ignoreIfNotExists = ifExists)
+        ignoreIfNotExists)
     }
     Seq.empty[Row]
   }
