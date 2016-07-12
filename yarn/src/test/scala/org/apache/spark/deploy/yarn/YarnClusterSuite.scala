@@ -97,7 +97,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Spark in yarn-cluster mode with different configurations") {
-    testBasicYarnApp(true,
+    testBasicYarnApp(false,
       Map(
         "spark.driver.memory" -> "512m",
         "spark.driver.cores" -> "1",
