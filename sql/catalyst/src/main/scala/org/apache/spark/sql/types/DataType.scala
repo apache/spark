@@ -206,6 +206,7 @@ object DataType {
           leftFields.zip(rightFields).forall { case (l, r) =>
             l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
           }
+      case (l: DataType, r: UserDefinedType[_]) => r.acceptsType(l)
       case (l, r) => l == r
     }
   }
