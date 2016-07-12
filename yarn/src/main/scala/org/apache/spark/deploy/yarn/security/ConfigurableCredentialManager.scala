@@ -29,6 +29,17 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
+/**
+ * A ConfigurableCredentialManager to manage all the registered credential providers and offer
+ * APIs for other modules to obtain credentials as well as renewal time. By default
+ * [[HDFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
+ * be loaded in, any plugged-in credential provider wants to be managed by
+ * ConfigurableCredentialManager needs to implement [[ServiceCredentialProvider]] interface and put
+ * into resources to be loaded by ServiceLoader.
+ *
+ * Also the specific credential provider is controlled by
+ * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
+ */
 final class ConfigurableCredentialManager private[yarn] (sparkConf: SparkConf) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
@@ -98,7 +109,7 @@ final class ConfigurableCredentialManager private[yarn] (sparkConf: SparkConf) e
    * @return Array of time of next renewal if credential can be renewed.
    *         Otherwise will return None instead.
    */
-  def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Array[Option[ Long]] = {
+  def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Array[Option[Long]] = {
     val timeOfNextRenewals = mutable.ArrayBuffer[Option[Long]]()
     credentialProviders.values.foreach { provider =>
       if (provider.isCredentialRequired(hadoopConf)) {
