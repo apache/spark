@@ -782,6 +782,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
     assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
       conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+      conf.set("spark.dynamicAllocation.initialExecutors", "2")
+        .set("spark.executor.instances", "1")) === 3)
   }
 
 
