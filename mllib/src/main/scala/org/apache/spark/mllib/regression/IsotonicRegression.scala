@@ -409,8 +409,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    */
   private def parallelPoolAdjacentViolators(
       input: RDD[(Double, Double, Double)]): Array[(Double, Double, Double)] = {
-    val keyedInput = input
-      .map(x => x._2 -> x)
+    val keyedInput = input.keyBy(_._2)
     val parallelStepResult = keyedInput
       .partitionBy(new RangePartitioner(keyedInput.getNumPartitions, keyedInput))
       .values
