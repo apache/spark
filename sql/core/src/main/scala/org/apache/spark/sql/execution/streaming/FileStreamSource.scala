@@ -73,8 +73,8 @@ class FileStreamSource(
     logTrace(s"Number of seen files = ${seenFiles.size}")
     if (batchFiles.nonEmpty) {
       maxBatchId += 1
-      metadataLog.add(maxBatchId, newFiles)
-      logInfo(s"Max batch id increased to $maxBatchId with ${newFiles.size} new files")
+      metadataLog.add(maxBatchId, batchFiles)
+      logInfo(s"Max batch id increased to $maxBatchId with ${batchFiles.size} new files")
     }
 
     new LongOffset(maxBatchId)
@@ -138,7 +138,7 @@ class FileStreamSource(
       .map { str =>
         Try(str.toInt).toOption.filter(_ > 0).getOrElse {
           throw new IllegalArgumentException(
-            s"Invalid value '$str' for option 'maxFilesPerBatch', must be a positive integer")
+            s"Invalid value '$str' for option 'maxFilesPerTrigger', must be a positive integer")
         }
       }
   }
