@@ -498,34 +498,35 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      val r = ctx.freshName("r")
       dataType match {
         case dt: DecimalType =>
           val decimalAdd = "$plus"
           s"""
-            ${ctx.javaType(dataType)} r = $eval1.remainder($eval2);
-            if (r.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-              ${ev.value} = (r.$decimalAdd($eval2)).remainder($eval2);
+            ${ctx.javaType(dataType)} $r = $eval1.remainder($eval2);
+            if ($r.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
+              ${ev.value} = ($r.$decimalAdd($eval2)).remainder($eval2);
             } else {
-              ${ev.value} = r;
+              ${ev.value} = $r;
             }
           """
         // byte and short are casted into int when add, minus, times or divide
         case ByteType | ShortType =>
           s"""
-            ${ctx.javaType(dataType)} r = (${ctx.javaType(dataType)})($eval1 % $eval2);
-            if (r < 0) {
-              ${ev.value} = (${ctx.javaType(dataType)})((r + $eval2) % $eval2);
+            ${ctx.javaType(dataType)} $r = (${ctx.javaType(dataType)})($eval1 % $eval2);
+            if ($r < 0) {
+              ${ev.value} = (${ctx.javaType(dataType)})(($r + $eval2) % $eval2);
             } else {
-              ${ev.value} = r;
+              ${ev.value} = $r;
             }
           """
         case _ =>
           s"""
-            ${ctx.javaType(dataType)} r = $eval1 % $eval2;
-            if (r < 0) {
-              ${ev.value} = (r + $eval2) % $eval2;
+            ${ctx.javaType(dataType)} $r = $eval1 % $eval2;
+            if ($r < 0) {
+              ${ev.value} = ($r + $eval2) % $eval2;
             } else {
-              ${ev.value} = r;
+              ${ev.value} = $r;
             }
           """
       }
