@@ -297,6 +297,11 @@ public abstract class ColumnVector implements AutoCloseable {
   protected abstract void reserveInternal(int capacity);
 
   /**
+   * Ensures that there is enough storage to store null information.
+   */
+  protected abstract void reserveNulls(int capacity);
+
+  /**
    * Returns the number of nulls in this column.
    */
   public final int numNulls() { return numNulls; }
@@ -1054,6 +1059,7 @@ public abstract class ColumnVector implements AutoCloseable {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
     }
+    reserveNulls(capacity);
     return dictionaryIds;
   }
 

@@ -165,7 +165,10 @@ public class VectorizedColumnReader {
       }
 
       if (leftInPage == 0) {
-        readPage();
+        boolean pageExists = readPage();
+        if (!pageExists) {
+          return;
+        }
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
       int num = Math.min(total, leftInPage);
@@ -449,30 +452,35 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readPage() throws IOException {
+  private boolean readPage() throws IOException {
     DataPage page = pageReader.readPage();
-    // TODO: Why is this a visitor?
-    page.accept(new DataPage.Visitor<Void>() {
-      @Override
-      public Void visit(DataPageV1 dataPageV1) {
-        try {
-          readPageV1(dataPageV1);
-          return null;
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+    if (page == null) {
+      return false;
+    } else {
+      // TODO: Why is this a visitor?
+      page.accept(new DataPage.Visitor<Void>() {
+        @Override
+        public Void visit(DataPageV1 dataPageV1) {
+          try {
+            readPageV1(dataPageV1);
+            return null;
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
         }
-      }
 
-      @Override
-      public Void visit(DataPageV2 dataPageV2) {
-        try {
-          readPageV2(dataPageV2);
-          return null;
-        } catch (IOException e) {
-          throw new RuntimeException(e);
+        @Override
+        public Void visit(DataPageV2 dataPageV2) {
+          try {
+            readPageV2(dataPageV2);
+            return null;
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
         }
-      }
-    });
+      });
+      return true;
+    }
   }
 
   private void initDataReader(Encoding dataEncoding, byte[] bytes, int offset) throws IOException {
@@ -549,6 +557,7 @@ public class VectorizedColumnReader {
             offset = offsets.get(curRepLevel);
           }
 
+          parentRepeatedColumn.reserve(rowId + 1);
           parentRepeatedColumn.putArray(rowId, offset, repCount);
 
           offset += repCount;
@@ -682,6 +691,7 @@ public class VectorizedColumnReader {
       reptitionMap.put(repLevel, 0);
     }
 
+    column.reserve(rowId + 1);
     column.putNull(rowId);
     rowIds.put(repLevel, rowId + 1);
   }

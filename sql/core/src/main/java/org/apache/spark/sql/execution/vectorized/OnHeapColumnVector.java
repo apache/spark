@@ -454,10 +454,17 @@ public final class OnHeapColumnVector extends ColumnVector {
       throw new RuntimeException("Unhandled " + type);
     }
 
-    byte[] newNulls = new byte[newCapacity];
-    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, nulls.length);
-    nulls = newNulls;
+    reserveNulls(newCapacity);
 
     capacity = newCapacity;
+  }
+
+  @Override
+  protected void reserveNulls(int capacity) {
+    if (nulls == null || nulls.length < capacity) {
+      byte[] newNulls = new byte[capacity];
+      if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, nulls.length);
+      nulls = newNulls;
+    }
   }
 }
