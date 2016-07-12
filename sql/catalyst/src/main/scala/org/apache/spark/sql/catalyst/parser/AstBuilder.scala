@@ -159,7 +159,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       // Add organization statements.
       optionalMap(ctx.queryOrganization)(withQueryResultClauses).
       // Add insert.
-      optionalMap(ctx.insertInto())(withInsertInto)
+      optionalMap(ctx.insertInto())(withInsertInto).
+      // exist intoClause
+      optionalMap(existIntoClause(ctx.queryTerm))(withSelectInto)
   }
 
   /**
@@ -392,6 +394,31 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     throw new ParseException("Script Transform is not supported", ctx)
+  }
+
+  /**
+   * Find intoClause.
+   */
+  private def existIntoClause(
+      ctx: QueryTermContext): IntoClauseContext = {
+    ctx match {
+      case queryTermDefault : QueryTermDefaultContext =>
+        queryTermDefault.queryPrimary match {
+          case queryPrimaryDefault : QueryPrimaryDefaultContext =>
+            queryPrimaryDefault.querySpecification.intoClause
+          case _ => null
+        }
+      case _ => null
+    }
+  }
+
+  /**
+   * Change to Hive CTAS statement.
+   */
+  protected def withSelectInto(
+      ctx: IntoClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    throw new ParseException("Script Select Into is not supported", ctx)
   }
 
   /**

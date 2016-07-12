@@ -1376,4 +1376,62 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       reader, writer,
       schemaLess)
   }
+
+  /**
+   * Reuse CTAS, convert select into to CTAS,
+   * returning [[CreateHiveTableAsSelectLogicalPlan]].
+   * The SELECT INTO statement selects data from one table
+   * and inserts it into a new table.It is commonly used to
+   * create a backup copy for table or selected records.
+   *
+   * Expected format:
+   * {{{
+   *   SELECT column_name(s)
+   *   INTO new_table
+   *   FROM old_table
+   *   ...
+   * }}}
+   */
+  override protected def withSelectInto(
+      ctx: IntoClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    // Storage format
+    val defaultStorage: CatalogStorageFormat = {
+      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
+      CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
+          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
+        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
+          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
+        // Note: Keep this unspecified because we use the presence of the serde to decide
+        // whether to convert a table created by CTAS to a datasource table.
+        serde = None,
+        compressed = false,
+        serdeProperties = Map())
+    }
+    // TODO support the sql text - have a proper location for this!
+    val tableDesc = CatalogTable(
+      identifier = visitTableIdentifier(ctx.tableIdentifier),
+      tableType = CatalogTableType.MANAGED,
+      storage = defaultStorage,
+      schema = Nil
+    )
+
+    // Table shouldn't exist
+    if (conf.convertCTAS) {
+      CreateTableUsingAsSelect(
+        tableIdent = tableDesc.identifier,
+        provider = conf.defaultDataSourceName,
+        partitionColumns = Array(),
+        bucketSpec = None,
+        mode = SaveMode.ErrorIfExists,
+        options = Map.empty[String, String],
+        query
+      )
+    } else {
+      CreateHiveTableAsSelectLogicalPlan(tableDesc, query, false)
+    }
+  }
 }
