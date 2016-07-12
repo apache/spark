@@ -353,7 +353,7 @@ hint
 
 hintStatement
     : hintName=identifier identifierList
-    | hintName=identifier '(' parameter1=identifier parameter2=identifier ')'
+    | hintName=identifier '(' parameters+=identifier parameters+=identifier ')'
     ;
 
 fromClause

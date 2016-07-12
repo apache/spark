@@ -528,10 +528,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val stmt = ctx.hintStatement
     val name = stmt.hintName.getText
-    if (stmt.parameter1 != null && stmt.parameter2 != null) {
-      Hint(name, Seq(stmt.parameter1.getText, stmt.parameter2.getText), relation)
-    } else if (stmt.identifierList != null) {
+    if (stmt.identifierList != null) {
       Hint(name, visitIdentifierList(stmt.identifierList), relation)
+    } else if (stmt.parameters != null) {
+      Hint(name, stmt.parameters.asScala.map(_.getText), relation)
     } else {
       Hint(name, Seq.empty[String], relation)
     }
