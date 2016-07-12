@@ -16,7 +16,7 @@
 */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs.{GET, PathParam, Produces}
+import javax.ws.rs.{GET, Produces}
 import javax.ws.rs.core.MediaType
 
 import org.apache.spark.ui.SparkUI
@@ -31,11 +31,9 @@ private[v1] class AllExecutorListResource(ui: SparkUI) {
     listener.synchronized {
       // The follow codes should be protected by `listener` to make sure no executors will be
       // removed before we query their status. See SPARK-12784.
-      val storageStatusList = listener.activeStorageStatusList
-      val deadStorageStatusList = listener.deadStorageStatusList
-      (0 until storageStatusList.size).map { statusId =>
+      (0 until listener.activeStorageStatusList.size).map { statusId =>
         ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
-      } ++ (0 until deadStorageStatusList.size).map { statusId =>
+      } ++ (0 until listener.deadStorageStatusList.size).map { statusId =>
         ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
       }
     }
