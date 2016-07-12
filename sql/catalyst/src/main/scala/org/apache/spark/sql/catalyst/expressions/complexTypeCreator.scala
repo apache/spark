@@ -404,7 +404,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
     "Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
   extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with ExpectsInputTypes {
+  extends TernaryExpression {
 
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal(":"))
@@ -416,33 +416,28 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
-
   override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
 
-  override def eval(input: InternalRow): Any = {
-    val exprs = children
-    val value1 = exprs(0).eval(input)
-    if (value1 != null) {
-      val value2 = exprs(1).eval(input)
-      if (value2 != null) {
-        val value3 = exprs(2).eval(input)
-        if (value3 != null) {
-          val array = value1.asInstanceOf[UTF8String]
-            .split(value2.asInstanceOf[UTF8String], -1)
-            .map { kv =>
-              val arr = kv.split(value3.asInstanceOf[UTF8String], 2)
-              if(arr.length < 2) {
-                Array(arr(0), null)
-              } else {
-                arr
-              }
-            }
-          return ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.map(_.dataType).forall(_ == StringType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(s"String To Map's all arguments should be string literal.")
+    }
+  }
+
+  override def nullSafeEval(str: Any, delim1: Any, delim2: Any): Any = {
+    val array = str.asInstanceOf[UTF8String]
+      .split(delim1.asInstanceOf[UTF8String], -1)
+      .map { kv =>
+        val arr = kv.split(delim2.asInstanceOf[UTF8String], 2)
+        if(arr.length < 2) {
+          Array(arr(0), null)
+        } else {
+          arr
         }
       }
-    }
-    throw new AnalysisException("All arguments should be a string literal.")
+    ArrayBasedMapData(array.map(_(0)), array.map(_(1)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

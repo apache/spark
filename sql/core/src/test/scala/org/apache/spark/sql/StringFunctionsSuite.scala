@@ -417,7 +417,8 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       sql("select str_to_map(null,null)").collect()
     }.getMessage
 
-    assert(m1 == m2 && m2 == m3)
-    assert(m1.contains("All arguments should be a string literal."))
+    println(Seq(m1, m2, m3)) // scalastyle:ignore
+
+    assert(Seq(m1, m2, m3).forall(_.contains("all arguments should be string literal.")))
   }
 }
