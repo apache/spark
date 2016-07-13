@@ -2345,7 +2345,13 @@ private[spark] object Utils extends Logging {
     if (conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
       logWarning(s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key} less than " +
         s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, will use " +
-          s"${DYN_ALLOCATION_MIN_EXECUTORS} instead.")
+          s"${DYN_ALLOCATION_MIN_EXECUTORS.key} to override.")
+    }
+
+    if (conf.get(EXECUTOR_INSTANCES).getOrElse(0) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
+      logWarning(s"${EXECUTOR_INSTANCES.key} less than " +
+        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, will use " +
+          s"${DYN_ALLOCATION_MIN_EXECUTORS.key} to override.")
     }
 
     Seq(
