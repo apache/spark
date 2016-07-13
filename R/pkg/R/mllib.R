@@ -321,7 +321,6 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @rdname spark.isotonicRegression
 #' @name spark.isotonicRegression
 #' @export
-#' @examples
 #' @note spark.isotonicRegression since 2.1.0
 #' @seealso \link{transform}, \link{read.ml}, \link{write.ml}
 setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula = "formula"),
