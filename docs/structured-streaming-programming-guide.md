@@ -641,8 +641,9 @@ val words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: S
 
 // Group the data by window and word and compute the count of each group
 val windowedCounts = words.groupBy(
-  window($"timestamp", "10 minutes", "5 minutes"), $"word"
-).count().orderBy("window")
+  window($"timestamp", "10 minutes", "5 minutes"),
+  $"word"
+).count()
 {% endhighlight %}
 
 </div>
@@ -655,7 +656,7 @@ Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp
 Dataset<Row> windowedCounts = words.groupBy(
   functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
   words.col("word")
-).count().orderBy("window");
+).count();
 {% endhighlight %}
 
 </div>
@@ -667,7 +668,7 @@ words = ... # streaming DataFrame of schema { timestamp: Timestamp, word: String
 windowedCounts = words.groupBy(
     window(words.timestamp, '10 minutes', '5 minutes'),
     words.word
-).count().orderBy('window')
+).count()
 {% endhighlight %}
 
 </div>
