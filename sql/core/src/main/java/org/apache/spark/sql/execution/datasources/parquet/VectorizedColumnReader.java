@@ -135,8 +135,8 @@ public class VectorizedColumnReader {
     int valuesReadInPage = 0;
     int repeatedRowId = 0;
 
-    Map<Integer, Integer> rowIds = new HashMap<Integer, Integer>();
-    Map<Integer, Integer> offsets = new HashMap<Integer, Integer>();
+    int[] rowIds = new int[maxRepLevel + 2];
+    int[] offsets = new int[maxRepLevel + 2];
 
     while (true) {
       // Compute the number of values we want to read in this page.
@@ -147,9 +147,7 @@ public class VectorizedColumnReader {
         // Constructs nested records if needed.
         if (valuesReadInPage > 0 && isNestedColumn) {
           constructNestedRecords(column, rowIds, offsets, valuesReadInPage, total);
-          if (rowIds.containsKey(1)) {
-            repeatedRowId = rowIds.get(1);
-          }
+          repeatedRowId = rowIds[1];
           valuesReadInPage = 0;
         }
       }
@@ -520,15 +518,15 @@ public class VectorizedColumnReader {
    * @param column The ColumnVector which the data in the page are read into.
    * @param rowIds Mapping between repetition levels and their current row ids for constructing.
    * @param offsets The beginning offsets in columns which we use to construct nested records.
-   * @param reptitionMap Mapping between repetition levels and their corresponding counts.
+   * @param repetitions Mapping between repetition levels and their corresponding counts.
    * @param total The total number of rows to construct.
    * @param repLevel The current repetition level.
    */
   private void insertRepeatedArray(
       ColumnVector column,
-      Map<Integer, Integer> rowIds,
-      Map<Integer, Integer> offsets,
-      Map<Integer, Integer> reptitionMap,
+      int[] rowIds,
+      int[] offsets,
+      int[] repetitions,
       int total,
       int repLevel) throws IOException {
     ColumnVector parentRepeatedColumn = column;
@@ -541,44 +539,21 @@ public class VectorizedColumnReader {
         // we only need to insert array into the parent columns whose repetition levels are
         // equal to or more than the given repetition level.
         if (parentColRepLevel >= repLevel) {
-          // Current row id at this column.
-          int rowId = 0;
-          if (rowIds.containsKey(curRepLevel)) {
-            rowId = rowIds.get(curRepLevel);
-          }
-          // Repetition count.
-          int repCount = 0;
-          if (reptitionMap.containsKey(curRepLevel)) {
-            repCount = reptitionMap.get(curRepLevel);
-          }
-          // Offset of values.
-          int offset = 0;
-          if (offsets.containsKey(curRepLevel)) {
-            offset = offsets.get(curRepLevel);
-          }
+          parentRepeatedColumn.reserve(rowIds[curRepLevel] + 1);
+          parentRepeatedColumn.putArray(rowIds[curRepLevel],
+            offsets[curRepLevel], repetitions[curRepLevel]);
 
-          parentRepeatedColumn.reserve(rowId + 1);
-          parentRepeatedColumn.putArray(rowId, offset, repCount);
-
-          offset += repCount;
-          repCount = 0;
-          rowId++;
-
-          offsets.put(curRepLevel, offset);
-          reptitionMap.put(curRepLevel, repCount);
-          rowIds.put(curRepLevel, rowId);
+          offsets[curRepLevel] += repetitions[curRepLevel];
+          repetitions[curRepLevel] = 0;
+          rowIds[curRepLevel]++;
 
           // Increase the repetition count for parent repetition level as we add a new record.
           if (curRepLevel > 1) {
-            int nextRepCount = 0;
-            if (reptitionMap.containsKey(curRepLevel - 1)) {
-              nextRepCount = reptitionMap.get(curRepLevel - 1);
-            }
-            reptitionMap.put(curRepLevel - 1, nextRepCount + 1);
+            repetitions[curRepLevel - 1]++;
           }
 
-          // In vectorization, the most outside repeated element is at the reptition 1.
-          if (curRepLevel == 1 && rowId == total) {
+          // In vectorization, the most outside repeated element is at the repetition 1.
+          if (curRepLevel == 1 && rowIds[curRepLevel] == total) {
             return;
           }
           curRepLevel--;
@@ -669,31 +644,24 @@ public class VectorizedColumnReader {
    * Inserts a null record at specified column.
    * @param column The ColumnVector which the data in the page are read into.
    * @param rowIds Mapping between repetition levels and their current row ids for constructing.
-   * @param reptitionMap Mapping between repetition levels and their corresponding counts.
+   * @param repetitions Mapping between repetition levels and their corresponding counts.
    */
   private void insertNullRecord(
       ColumnVector column,
-      Map<Integer, Integer> rowIds,
-      Map<Integer, Integer> reptitionMap) {
+      int[] rowIds,
+      int[] repetitions) {
     int repLevel = column.getRepLevel();
 
     if (repLevel == 0) {
       repLevel = 1;
     }
 
-    int rowId = 0;
-    if (rowIds.containsKey(repLevel)) {
-      rowId = rowIds.get(repLevel);
-    }
+    rowIds[repLevel] += repetitions[repLevel];
+    repetitions[repLevel] = 0;
 
-    if (reptitionMap.containsKey(repLevel)) {
-      rowId += reptitionMap.get(repLevel);
-      reptitionMap.put(repLevel, 0);
-    }
-
-    column.reserve(rowId + 1);
-    column.putNull(rowId);
-    rowIds.put(repLevel, rowId + 1);
+    column.reserve(rowIds[repLevel] + 1);
+    column.putNull(rowIds[repLevel]);
+    rowIds[repLevel]++;
   }
 
   /**
@@ -707,16 +675,12 @@ public class VectorizedColumnReader {
    */
   private void constructNestedRecords(
       ColumnVector column,
-      Map<Integer, Integer> rowIds,
-      Map<Integer, Integer> offsets,
+      int[] rowIds,
+      int[] offsets,
       int valuesReadInPage,
       int total) throws IOException {
     // Keeps repetition levels and corresponding repetition counts.
-    Map<Integer, Integer> reptitionMap = new HashMap<Integer, Integer>();
-
-    for (int i = 0; i <= maxRepLevel; i++) {
-      reptitionMap.put(i, 0);
-    }
+    int[] repetitions = new int[maxRepLevel + 2];
 
     if (column.getParentColumn() != null) {
       boolean newBeginning = true;
@@ -729,7 +693,7 @@ public class VectorizedColumnReader {
           // When a new record begins at lower repetition level,
           // we insert array into repeated column.
           if (repLevel < maxRepLevel) {
-            insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
           }
         }
         newBeginning = false;
@@ -737,10 +701,7 @@ public class VectorizedColumnReader {
         // When definition level is less than max definition level,
         // there is a null value.
         if (defLevel < maxDefLevel) {
-          int offset = 0;
-          if (offsets.containsKey(maxRepLevel)) {
-            offset = offsets.get(maxRepLevel);
-          }
+          int offset = offsets[maxRepLevel];
 
           // The null value is defined at the root level.
           // Insert a null record.
@@ -767,7 +728,7 @@ public class VectorizedColumnReader {
               //     optional int32 someId;
               //   }
               // }
-              insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
+              insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
             } else {
               // Obtain most outside column.
               ColumnVector topColumn = column.getParentColumn();
@@ -775,21 +736,22 @@ public class VectorizedColumnReader {
                 topColumn = topColumn.getParentColumn();
               }
 
-              insertNullRecord(topColumn, rowIds, reptitionMap);
+              insertNullRecord(topColumn, rowIds, repetitions);
             }
             // Move to next offset in max repetition level as we processed the current value.
-            offsets.put(maxRepLevel, offset + 1);
+            offsets[maxRepLevel]++;
             newBeginning = true;
           } else if (isLegacyArray(column) &&
             column.getNearestParentArrayColumn().getDefLevel() == defLevel) {
             // For a legacy array, if a null is defined at the repeated group column, it actually
             // means an element with null value.
 
-            reptitionMap.put(maxRepLevel, reptitionMap.get(maxRepLevel) + 1);
+            repetitions[maxRepLevel]++;
           } else if (!column.getParentColumn().isArray() &&
             column.getParentColumn().getDefLevel() == defLevel) {
             // A null element defined in the wrapping non-repeated group.
-            increaseRowId(rowIds, 1);
+            // increaseRowId(rowIds, 1);
+            rowIds[1]++;
           } else {
             // An empty element defined in outside group.
             // E.g., the element in the following schema.
@@ -809,16 +771,16 @@ public class VectorizedColumnReader {
               // Found the group with the same definition level.
               // Insert a null record at definition level.
               // E.g, R=0, D=1 for above schema.
-              insertNullRecord(parent, rowIds, reptitionMap);
-              offsets.put(maxRepLevel, offset + 1);
+              insertNullRecord(parent, rowIds, repetitions);
+              offsets[maxRepLevel]++;
               newBeginning = true;
             } else {
               // Found the group with lower definition level.
               // Insert an empty record.
               // E.g, R=0, D=2 for above schema.
               parent = findHiddenInnerElementWithDefLevel(column, defLevel);
-              insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, repLevel);
-              offsets.put(maxRepLevel, offset + 1);
+              insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
+              offsets[maxRepLevel]++;
               newBeginning = true;
             }
           }
@@ -827,24 +789,16 @@ public class VectorizedColumnReader {
           // A new record begins with non-null value.
           if (maxRepLevel == 0) {
             // A required record at root level.
-            int repCount = 0;
-            if (reptitionMap.containsKey(1)) {
-              repCount = reptitionMap.get(1);
-            }
-            reptitionMap.put(1, repCount + 1);
-            insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, maxRepLevel - 1);
+            repetitions[1]++;
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, maxRepLevel - 1);
           } else {
             // Repeated values. We increase repetition count.
-            if (reptitionMap.containsKey(maxRepLevel)) {
-              reptitionMap.put(maxRepLevel, reptitionMap.get(maxRepLevel) + 1);
-            } else {
-              reptitionMap.put(maxRepLevel, 1);
-            }
+            repetitions[maxRepLevel]++;
           }
         }
       }
       if (!newBeginning) {
-        insertRepeatedArray(column, rowIds, offsets, reptitionMap, total, 0);
+        insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
       }
     }
   }

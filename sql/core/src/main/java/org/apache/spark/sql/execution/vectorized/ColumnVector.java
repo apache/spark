@@ -1007,14 +1007,27 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
+   * The flag shows if the nearest parent column is initialized.
+   */
+  private boolean isNearestParentArrayColumnInited = false;
+
+  /**
+   * The nearest parent column which is an Array column.
+   */
+  private ColumnVector nearestParentArrayColumn;
+
+  /**
    * Returns the nearest parent column which is an Array column.
    */
   public ColumnVector getNearestParentArrayColumn() {
-    ColumnVector parentCol = this.parentColumn;
-    while (parentCol != null && !parentCol.isArray()) {
-      parentCol = parentCol.parentColumn;
+    if (!isNearestParentArrayColumnInited) {
+      nearestParentArrayColumn = this.parentColumn;
+      while (nearestParentArrayColumn != null && !nearestParentArrayColumn.isArray()) {
+        nearestParentArrayColumn = nearestParentArrayColumn.parentColumn;
+      }
+      isNearestParentArrayColumnInited = true;
     }
-    return parentCol;
+    return nearestParentArrayColumn;
   }
 
   /**
