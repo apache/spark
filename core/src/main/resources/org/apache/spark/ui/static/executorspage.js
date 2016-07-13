@@ -155,7 +155,6 @@ $(document).ready(function () {
     });
 
     executorsSummary = $("#active-executors");
-    searchString = executorsSummary["context"]["location"]["search"];
 
     var endPoint = createRESTEndPoint();
 
