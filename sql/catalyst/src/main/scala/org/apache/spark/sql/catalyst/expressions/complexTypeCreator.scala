@@ -420,12 +420,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.map(_.dataType).forall(_ == StringType)) {
-      TypeCheckResult.TypeCheckSuccess
-    } else if (Seq(pairDelim, keyValueDelim).forall(_.foldable)) {
-      TypeCheckResult.TypeCheckFailure(s"String To Map's all arguments must be of type string.")
+      if (Seq(pairDelim, keyValueDelim).forall(_.foldable)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure(
+          s"String To Map's arguments must be foldable, but got $children.")
+      }
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"String To Map's arguments must be foldable, but got $children.")
+      TypeCheckResult.TypeCheckFailure(s"String To Map's all arguments must be of type string.")
     }
   }
 
