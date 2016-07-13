@@ -126,10 +126,6 @@ function failedTasksStyle(failedTasks, totalTasks) {
         ("hsla(0, 100%, 50%, " + failedTasksAlpha(failedTasks, totalTasks) + ")") : "";
 }
 
-function failedTasksColor(failedTasks, totalTasks) {
-    return failedTasks > 0 ? "white" : "black";
-}
-
 // totalDuration range from 0 to 50% GC time, alpha max = 1
 function totalDurationAlpha(totalGCTime, totalDuration) {
     return totalDuration > 0 ?
