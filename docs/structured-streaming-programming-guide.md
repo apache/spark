@@ -626,52 +626,95 @@ The result tables would look something like the following.
 
 ![Window Operations](img/structured-streaming-window.png)
 
-Since this windowing is similar to grouping, in code, you can use `groupBy()` and `window()` operations to express windowed aggregations.
+Since this windowing is similar to grouping, in code, you can use `groupBy()` and `window()` operations to express windowed aggregations. You can see the full code for the below examples in
+[Scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCountWindowed.scala)/
+[Java]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCountWindowed.java)/
+[Python]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/sql/streaming/structured_network_wordcount_windowed.py).
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-// Number of events in every 1 minute time windows
-df.groupBy(window(df.col("time"), "1 minute"))
-  .count()
+import spark.implicits._
 
+// Create DataFrame representing the stream of input lines from connection to host:port
+val lines = spark.readStream
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .option("includeTimestamp", true)
+  .load().as[(String, Timestamp)]
 
-// Average number of events for each device type in every 1 minute time windows
-df.groupBy(
-     df.col("type"),
-     window(df.col("time"), "1 minute"))
-  .avg("signal")
+// Split the lines into words, retaining timestamps
+val words = lines.flatMap(line =>
+  line._1.split(" ").map(word => (word, line._2))
+).toDF("word", "timestamp")
+
+// Group the data by window and word and compute the count of each group
+val windowedCounts = words.groupBy(
+  window($"timestamp", "10 minutes", "5 minutes"), $"word"
+).count().orderBy("window")
 {% endhighlight %}
 
 </div>
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-import static org.apache.spark.sql.functions.window;
+// Create DataFrame representing the stream of input lines from connection to host:port
+Dataset<Tuple2<String, Timestamp>> lines = spark
+  .readStream()
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .option("includeTimestamp", true)
+  .load().as(Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP()));
 
-// Number of events in every 1 minute time windows
-df.groupBy(window(df.col("time"), "1 minute"))
-  .count();
+// Split the lines into words, retaining timestamps
+Dataset<Row> words = lines.flatMap(
+  new FlatMapFunction<Tuple2<String, Timestamp>, Tuple2<String, Timestamp>>() {
+    @Override
+    public Iterator<Tuple2<String, Timestamp>> call(Tuple2<String, Timestamp> t) {
+      List<Tuple2<String, Timestamp>> result = new ArrayList<>();
+      for (String word : t._1.split(" ")) {
+        result.add(new Tuple2<>(word, t._2));
+      }
+      return result.iterator();
+    }
+  },
+  Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP())
+).toDF("word", "timestamp");
 
-// Average number of events for each device type in every 1 minute time windows
-df.groupBy(
-     df.col("type"),
-     window(df.col("time"), "1 minute"))
-  .avg("signal");
-
+// Group the data by window and word and compute the count of each group
+Dataset<Row> windowedCounts = words.groupBy(
+  functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
+  words.col("word")
+).count().orderBy("window");
 {% endhighlight %}
 
 </div>
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-from pyspark.sql.functions import window
+# Create DataFrame representing the stream of input lines from connection to host:port
+lines = spark\
+    .readStream\
+    .format('socket')\
+    .option('host', 'localhost')\
+    .option('port', 9999)\
+    .option('includeTimestamp', 'true')\
+    .load()
 
-# Number of events in every 1 minute time windows
-df.groupBy(window("time", "1 minute")).count()
+# Split the lines into words, retaining timestamps
+# split() splits each line into an array, and explode() turns the array into multiple rows
+words = lines.select(
+    explode(split(lines.value, ' ')).alias('word'),
+    lines.timestamp
+)
 
-# Average number of events for each device type in every 1 minute time windows
-df.groupBy("type", window("time", "1 minute")).avg("signal")
+# Group the data by window and word and compute the count of each group
+windowedCounts = words.groupBy(
+    window(words.timestamp, '10 minutes', '5 minutes'),
+    words.word
+).count().orderBy('window')
 {% endhighlight %}
 
 </div>
