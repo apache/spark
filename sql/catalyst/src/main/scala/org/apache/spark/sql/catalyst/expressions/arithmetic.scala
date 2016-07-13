@@ -209,7 +209,6 @@ case class Multiply(left: Expression, right: Expression)
 
 abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   override def nullable: Boolean = true
-  override def decimalMethod: String = "$div"
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
@@ -243,7 +242,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
     }
     val javaType = ctx.javaType(dataType)
     val divide = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}." + "$div" + s"(${eval2.value})"
+      s"${eval1.value}.$$div(${eval2.value})"
     } else {
       s"($javaType)(${eval1.value} / ${eval2.value})"
     }
