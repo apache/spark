@@ -427,7 +427,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
           s"$prettyName's arguments must be foldable, but got $children.")
       }
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName's all arguments must be of type string.")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName's both delimiters must be of type string.")
     }
   }
 
