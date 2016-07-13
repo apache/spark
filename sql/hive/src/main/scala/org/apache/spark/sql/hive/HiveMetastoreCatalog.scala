@@ -273,20 +273,18 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         serdeProperties = options)
     }
 
-    def hasPartitionColumns(relation: BaseRelation): Boolean = relation match {
-      case hadoopFsRelation: HadoopFsRelation =>
-        try {
-          // Calling hadoopFsRelation.partitionColumns will trigger the refresh call of
-          // the HadoopFsRelation, which will validate input paths. However, when we create
-          // an empty table, the dir of the table has not been created, which will
-          // cause a FileNotFoundException. So, at here we will catch the FileNotFoundException
-          // and return false.
-          hadoopFsRelation.partitionColumns.nonEmpty
-        } catch {
-          case _: java.io.FileNotFoundException =>
-            false
-        }
-      case _ => false
+    def hasPartitionColumns(relation: HadoopFsRelation): Boolean = {
+      try {
+        // Calling hadoopFsRelation.partitionColumns will trigger the refresh call of
+        // the HadoopFsRelation, which will validate input paths. However, when we create
+        // an empty table, the dir of the table has not been created, which will
+        // cause a FileNotFoundException. So, at here we will catch the FileNotFoundException
+        // and return false.
+        relation.partitionColumns.nonEmpty
+      } catch {
+        case _: java.io.FileNotFoundException =>
+          false
+      }
     }
 
     def newHiveCompatibleMetastoreTable(relation: HadoopFsRelation, serde: HiveSerDe): HiveTable = {
