@@ -30,8 +30,8 @@ import org.apache.spark.sql.streaming.OutputMode
 class IncrementalExecution private[sql](
     sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
-    outputMode: OutputMode,
-    checkpointLocation: String,
+    val outputMode: OutputMode,
+    val checkpointLocation: String,
     val currentBatchId: Long)
   extends QueryExecution(sparkSession, logicalPlan) {
 

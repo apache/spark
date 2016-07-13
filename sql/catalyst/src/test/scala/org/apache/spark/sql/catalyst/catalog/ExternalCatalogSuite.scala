@@ -99,8 +99,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("drop database when the database is not empty") {
     // Throw exception if there are functions left
     val catalog1 = newBasicCatalog()
-    catalog1.dropTable("db2", "tbl1", ignoreIfNotExists = false)
-    catalog1.dropTable("db2", "tbl2", ignoreIfNotExists = false)
+    catalog1.dropTable("db2", "tbl1", ignoreIfNotExists = false, purge = false)
+    catalog1.dropTable("db2", "tbl2", ignoreIfNotExists = false, purge = false)
     intercept[AnalysisException] {
       catalog1.dropDatabase("db2", ignoreIfNotExists = false, cascade = false)
     }
@@ -164,7 +164,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("drop table") {
     val catalog = newBasicCatalog()
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    catalog.dropTable("db2", "tbl1", ignoreIfNotExists = false)
+    catalog.dropTable("db2", "tbl1", ignoreIfNotExists = false, purge = false)
     assert(catalog.listTables("db2").toSet == Set("tbl2"))
   }
 
@@ -172,16 +172,16 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     // Should always throw exception when the database does not exist
     intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false)
+      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false, purge = false)
     }
     intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true)
+      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true, purge = false)
     }
     // Should throw exception when the table does not exist, if ignoreIfNotExists is false
     intercept[AnalysisException] {
-      catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false)
+      catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false, purge = false)
     }
-    catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = true)
+    catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = true, purge = false)
   }
 
   test("rename table") {
@@ -292,13 +292,13 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
     catalog.dropPartitions(
-      "db2", "tbl2", Seq(part1.spec), ignoreIfNotExists = false)
+      "db2", "tbl2", Seq(part1.spec), ignoreIfNotExists = false, purge = false)
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part2)))
     resetState()
     val catalog2 = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog2, "db2", "tbl2", Seq(part1, part2)))
     catalog2.dropPartitions(
-      "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
+      "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false, purge = false)
     assert(catalog2.listPartitions("db2", "tbl2").isEmpty)
   }
 
@@ -306,11 +306,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "does_not_exist", "tbl1", Seq(), ignoreIfNotExists = false)
+        "does_not_exist", "tbl1", Seq(), ignoreIfNotExists = false, purge = false)
     }
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "db2", "does_not_exist", Seq(), ignoreIfNotExists = false)
+        "db2", "does_not_exist", Seq(), ignoreIfNotExists = false, purge = false)
     }
   }
 
@@ -318,10 +318,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = false)
+        "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = false, purge = false)
     }
     catalog.dropPartitions(
-      "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = true)
+      "db2", "tbl2", Seq(part3.spec), ignoreIfNotExists = true, purge = false)
   }
 
   test("get partition") {
@@ -561,7 +561,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(!exists(db.locationUri, "my_table"))
     assert(exists(db.locationUri, "your_table"))
 
-    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false)
+    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
     assert(!exists(db.locationUri, "your_table"))
 
     val externalTable = CatalogTable(
@@ -600,7 +600,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(!exists(databaseDir, "tbl", "a=1", "b=2"))
     assert(exists(databaseDir, "tbl", "a=5", "b=6"))
 
-    catalog.dropPartitions("db1", "tbl", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
+    catalog.dropPartitions("db1", "tbl", Seq(part2.spec, part3.spec), ignoreIfNotExists = false,
+      purge = false)
     assert(!exists(databaseDir, "tbl", "a=3", "b=4"))
     assert(!exists(databaseDir, "tbl", "a=5", "b=6"))
 

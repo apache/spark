@@ -258,22 +258,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView")
-    .internal()
-    .doc("When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
-         "Note that this function is experimental and should ony be used when you are using " +
-         "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
-         "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
-         "possible, or you may get wrong result.")
-    .booleanConf
-    .createWithDefault(true)
-
-  val CANONICAL_NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView.canonical")
-    .internal()
-    .doc("When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
-         "CREATE VIEW statement using SQL query string generated from view definition logical " +
-         "plan.  If the logical plan doesn't have a SQL representation, we fallback to the " +
-         "original native view implementation.")
+  val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
+    .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
+      "to produce the partition columns instead of table scans. It applies when all the columns " +
+      "scanned are partition columns and the query has an aggregate operator that satisfies " +
+      "distinct semantics.")
     .booleanConf
     .createWithDefault(true)
 
@@ -613,7 +602,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  def nativeView: Boolean = getConf(NATIVE_VIEW)
+  def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
@@ -624,8 +613,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
-
-  def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 

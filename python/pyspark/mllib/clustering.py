@@ -507,7 +507,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
           Path to where the model is stored.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.GaussianMixtureModelWrapper(model)
+        wrapper = sc._jvm.org.apache.spark.mllib.api.python.GaussianMixtureModelWrapper(model)
         return cls(wrapper)
 
 
@@ -571,14 +571,14 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     >>> import math
     >>> def genCircle(r, n):
-    ...   points = []
-    ...   for i in range(0, n):
-    ...     theta = 2.0 * math.pi * i / n
-    ...     points.append((r * math.cos(theta), r * math.sin(theta)))
-    ...   return points
+    ...     points = []
+    ...     for i in range(0, n):
+    ...         theta = 2.0 * math.pi * i / n
+    ...         points.append((r * math.cos(theta), r * math.sin(theta)))
+    ...     return points
     >>> def sim(x, y):
-    ...   dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
-    ...   return math.exp(-dist2 / 2.0)
+    ...     dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
+    ...     return math.exp(-dist2 / 2.0)
     >>> r1 = 1.0
     >>> n1 = 10
     >>> r2 = 4.0
@@ -638,7 +638,8 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Load a model from the given path.
         """
         model = cls._load_java(sc, path)
-        wrapper = sc._jvm.PowerIterationClusteringModelWrapper(model)
+        wrapper =\
+            sc._jvm.org.apache.spark.mllib.api.python.PowerIterationClusteringModelWrapper(model)
         return PowerIterationClusteringModel(wrapper)
 
 

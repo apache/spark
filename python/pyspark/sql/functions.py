@@ -1550,8 +1550,8 @@ def translate(srcCol, matching, replace):
     The translate will happen when any character in the string matching with the character
     in the `matching`.
 
-    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123")\
-    .alias('r')).collect()
+    >>> spark.createDataFrame([('translate',)], ['a']).select(translate('a', "rnlt", "123") \\
+    ...     .alias('r')).collect()
     [Row(r=u'1a2s3ae')]
     """
     sc = SparkContext._active_spark_context
@@ -1637,6 +1637,27 @@ def explode(col):
     return Column(jc)
 
 
+@since(2.1)
+def posexplode(col):
+    """Returns a new row for each element with position in the given array or map.
+
+    >>> from pyspark.sql import Row
+    >>> eDF = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
+    >>> eDF.select(posexplode(eDF.intlist)).collect()
+    [Row(pos=0, col=1), Row(pos=1, col=2), Row(pos=2, col=3)]
+
+    >>> eDF.select(posexplode(eDF.mapfield)).show()
+    +---+---+-----+
+    |pos|key|value|
+    +---+---+-----+
+    |  0|  a|    b|
+    +---+---+-----+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.posexplode(_to_java_column(col))
+    return Column(jc)
+
+
 @ignore_unicode_prefix
 @since(1.6)
 def get_json_object(col, path):
@@ -1649,8 +1670,8 @@ def get_json_object(col, path):
 
     >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = spark.createDataFrame(data, ("key", "jstring"))
-    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \
-                          get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
+    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \\
+    ...                   get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
     [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
     """
     sc = SparkContext._active_spark_context

@@ -69,7 +69,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         }.flatten.reduceLeftOption(_ && _)
         assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-        val (_, selectedFilters) =
+        val (_, selectedFilters, _) =
           DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
         assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
@@ -229,8 +229,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  // See https://issues.apache.org/jira/browse/SPARK-11153
-  ignore("filter pushdown - string") {
+  test("filter pushdown - string") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i.toString))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
       checkFilterPredicate(
@@ -258,8 +257,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  // See https://issues.apache.org/jira/browse/SPARK-11153
-  ignore("filter pushdown - binary") {
+  test("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
@@ -516,33 +514,17 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("SPARK-11164: test the parquet filter in") {
-    import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/table1"
-          (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
-
-          // When a filter is pushed to Parquet, Parquet can apply it to every row.
-          // So, we can check the number of rows returned from the Parquet
-          // to make sure our filter pushdown work.
-          val df = spark.read.parquet(path).where("b in (0,2)")
-          assert(stripSparkFilter(df).count == 3)
-
-          val df1 = spark.read.parquet(path).where("not (b in (1))")
-          assert(stripSparkFilter(df1).count == 3)
-
-          val df2 = spark.read.parquet(path).where("not (b in (1,3) or a <= 2)")
-          assert(stripSparkFilter(df2).count == 2)
-
-          val df3 = spark.read.parquet(path).where("not (b in (1,3) and a <= 2)")
-          assert(stripSparkFilter(df3).count == 4)
-
-          val df4 = spark.read.parquet(path).where("not (a <= 2)")
-          assert(stripSparkFilter(df4).count == 3)
-        }
-      }
+  test("SPARK-16371 Do not push down filters when inner name and outer name are the same") {
+    withParquetDataFrame((1 to 4).map(i => Tuple1(Tuple1(i)))) { implicit df =>
+      // Here the schema becomes as below:
+      //
+      // root
+      //  |-- _1: struct (nullable = true)
+      //  |    |-- _1: integer (nullable = true)
+      //
+      // The inner column name, `_1` and outer column name `_1` are the same.
+      // Obviously this should not push down filters because the outer column is struct.
+      assert(df.filter("_1 IS NOT NULL").count() === 4)
     }
   }
 }
