@@ -396,7 +396,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
 }
 
 /**
- * Creates a map after splitting the input text into key/value pairs using delimeters
+ * Creates a map after splitting the input text into key/value pairs using delimiters
  */
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim, keyValueDelim]) - Creates a map after splitting the text " +
@@ -424,7 +424,7 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
         TypeCheckResult.TypeCheckSuccess
       } else {
         TypeCheckResult.TypeCheckFailure(
-          s"$prettyName's delimeters must be foldable, but got $children.")
+          s"$prettyName's delimiters must be foldable, but got $children.")
       }
     } else {
       TypeCheckResult.TypeCheckFailure(s"$prettyName's all arguments must be of type string.")
