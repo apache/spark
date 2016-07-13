@@ -406,17 +406,5 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
     )
 
-    // All arguments should be string literals.
-    val m1 = intercept[AnalysisException]{
-      sql("select str_to_map('a:1,b:2,c:3',null,null)").collect()
-    }.getMessage
-    val m2 = intercept[AnalysisException]{
-      sql("select str_to_map('a:1,b:2,c:3',null)").collect()
-    }.getMessage
-    val m3 = intercept[AnalysisException]{
-      sql("select str_to_map(null,null)").collect()
-    }.getMessage
-
-    assert(Seq(m1, m2, m3).forall(_.contains("all arguments must be of type string.")))
   }
 }
