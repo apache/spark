@@ -628,19 +628,6 @@ public class VectorizedColumnReader {
   }
 
   /**
-   * Increases row id for a specified repetition level.
-   * @param rowIds Mapping between repetition levels and their current row ids for constructing.
-   * @param level repetition level.
-   */
-  private void increaseRowId(Map<Integer, Integer> rowIds, int level) {
-    int rowId = 0;
-    if (rowIds.containsKey(level)) {
-      rowId = rowIds.get(level);
-    }
-    rowIds.put(level, rowId + 1);
-  }
-
-  /**
    * Inserts a null record at specified column.
    * @param column The ColumnVector which the data in the page are read into.
    * @param rowIds Mapping between repetition levels and their current row ids for constructing.
@@ -750,7 +737,6 @@ public class VectorizedColumnReader {
           } else if (!column.getParentColumn().isArray() &&
             column.getParentColumn().getDefLevel() == defLevel) {
             // A null element defined in the wrapping non-repeated group.
-            // increaseRowId(rowIds, 1);
             rowIds[1]++;
           } else {
             // An empty element defined in outside group.
