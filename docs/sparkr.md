@@ -111,7 +111,7 @@ head(df)
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
 The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
-specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter.
+specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
@@ -146,7 +146,7 @@ The data sources API natively supports CSV formatted input files. For more infor
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.string = "NA")
+df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "NA")
 
 {% endhighlight %}
 </div>
