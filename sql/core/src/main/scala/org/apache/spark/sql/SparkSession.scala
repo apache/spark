@@ -79,7 +79,11 @@ class SparkSession private(
 
   sparkContext.assertNotStopped()
 
-  /** The version of Spark on which this application is running. */
+  /**
+   * The version of Spark on which this application is running.
+   *
+   * @since 2.0.0
+   */
   def version: String = SPARK_VERSION
 
   /* ----------------------- *
