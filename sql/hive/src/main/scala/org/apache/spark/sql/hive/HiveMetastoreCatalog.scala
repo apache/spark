@@ -119,7 +119,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
 
-        val options = table.storage.serdeProperties
+        val options = table.storage.getProperties
         val dataSource =
           DataSource(
             sparkSession,
@@ -441,10 +441,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if p.resolved => p
 
       case p @ CreateHiveTableAsSelectLogicalPlan(table, child, allowExisting) =>
-        val desc = if (table.storage.serde.isEmpty) {
+        val desc = if (table.storage.getSerde.isEmpty) {
           // add default serde
-          table.withNewStorage(
-            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+          table.mapStorage(_.withSerde(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
         } else {
           table
         }

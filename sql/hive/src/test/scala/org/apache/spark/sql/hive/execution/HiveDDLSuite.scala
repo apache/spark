@@ -355,16 +355,16 @@ class HiveDDLSuite
     val expectedSerdePropsString =
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
-    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) !=
+    assume(oldPart.storage.getSerde != Some(expectedSerde), "bad test: serde was already set")
+    assume(oldPart.storage.getProperties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
       |    WITH SERDEPROPERTIES ($expectedSerdePropsString)
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
-    assert(newPart.storage.serde == Some(expectedSerde))
-    assume(newPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) ==
+    assert(newPart.storage.getSerde == Some(expectedSerde))
+    assume(newPart.storage.getProperties.filterKeys(expectedSerdeProps.contains) ==
       expectedSerdeProps)
   }
 

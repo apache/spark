@@ -147,14 +147,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
         identifier = TableIdentifier(tableName, Some(database)),
         tableType = CatalogTableType.MANAGED,
         schema = Seq(CatalogColumn("key", "int")),
-        storage = CatalogStorageFormat(
-          locationUri = None,
-          inputFormat = Some(classOf[TextInputFormat].getName),
-          outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-          serde = Some(classOf[LazySimpleSerDe].getName()),
-          compressed = false,
-          serdeProperties = Map.empty
-        ))
+        storage = CatalogStorageFormat.empty
+          .withInputFormat(Some(classOf[TextInputFormat].getName))
+          .withOutputFormat(Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName))
+          .withSerde(Some(classOf[LazySimpleSerDe].getName)))
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -269,13 +265,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     // Partition related API
     ///////////////////////////////////////////////////////////////////////////
 
-    val storageFormat = CatalogStorageFormat(
-      locationUri = None,
-      inputFormat = None,
-      outputFormat = None,
-      serde = None,
-      compressed = false,
-      serdeProperties = Map.empty)
+    val storageFormat = CatalogStorageFormat.empty
 
     test(s"$version: sql create partitioned table") {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
@@ -366,10 +356,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
       val newLocation = Utils.createTempDir().getPath()
-      val storage = storageFormat.copy(
-        locationUri = Some(newLocation),
+      val storage = storageFormat.copy(locationUri = Some(newLocation))
         // needed for 0.12 alter partitions
-        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+        .withSerde(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       val partition = CatalogTablePartition(spec, storage)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)

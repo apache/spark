@@ -949,21 +949,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     // to include the partition columns here explicitly
     val schema = cols ++ partitionCols
 
-    // Storage format
-    val defaultStorage: CatalogStorageFormat = {
+    // default input/output format
+    val (defaultInputFormat, defaultOutputFormat) = {
       val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
       val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
-      CatalogStorageFormat(
-        locationUri = None,
-        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
-          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
-        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-        // Note: Keep this unspecified because we use the presence of the serde to decide
-        // whether to convert a table created by CTAS to a datasource table.
-        serde = None,
-        compressed = false,
-        serdeProperties = Map())
+      val inFmt = defaultHiveSerde.flatMap(_.inputFormat)
+        .getOrElse("org.apache.hadoop.mapred.TextInputFormat")
+      val outFmt = defaultHiveSerde.flatMap(_.outputFormat)
+        .getOrElse("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
+      inFmt -> outFmt
     }
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
@@ -977,11 +971,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val storage = CatalogStorageFormat(
       locationUri = location,
-      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
-      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
-      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
-      compressed = false,
-      serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+      properties = rowStorage.getProperties ++ fileStorage.getProperties
+    ).withInputFormat(Some(defaultInputFormat))
+      .withInputFormat(fileStorage.getInputFormat)
+      .withOutputFormat(Some(defaultOutputFormat))
+      .withOutputFormat(fileStorage.getOutputFormat)
+      // if both file format and row format specifies serde, the one from row format wins.
+      .withSerde(fileStorage.getSerde)
+      .withSerde(rowStorage.getSerde)
     // If location is defined, we'll assume this is an external table.
     // Otherwise, we may accidentally delete existing data.
     val tableType = if (external || location.isDefined) {
@@ -1085,9 +1082,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitTableFileFormat(
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    CatalogStorageFormat.empty.copy(
-      inputFormat = Option(string(ctx.inFmt)),
-      outputFormat = Option(string(ctx.outFmt)))
+    CatalogStorageFormat.empty
+      .withInputFormat(Option(ctx.inFmt).map(string))
+      .withOutputFormat(Option(ctx.outFmt).map(string))
   }
 
   /**
@@ -1098,10 +1095,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val source = ctx.identifier.getText
     HiveSerDe.sourceToSerDe(source, conf) match {
       case Some(s) =>
-        CatalogStorageFormat.empty.copy(
-          inputFormat = s.inputFormat,
-          outputFormat = s.outputFormat,
-          serde = s.serde)
+        CatalogStorageFormat.empty
+          .withInputFormat(s.inputFormat)
+          .withOutputFormat(s.outputFormat)
+          .withSerde(s.serde)
       case None =>
         operationNotAllowed(s"STORED AS with file format '$source'", ctx)
     }
@@ -1138,9 +1135,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitRowFormatSerde(
       ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
     import ctx._
-    CatalogStorageFormat.empty.copy(
-      serde = Option(string(name)),
-      serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+    CatalogStorageFormat.empty
+      .copy(properties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      .withSerde(Option(name).map(string))
   }
 
   /**
@@ -1168,7 +1165,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             ctx)
           "line.delim" -> value
         }
-    CatalogStorageFormat.empty.copy(serdeProperties = entries.toMap)
+    CatalogStorageFormat.empty.copy(properties = entries.toMap)
   }
 
   /**
@@ -1296,6 +1293,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   private def visitCatalogColumns(ctx: ColTypeListContext): Seq[CatalogColumn] = withOrigin(ctx) {
     ctx.colType.asScala.map { col =>
       CatalogColumn(
+        // TODO: it should be case preserving.
         col.identifier.getText.toLowerCase,
         // Note: for types like "STRUCT<myFirstName: STRING, myLastName: STRING>" we can't
         // just convert the whole type string to lower case, otherwise the struct field names
@@ -1344,7 +1342,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
       case c: RowFormatSerdeContext =>
         // Use a serde format.
-        val CatalogStorageFormat(None, None, None, Some(name), _, props) = visitRowFormatSerde(c)
+        val props = Option(c.props).map(visitPropertyKeyValues).getOrElse(Nil)
+        val name = string(c.name)
 
         // SPARK-10310: Special cases LazySimpleSerDe
         val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {

@@ -42,38 +42,54 @@ case class CatalogFunction(
 
 /**
  * Storage format, used to describe how a partition or a table is stored.
+ *
+ * @param locationUri the storage location of the table/partition, can be None if it has no storage,
+ *                    e.g. view, or it's not file-based, e.g. JDBC data source table.
+ * @param properties used to store some extra information for the storage.
  */
 case class CatalogStorageFormat(
     locationUri: Option[String],
-    inputFormat: Option[String],
-    outputFormat: Option[String],
-    serde: Option[String],
-    compressed: Boolean,
-    serdeProperties: Map[String, String]) {
+    properties: Map[String, String]) {
 
   override def toString: String = {
-    val serdePropsToString =
-      if (serdeProperties.nonEmpty) {
-        s"Properties: " + serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val propertiesToString =
+      if (properties.nonEmpty) {
+        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
       } else {
         ""
       }
-    val output =
-      Seq(locationUri.map("Location: " + _).getOrElse(""),
-        inputFormat.map("InputFormat: " + _).getOrElse(""),
-        outputFormat.map("OutputFormat: " + _).getOrElse(""),
-        if (compressed) "Compressed" else "",
-        serde.map("Serde: " + _).getOrElse(""),
-        serdePropsToString)
+    val output = Seq(
+      locationUri.map("Location: " + _).getOrElse(""),
+      propertiesToString)
     output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
   }
 
+  // TODO: remove these hive hacks
+
+  def withInputFormat(inFmt: Option[String]): CatalogStorageFormat = {
+    inFmt.map(i => copy(properties = properties + ("inputFormat" -> i))).getOrElse(this)
+  }
+
+  def withOutputFormat(outFmt: Option[String]): CatalogStorageFormat = {
+    outFmt.map(o => copy(properties = properties + ("outputFormat" -> o))).getOrElse(this)
+  }
+
+  def withSerde(serde: Option[String]): CatalogStorageFormat = {
+    serde.map(s => copy(properties = properties + ("serde" -> s))).getOrElse(this)
+  }
+
+  def getInputFormat: Option[String] = properties.get("inputFormat")
+
+  def getOutputFormat: Option[String] = properties.get("outputFormat")
+
+  def getSerde: Option[String] = properties.get("serde")
+
+  def getProperties: Map[String, String] = properties - "inputFormat" - "outputFormat" - "serde"
 }
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, serdeProperties = Map.empty)
+  val empty = CatalogStorageFormat(None, Map.empty)
 }
 
 /**
@@ -115,6 +131,8 @@ case class CatalogTablePartition(
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
  * future once we have a better understanding of how we want to handle skewed columns.
  *
+ * @param provider the name of the data source provider, e.g. parquet, json, etc.
+ *                 Note that `hive` is also one kind of provider.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
  */
@@ -123,6 +141,7 @@ case class CatalogTable(
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
+    provider: Option[String] = None,
     partitionColumnNames: Seq[String] = Seq.empty,
     sortColumnNames: Seq[String] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
@@ -158,16 +177,9 @@ case class CatalogTable(
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
 
-  /** Syntactic sugar to update a field in `storage`. */
-  def withNewStorage(
-      locationUri: Option[String] = storage.locationUri,
-      inputFormat: Option[String] = storage.inputFormat,
-      outputFormat: Option[String] = storage.outputFormat,
-      compressed: Boolean = false,
-      serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
-    copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+  /** Syntactic sugar to update the `storage`. */
+  def mapStorage(f: CatalogStorageFormat => CatalogStorageFormat): CatalogTable = {
+    copy(storage = f(storage))
   }
 
   override def toString: String = {

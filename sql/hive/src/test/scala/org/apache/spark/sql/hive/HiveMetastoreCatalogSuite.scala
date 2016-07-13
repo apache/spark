@@ -93,9 +93,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
         }
 
         val hiveTable = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
-        assert(hiveTable.storage.inputFormat === Some(inputFormat))
-        assert(hiveTable.storage.outputFormat === Some(outputFormat))
-        assert(hiveTable.storage.serde === Some(serde))
+        assert(hiveTable.storage.getInputFormat === Some(inputFormat))
+        assert(hiveTable.storage.getOutputFormat === Some(outputFormat))
+        assert(hiveTable.storage.getSerde === Some(serde))
 
         assert(hiveTable.partitionColumnNames.isEmpty)
         assert(hiveTable.tableType === CatalogTableType.MANAGED)
@@ -125,9 +125,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
           val hiveTable =
             sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
-          assert(hiveTable.storage.inputFormat === Some(inputFormat))
-          assert(hiveTable.storage.outputFormat === Some(outputFormat))
-          assert(hiveTable.storage.serde === Some(serde))
+          assert(hiveTable.storage.getInputFormat === Some(inputFormat))
+          assert(hiveTable.storage.getOutputFormat === Some(outputFormat))
+          assert(hiveTable.storage.getSerde === Some(serde))
 
           assert(hiveTable.tableType === CatalogTableType.EXTERNAL)
           assert(hiveTable.storage.locationUri ===
@@ -157,9 +157,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
           val hiveTable =
             sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
-          assert(hiveTable.storage.inputFormat === Some(inputFormat))
-          assert(hiveTable.storage.outputFormat === Some(outputFormat))
-          assert(hiveTable.storage.serde === Some(serde))
+          assert(hiveTable.storage.getInputFormat === Some(inputFormat))
+          assert(hiveTable.storage.getOutputFormat === Some(outputFormat))
+          assert(hiveTable.storage.getSerde === Some(serde))
 
           assert(hiveTable.partitionColumnNames.isEmpty)
           assert(hiveTable.tableType === CatalogTableType.EXTERNAL)

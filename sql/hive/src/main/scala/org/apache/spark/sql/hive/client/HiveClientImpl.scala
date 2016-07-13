@@ -355,6 +355,26 @@ private[hive] class HiveClientImpl(
 
       val properties = h.getParameters.asScala.toMap
 
+      val storage = CatalogStorageFormat(
+        locationUri = shim.getDataLocation(h).filterNot { _ =>
+          // SPARK-15269: Persisted data source tables always store the location URI as a SerDe
+          // property named "path" instead of standard Hive `dataLocation`, because Hive only
+          // allows directory paths as location URIs while Spark SQL data source tables also
+          // allows file paths. So the standard Hive `dataLocation` is meaningless for Spark SQL
+          // data source tables.
+          DDLUtils.isDatasourceTable(properties) &&
+            h.getTableType == HiveTableType.EXTERNAL_TABLE &&
+            // Spark SQL may also save external data source in Hive compatible format when
+            // possible, so that these tables can be directly accessed by Hive. For these tables,
+            // `dataLocation` is still necessary. Here we also check for input format class
+            // because only these Hive compatible tables set this field.
+            h.getInputFormatClass == null
+        },
+        properties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
+      ).withInputFormat(Option(h.getInputFormatClass).map(_.getName))
+        .withOutputFormat(Option(h.getOutputFormatClass).map(_.getName))
+        .withSerde(Option(h.getSerializationLib))
+
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -364,6 +384,7 @@ private[hive] class HiveClientImpl(
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         },
         schema = schema,
+        provider = Some("hive"),
         partitionColumnNames = partCols.map(_.name),
         sortColumnNames = Seq(), // TODO: populate this
         bucketColumnNames = h.getBucketCols.asScala,
@@ -371,27 +392,7 @@ private[hive] class HiveClientImpl(
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
-        storage = CatalogStorageFormat(
-          locationUri = shim.getDataLocation(h).filterNot { _ =>
-            // SPARK-15269: Persisted data source tables always store the location URI as a SerDe
-            // property named "path" instead of standard Hive `dataLocation`, because Hive only
-            // allows directory paths as location URIs while Spark SQL data source tables also
-            // allows file paths. So the standard Hive `dataLocation` is meaningless for Spark SQL
-            // data source tables.
-            DDLUtils.isDatasourceTable(properties) &&
-              h.getTableType == HiveTableType.EXTERNAL_TABLE &&
-              // Spark SQL may also save external data source in Hive compatible format when
-              // possible, so that these tables can be directly accessed by Hive. For these tables,
-              // `dataLocation` is still necessary. Here we also check for input format class
-              // because only these Hive compatible tables set this field.
-              h.getInputFormatClass == null
-          },
-          inputFormat = Option(h.getInputFormatClass).map(_.getName),
-          outputFormat = Option(h.getOutputFormatClass).map(_.getName),
-          serde = Option(h.getSerializationLib),
-          compressed = h.getTTable.getSd.isCompressed,
-          serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
-        ),
+        storage = storage,
         properties = properties,
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
@@ -770,11 +771,11 @@ private[hive] class HiveClientImpl(
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
     table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
-    table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
-    table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
+    table.storage.getInputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
+    table.storage.getOutputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
     hiveTable.setSerializationLib(
-      table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
+      table.storage.getSerde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    table.storage.getProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
@@ -795,10 +796,10 @@ private[hive] class HiveClientImpl(
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
     p.storage.locationUri.foreach(storageDesc.setLocation)
-    p.storage.inputFormat.foreach(storageDesc.setInputFormat)
-    p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
-    p.storage.serde.foreach(serdeInfo.setSerializationLib)
-    serdeInfo.setParameters(p.storage.serdeProperties.asJava)
+    p.storage.getInputFormat.foreach(storageDesc.setInputFormat)
+    p.storage.getOutputFormat.foreach(storageDesc.setOutputFormat)
+    p.storage.getSerde.foreach(serdeInfo.setSerializationLib)
+    serdeInfo.setParameters(p.storage.getProperties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
     tpart.setDbName(ht.getDbName)
     tpart.setTableName(ht.getTableName)
@@ -809,14 +810,16 @@ private[hive] class HiveClientImpl(
 
   private def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
+
+    val storage = CatalogStorageFormat(
+      locationUri = Option(apiPartition.getSd.getLocation),
+      properties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap
+    ).withInputFormat(Option(apiPartition.getSd.getInputFormat))
+      .withOutputFormat(Option(apiPartition.getSd.getOutputFormat))
+      .withSerde(Option(apiPartition.getSd.getSerdeInfo.getSerializationLib))
+
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
-      storage = CatalogStorageFormat(
-        locationUri = Option(apiPartition.getSd.getLocation),
-        inputFormat = Option(apiPartition.getSd.getInputFormat),
-        outputFormat = Option(apiPartition.getSd.getOutputFormat),
-        serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
-        compressed = apiPartition.getSd.isCompressed,
-        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
+      storage = storage)
   }
 }
