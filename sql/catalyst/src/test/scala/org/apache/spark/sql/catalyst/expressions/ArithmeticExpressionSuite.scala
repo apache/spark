@@ -137,17 +137,15 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
     }
   }
-
-  // By fixing SPARK-15776, Divide's inputType is required to be DoubleType of DecimalType.
-  // TODO: in future release, we should add a IntegerDivide to support integral types.
+  
   test("/ (Divide) for integral type") {
-    checkEvaluation(IntegerDivide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
-    checkEvaluation(IntegerDivide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
-    checkEvaluation(IntegerDivide(Literal(1), Literal(2)), 0)
-    checkEvaluation(IntegerDivide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
-    checkEvaluation(IntegerDivide(positiveShortLit, negativeShortLit), 0.toShort)
-    checkEvaluation(IntegerDivide(positiveIntLit, negativeIntLit), 0)
-    checkEvaluation(IntegerDivide(positiveLongLit, negativeLongLit), 0L)
+    checkEvaluation(IntegralDivide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
+    checkEvaluation(IntegralDivide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
+    checkEvaluation(IntegralDivide(Literal(1), Literal(2)), 0)
+    checkEvaluation(IntegralDivide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
+    checkEvaluation(IntegralDivide(positiveShortLit, negativeShortLit), 0.toShort)
+    checkEvaluation(IntegralDivide(positiveIntLit, negativeIntLit), 0)
+    checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
   }
 
   test("% (Remainder)") {

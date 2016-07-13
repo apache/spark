@@ -207,7 +207,7 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
-abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
+abstract class DivideBase extends BinaryArithmetic with NullIntolerant {
   override def nullable: Boolean = true
 
   private lazy val div: (Any, Any) => Any = dataType match {
@@ -281,7 +281,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   usage = "a _FUNC_ b - Fraction Division a by b.",
   extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
 case class Divide(left: Expression, right: Expression)
-    extends DivisionArithmetic {
+    extends DivideBase {
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -291,8 +291,8 @@ case class Divide(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "a _FUNC_ b - Divides a by b.",
   extended = "> SELECT 3 _FUNC_ 2;\n 1")
-case class IntegerDivide(left: Expression, right: Expression)
-  extends DivisionArithmetic {
+case class IntegralDivide(left: Expression, right: Expression)
+  extends DivideBase {
 
   override def inputType: AbstractDataType = IntegralType
 
