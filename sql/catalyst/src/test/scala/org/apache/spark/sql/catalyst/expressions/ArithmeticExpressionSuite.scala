@@ -137,7 +137,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
     }
   }
-  
+
   test("/ (Divide) for integral type") {
     checkEvaluation(IntegralDivide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
     checkEvaluation(IntegralDivide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
