@@ -66,7 +66,7 @@ test_that("repeatedly starting and stopping SparkR", {
 test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
     sparkR.session(enableHiveSupport = FALSE)
-    df <- createDataFrame(data.frame(dummy=1:i))
+    df <- createDataFrame(data.frame(dummy = 1:i))
     expect_equal(count(df), i)
     sparkR.session.stop()
     Sys.sleep(20) # Need more time to shutdown Hive metastore
