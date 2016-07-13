@@ -240,7 +240,6 @@ setMethod("between", signature(x = "Column"),
 #'
 #' @examples \dontrun{
 #'   cast(df$age, "string")
-#'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
 #' @note cast since 1.4.0
 setMethod("cast",

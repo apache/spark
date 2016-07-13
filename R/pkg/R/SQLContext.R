@@ -268,7 +268,7 @@ as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
 }
 
 #' @rdname createDataFrame
-#' @aliases createDataFrame
+#' @aliases as.DataFrame
 #' @export
 #' @method as.DataFrame
 as.DataFrame <- function(x, ...) {
