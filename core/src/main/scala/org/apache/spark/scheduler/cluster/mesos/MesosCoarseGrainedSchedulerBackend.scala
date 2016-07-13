@@ -553,7 +553,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       taskId: String,
       reason: String): Unit = {
     stateLock.synchronized {
-      removeExecutor(taskId, SlaveLost(reason))
+      if (!stopCalled) {
+        removeExecutor(taskId, SlaveLost(reason))
+      }
       slaves(slaveId).taskIDs.remove(taskId)
     }
   }
