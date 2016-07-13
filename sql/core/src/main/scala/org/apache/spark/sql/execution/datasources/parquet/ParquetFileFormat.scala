@@ -780,8 +780,7 @@ private[sql] object ParquetFileFormat extends Logging {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
     val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
-    val serializedConf =
-      new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
+    val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
 
     // !! HACK ALERT !!
     //
