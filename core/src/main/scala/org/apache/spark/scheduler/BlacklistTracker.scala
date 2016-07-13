@@ -41,8 +41,8 @@ import org.apache.spark.util.Utils
  * faulty; etc.
  *
  * THREADING: As with most helpers of TaskSchedulerImpl, this is not thread-safe.  Though it is
-  * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The
-  * one exception is [[nodeBlacklist()]], which can be called without holding a lock.
+ * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The
+ * one exception is [[nodeBlacklist()]], which can be called without holding a lock.
  */
 private[scheduler] class BlacklistTracker (
     conf: SparkConf,

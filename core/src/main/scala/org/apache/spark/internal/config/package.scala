@@ -104,7 +104,7 @@ package object config {
     .createOptional
 
   private[spark] val MAX_TASK_FAILURES_PER_NODE =
-    ConfigBuilder("spark.blacklist.maxTaskFailuresPerNode")
+    ConfigBuilder("spark.blacklist.maxFailedTasksPerNode")
     .intConf
     .createWithDefault(2)
 

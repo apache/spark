@@ -65,7 +65,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       "spark.testing.nExecutorsPerHost" -> "5",
       "spark.testing.nCoresPerExecutor" -> "10",
       "spark.task.maxFailures" -> "4",
-      "spark.blacklist.maxTaskFailuresPerNode" -> "5"
+      "spark.blacklist.maxFailedTasksPerNode" -> "5"
     )
   ) {
     // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this
