@@ -40,7 +40,7 @@ setMethod("window.partitionBy",
             windowSpec(
               callJStatic("org.apache.spark.sql.expressions.Window",
                           "partitionBy",
-                          col,
+                          x,
                           list(...)))
           })
 
@@ -52,7 +52,7 @@ setMethod("window.partitionBy",
 setMethod("window.partitionBy",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(col, ...), function(c) {
+            jcols <- lapply(list(x, ...), function(c) {
               c@jc
             })
             windowSpec(
@@ -84,7 +84,7 @@ setMethod("window.orderBy",
             windowSpec(
               callJStatic("org.apache.spark.sql.expressions.Window",
                           "orderBy",
-                          col,
+                          x,
                           list(...)))
           })
 
@@ -96,7 +96,7 @@ setMethod("window.orderBy",
 setMethod("window.orderBy",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(col, ...), function(c) {
+            jcols <- lapply(list(x, ...), function(c) {
               c@jc
             })
             windowSpec(
