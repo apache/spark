@@ -45,13 +45,10 @@ case class CatalogFunction(
  *
  * @param locationUri the storage location of the table/partition, can be None if it has no storage,
  *                    e.g. view, or it's not file-based, e.g. JDBC data source table.
- * @param provider the name of the data source provider, e.g. parquet, json, etc. Can be None if it
- *                 has no storage. Note that `hive` is also one kind of provider.
  * @param properties used to store some extra information for the storage.
  */
 case class CatalogStorageFormat(
     locationUri: Option[String],
-    provider: Option[String],
     properties: Map[String, String]) {
 
   override def toString: String = {
@@ -63,23 +60,22 @@ case class CatalogStorageFormat(
       }
     val output = Seq(
       locationUri.map("Location: " + _).getOrElse(""),
-      provider.map("Provider: " + _).getOrElse(""),
       propertiesToString)
     output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
   }
 
   // TODO: remove these hive hacks
 
-  def withInputFormat(inFmt: String): CatalogStorageFormat = {
-    this.copy(properties = properties + ("inputFormat" -> inFmt))
+  def withInputFormat(inFmt: Option[String]): CatalogStorageFormat = {
+    inFmt.map(i => copy(properties = properties + ("inputFormat" -> i))).getOrElse(this)
   }
 
-  def withOutputFormat(outFmt: String): CatalogStorageFormat = {
-    this.copy(properties = properties + ("outputFormat" -> outFmt))
+  def withOutputFormat(outFmt: Option[String]): CatalogStorageFormat = {
+    outFmt.map(o => copy(properties = properties + ("outputFormat" -> o))).getOrElse(this)
   }
 
-  def withSerde(serde: String): CatalogStorageFormat = {
-    this.copy(properties = properties + ("serde" -> serde))
+  def withSerde(serde: Option[String]): CatalogStorageFormat = {
+    serde.map(s => copy(properties = properties + ("serde" -> s))).getOrElse(this)
   }
 
   def getInputFormat: Option[String] = properties.get("inputFormat")
@@ -93,7 +89,7 @@ case class CatalogStorageFormat(
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val empty = CatalogStorageFormat(None, None, Map.empty)
+  val empty = CatalogStorageFormat(None, Map.empty)
 }
 
 /**
@@ -135,6 +131,8 @@ case class CatalogTablePartition(
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
  * future once we have a better understanding of how we want to handle skewed columns.
  *
+ * @param provider the name of the data source provider, e.g. parquet, json, etc.
+ *                 Note that `hive` is also one kind of provider.
  * @param unsupportedFeatures is a list of string descriptions of features that are used by the
  *        underlying table but not supported by Spark SQL yet.
  */
@@ -143,6 +141,7 @@ case class CatalogTable(
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
+    provider: Option[String] = None,
     partitionColumnNames: Seq[String] = Seq.empty,
     sortColumnNames: Seq[String] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
@@ -177,6 +176,11 @@ case class CatalogTable(
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
+
+  /** Syntactic sugar to update the `storage`. */
+  def mapStorage(f: CatalogStorageFormat => CatalogStorageFormat): CatalogTable = {
+    copy(storage = f(storage))
+  }
 
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")

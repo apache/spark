@@ -43,7 +43,7 @@ case class CreateHiveTableAsSelectLogicalPlan(
     tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
-  assert(tableDesc.storage.provider == Some("hive"))
+  assert(tableDesc.provider == Some("hive"))
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
@@ -81,13 +81,11 @@ case class CreateTableLikeCommand(
         s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
     }
 
-    val sourceTableMeta = catalog.getTableMetadata(sourceTable)
-    val tableToCreate = sourceTableMeta.copy(
+    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
       identifier = targetTable,
       tableType = CatalogTableType.MANAGED,
       createTime = System.currentTimeMillis,
-      lastAccessTime = -1,
-      storage = sourceTableMeta.storage.copy(locationUri = None))
+      lastAccessTime = -1).mapStorage(_.copy(locationUri = None))
 
     catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]
@@ -120,11 +118,11 @@ case class CreateTableLikeCommand(
  * }}}
  */
 case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
-  assert(table.storage.provider == Some("hive"))
+  assert(table.provider == Some("hive"))
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.properties.keys.toSeq, "CREATE TABLE")
+    DDLUtils.verifyTableProperties(table.storage.getProperties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
@@ -170,9 +168,9 @@ case class AlterTableRenameCommand(
       val table = catalog.getTableMetadata(oldName)
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
         val newPath = catalog.defaultTablePath(newName)
-        val newTable = table.copy(
-          storage = table.storage.copy(
-            properties = table.storage.properties + ("path" -> newPath)))
+        val newTable = table.mapStorage { storage =>
+          storage.copy(properties = storage.properties + ("path" -> newPath))
+        }
         catalog.alterTable(newTable)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
@@ -448,7 +446,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
         partCols.foreach(col => append(buffer, col, "", ""))
       }
     } else {
-      assert(table.storage.provider == Some("hive"))
+      assert(table.provider == Some("hive"))
       describeSchema(table.schema, buffer)
 
       if (table.partitionColumns.nonEmpty) {
@@ -747,7 +745,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       showCreateDataSourceTable(tableMetadata)
     } else {
-      assert(tableMetadata.storage.provider == Some("hive"))
+      assert(tableMetadata.provider == Some("hive"))
       showCreateHiveTable(tableMetadata)
     }
 

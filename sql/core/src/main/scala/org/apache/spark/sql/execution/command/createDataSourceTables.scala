@@ -388,7 +388,6 @@ object CreateDataSourceTableUtils extends Logging {
         schema = Nil,
         storage = CatalogStorageFormat(
           locationUri = None,
-          provider = None,
           properties = options
         ),
         properties = tableProperties.toMap)
@@ -400,18 +399,18 @@ object CreateDataSourceTableUtils extends Logging {
       assert(partitionColumns.isEmpty)
       assert(relation.partitionSchema.isEmpty)
 
-      var storage = CatalogStorageFormat(
+      val storage = CatalogStorageFormat(
         locationUri = Some(relation.location.paths.map(_.toUri.toString).head),
-        provider = Some("hive"),
         properties = options)
-      serde.inputFormat.foreach(inFmt => storage = storage.withInputFormat(inFmt))
-      serde.outputFormat.foreach(outFmt => storage = storage.withOutputFormat(outFmt))
-      serde.serde.foreach(sd => storage = storage.withSerde(sd))
+        .withInputFormat(serde.inputFormat)
+        .withOutputFormat(serde.outputFormat)
+        .withSerde(serde.serde)
 
       CatalogTable(
         identifier = tableIdent,
         tableType = tableType,
         storage = storage,
+        provider = Some("hive"),
         schema = relation.schema.map { f =>
           CatalogColumn(f.name, f.dataType.catalogString)
         },

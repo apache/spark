@@ -80,7 +80,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val storage =
       CatalogStorageFormat(
         locationUri = Some(catalog.defaultTablePath(name)),
-        provider = None,
         properties = Map.empty)
     CatalogTable(
       identifier = name,

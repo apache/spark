@@ -318,21 +318,18 @@ case class AlterTableSerDePropertiesCommand(
         "not supported for tables created with the datasource API")
     }
     if (partSpec.isEmpty) {
-      var newStorage = table.storage
-      serdeClassName.foreach(serde => newStorage = newStorage.withSerde(serde))
-      serdeProperties.foreach { props =>
-        newStorage = newStorage.copy(properties = newStorage.properties ++ props)
+      val newTable = table.mapStorage { storage =>
+        storage
+          .copy(properties = storage.properties ++ serdeProperties.getOrElse(Map.empty))
+          .withSerde(serdeClassName)
       }
-      val newTable = table.copy(storage = newStorage)
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
       val part = catalog.getPartition(tableName, spec)
-      var newStorage = part.storage
-      serdeClassName.foreach(serde => newStorage = newStorage.withSerde(serde))
-      serdeProperties.foreach { props =>
-        newStorage = newStorage.copy(properties = newStorage.properties ++ props)
-      }
+      val newStorage = part.storage.copy(
+        properties = part.storage.properties ++ serdeProperties.getOrElse(Map.empty)
+      ).withSerde(serdeClassName)
       val newPart = part.copy(storage = newStorage)
       catalog.alterPartitions(tableName, Seq(newPart))
     }
@@ -470,12 +467,13 @@ case class AlterTableSetLocationCommand(
         // No partition spec is specified, so we set the location for the table itself
         val newTable =
           if (DDLUtils.isDatasourceTable(table)) {
-            table.copy(storage = table.storage.copy(
-              locationUri = Some(location),
-              properties = table.storage.properties + ("path" -> location)
-            ))
+            table.mapStorage { storage =>
+              storage.copy(
+                locationUri = Some(location),
+                properties = storage.properties + ("path" -> location))
+            }
           } else {
-            table.copy(storage = table.storage.copy(locationUri = Some(location)))
+            table.mapStorage(_.copy(locationUri = Some(location)))
           }
         catalog.alterTable(newTable)
     }

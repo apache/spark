@@ -148,9 +148,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
         tableType = CatalogTableType.MANAGED,
         schema = Seq(CatalogColumn("key", "int")),
         storage = CatalogStorageFormat.empty
-          .withInputFormat(classOf[TextInputFormat].getName)
-          .withOutputFormat(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName)
-          .withSerde(classOf[LazySimpleSerDe].getName))
+          .withInputFormat(Some(classOf[TextInputFormat].getName))
+          .withOutputFormat(Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName))
+          .withSerde(Some(classOf[LazySimpleSerDe].getName)))
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -358,7 +358,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val newLocation = Utils.createTempDir().getPath()
       val storage = storageFormat.copy(locationUri = Some(newLocation))
         // needed for 0.12 alter partitions
-        .withSerde("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+        .withSerde(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       val partition = CatalogTablePartition(spec, storage)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)

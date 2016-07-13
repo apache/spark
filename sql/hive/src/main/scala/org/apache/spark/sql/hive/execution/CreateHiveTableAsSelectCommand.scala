@@ -52,19 +52,13 @@ case class CreateHiveTableAsSelectCommand(
       import org.apache.hadoop.io.Text
       import org.apache.hadoop.mapred.TextInputFormat
 
-      var newStorage = tableDesc.storage
-      if (newStorage.getInputFormat.isEmpty) {
-        newStorage = newStorage.withInputFormat(classOf[TextInputFormat].getName)
+      val withFormat = tableDesc.mapStorage { storage =>
+        storage
+          .withInputFormat(storage.getInputFormat.orElse(Some(classOf[TextInputFormat].getName)))
+          .withOutputFormat(storage.getOutputFormat
+            .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)))
+          .withSerde(storage.getSerde.orElse(Some(classOf[LazySimpleSerDe].getName)))
       }
-      if (newStorage.getOutputFormat.isEmpty) {
-        newStorage = newStorage.withOutputFormat(
-          classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)
-      }
-      if (newStorage.getSerde.isEmpty) {
-        newStorage = newStorage.withSerde(classOf[LazySimpleSerDe].getName)
-      }
-
-      val withFormat = tableDesc.copy(storage = newStorage)
 
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS

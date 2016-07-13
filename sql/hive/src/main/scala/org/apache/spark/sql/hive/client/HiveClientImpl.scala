@@ -355,7 +355,7 @@ private[hive] class HiveClientImpl(
 
       val properties = h.getParameters.asScala.toMap
 
-      var storage = CatalogStorageFormat(
+      val storage = CatalogStorageFormat(
         locationUri = shim.getDataLocation(h).filterNot { _ =>
           // SPARK-15269: Persisted data source tables always store the location URI as a SerDe
           // property named "path" instead of standard Hive `dataLocation`, because Hive only
@@ -370,16 +370,10 @@ private[hive] class HiveClientImpl(
             // because only these Hive compatible tables set this field.
             h.getInputFormatClass == null
         },
-        provider = Some("hive"),
         properties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
-      )
-      Option(h.getInputFormatClass).map(_.getName).foreach { inFmt =>
-        storage = storage.withInputFormat(inFmt)
-      }
-      Option(h.getOutputFormatClass).map(_.getName).foreach { outFmt =>
-        storage = storage.withOutputFormat(outFmt)
-      }
-      Option(h.getSerializationLib).foreach(serde => storage = storage.withSerde(serde))
+      ).withInputFormat(Option(h.getInputFormatClass).map(_.getName))
+        .withOutputFormat(Option(h.getOutputFormatClass).map(_.getName))
+        .withSerde(Option(h.getSerializationLib))
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -390,6 +384,7 @@ private[hive] class HiveClientImpl(
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         },
         schema = schema,
+        provider = Some("hive"),
         partitionColumnNames = partCols.map(_.name),
         sortColumnNames = Seq(), // TODO: populate this
         bucketColumnNames = h.getBucketCols.asScala,
@@ -816,19 +811,12 @@ private[hive] class HiveClientImpl(
   private def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
     val apiPartition = hp.getTPartition
 
-    var storage = CatalogStorageFormat(
+    val storage = CatalogStorageFormat(
       locationUri = Option(apiPartition.getSd.getLocation),
-      provider = Some("hive"),
-      properties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap)
-    Option(apiPartition.getSd.getInputFormat).foreach { inFmt =>
-      storage = storage.withInputFormat(inFmt)
-    }
-    Option(apiPartition.getSd.getOutputFormat).foreach { outFmt =>
-      storage = storage.withOutputFormat(outFmt)
-    }
-    Option(apiPartition.getSd.getSerdeInfo.getSerializationLib).foreach { serde =>
-      storage = storage.withSerde(serde)
-    }
+      properties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap
+    ).withInputFormat(Option(apiPartition.getSd.getInputFormat))
+      .withOutputFormat(Option(apiPartition.getSd.getOutputFormat))
+      .withSerde(Option(apiPartition.getSd.getSerdeInfo.getSerializationLib))
 
     CatalogTablePartition(
       spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),

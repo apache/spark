@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -923,7 +922,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.bucketSpec != null) {
       operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
     }
-    val comment = Option(ctx.comment).map(string)
+    val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
     val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
     val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
@@ -950,37 +949,39 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     // to include the partition columns here explicitly
     val schema = cols ++ partitionCols
 
+    // default input/output format
+    val (defaultInputFormat, defaultOutputFormat) = {
+      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
+      val inFmt = defaultHiveSerde.flatMap(_.inputFormat)
+        .getOrElse("org.apache.hadoop.mapred.TextInputFormat")
+      val outFmt = defaultHiveSerde.flatMap(_.outputFormat)
+        .getOrElse("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
+      inFmt -> outFmt
+    }
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
-    var storage = CatalogStorageFormat(
-      locationUri = Option(ctx.locationSpec).map(visitLocationSpec),
-      provider = Some("hive"),
-      properties = Map.empty)
-    Option(ctx.createFileFormat).foreach(ctx => storage = getFileFormat(ctx, storage))
-    // if both file format and row format specifies serde, the one from row format wins.
-    Option(ctx.rowFormat).foreach(ctx => storage = getRowFormat(ctx, storage))
-
-    val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
-    val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
-    // set default values for hive formats. Note that serde doesn't have default value, because we
-    // use the presence of the serde to decide whether to convert a table created by CTAS to a
-    // datasource table.
-    if (storage.getInputFormat.isEmpty) {
-      storage = storage.withInputFormat(defaultHiveSerde.flatMap(_.inputFormat)
-        .getOrElse("org.apache.hadoop.mapred.TextInputFormat"))
-    }
-    if (storage.getOutputFormat.isEmpty) {
-      storage = storage.withOutputFormat(defaultHiveSerde.flatMap(_.outputFormat)
-        .getOrElse("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    }
-
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
-    if (external && storage.locationUri.isEmpty) {
+    if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
     }
-
+    val storage = CatalogStorageFormat(
+      locationUri = location,
+      properties = rowStorage.getProperties ++ fileStorage.getProperties
+    ).withInputFormat(Some(defaultInputFormat))
+      .withInputFormat(fileStorage.getInputFormat)
+      .withOutputFormat(Some(defaultOutputFormat))
+      .withOutputFormat(fileStorage.getOutputFormat)
+      // if both file format and row format specifies serde, the one from row format wins.
+      .withSerde(fileStorage.getSerde)
+      .withSerde(rowStorage.getSerde)
     // If location is defined, we'll assume this is an external table.
     // Otherwise, we may accidentally delete existing data.
-    val tableType = if (external || storage.locationUri.isDefined) {
+    val tableType = if (external || location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -1019,8 +1020,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
-          val optionsWithPath = if (storage.locationUri.isDefined) {
-            Map("path" -> storage.locationUri.get)
+          val optionsWithPath = if (location.isDefined) {
+            Map("path" -> location.get)
           } else {
             Map.empty[String, String]
           }
@@ -1056,39 +1057,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Parse the `createFileFormat` and put the storage information into the passed in map.
+   * Create a [[CatalogStorageFormat]] for creating tables.
    *
-   * Example format:
-   * {{{
-   *   STORED AS INPUTFORMAT formatName1 OUTPUTFORMAT formatName2
-   * }}}
-   *
-   * OR
-   *
-   * {{{
-   *   STORED AS fileFormatName
-   * }}}
+   * Format: STORED AS ...
    */
-  private def getFileFormat(
-      ctx: CreateFileFormatContext,
-      storage: CatalogStorageFormat): CatalogStorageFormat = {
+  override def visitCreateFileFormat(
+      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     (ctx.fileFormat, ctx.storageHandler) match {
       // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
       case (c: TableFileFormatContext, null) =>
-        storage.withInputFormat(string(c.inFmt)).withOutputFormat(string(c.outFmt))
+        visitTableFileFormat(c)
       // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
       case (c: GenericFileFormatContext, null) =>
-        val source = c.identifier.getText
-        HiveSerDe.sourceToSerDe(source, conf) match {
-          case Some(s) =>
-            var result = storage
-            s.inputFormat.foreach(inFmt => result = result.withInputFormat(inFmt))
-            s.outputFormat.foreach(outFmt => result = result.withOutputFormat(outFmt))
-            s.serde.foreach(serde => result = result.withSerde(serde))
-            result
-          case None =>
-            operationNotAllowed(s"STORED AS with file format '$source'", ctx)
-        }
+        visitGenericFileFormat(c)
       case (null, storageHandler) =>
         operationNotAllowed("STORED BY", ctx)
       case _ =>
@@ -1097,7 +1078,34 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Parse the `rowFormat` and put the storage information into the passed in map.
+   * Create a [[CatalogStorageFormat]].
+   */
+  override def visitTableFileFormat(
+      ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    CatalogStorageFormat.empty
+      .withInputFormat(Option(ctx.inFmt).map(string))
+      .withOutputFormat(Option(ctx.outFmt).map(string))
+  }
+
+  /**
+   * Resolve a [[HiveSerDe]] based on the name given and return it as a [[CatalogStorageFormat]].
+   */
+  override def visitGenericFileFormat(
+      ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    val source = ctx.identifier.getText
+    HiveSerDe.sourceToSerDe(source, conf) match {
+      case Some(s) =>
+        CatalogStorageFormat.empty
+          .withInputFormat(s.inputFormat)
+          .withOutputFormat(s.outputFormat)
+          .withSerde(s.serde)
+      case None =>
+        operationNotAllowed(s"STORED AS with file format '$source'", ctx)
+    }
+  }
+
+  /**
+   * Create a [[CatalogStorageFormat]] used for creating tables.
    *
    * Example format:
    * {{{
@@ -1114,39 +1122,50 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *   [NULL DEFINED AS char]
    * }}}
    */
-  private def getRowFormat(
-      ctx: RowFormatContext,
-      storage: CatalogStorageFormat): CatalogStorageFormat = withOrigin(ctx) {
+  private def visitRowFormat(ctx: RowFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     ctx match {
-      case serde: RowFormatSerdeContext =>
-        var result = storage.withSerde(string(serde.name))
-        Option(serde.props).map(visitPropertyKeyValues).foreach { props =>
-          result = result.copy(properties = result.properties ++ props)
-        }
-        result
-      case delimited: RowFormatDelimitedContext =>
-        // Collect the entries if any.
-        def entry(key: String, value: Token): Option[(String, String)] = {
-          Option(value).map(x => key -> string(x))
-        }
-        // TODO we need proper support for the NULL format.
-        val entries =
-          entry("field.delim", delimited.fieldsTerminatedBy) ++
-            entry("serialization.format", delimited.fieldsTerminatedBy) ++
-            entry("escape.delim", delimited.escapedBy) ++
-            // The following typo is inherited from Hive...
-            entry("colelction.delim", delimited.collectionItemsTerminatedBy) ++
-            entry("mapkey.delim", delimited.keysTerminatedBy) ++
-            Option(delimited.linesSeparatedBy).toSeq.map { token =>
-              val value = string(token)
-              assert(
-                value == "\n",
-                s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
-                ctx)
-              "line.delim" -> value
-            }
-        storage.copy(properties = storage.properties ++ entries)
+      case serde: RowFormatSerdeContext => visitRowFormatSerde(serde)
+      case delimited: RowFormatDelimitedContext => visitRowFormatDelimited(delimited)
     }
+  }
+
+  /**
+   * Create SERDE row format name and properties pair.
+   */
+  override def visitRowFormatSerde(
+      ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
+    import ctx._
+    CatalogStorageFormat.empty
+      .copy(properties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      .withSerde(Option(name).map(string))
+  }
+
+  /**
+   * Create a delimited row format properties object.
+   */
+  override def visitRowFormatDelimited(
+      ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
+    // Collect the entries if any.
+    def entry(key: String, value: Token): Seq[(String, String)] = {
+      Option(value).toSeq.map(x => key -> string(x))
+    }
+    // TODO we need proper support for the NULL format.
+    val entries =
+      entry("field.delim", ctx.fieldsTerminatedBy) ++
+        entry("serialization.format", ctx.fieldsTerminatedBy) ++
+        entry("escape.delim", ctx.escapedBy) ++
+        // The following typo is inherited from Hive...
+        entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
+        entry("mapkey.delim", ctx.keysTerminatedBy) ++
+        Option(ctx.linesSeparatedBy).toSeq.map { token =>
+          val value = string(token)
+          assert(
+            value == "\n",
+            s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+            ctx)
+          "line.delim" -> value
+        }
+    CatalogStorageFormat.empty.copy(properties = entries.toMap)
   }
 
   /**
@@ -1310,8 +1329,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // expects a seq of pairs in which the old parsers' token names are used as keys.
         // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
         // retrieving the key value pairs ourselves.
-        def entry(key: String, value: Token): Option[(String, String)] = {
-          Option(value).map(t => key -> t.getText)
+        def entry(key: String, value: Token): Seq[(String, String)] = {
+          Option(value).map(t => key -> t.getText).toSeq
         }
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
@@ -1319,11 +1338,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
           entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
 
-        (entries.toSeq, None, Seq.empty, None)
+        (entries, None, Seq.empty, None)
 
       case c: RowFormatSerdeContext =>
+        // Use a serde format.
         val props = Option(c.props).map(visitPropertyKeyValues).getOrElse(Nil)
         val name = string(c.name)
+
         // SPARK-10310: Special cases LazySimpleSerDe
         val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
           Try(conf.getConfString(configKey)).toOption
