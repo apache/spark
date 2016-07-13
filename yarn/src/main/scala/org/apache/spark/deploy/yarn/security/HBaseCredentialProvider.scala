@@ -41,6 +41,7 @@ private[yarn] class HBaseCredentialProvider extends ServiceCredentialProvider wi
       logDebug("Attempting to fetch HBase security token.")
       val token = obtainToken.invoke(null, hbaseConf(hadoopConf))
         .asInstanceOf[Token[_ <: TokenIdentifier]]
+      logInfo(s"Get token from HBase: ${token.toString}")
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>

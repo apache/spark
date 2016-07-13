@@ -69,9 +69,11 @@ final class ConfigurableCredentialManager private[yarn] (sparkConf: SparkConf) e
     providers.filter { p =>
       sparkConf.getOption(providerEnabledConfig.format(p.serviceName))
         .orElse {
-          logWarning(s"${deprecatedProviderEnabledConfig.format(p.serviceName)} is deprecated, " +
-            s"using ${providerEnabledConfig.format(p.serviceName)} instead")
-          sparkConf.getOption(deprecatedProviderEnabledConfig.format(p.serviceName))
+          sparkConf.getOption(deprecatedProviderEnabledConfig.format(p.serviceName)).map { c =>
+            logWarning(s"${deprecatedProviderEnabledConfig.format(p.serviceName)} is deprecated, " +
+              s"using ${providerEnabledConfig.format(p.serviceName)} instead")
+            c
+          }
         }
         .getOrElse(defaultCredentialProviders.keySet.find(_ == p.serviceName).isDefined.toString)
         .toBoolean
@@ -115,7 +117,7 @@ final class ConfigurableCredentialManager private[yarn] (sparkConf: SparkConf) e
       if (provider.isCredentialRequired(hadoopConf)) {
         timeOfNextRenewals += provider.obtainCredentials(hadoopConf, creds)
       } else {
-        logWarning(s"Service ${provider.serviceName} does not require a token." +
+        logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
       }
     }

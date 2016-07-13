@@ -71,6 +71,7 @@ private[yarn] class HiveCredentialProvider extends ServiceCredentialProvider wit
             .asInstanceOf[String]
           val hive2Token = new Token[DelegationTokenIdentifier]()
           hive2Token.decodeFromUrlString(tokenStr)
+          logInfo(s"Get Token from hive metastore: ${hive2Token.toString}")
           creds.addToken(new Text("hive.server2.delegation.token"), hive2Token)
         }
       } catch {
