@@ -1281,7 +1281,8 @@ setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spar
 
 #' @rdname spark.isotonicRegression
 #' @export
-setGeneric("spark.isotonicRegression", function(data, formula, ...) { standardGeneric("spark.isotonicRegression") })
+setGeneric("spark.isotonicRegression", function(data, formula, ...)
+    { standardGeneric("spark.isotonicRegression") })
 
 #' @rdname write.ml
 #' @export
