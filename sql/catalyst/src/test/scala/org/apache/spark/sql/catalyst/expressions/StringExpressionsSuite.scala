@@ -605,6 +605,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(expr, null, row4)
     checkEvaluation(expr, null, row5)
     checkEvaluation(expr, null, row6)
+
+    val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
+    checkEvaluation(nonNullExpr, "num-num", row1)
   }
 
   test("RegexExtract") {
@@ -631,6 +634,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val expr1 = new RegExpExtract(s, p)
     checkEvaluation(expr1, "100", row1)
+
+    val nonNullExpr = RegExpExtract(Literal("100-200"), Literal("(\\d+)-(\\d+)"), Literal(1))
+    checkEvaluation(nonNullExpr, "100", row1)
   }
 
   test("SPLIT") {
