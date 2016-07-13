@@ -98,8 +98,8 @@ class SessionCatalogSuite extends SparkFunSuite {
     // Throw exception if there are functions left
     val externalCatalog1 = newBasicCatalog()
     val sessionCatalog1 = new SessionCatalog(externalCatalog1)
-    externalCatalog1.dropTable("db2", "tbl1", ignoreIfNotExists = false)
-    externalCatalog1.dropTable("db2", "tbl2", ignoreIfNotExists = false)
+    externalCatalog1.dropTable("db2", "tbl1", ignoreIfNotExists = false, purge = false)
+    externalCatalog1.dropTable("db2", "tbl2", ignoreIfNotExists = false, purge = false)
     intercept[AnalysisException] {
       sessionCatalog1.dropDatabase("db2", ignoreIfNotExists = false, cascade = false)
     }
@@ -217,11 +217,12 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    sessionCatalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false,
+      purge = false)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl2"))
     // Drop table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
-    sessionCatalog.dropTable(TableIdentifier("tbl2"), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier("tbl2"), ignoreIfNotExists = false, purge = false)
     assert(externalCatalog.listTables("db2").isEmpty)
   }
 
@@ -229,15 +230,19 @@ class SessionCatalogSuite extends SparkFunSuite {
     val catalog = new SessionCatalog(newBasicCatalog())
     // Should always throw exception when the database does not exist
     intercept[NoSuchDatabaseException] {
-      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false)
+      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
+        purge = false)
     }
     intercept[NoSuchDatabaseException] {
-      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true)
+      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
+        purge = false)
     }
     intercept[NoSuchTableException] {
-      catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false)
+      catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false,
+        purge = false)
     }
-    catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = true)
+    catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = true,
+      purge = false)
   }
 
   test("drop temp table") {
@@ -249,16 +254,17 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If database is not specified, temp table should be dropped first
-    sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
     assert(sessionCatalog.getTempTable("tbl1") == None)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     // If temp table does not exist, the table in the current database should be dropped
-    sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
     assert(externalCatalog.listTables("db2").toSet == Set("tbl2"))
     // If database is specified, temp tables are never dropped
     sessionCatalog.createTempView("tbl1", tempTable, overrideIfExists = false)
     sessionCatalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
-    sessionCatalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier("tbl1", Some("db2")), ignoreIfNotExists = false,
+      purge = false)
     assert(sessionCatalog.getTempTable("tbl1") == Some(tempTable))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl2"))
   }
@@ -394,7 +400,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", tempTable1))
     // Then, if that does not exist, look up the relation in the current database
-    sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1)))
   }
@@ -575,14 +581,16 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec),
-      ignoreIfNotExists = false)
+      ignoreIfNotExists = false,
+      purge = false)
     assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part2)))
     // Drop partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2"),
       Seq(part2.spec),
-      ignoreIfNotExists = false)
+      ignoreIfNotExists = false,
+      purge = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
     // Drop multiple partitions at once
     sessionCatalog.createPartitions(
@@ -591,7 +599,8 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec, part2.spec),
-      ignoreIfNotExists = false)
+      ignoreIfNotExists = false,
+      purge = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
   }
 
@@ -601,13 +610,15 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.dropPartitions(
         TableIdentifier("tbl1", Some("unknown_db")),
         Seq(),
-        ignoreIfNotExists = false)
+        ignoreIfNotExists = false,
+        purge = false)
     }
     intercept[NoSuchTableException] {
       catalog.dropPartitions(
         TableIdentifier("does_not_exist", Some("db2")),
         Seq(),
-        ignoreIfNotExists = false)
+        ignoreIfNotExists = false,
+        purge = false)
     }
   }
 
@@ -617,12 +628,14 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.dropPartitions(
         TableIdentifier("tbl2", Some("db2")),
         Seq(part3.spec),
-        ignoreIfNotExists = false)
+        ignoreIfNotExists = false,
+        purge = false)
     }
     catalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part3.spec),
-      ignoreIfNotExists = true)
+      ignoreIfNotExists = true,
+      purge = false)
   }
 
   test("drop partitions with invalid partition spec") {
@@ -631,7 +644,8 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.dropPartitions(
         TableIdentifier("tbl2", Some("db2")),
         Seq(partWithMoreColumns.spec),
-        ignoreIfNotExists = false)
+        ignoreIfNotExists = false,
+        purge = false)
     }
     assert(e.getMessage.contains(
       "Partition spec is invalid. The spec (a, b, c) must be contained within " +
@@ -640,7 +654,8 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.dropPartitions(
         TableIdentifier("tbl2", Some("db2")),
         Seq(partWithUnknownColumns.spec),
-        ignoreIfNotExists = false)
+        ignoreIfNotExists = false,
+        purge = false)
     }
     assert(e.getMessage.contains(
       "Partition spec is invalid. The spec (a, unknown) must be contained within " +
