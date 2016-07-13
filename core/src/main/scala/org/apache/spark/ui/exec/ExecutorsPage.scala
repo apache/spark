@@ -58,6 +58,7 @@ private[ui] class ExecutorsPage(
       <div>
         {
         <div id="active-executors"></div> ++
+          <script src={UIUtils.prependBaseUri("/static/utils.js")}> </script> ++
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}> </script>
         }
       </div>;
