@@ -43,7 +43,7 @@ public class UDFXPathUtil {
   private XPathExpression expression = null;
   private String oldPath = null;
 
-  public Object eval(String xml, String path, QName qname) {
+  public Object eval(String xml, String path, QName qname) throws XPathExpressionException {
     if (xml == null || path == null || qname == null) {
       return null;
     }
@@ -56,7 +56,7 @@ public class UDFXPathUtil {
       try {
         expression = xpath.compile(path);
       } catch (XPathExpressionException e) {
-        expression = null;
+        throw new RuntimeException("Invalid XPath '" + path + "'" + e.getMessage(), e);
       }
       oldPath = path;
     }
@@ -66,31 +66,30 @@ public class UDFXPathUtil {
     }
 
     reader.set(xml);
-
     try {
       return expression.evaluate(inputSource, qname);
     } catch (XPathExpressionException e) {
-      throw new RuntimeException("Invalid expression '" + oldPath + "'", e);
+      throw new RuntimeException("Invalid XML document: " + e.getMessage() + "\n" + xml, e);
     }
   }
 
-  public Boolean evalBoolean(String xml, String path) {
+  public Boolean evalBoolean(String xml, String path) throws XPathExpressionException {
     return (Boolean) eval(xml, path, XPathConstants.BOOLEAN);
   }
 
-  public String evalString(String xml, String path) {
+  public String evalString(String xml, String path) throws XPathExpressionException {
     return (String) eval(xml, path, XPathConstants.STRING);
   }
 
-  public Double evalNumber(String xml, String path) {
+  public Double evalNumber(String xml, String path) throws XPathExpressionException {
     return (Double) eval(xml, path, XPathConstants.NUMBER);
   }
 
-  public Node evalNode(String xml, String path) {
+  public Node evalNode(String xml, String path) throws XPathExpressionException {
     return (Node) eval(xml, path, XPathConstants.NODE);
   }
 
-  public NodeList evalNodeList(String xml, String path) {
+  public NodeList evalNodeList(String xml, String path) throws XPathExpressionException {
     return (NodeList) eval(xml, path, XPathConstants.NODESET);
   }
 

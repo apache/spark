@@ -355,32 +355,39 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR supports the following Machine Learning algorithms.
+SparkR supports the following machine learning algorithms currently: `Generalized Linear Model`, `Accelerated Failure Time (AFT) Survival Regression Model`, `Naive Bayes Model` and `KMeans Model`.
+Under the hood, SparkR uses MLlib to train the model.
+Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
+SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
 
-* Generalized Linear Regression Model [spark.glm()](api/R/spark.glm.html)
-* Naive Bayes [spark.naiveBayes()](api/R/spark.naiveBayes.html)
-* KMeans [spark.kmeans()](api/R/spark.kmeans.html)
-* AFT Survival Regression [spark.survreg()](api/R/spark.survreg.html)
+## Algorithms
 
-[Generalized Linear Regression](api/R/spark.glm.html) can be used to train a model from a specified family. Currently the Gaussian, Binomial, Poisson and Gamma families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
+### Generalized Linear Model
 
-The [summary()](api/R/summary.html) function gives the summary of a model produced by different algorithms listed above.
-It produces the similar result compared with R summary function.
+[spark.glm()](api/R/spark.glm.html) or [glm()](api/R/glm.html) fits generalized linear model against a Spark DataFrame.
+Currently "gaussian", "binomial", "poisson" and "gamma" families are supported.
+{% include_example glm r/ml.R %}
+
+### Accelerated Failure Time (AFT) Survival Regression Model
+
+[spark.survreg()](api/R/spark.survreg.html) fits an accelerated failure time (AFT) survival regression model on a SparkDataFrame.
+Note that the formula of [spark.survreg()](api/R/spark.survreg.html) does not support operator '.' currently.
+{% include_example survreg r/ml.R %}
+
+### Naive Bayes Model
+
+[spark.naiveBayes()](api/R/spark.naiveBayes.html) fits a Bernoulli naive Bayes model against a SparkDataFrame. Only categorical data is supported.
+{% include_example naiveBayes r/ml.R %}
+
+### KMeans Model
+
+[spark.kmeans()](api/R/spark.kmeans.html) fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
+{% include_example kmeans r/ml.R %}
 
 ## Model persistence
 
-* [write.ml](api/R/write.ml.html) allows users to save a fitted model in a given input path
-* [read.ml](api/R/read.ml.html) allows users to read/load the model which was saved using write.ml in a given path
-
-Model persistence is supported for all Machine Learning algorithms for all families.
-
-The examples below show how to build several models:
-* GLM using the Gaussian and Binomial model families
-* AFT survival regression model
-* Naive Bayes model
-* K-Means model
-
-{% include_example r/ml.R %}
+The following example shows how to save/load a MLlib model by SparkR.
+{% include_example read_write r/ml.R %}
 
 # R Function Name Conflicts
 

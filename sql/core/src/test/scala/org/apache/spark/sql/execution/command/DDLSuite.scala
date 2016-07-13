@@ -352,7 +352,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }.getMessage
     assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
 
-    catalog.dropTable(tableIdent1, ignoreIfNotExists = false)
+    catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 
     assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName RESTRICT")
@@ -1268,6 +1268,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
     assertUnsupported("CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
+  }
+
+  test("drop current database") {
+    sql("CREATE DATABASE temp")
+    sql("USE temp")
+    val m = intercept[AnalysisException] {
+      sql("DROP DATABASE temp")
+    }.getMessage
+    assert(m.contains("Can not drop current database `temp`"))
   }
 
   test("drop default database") {

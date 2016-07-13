@@ -19,14 +19,20 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.test.SharedSQLContext
 
-/**
- * End-to-end tests for XML expressions.
- */
-class XmlFunctionsSuite extends QueryTest with SharedSQLContext {
+class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("xpath_boolean") {
-    val df = Seq("<a><b>b</b></a>" -> "a/b").toDF("xml", "path")
-    checkAnswer(df.selectExpr("xpath_boolean(xml, path)"), Row(true))
+  test("reflect and java_method") {
+    val df = Seq((1, "one")).toDF("a", "b")
+    val className = ReflectClass.getClass.getName.stripSuffix("$")
+    checkAnswer(
+      df.selectExpr(
+        s"reflect('$className', 'method1', a, b)",
+        s"java_method('$className', 'method1', a, b)"),
+      Row("m1one", "m1one"))
   }
+}
+
+object ReflectClass {
+  def method1(v1: Int, v2: String): String = "m" + v1 + v2
 }

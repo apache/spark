@@ -62,7 +62,7 @@ class CatalogSuite
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
-    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false, purge = false)
   }
 
   private def createFunction(name: String, db: Option[String] = None): Unit = {
@@ -232,6 +232,11 @@ class CatalogSuite
   test("list columns") {
     createTable("tab1")
     testListColumns("tab1", dbName = None)
+  }
+
+  test("list columns in temporary table") {
+    createTempTable("temp1")
+    spark.catalog.listColumns("temp1")
   }
 
   test("list columns in database") {
