@@ -238,6 +238,6 @@ private[sql] class HiveSessionCatalog(
     "hash",
     "histogram_numeric",
     "percentile",
-    "percentile_approx",
+    "percentile_approx"
   )
 }
