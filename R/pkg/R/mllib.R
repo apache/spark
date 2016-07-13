@@ -57,7 +57,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'
 #' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
 #' @export
-#' @note IsotonicRegressionModel since 2.0.0
+#' @note IsotonicRegressionModel since 2.1.0
 setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 
 #' Saves the MLlib model to the input path
