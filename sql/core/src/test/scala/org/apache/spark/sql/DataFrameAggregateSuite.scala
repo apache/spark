@@ -480,8 +480,8 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val data = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("value")
     checkAnswer(
       data.select(histogram_numeric($"value", 3)),
-      Row(Array(Row(5.571428571428571, 7),
-          Row(33.5, 2),
-          Row(400.0, 1))) :: Nil)
+      Row(Array(Row(5.571428571428571, 7.0),
+          Row(33.5, 2.0),
+          Row(400.0, 1.0))) :: Nil)
   }
 }

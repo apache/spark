@@ -347,11 +347,11 @@ object TypeCoercion {
       case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
       case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
       case NumericHistogram(e @ StringType(), b @ StringType()) =>
-        NumericHistogram(Cast(e, DoubleType), Cast(b, IntegerType))
+        NumericHistogram(Cast(e, DoubleType), Cast(b, DoubleType))
       case NumericHistogram(e @ NumericType(), b @ StringType()) =>
-        NumericHistogram(Cast(e, DoubleType), Cast(b, IntegerType))
+        NumericHistogram(Cast(e, DoubleType), Cast(b, DoubleType))
       case NumericHistogram(e @ StringType(), b @ NumericType()) =>
-        NumericHistogram(Cast(e, DoubleType), Cast(b, IntegerType))
+        NumericHistogram(Cast(e, DoubleType), Cast(b, DoubleType))
       case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
       case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
     }

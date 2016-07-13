@@ -626,6 +626,12 @@ object functions {
   def histogram_numeric(columnName: String, nb: Int): Column =
     histogram_numeric(Column(columnName), nb)
 
+  def imperative_histogram_numeric(e: Column, nb: Int): Column =
+    withAggregateFunction { ImperativeNumericHistogram(e.expr, Literal(nb)) }
+
+  def imperative_histogram_numeric(columnName: String, nb: Int): Column =
+    imperative_histogram_numeric(Column(columnName), nb)
+
   /**
    * Aggregate function: returns the sum of all values in the expression.
    *
