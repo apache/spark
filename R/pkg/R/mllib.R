@@ -53,10 +53,34 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
+#' Saves the MLlib model to the input path
+#'
+#' Saves the MLlib model to the input path. For more information, see the specific
+#' MLlib model below.
+#' @rdname write.ml
+#' @name write.ml
+#' @export
+#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{read.ml}
+NULL
+
+#' Makes predictions from a MLlib model
+#'
+#' Makes predictions from a MLlib model. For more information, see the specific
+#' MLlib model below.
+#' @rdname predict
+#' @name predict
+#' @export
+#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+NULL
+
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame. Users can print, make predictions on the
-#' produced model and save the model to the input path.
+#' Fits generalized linear model against a Spark DataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -145,7 +169,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
-#'
+
 #' @param object A fitted generalized linear model
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
 #'         including at least the coefficients, null/residual deviance, null/residual degrees
@@ -185,7 +209,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           })
 
 #  Prints the summary of GeneralizedLinearRegressionModel
-#'
+
 #' @rdname spark.glm
 #' @param x Summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
@@ -270,7 +294,8 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' K-Means Clustering Model
 #'
 #' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
-#' Users can print, make predictions on the produced model and save the model to the input path.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -343,7 +368,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
           })
 
 #  Get the summary of a k-means model
-#'
+
 #' @param object A fitted k-means model
 #' @return \code{summary} returns the model's coefficients, size and cluster
 #' @rdname spark.kmeans
@@ -370,7 +395,7 @@ setMethod("summary", signature(object = "KMeansModel"),
           })
 
 #  Predicted values based on a k-means model
-#'
+
 #' @return \code{predict} returns the predicted values based on a k-means model
 #' @rdname spark.kmeans
 #' @export
@@ -463,7 +488,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
           })
 
 #  Saves the generalized linear model to the input path.
-#'
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
@@ -481,7 +506,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
           })
 
 #  Save fitted MLlib model to the input path
-#'
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
@@ -506,6 +531,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @rdname read.ml
 #' @name read.ml
 #' @export
+#' @seealso \link{write.ml}
 #' @examples
 #' \dontrun{
 #' path <- "path/to/model"

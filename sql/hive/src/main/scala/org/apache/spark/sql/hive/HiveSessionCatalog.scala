@@ -235,7 +235,9 @@ private[sql] class HiveSessionCatalog(
   // parse_url_tuple, posexplode, reflect2,
   // str_to_map, windowingtablefunction.
   private val hiveFunctions = Seq(
-    "hash", "java_method", "histogram_numeric",
-    "percentile", "percentile_approx", "reflect"
+    "hash",
+    "histogram_numeric",
+    "percentile",
+    "percentile_approx",
   )
 }

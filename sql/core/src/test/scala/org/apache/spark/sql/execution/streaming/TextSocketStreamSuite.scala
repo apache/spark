@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{IOException, OutputStreamWriter}
 import java.net.ServerSocket
+import java.sql.Timestamp
 import java.util.concurrent.LinkedBlockingQueue
 
 import org.scalatest.BeforeAndAfterEach
@@ -27,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
   import testImplicits._
@@ -85,6 +86,47 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
+  test("timestamped usage") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val provider = new TextSocketSourceProvider
+    val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString,
+      "includeTimestamp" -> "true")
+    val schema = provider.sourceSchema(sqlContext, None, "", parameters)._2
+    assert(schema === StructType(StructField("value", StringType) ::
+      StructField("timestamp", TimestampType) :: Nil))
+
+    source = provider.createSource(sqlContext, "", None, "", parameters)
+
+    failAfter(streamingTimeout) {
+      serverThread.enqueue("hello")
+      while (source.getOffset.isEmpty) {
+        Thread.sleep(10)
+      }
+      val offset1 = source.getOffset.get
+      val batch1 = source.getBatch(None, offset1)
+      val batch1Seq = batch1.as[(String, Timestamp)].collect().toSeq
+      assert(batch1Seq.map(_._1) === Seq("hello"))
+      val batch1Stamp = batch1Seq(0)._2
+
+      serverThread.enqueue("world")
+      while (source.getOffset.get === offset1) {
+        Thread.sleep(10)
+      }
+      val offset2 = source.getOffset.get
+      val batch2 = source.getBatch(Some(offset1), offset2)
+      val batch2Seq = batch2.as[(String, Timestamp)].collect().toSeq
+      assert(batch2Seq.map(_._1) === Seq("world"))
+      val batch2Stamp = batch2Seq(0)._2
+      assert(!batch2Stamp.before(batch1Stamp))
+
+      // Try stopping the source to make sure this does not block forever.
+      source.stop()
+      source = null
+    }
+  }
+
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
@@ -95,6 +137,14 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
     intercept[AnalysisException] {
       provider.sourceSchema(sqlContext, None, "", Map("port" -> "1234"))
+    }
+  }
+
+  test("non-boolean includeTimestamp") {
+    val provider = new TextSocketSourceProvider
+    intercept[AnalysisException] {
+      provider.sourceSchema(sqlContext, None, "", Map("host" -> "localhost",
+      "port" -> "1234", "includeTimestamp" -> "fasle"))
     }
   }
 
