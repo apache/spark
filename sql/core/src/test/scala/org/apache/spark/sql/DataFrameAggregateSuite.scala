@@ -475,4 +475,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       spark.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
+
+  test("SPARK-16280: test histogram_numeric.") {
+    val data = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("value")
+    checkAnswer(
+      data.select(histogram_numeric($"value", 3)),
+      Row(Array(Row(5.571428571428571, 7),
+          Row(33.5, 2),
+          Row(400.0, 1))) :: Nil)
+  }
 }
