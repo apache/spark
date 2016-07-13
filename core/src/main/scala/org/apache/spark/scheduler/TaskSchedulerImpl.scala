@@ -255,7 +255,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
     manager.parent.removeSchedulable(manager)
     if (success) {
-      blacklistTracker.foreach(_.taskSetSucceeded(manager.taskSet.stageId, this))
+      blacklistTracker.foreach(_.taskSetSucceeded(manager.execToFailures, this))
       logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
         s" ${manager.parent.name}")
     } else {
@@ -279,8 +279,8 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       val host = offer.host
       val execId = offer.executorId
       val offerBlacklisted = blacklistTracker.map { bl =>
-        bl.isNodeBlacklistedForStage(host, taskSet.stageId) ||
-          bl.isExecutorBlacklistedForStage(taskSet.stageId, execId)
+        taskSet.isNodeBlacklistedForTaskSet(host) ||
+          taskSet.isExecutorBlacklistedForTaskSet(execId)
       }.getOrElse(false)
       if (!offerBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
         try {

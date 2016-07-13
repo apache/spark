@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
@@ -64,6 +65,9 @@ private[spark] class TaskSetManager(
   }
 
   val conf = sched.sc.conf
+  private val MAX_TASK_FAILURES_PER_NODE = conf.get(config.MAX_TASK_FAILURES_PER_NODE)
+  private val MAX_FAILURES_PER_EXEC_STAGE = conf.get(config.MAX_FAILURES_PER_EXEC_STAGE)
+  private val MAX_FAILED_EXEC_PER_NODE_STAGE = conf.get(config.MAX_FAILED_EXEC_PER_NODE_STAGE)
 
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
@@ -81,6 +85,10 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
+  val execToFailures: HashMap[String, FailureStatus] = new HashMap()
+  val nodeBlacklistedTasks: HashMap[String, HashSet[Int]] = new HashMap()
+  val blacklistedNodes: HashSet[String] = new HashSet()
+
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksSuccessful = 0
@@ -250,8 +258,8 @@ private[spark] class TaskSetManager(
       indexOffset -= 1
       val index = list(indexOffset)
       val taskBlacklisted = blacklistTracker.map { bl =>
-        bl.isNodeBlacklistedForTask(host, stageId, index) ||
-          bl.isExecutorBlacklistedForTask(execId, stageId, index)
+        isNodeBlacklistedForTask(host, index) ||
+          isExecutorBlacklistedForTask(execId, index)
       }.getOrElse(false)
       if (!taskBlacklisted) {
         // This should almost always be list.trimEnd(1) to remove tail
@@ -282,8 +290,8 @@ private[spark] class TaskSetManager(
 
     def canRunOnHost(index: Int): Boolean = {
       !hasAttemptOnHost(index, host) && blacklistTracker.map { bl =>
-        !bl.isNodeBlacklistedForTask(host, stageId, index) &&
-          !bl.isExecutorBlacklistedForTask(execId, stageId, index)
+        !isNodeBlacklistedForTask(host, index) &&
+          !isExecutorBlacklistedForTask(execId, index)
       }.getOrElse(true)
     }
 
@@ -613,13 +621,13 @@ private[spark] class TaskSetManager(
         val stage = taskSet.stageId
         executorsByHost.foreach { case (host, execs) =>
           if (!blacklist.isNodeBlacklisted(host) &&
-                !blacklist.isNodeBlacklistedForStage(host, stage) &&
-                !blacklist.isNodeBlacklistedForTask(host, stage, indexInTaskSet)) {
+                !isNodeBlacklistedForTaskSet(host) &&
+                !isNodeBlacklistedForTask(host, indexInTaskSet)) {
             execs.foreach { exec =>
               if (
                 !blacklist.isExecutorBlacklisted(exec) &&
-                  !blacklist.isExecutorBlacklistedForStage(stage, exec) &&
-                  !blacklist.isExecutorBlacklistedForTask(exec, stage, indexInTaskSet)
+                  !isExecutorBlacklistedForTaskSet(exec) &&
+                  !isExecutorBlacklistedForTask(exec, indexInTaskSet)
               ) {
                 // we've found some executor this task can run on.  Its possible that some *other*
                 // task isn't schedulable anywhere, but we will discover that in some later call,
@@ -789,7 +797,7 @@ private[spark] class TaskSetManager(
     // shouldn't penalize *this* executor at all, so don't count it as a task-failure as far as
     // the blacklist is concerned.
     if (!reason.isInstanceOf[FetchFailed]) {
-      blacklistTracker.foreach(_.taskFailed(stageId, index, info, sched))
+      updateBlacklistForFailedTask(info.host, info.executorId, index)
     }
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
@@ -817,6 +825,75 @@ private[spark] class TaskSetManager(
       }
     }
     maybeFinishTaskSet()
+  }
+
+  private[scheduler] def updateBlacklistForFailedTask(
+      host: String,
+      exec: String,
+      index: Int): Unit = {
+    val failureStatus = execToFailures.getOrElseUpdate(exec, new FailureStatus())
+    failureStatus.totalFailures += 1
+    failureStatus.tasksWithFailures += index
+
+    // check if this task has also failed on other executors on the same host, and if so, blacklist
+    // this task from the host
+    val failuresOnHost = (for {
+      exec <- sched.getExecutorsAliveOnHost(host).getOrElse(Set()).toSeq
+      failures <- execToFailures.get(exec)
+    } yield {
+      if (failures.tasksWithFailures.contains(index)) 1 else 0
+    }).sum
+    if (failuresOnHost >= MAX_TASK_FAILURES_PER_NODE) {
+      nodeBlacklistedTasks.getOrElseUpdate(host, new HashSet()) += index
+    }
+
+    if (failureStatus.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE) {
+      // This executor has been pushed into the blacklist for this stage.  Let's check if it pushes
+      // the whole node into the blacklist
+      val blacklistedExecutors =
+        execToFailures.filter(_._2.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE)
+      if (blacklistedExecutors.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
+        logInfo(s"Blacklisting ${host} for stage $stageId")
+        blacklistedNodes += host
+      }
+    }
+  }
+
+  /**
+   * Return true if this executor is blacklisted for the given task.  This does *not*
+   * need to return true if the executor is blacklisted for the entire stage, or blacklisted
+   * altogether.  That is to keep this method as fast as possible in the inner-loop of the
+   * scheduler, where those filters will have already been applied.
+   */
+  def isExecutorBlacklistedForTask(
+      executorId: String,
+      index: Int): Boolean = {
+    execToFailures.get(executorId)
+      .map(_.tasksWithFailures.contains(index))
+      .getOrElse(false)
+  }
+
+  def isNodeBlacklistedForTask(
+      node: String,
+      index: Int): Boolean = {
+    nodeBlacklistedTasks.get(node)
+      .map(_.contains(index))
+      .getOrElse(false)
+  }
+
+  /**
+   * Return true if this executor is blacklisted for the given stage.  Completely ignores whether
+   * the executor is blacklisted overall (or anything to do with the node the executor is on).  That
+   * is to keep this method as fast as possible in the inner-loop of the scheduler, where those
+   * filters will already have been applied.
+   */
+  def isExecutorBlacklistedForTaskSet(executorId: String): Boolean = {
+    execToFailures.get(executorId)
+      .map(_.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE).getOrElse(false)
+  }
+
+  def isNodeBlacklistedForTaskSet(node: String): Boolean = {
+    blacklistedNodes.contains(node)
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
