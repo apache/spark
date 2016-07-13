@@ -51,7 +51,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     }.flatten.reduceLeftOption(_ && _)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-    val (_, selectedFilters) =
+    val (_, selectedFilters, _) =
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
@@ -95,7 +95,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     }.flatten.reduceLeftOption(_ && _)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-    val (_, selectedFilters) =
+    val (_, selectedFilters, _) =
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 

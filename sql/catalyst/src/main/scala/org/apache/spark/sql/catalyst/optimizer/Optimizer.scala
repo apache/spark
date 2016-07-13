@@ -556,12 +556,27 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] operators by keeping only the last one.
+ * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
+ * by keeping only the one.
+ * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
+ * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
+ * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
+ *    [[RepartitionByExpression]] with the expression and last number of partition.
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Case 1
     case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
       Repartition(numPartitions, shuffle, child)
+    // Case 2
+    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
+    // Case 3
+    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
+      r.copy(numPartitions = Some(numPartitions))
+    // Case 3
+    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
   }
 }
 
@@ -820,16 +835,24 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
- * which is much faster
+ * Optimize IN predicates:
+ * 1. Removes literal repetitions.
+ * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
-          list.size > conf.optimizerInSetConversionThreshold =>
-        val hSet = list.map(e => e.eval(EmptyRow))
-        InSet(v, HashSet() ++ hSet)
+      case expr @ In(v, list) if expr.inSetConvertible =>
+        val newList = ExpressionSet(list).toSeq
+        if (newList.size > conf.optimizerInSetConversionThreshold) {
+          val hSet = newList.map(e => e.eval(EmptyRow))
+          InSet(v, HashSet() ++ hSet)
+        } else if (newList.size < list.size) {
+          expr.copy(list = newList)
+        } else { // newList.length == list.length
+          expr
+        }
     }
   }
 }
@@ -1105,19 +1128,23 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
-    // pushed beneath must satisfy the following two conditions:
+    // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
-    // 2. Deterministic
+    // 2. Deterministic.
+    // 3. Placed before any non-deterministic predicates.
     case filter @ Filter(condition, w: Window)
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references.subsetOf(partitionAttrs) && cond.deterministic &&
-          // This is for ensuring all the partitioning expressions have been converted to alias
-          // in Analyzer. Thus, we do not need to check if the expressions in conditions are
-          // the same as the expressions used in partitioning columns.
-          partitionAttrs.forall(_.isInstanceOf[Attribute])
+
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        cond.references.subsetOf(partitionAttrs)
       }
+
+      val stayUp = rest ++ containingNonDeterministic
+
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
         val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
@@ -1136,10 +1163,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        replaced.references.subsetOf(aggregate.child.outputSet) && replaced.deterministic
+        replaced.references.subsetOf(aggregate.child.outputSet)
       }
+
+      val stayUp = rest ++ containingNonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1154,9 +1186,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.deterministic
-      }
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
         val output = union.output
@@ -1196,9 +1227,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (pushDown, stayUp) = splitConjunctivePredicates(filter.condition).partition { cond =>
-      cond.deterministic && cond.references.subsetOf(grandchild.outputSet)
+    val (candidates, containingNonDeterministic) =
+      splitConjunctivePredicates(filter.condition).span(_.deterministic)
+
+    val (pushDown, rest) = candidates.partition { cond =>
+      cond.references.subsetOf(grandchild.outputSet)
     }
+
+    val stayUp = rest ++ containingNonDeterministic
+
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
       if (stayUp.nonEmpty) {

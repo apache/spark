@@ -332,7 +332,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
     }}
 
-    val (unhandledPredicates, pushedFilters) = selectFilters(relation.relation, candidatePredicates)
+    val (unhandledPredicates, pushedFilters, handledFilters) =
+      selectFilters(relation.relation, candidatePredicates)
 
     // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
     // them from requested columns.
@@ -349,8 +350,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
+
+      // Mark filters which are handled by the underlying DataSource with an Astrisk
       if (pushedFilters.nonEmpty) {
-        pairs += (PUSHED_FILTERS -> pushedFilters.mkString("[", ", ", "]"))
+        val markedFilters = for (filter <- pushedFilters) yield {
+            if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+        }
+        pairs += (PUSHED_FILTERS -> markedFilters.mkString("[", ", ", "]"))
       }
       pairs.toMap
     }
@@ -492,13 +498,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s
    * and can be handled by `relation`.
    *
-   * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
-   *         predicate [[Expression]]s that are either not convertible or cannot be handled by
-   *         `relation`. The second element contains all converted data source [[Filter]]s that
-   *         will be pushed down to the data source.
+   * @return A triplet of `Seq[Expression]`, `Seq[Filter]`, and `Seq[Filter]` . The first element
+   *         contains all Catalyst predicate [[Expression]]s that are either not convertible or
+   *         cannot be handled by `relation`. The second element contains all converted data source
+   *         [[Filter]]s that will be pushed down to the data source. The third element contains
+   *         all [[Filter]]s that are completely filtered at the DataSource.
    */
   protected[sql] def selectFilters(
-      relation: BaseRelation, predicates: Seq[Expression]): (Seq[Expression], Seq[Filter]) = {
+    relation: BaseRelation,
+    predicates: Seq[Expression]): (Seq[Expression], Seq[Filter], Set[Filter]) = {
+
     // For conciseness, all Catalyst filter expressions of type `expressions.Expression` below are
     // called `predicate`s, while all data source filters of type `sources.Filter` are simply called
     // `filter`s.
@@ -521,7 +530,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val unhandledPredicates = translatedMap.filter { case (p, f) =>
       unhandledFilters.contains(f)
     }.keys
+    val handledFilters = pushedFilters.toSet -- unhandledFilters
 
-    (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters)
+    (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 }

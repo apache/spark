@@ -434,6 +434,9 @@ class Word2Vec extends Serializable with Logging {
       bcSyn1Global.unpersist(false)
     }
     newSentences.unpersist()
+    expTable.unpersist()
+    bcVocab.unpersist()
+    bcVocabHash.unpersist()
 
     val wordArray = vocab.map(_.word)
     new Word2VecModel(wordArray.zipWithIndex.toMap, syn0Global)

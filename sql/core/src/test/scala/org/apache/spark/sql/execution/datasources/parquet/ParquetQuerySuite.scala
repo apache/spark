@@ -54,7 +54,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true)
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
@@ -65,7 +65,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       checkAnswer(spark.table("t"), data.map(Row.fromTuple))
     }
     spark.sessionState.catalog.dropTable(
-      TableIdentifier("tmp"), ignoreIfNotExists = true)
+      TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("SPARK-15678: not use cache on overwrite") {
