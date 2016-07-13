@@ -237,7 +237,7 @@ test_that("read csv as DataFrame", {
                    "Empty,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
-  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.string = "Empty")
+  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "Empty")
   expect_equal(count(df2), 4)
   withoutna2 <- na.omit(df2, how = "any", cols = "year")
   expect_equal(count(withoutna2), 3)
