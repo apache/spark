@@ -627,6 +627,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         checkAnswer(df, data.map(_.toString).toDF("value"))
       }
 
+      def checkAllData(data: Seq[Int]): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.allData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
       /** Check how many batches have executed since the last time this check was made */
       var lastBatchId = -1L
       def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
@@ -636,6 +643,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
 
       checkLastBatchData(3)  // (1 and 2) should be in batch 1, (3) should be in batch 2 (last)
+      checkAllData(1 to 3)
       lastBatchId = memorySink.latestBatchId.get
 
       fileSource.withBatchingLocked {
@@ -645,8 +653,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         createFile(7)   // 6 and 7 should be in the last batch
       }
       q.processAllAvailable()
-      checkLastBatchData(6, 7)
       checkNumBatchesSinceLastCheck(2)
+      checkLastBatchData(6, 7)
+      checkAllData(1 to 7)
 
       fileSource.withBatchingLocked {
         createFile(8)
@@ -656,8 +665,30 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         createFile(12)   // 12 should be in the last batch
       }
       q.processAllAvailable()
-      checkLastBatchData(12)
       checkNumBatchesSinceLastCheck(3)
+      checkLastBatchData(12)
+      checkAllData(1 to 12)
+
+      q.stop()
+    }
+  }
+
+  test("max files per trigger - incorrect values") {
+    withTempDir { case src =>
+      def testMaxFilePerTriggerValue(value: String): Unit = {
+        val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
+        val e = intercept[IllegalArgumentException] {
+          testStream(df)()
+        }
+        Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
+          assert(e.getMessage.contains(s))
+        }
+      }
+
+      testMaxFilePerTriggerValue("not-a-integer")
+      testMaxFilePerTriggerValue("-1")
+      testMaxFilePerTriggerValue("0")
+      testMaxFilePerTriggerValue("10.1")
     }
   }
 
@@ -672,8 +703,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val q = df.writeStream.queryName("file_explain").format("memory").start()
         .asInstanceOf[StreamExecution]
       try {
-        assert("N/A" === q.explainInternal(false))
-        assert("N/A" === q.explainInternal(true))
+        assert("No physical plan. Waiting for data." === q.explainInternal(false))
+        assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
         val tempFile = Utils.tempFileWith(new File(tmp, "text"))
         val finalFile = new File(src, tempFile.getName)

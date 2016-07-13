@@ -22,11 +22,10 @@
 library(SparkR)
 
 # Initialize SparkSession
-sparkR.session(appName="SparkR-ML-example")
+sparkR.session(appName = "SparkR-ML-example")
 
-# $example on$
 ############################ spark.glm and glm ##############################################
-
+# $example on:glm$
 irisDF <- suppressWarnings(createDataFrame(iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF
@@ -55,8 +54,9 @@ summary(binomialGLM)
 # Prediction
 binomialPredictions <- predict(binomialGLM, binomialTestDF)
 showDF(binomialPredictions)
-
+# $example off:glm$
 ############################ spark.survreg ##############################################
+# $example on:survreg$
 # Use the ovarian dataset available in R survival package
 library(survival)
 
@@ -72,9 +72,9 @@ summary(aftModel)
 # Prediction
 aftPredictions <- predict(aftModel, aftTestDF)
 showDF(aftPredictions)
-
+# $example off:survreg$
 ############################ spark.naiveBayes ##############################################
-
+# $example on:naiveBayes$
 # Fit a Bernoulli naive Bayes model with spark.naiveBayes
 titanic <- as.data.frame(Titanic)
 titanicDF <- createDataFrame(titanic[titanic$Freq > 0, -5])
@@ -88,9 +88,9 @@ summary(nbModel)
 # Prediction
 nbPredictions <- predict(nbModel, nbTestDF)
 showDF(nbPredictions)
-
+# $example off:naiveBayes$
 ############################ spark.kmeans ##############################################
-
+# $example on:kmeans$
 # Fit a k-means model with spark.kmeans
 irisDF <- suppressWarnings(createDataFrame(iris))
 kmeansDF <- irisDF
@@ -107,9 +107,9 @@ showDF(fitted(kmeansModel))
 # Prediction
 kmeansPredictions <- predict(kmeansModel, kmeansTestDF)
 showDF(kmeansPredictions)
-
+# $example off:kmeans$
 ############################ model read/write ##############################################
-
+# $example on:read_write$
 irisDF <- suppressWarnings(createDataFrame(iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF
@@ -120,7 +120,7 @@ gaussianGLM <- spark.glm(gaussianDF, Sepal_Length ~ Sepal_Width + Species, famil
 modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
 write.ml(gaussianGLM, modelPath)
 gaussianGLM2 <- read.ml(modelPath)
-# $example off$
+
 # Check model summary
 summary(gaussianGLM2)
 
@@ -129,7 +129,7 @@ gaussianPredictions <- predict(gaussianGLM2, gaussianTestDF)
 showDF(gaussianPredictions)
 
 unlink(modelPath)
-
+# $example off:read_write$
 ############################ fit models with spark.lapply #####################################
 
 # Perform distributed training of multiple models with spark.lapply
