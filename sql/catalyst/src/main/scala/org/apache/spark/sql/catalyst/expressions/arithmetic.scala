@@ -211,7 +211,7 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   override def nullable: Boolean = true
   override def decimalMethod: String = "$div"
 
-  val div: (Any, Any) => Any = dataType match {
+  private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
   }
