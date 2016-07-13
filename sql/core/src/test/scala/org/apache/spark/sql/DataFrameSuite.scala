@@ -1578,4 +1578,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.createDataFrame(rdd, StructType(schemas), false)
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
+
+  test("cannot push projects down beneath sample when amplifying data") {
+    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
+    val amplifyDf = df.sample(true, 2.0)
+    def checkQuery(c: Column): Unit = {
+      val d = amplifyDf.withColumn("c", c).select($"c").collect
+      assert(d.size == d.distinct.size)
+    }
+    checkQuery(monotonically_increasing_id)
+    checkQuery(rand)
+  }
 }

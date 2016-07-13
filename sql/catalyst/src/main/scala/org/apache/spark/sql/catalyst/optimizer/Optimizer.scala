@@ -148,6 +148,21 @@ class SimpleTestOptimizer extends Optimizer(
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
+ * Pushes projects down beneath Sample to enable column pruning with sampling.
+ */
+object PushProjectThroughSample extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Push down projection into sample
+    case proj @ Project(projectList, Sample(lb, up, replace, seed, child)) =>
+      if (up - lb < 1.0 && !projectList.exists(_.find(!_.deterministic).nonEmpty)) {
+        Sample(lb, up, replace, seed, Project(projectList, child))()
+      } else {
+        proj
+      }
+  }
+}
+
+/**
  * Removes the Project only conducting Alias of its child node.
  * It is created mainly for removing extra Project added in EliminateSerialization rule,
  * but can also benefit other operators.
