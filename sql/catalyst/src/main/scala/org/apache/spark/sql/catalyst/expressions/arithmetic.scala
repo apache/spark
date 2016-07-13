@@ -209,8 +209,9 @@ case class Multiply(left: Expression, right: Expression)
 
 abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
   override def nullable: Boolean = true
+  override def decimalMethod: String = "$div"
 
-  private lazy val div: (Any, Any) => Any = dataType match {
+  val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]].quot
   }
@@ -241,10 +242,10 @@ abstract class DivisionArithmetic extends BinaryArithmetic with NullIntolerant {
       s"${eval2.value} == 0"
     }
     val javaType = ctx.javaType(dataType)
-    val divide = if (dataType.isInstanceOf[DecimalType] || dataType.isInstanceOf[DoubleType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
+    val divide = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval1.value}." + "$div" + s"(${eval2.value})"
     } else {
-      s"($javaType)(${eval1.value} $decimalMethod ${eval2.value})"
+      s"($javaType)(${eval1.value} / ${eval2.value})"
     }
 
     if (!left.nullable && !right.nullable) {
@@ -286,7 +287,6 @@ case class Divide(left: Expression, right: Expression)
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
-  override def decimalMethod: String = "$div"
 }
 
 @ExpressionDescription(
@@ -298,7 +298,6 @@ case class IntegerDivide(left: Expression, right: Expression)
   override def inputType: AbstractDataType = IntegralType
 
   override def symbol: String = "div"
-  override def decimalMethod: String = "/"
 }
 
 @ExpressionDescription(
