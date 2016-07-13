@@ -637,18 +637,7 @@ Since this windowing is similar to grouping, in code, you can use `groupBy()` an
 {% highlight scala %}
 import spark.implicits._
 
-// Create DataFrame representing the stream of input lines from connection to host:port
-val lines = spark.readStream
-  .format("socket")
-  .option("host", "localhost")
-  .option("port", 9999)
-  .option("includeTimestamp", true)
-  .load().as[(String, Timestamp)]
-
-// Split the lines into words, retaining timestamps
-val words = lines.flatMap(line =>
-  line._1.split(" ").map(word => (word, line._2))
-).toDF("word", "timestamp")
+val words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 // Group the data by window and word and compute the count of each group
 val windowedCounts = words.groupBy(
@@ -660,29 +649,7 @@ val windowedCounts = words.groupBy(
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-// Create DataFrame representing the stream of input lines from connection to host:port
-Dataset<Tuple2<String, Timestamp>> lines = spark
-  .readStream()
-  .format("socket")
-  .option("host", "localhost")
-  .option("port", 9999)
-  .option("includeTimestamp", true)
-  .load().as(Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP()));
-
-// Split the lines into words, retaining timestamps
-Dataset<Row> words = lines.flatMap(
-  new FlatMapFunction<Tuple2<String, Timestamp>, Tuple2<String, Timestamp>>() {
-    @Override
-    public Iterator<Tuple2<String, Timestamp>> call(Tuple2<String, Timestamp> t) {
-      List<Tuple2<String, Timestamp>> result = new ArrayList<>();
-      for (String word : t._1.split(" ")) {
-        result.add(new Tuple2<>(word, t._2));
-      }
-      return result.iterator();
-    }
-  },
-  Encoders.tuple(Encoders.STRING(), Encoders.TIMESTAMP())
-).toDF("word", "timestamp");
+Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 // Group the data by window and word and compute the count of each group
 Dataset<Row> windowedCounts = words.groupBy(
@@ -694,21 +661,7 @@ Dataset<Row> windowedCounts = words.groupBy(
 </div>
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-# Create DataFrame representing the stream of input lines from connection to host:port
-lines = spark\
-    .readStream\
-    .format('socket')\
-    .option('host', 'localhost')\
-    .option('port', 9999)\
-    .option('includeTimestamp', 'true')\
-    .load()
-
-# Split the lines into words, retaining timestamps
-# split() splits each line into an array, and explode() turns the array into multiple rows
-words = lines.select(
-    explode(split(lines.value, ' ')).alias('word'),
-    lines.timestamp
-)
+words = ... # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
 # Group the data by window and word and compute the count of each group
 windowedCounts = words.groupBy(
