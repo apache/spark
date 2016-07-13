@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,12 +32,9 @@ class SimplifyCastsSuite extends PlanTest {
     val batches = Batch("SimplifyCasts", FixedPoint(50), SimplifyCasts) :: Nil
   }
 
-  def array(arrayType: ArrayType): AttributeReference =
-    AttributeReference("a", arrayType)()
-
   test("non-nullable to non-nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType)))
-    val array_intPrimitive = array(ArrayType(IntegerType, false))
+    val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
+    val array_intPrimitive = 'a.array(ArrayType(IntegerType, false))
     val plan = input.select(array_intPrimitive
       .cast(ArrayType(IntegerType, false)).as('a)).analyze
     val optimized = Optimize.execute(plan)
@@ -45,8 +43,8 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable to nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType)))
-    val array_intPrimitive = array(ArrayType(IntegerType, false))
+    val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
+    val array_intPrimitive = 'a.array(ArrayType(IntegerType, false))
     val plan = input.select(array_intPrimitive
       .cast(ArrayType(IntegerType, true)).as('a)).analyze
     val optimized = Optimize.execute(plan)
@@ -55,8 +53,8 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable to non-nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType)))
-    val array_intNull = array(ArrayType(IntegerType, true))
+    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val array_intNull = 'a.array(ArrayType(IntegerType, true))
     val plan = input.select(array_intNull
       .cast(ArrayType(IntegerType, false)).as('a)).analyze
     val optimized = Optimize.execute(plan)
@@ -64,8 +62,8 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable to nullable array cast") {
-    val input = LocalRelation('a.array(ArrayType(IntegerType)))
-    val array_intNull = array(ArrayType(IntegerType, true))
+    val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
+    val array_intNull = 'a.array(ArrayType(IntegerType, true))
     val plan = input.select(array_intNull
       .cast(ArrayType(IntegerType, true)).as('a)).analyze
     val optimized = Optimize.execute(plan)
