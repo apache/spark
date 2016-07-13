@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
@@ -55,7 +55,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 }
 
 /**
- * :: Experimental ::
  * A label indexer that maps a string column of labels to an ML column of label indices.
  * If the input column is numeric, we cast it to string and index the string values.
  * The indices are in [0, numLabels), ordered by label frequencies.
@@ -63,7 +62,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  *
  * @see [[IndexToString]] for the inverse transformation
  */
-@Experimental
 @Since("1.4.0")
 class StringIndexer @Since("1.4.0") (
     @Since("1.4.0") override val uid: String) extends Estimator[StringIndexerModel]
@@ -112,7 +110,6 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[StringIndexer]].
  *
  * NOTE: During transformation, if the input column does not exist,
@@ -121,7 +118,6 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
  *
  * @param labels  Ordered list of labels, corresponding to indices to be assigned.
  */
-@Experimental
 @Since("1.4.0")
 class StringIndexerModel (
     @Since("1.4.0") override val uid: String,
@@ -250,7 +246,6 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
 }
 
 /**
- * :: Experimental ::
  * A [[Transformer]] that maps a column of indices back to a new column of corresponding
  * string values.
  * The index-string mapping is either from the ML attributes of the input column,
@@ -258,7 +253,6 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
  *
  * @see [[StringIndexer]] for converting strings into indices
  */
-@Experimental
 @Since("1.5.0")
 class IndexToString private[ml] (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {

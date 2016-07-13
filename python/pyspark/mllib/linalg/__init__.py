@@ -1338,8 +1338,6 @@ class Matrices(object):
 
 class QRDecomposition(object):
     """
-    .. note:: Experimental
-
     Represents QR factors.
     """
     def __init__(self, Q, R):
