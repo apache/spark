@@ -45,9 +45,7 @@ object StronglyConnectedComponents {
     var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache()
 
     // helper variables to unpersist cached graphs
-    var prevSccGraph1 = sccGraph
-    var prevSccGraph2 = sccGraph
-
+    var prevSccGraph = sccGraph
 
     var numVertices = sccWorkGraph.numVertices
     var iter = 0
@@ -70,18 +68,16 @@ object StronglyConnectedComponents {
         sccGraph = sccGraph.outerJoinVertices(finalVertices) {
           (vid, scc, opt) => opt.getOrElse(scc)
         }.cache()
-        // take triplet to materialize vertices and edges (faster then count on both)
-        sccGraph.triplets.take(1)
+        // materialize vertices and edges
+        sccGraph.vertices.count()
+        sccGraph.edges.count()
         // sccGraph materialized so, unpersist can be done on previous
-        prevSccGraph1.unpersist(blocking = false)
-        prevSccGraph1 = sccGraph
+        prevSccGraph.unpersist(blocking = false)
+        prevSccGraph = sccGraph
 
         // only keep vertices that are not final
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
       } while (sccWorkGraph.numVertices < numVertices)
-
-      // prevSccGraph1 not needed anymore - loop left
-      prevSccGraph1.unpersist(blocking = false)
 
       sccWorkGraph = sccWorkGraph.mapVertices{ case (vid, (color, isFinal)) => (vid, isFinal) }
 
@@ -120,13 +116,16 @@ object StronglyConnectedComponents {
           }
         },
         (final1, final2) => final1 || final2)
-        // cache and materialize sccGraph every iteration
-        sccGraph.cache()
-        // take triplet to materialize vertices and edges (faster then count on both)
-        sccGraph.triplets.take(1)
+
+        // ensure sccGraph's rdd are marked as recently used
+        sccGraph.vertices.count()
+        sccGraph.edges.count()
         // sccGraph materialized so, unpersist can be done on previous
-        prevSccGraph2.unpersist(blocking = false)
-        prevSccGraph2 = sccGraph
+        if(prevSccGraph != sccGraph)
+        {
+          prevSccGraph.unpersist(blocking = false)
+          prevSccGraph = sccGraph
+        }
     }
     sccGraph
   }
