@@ -166,7 +166,7 @@ object PushProjectThroughSample extends Rule[LogicalPlan] {
  */
 object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   /**
-   * Returns true if the project list is semantically same with child output, after strip alias on
+   * Returns true if the project list is semantically same as child output, after strip alias on
    * attribute.
    */
   private def isAliasOnly(
@@ -184,7 +184,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 
   private def stripAliasOnAttribute(projectList: Seq[NamedExpression]) = {
     projectList.map {
-      // Alias with metadata can not be striped, or the metadata will be lost.
+      // Alias with metadata can not be stripped, or the metadata will be lost.
       // If the alias name is different from attribute name, we can't strip it either, or we may
       // accidentally change the output schema name of the root plan.
       case a @ Alias(attr: Attribute, name) if a.metadata == Metadata.empty && name == attr.name =>
@@ -203,10 +203,11 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
         case (a1, a2) => a1 semanticEquals a2
       }
       val attrMap = AttributeMap(attributesToReplace)
-      plan.transformAllExpressions {
-        case a: Attribute if attrMap.contains(a) => attrMap(a)
-      }.transform {
+      plan transform {
         case plan: Project if plan eq proj => plan.child
+        case plan => plan transformExpressions {
+          case a: Attribute if attrMap.contains(a) => attrMap(a)
+        }
       }
     }.getOrElse(plan)
   }
