@@ -476,4 +476,9 @@ test_that("spark.survreg", {
   }
 })
 
+test_that("spark.isotonicRegression", {
+
+})
+
 sparkR.session.stop()
+

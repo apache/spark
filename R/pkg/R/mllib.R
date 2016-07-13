@@ -53,6 +53,13 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
+#' S4 class that represents an IsotonicRegressionModel
+#'
+#' @param jobj a Java object reference to the backing Scala IsotonicRegressionModel
+#' @export
+#' @note IsotonicRegressionModel since 2.0.0
+setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
+
 #' Saves the MLlib model to the input path
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
@@ -299,6 +306,44 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
             return(list(apriori = apriori, tables = tables))
           })
 
+#' Isotonic Regression Model
+#' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
+#' Users can print, make predictions on the produced model and save the model to the input path.
+#'
+#' @param data SparkDataFrame for training
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param isotonic Whether the output sequence should be isotonic/increasing (true) or
+#'                 antitonic/decreasing (false)
+#' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
+#'                     no effect otherwise
+#' @return \code{spark.isotonicRegression} returns a fitted Isotonic Regression model
+#' @rdname spark.isotonicRegression
+#' @name spark.isotonicRegression
+#' @export
+#' @examples
+#' @note spark.isotonicRegression since 2.1.0
+#' @seealso \link{transform}, \link{read.ml}, \link{write.ml}
+setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, isotonic = TRUE, featureIndex = 0) {
+            formula <- paste(deparse(formula), collapse = "")
+            jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
+            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex))
+            return(new("IsotonicRegressionModel", jobj = jobj))
+          })
+
+setMethod("predict", signature(object = "IsotonicRegressionModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+          })
+
+setMethod("fitted", signature(object = "IsotonicRegressionModel"),
+          function(object, method = c("boundaries", "predictions"), ...) {
+            method <- match.arg(method)
+            jobj <- object@jobj
+            return(dataFrame(callJMethod(jobj, "fitted", method)))
+          })
+
 #' K-Means Clustering Model
 #'
 #' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
@@ -533,6 +578,15 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
+setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+           invisible(callJMethod(writer, "save", path))
+          })
+
 #' Load a fitted MLlib model from the input path.
 #'
 #' @param path Path of the model to read.
@@ -558,6 +612,8 @@ read.ml <- function(path) {
       return(new("GeneralizedLinearRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
       return(new("KMeansModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.IsotonicRegressionWrapper")) {
+      return(new("IsotonicRegressionModel", jobj = jobj))
   } else {
     stop(paste("Unsupported model: ", jobj))
   }
