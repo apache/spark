@@ -327,6 +327,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val roDir = Utils.createTempDir()
     Files.setPosixFilePermissions(roDir.toPath(), EnumSet.of(OWNER_READ, OWNER_EXECUTE))
     roConfig.set(YarnConfiguration.NM_LOCAL_DIRS, roDir.getAbsolutePath())
+    roConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
 
     // Try to start the shuffle service, it should fail.
     val service = new YarnShuffleService()
