@@ -424,10 +424,10 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
         TypeCheckResult.TypeCheckSuccess
       } else {
         TypeCheckResult.TypeCheckFailure(
-          s"String To Map's arguments must be foldable, but got $children.")
+          s"$prettyName's arguments must be foldable, but got $children.")
       }
     } else {
-      TypeCheckResult.TypeCheckFailure(s"String To Map's all arguments must be of type string.")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName's all arguments must be of type string.")
     }
   }
 
