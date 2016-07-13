@@ -19,7 +19,7 @@ package org.apache.spark.mllib.fpm
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.Logging
@@ -28,14 +28,11 @@ import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
- *
  * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
  * association rules which have a single item as the consequent.
  *
  */
 @Since("1.5.0")
-@Experimental
 class AssociationRules private[fpm] (
     private var minConfidence: Double) extends Logging with Serializable {
 
@@ -95,8 +92,6 @@ class AssociationRules private[fpm] (
 object AssociationRules {
 
   /**
-   * :: Experimental ::
-   *
    * An association rule between sets of items.
    * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
    *                   instead.
@@ -106,7 +101,6 @@ object AssociationRules {
    *
    */
   @Since("1.5.0")
-  @Experimental
   class Rule[Item] private[fpm] (
       @Since("1.5.0") val antecedent: Array[Item],
       @Since("1.5.0") val consequent: Array[Item],

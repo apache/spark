@@ -151,13 +151,11 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 }
 
 /**
- * :: Experimental ::
  * Logistic regression.
  * Currently, this class only supports binary classification.  It will support multiclass
  * in the future.
  */
 @Since("1.2.0")
-@Experimental
 class LogisticRegression @Since("1.2.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
@@ -475,11 +473,9 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[LogisticRegression]].
  */
 @Since("1.4.0")
-@Experimental
 class LogisticRegressionModel private[spark] (
     @Since("1.4.0") override val uid: String,
     @Since("2.0.0") val coefficients: Vector,
