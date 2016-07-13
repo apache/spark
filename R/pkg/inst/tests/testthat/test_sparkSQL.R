@@ -2481,3 +2481,5 @@ unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
+
+sparkR.session.stop()
