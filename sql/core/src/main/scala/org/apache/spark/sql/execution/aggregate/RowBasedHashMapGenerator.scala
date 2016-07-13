@@ -237,8 +237,9 @@ class RowBasedHashMapGenerator(
        |          = new org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder(agg_result,
        |            ${numVarLenFields * 32});
        |        org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter agg_rowWriter
-       |          = new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(agg_holder,
-       |          ${groupingKeySchema.length});
+       |          = new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(
+       |              agg_holder,
+       |              ${groupingKeySchema.length});
        |        agg_holder.reset(); //TODO: investigate if reset or zeroout are actually needed
        |        agg_rowWriter.zeroOutNullBytes();
        |        ${createUnsafeRowForKey};
