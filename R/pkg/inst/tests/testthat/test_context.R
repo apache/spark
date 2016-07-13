@@ -63,7 +63,7 @@ test_that("repeatedly starting and stopping SparkR", {
   }
 })
 
-test_that("repeatedly starting and stopping SparkR", {
+test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
     sparkR.session(enableHiveSupport = FALSE)
     df <- createDataFrame(data.frame(dummy=1:i))
@@ -162,7 +162,7 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
 })
 
 test_that("spark.lapply should perform simple transforms", {
-  sc <- sparkR.sparkContext()
+  sparkR.sparkContext()
   doubled <- spark.lapply(1:10, function(x) { 2 * x })
   expect_equal(doubled, as.list(2 * 1:10))
   sparkR.session.stop()
