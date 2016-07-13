@@ -2277,7 +2277,7 @@ setMethod("n_distinct", signature(x = "Column"),
           })
 
 #' @rdname nrow
-#' @pme write.mlaram x Column to compute on
+#' @param x Column to compute on
 #'
 #' @name n
 #' @aliases n,Column-method
