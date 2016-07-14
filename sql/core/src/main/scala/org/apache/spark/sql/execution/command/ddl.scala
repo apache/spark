@@ -179,7 +179,8 @@ case class DescribeDatabaseCommand(
 case class DropTableCommand(
     tableName: TableIdentifier,
     ifExists: Boolean,
-    isView: Boolean) extends RunnableCommand {
+    isView: Boolean,
+    purge: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -207,7 +208,7 @@ case class DropTableCommand(
         case NonFatal(e) => log.warn(e.toString, e)
       }
       catalog.refreshTable(tableName)
-      catalog.dropTable(tableName, ifExists)
+      catalog.dropTable(tableName, ifExists, purge)
     }
     Seq.empty[Row]
   }
@@ -408,7 +409,8 @@ case class AlterTableRenamePartitionCommand(
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
-    ifExists: Boolean)
+    ifExists: Boolean,
+    purge: Boolean)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -418,7 +420,7 @@ case class AlterTableDropPartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
+    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 

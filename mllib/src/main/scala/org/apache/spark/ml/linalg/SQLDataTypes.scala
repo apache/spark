@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.ml.linalg
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.types.DataType
 
 /**
- * End-to-end tests for XML expressions.
+ * :: DeveloperApi ::
+ * SQL data types for vectors and matrices.
  */
-class XmlFunctionsSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
+@Since("2.0.0")
+@DeveloperApi
+object SQLDataTypes {
 
-  test("xpath_boolean") {
-    val df = Seq("<a><b>b</b></a>" -> "a/b").toDF("xml", "path")
-    checkAnswer(df.selectExpr("xpath_boolean(xml, path)"), Row(true))
-  }
+  /** Data type for [[Vector]]. */
+  val VectorType: DataType = new VectorUDT
+
+  /** Data type for [[Matrix]]. */
+  val MatrixType: DataType = new MatrixUDT
 }

@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Encoder, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources.HadoopFsRelation
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
@@ -74,13 +74,71 @@ object RDDConversions {
   }
 }
 
+private[sql] object ExternalRDD {
+
+  def apply[T: Encoder](rdd: RDD[T], session: SparkSession): LogicalPlan = {
+    val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
+    CatalystSerde.serialize[T](externalRdd)
+  }
+}
+
 /** Logical plan node for scanning data from an RDD. */
+private[sql] case class ExternalRDD[T](
+    outputObjAttr: Attribute,
+    rdd: RDD[T])(session: SparkSession)
+  extends LeafNode with ObjectProducer with MultiInstanceRelation {
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
+
+  override def newInstance(): ExternalRDD.this.type =
+    ExternalRDD(outputObjAttr.newInstance(), rdd)(session).asInstanceOf[this.type]
+
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case ExternalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case _ => false
+    }
+  }
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
+  @transient override lazy val statistics: Statistics = Statistics(
+    // TODO: Instead of returning a default value here, find a way to return a meaningful size
+    // estimate for RDDs. See PR 1238 for more discussions.
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
+  )
+}
+
+/** Physical plan node for scanning data from an RDD. */
+private[sql] case class ExternalRDDScanExec[T](
+    outputObjAttr: Attribute,
+    rdd: RDD[T]) extends LeafExecNode with ObjectProducerExec {
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val outputDataType = outputObjAttr.dataType
+    rdd.mapPartitionsInternal { iter =>
+      val outputObject = ObjectOperator.wrapObjectToRow(outputDataType)
+      iter.map { value =>
+        numOutputRows += 1
+        outputObject(value)
+      }
+    }
+  }
+
+  override def simpleString: String = {
+    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+  }
+}
+
+/** Logical plan node for scanning data from an RDD of InternalRow. */
 private[sql] case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow])(session: SparkSession)
-  extends LogicalPlan with MultiInstanceRelation {
-
-  override def children: Seq[LogicalPlan] = Nil
+  extends LeafNode with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
@@ -96,8 +154,6 @@ private[sql] case class LogicalRDD(
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
-  override def producedAttributes: AttributeSet = outputSet
-
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
@@ -105,7 +161,7 @@ private[sql] case class LogicalRDD(
   )
 }
 
-/** Physical plan node for scanning data from an RDD. */
+/** Physical plan node for scanning data from an RDD of InternalRow. */
 private[sql] case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],

@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -36,14 +36,12 @@ import org.apache.spark.sql.Dataset
 
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
 @Since("1.4.0")
-@Experimental
 class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
@@ -127,7 +125,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
 }
 
 @Since("1.4.0")
-@Experimental
 object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifier] {
   /** Accessor for supported impurities: entropy, gini */
   @Since("1.4.0")
@@ -138,13 +135,11 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
 }
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
 @Since("1.4.0")
-@Experimental
 class DecisionTreeClassificationModel private[ml] (
     @Since("1.4.0")override val uid: String,
     @Since("1.4.0")override val rootNode: Node,
