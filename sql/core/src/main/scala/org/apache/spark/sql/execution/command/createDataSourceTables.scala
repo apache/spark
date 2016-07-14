@@ -330,12 +330,16 @@ object CreateDataSourceTableUtils extends Logging {
     matcher.matches()
   }
 
-  def createTablePropertiesForSchema(
+  /**
+   * Saves the schema (including partition info) into the table properties.
+   * Overwrites the schema, if already existed.
+   */
+  def saveSchema(
       sparkSession: SparkSession,
       schema: StructType,
       partitionColumns: Array[String],
       tableProperties: mutable.HashMap[String, String]): Unit = {
-    // Saves the schema.  Serialized JSON schema string may be too long to be stored into a single
+    // Serialized JSON schema string may be too long to be stored into a single
     // metastore SerDe property.  In this case, we split the JSON string and store each part as
     // a separate table property.
     val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
@@ -367,13 +371,9 @@ object CreateDataSourceTableUtils extends Logging {
       isExternal: Boolean): Unit = {
     val tableProperties = new mutable.HashMap[String, String]
     tableProperties.put(DATASOURCE_PROVIDER, provider)
-    tableProperties.put(DATASOURCE_SCHEMA_TYPE, schemaType.name)
 
-    createTablePropertiesForSchema(
-      sparkSession,
-      schema,
-      partitionColumns,
-      tableProperties)
+    tableProperties.put(DATASOURCE_SCHEMA_TYPE, schemaType.name)
+    saveSchema(sparkSession, schema, partitionColumns, tableProperties)
 
     if (bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get

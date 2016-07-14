@@ -371,16 +371,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
             options = tableDesc.storage.serdeProperties)
             .resolveRelation().asInstanceOf[HadoopFsRelation]
 
-        // TODO: If we do not remove them, the table properties might contain useless part.
-        // Should we remove them?
-        // val tableProperties = tableDesc.properties.filterKeys { k =>
-        //   k != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS &&
-        //     !k.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS) }
-        val properties = new mutable.HashMap[String, String]
-        CreateDataSourceTableUtils.createTablePropertiesForSchema(
-          sparkSession, dataSource.schema, dataSource.partitionSchema.fieldNames, properties)
+        val schemaProperties = new mutable.HashMap[String, String]
+        CreateDataSourceTableUtils.saveSchema(
+          sparkSession, dataSource.schema, dataSource.partitionSchema.fieldNames, schemaProperties)
 
-        val newTable = tableDesc.copy(properties = tableDesc.properties ++ properties)
+        val tablePropertiesWithoutSchema = tableDesc.properties.filterKeys { k =>
+          // Keep the properties that are not for schema or partition columns
+          k != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS &&
+            !k.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PART_PREFIX) &&
+            k != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTCOLS &&
+            !k.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PARTCOL_PREFIX) }
+
+        val newTable = tableDesc.copy(properties = tablePropertiesWithoutSchema ++ schemaProperties)
+
+        // Alter the schema-related table properties that are stored in external catalog.
         sessionCatalog.alterTable(newTable)
       }
     }
@@ -395,7 +399,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    // Refresh the schema in external catalog, if it is a data source table whose schema is inferred
+    // at runtime. For user-specified schema, we do not infer and update the schema.
+    // TODO: Support column-related ALTER TABLE DDL commands, and then users can update
+    // the user-specified schema.
     refreshInferredSchema(tableIdent)
+    // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
+    // Non-temp tables: refresh the metadata cache.
     sessionCatalog.refreshTable(tableIdent)
 
     // If this table is cached as an InMemoryRelation, drop the original
