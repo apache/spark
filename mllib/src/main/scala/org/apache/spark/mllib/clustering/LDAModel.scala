@@ -784,6 +784,8 @@ class DistributedLDAModel private[clustering] (
   @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
+      // TODO: Remove work-around for the breeze bug.
+      // https://github.com/scalanlp/breeze/issues/561
       val topIndices = if (k == topicCounts.length) {
         Seq.range(0, k)
       } else {
