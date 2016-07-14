@@ -266,7 +266,10 @@ case class SampleExec(
     if (withReplacement) {
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
-      ctx.copyResult = true
+      if (upperBound - lowerBound > 1.0) {
+        // In case input rows are possibly sampled twice, we need to copy the rows
+        ctx.copyResult = true
+      }
       ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
         s"$initSampler();")
 
