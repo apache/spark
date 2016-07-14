@@ -247,9 +247,9 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
   }
 
   test("test min/max with weighted samples (SPARK-16561)") {
-    val summarizer1 = (new MultivariateOnlineSummarizer)
+    val summarizer1 = new MultivariateOnlineSummarizer()
       .add(Vectors.dense(10.0, -10.0), 1e10)
-      .add(Vectors.dense(0.0, 0.0), 1e-10)
+      .add(Vectors.dense(0.0, 0.0), 1e-7)
 
     val summarizer2 = new MultivariateOnlineSummarizer
     summarizer2.add(Vectors.dense(10.0, -10.0), 1e10)
@@ -261,11 +261,11 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       summarizer3.add(Vectors.dense(0.0, 0.0), 1e-7)
     summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
 
-    assert(summarizer1.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14, "max mismatch")
-    assert(summarizer1.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14, "mix mismatch")
-    assert(summarizer2.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14, "max mismatch")
-    assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14, "mix mismatch")
-    assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14, "max mismatch")
-    assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14, "mix mismatch")
+    assert(summarizer1.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
+    assert(summarizer1.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+    assert(summarizer2.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
+    assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+    assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
+    assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 }
