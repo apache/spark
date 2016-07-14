@@ -622,9 +622,8 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
  * }}}
  */
 case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
-  // The result of SHOW COLUMNS has one column called 'result'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("col_name", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -652,9 +651,8 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
 case class ShowPartitionsCommand(
     table: TableIdentifier,
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
-  // The result of SHOW PARTITIONS has one column called 'result'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
 
   private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
