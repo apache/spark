@@ -779,13 +779,13 @@ setGeneric("rowsBetween", function(x, start, end) { standardGeneric("rowsBetween
 #' @export
 setGeneric("rangeBetween", function(x, start, end) { standardGeneric("rangeBetween") })
 
-#' @rdname window.partitionBy
+#' @rdname windowPartitionBy
 #' @export
-setGeneric("window.partitionBy", function(x, ...) { standardGeneric("window.partitionBy") })
+setGeneric("windowPartitionBy", function(col, ...) { standardGeneric("windowPartitionBy") })
 
-#' @rdname window.orderBy
+#' @rdname windowOrderBy
 #' @export
-setGeneric("window.orderBy", function(x, ...) { standardGeneric("window.orderBy") })
+setGeneric("windowOrderBy", function(col, ...) { standardGeneric("windowOrderBy") })
 
 ###################### Expression Function Methods ##########################
 
@@ -1255,7 +1255,6 @@ setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.gl
 #' @export
 setGeneric("glm")
 
-#' predict
 #' @rdname predict
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
@@ -1280,7 +1279,6 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
-#' write.ml
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })

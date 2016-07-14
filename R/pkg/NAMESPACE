@@ -341,9 +341,8 @@ export("partitionBy",
        "rowsBetween",
        "rangeBetween")
 
-export("window.partitionBy",
-       "window.orderBy")
-
+export("windowPartitionBy",
+       "windowOrderBy")
 
 S3method(print, jobj)
 S3method(print, structField)
@@ -353,4 +352,3 @@ S3method(structField, character)
 S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
-# window.orderBy window.partitionBy

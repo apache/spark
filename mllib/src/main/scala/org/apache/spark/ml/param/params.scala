@@ -28,9 +28,9 @@ import scala.collection.JavaConverters._
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.linalg.JsonVectorConverter
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -510,11 +510,9 @@ class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[In
 }
 
 /**
- * :: Experimental ::
  * A param and its value.
  */
 @Since("1.2.0")
-@Experimental
 case class ParamPair[T] @Since("1.2.0") (
     @Since("1.2.0") param: Param[T],
     @Since("1.2.0") value: T) {
@@ -797,11 +795,9 @@ trait Params extends Identifiable with Serializable {
 abstract class JavaParams extends Params
 
 /**
- * :: Experimental ::
  * A param to value map.
  */
 @Since("1.2.0")
-@Experimental
 final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   extends Serializable {
 
@@ -952,7 +948,6 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
 }
 
 @Since("1.2.0")
-@Experimental
 object ParamMap {
 
   /**

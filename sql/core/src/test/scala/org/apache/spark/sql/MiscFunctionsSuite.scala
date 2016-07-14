@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg
+package org.apache.spark.sql
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.test.SharedSQLContext
 
-/**
- * :: DeveloperApi ::
- * SQL data types for vectors and matrices.
- */
-@DeveloperApi
-object sqlDataTypes {
+class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  /** Data type for [[Vector]]. */
-  val VectorType: DataType = new VectorUDT
+  test("reflect and java_method") {
+    val df = Seq((1, "one")).toDF("a", "b")
+    val className = ReflectClass.getClass.getName.stripSuffix("$")
+    checkAnswer(
+      df.selectExpr(
+        s"reflect('$className', 'method1', a, b)",
+        s"java_method('$className', 'method1', a, b)"),
+      Row("m1one", "m1one"))
+  }
+}
 
-  /** Data type for [[Matrix]]. */
-  val MatrixType: DataType = new MatrixUDT
+object ReflectClass {
+  def method1(v1: Int, v2: String): String = "m" + v1 + v2
 }

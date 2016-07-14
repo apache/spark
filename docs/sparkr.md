@@ -111,19 +111,17 @@ head(df)
 SparkR supports operating on a variety of data sources through the `SparkDataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
 The general method for creating SparkDataFrames from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active SparkSession will be used automatically. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
-specifying `--packages` with `spark-submit` or `sparkR` commands, or if creating context through `init`
-you can specify the packages with the `packages` argument.
+specifying `--packages` with `spark-submit` or `sparkR` commands, or if initializing SparkSession with `sparkPackages` parameter when in an interactive R shell or from RStudio.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.session(sparkPackages="com.databricks:spark-avro_2.11:3.0.0")
+sc <- sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
 {% endhighlight %}
 </div>
 
 We can see how to use data sources using an example JSON input file. Note that the file that is used here is _not_ a typical JSON file. Each line in the file must contain a separate, self-contained valid JSON object. As a consequence, a regular multi-line JSON file will most often fail.
 
 <div data-lang="r"  markdown="1">
-
 {% highlight r %}
 people <- read.df("./examples/src/main/resources/people.json", "json")
 head(people)
@@ -138,6 +136,18 @@ printSchema(people)
 #  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
+# Similarly, multiple files can be read with read.json
+people <- read.json(c("./examples/src/main/resources/people.json", "./examples/src/main/resources/people2.json"))
+
+{% endhighlight %}
+</div>
+
+The data sources API natively supports CSV formatted input files. For more information please refer to SparkR [read.df](api/R/read.df.html) API documentation.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+df <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "NA")
+
 {% endhighlight %}
 </div>
 
@@ -146,7 +156,7 @@ to a Parquet file using `write.df`.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-write.df(people, path="people.parquet", source="parquet", mode="overwrite")
+write.df(people, path = "people.parquet", source = "parquet", mode = "overwrite")
 {% endhighlight %}
 </div>
 
@@ -264,14 +274,14 @@ In SparkR, we support several kinds of User-Defined Functions:
 Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
 and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function
 should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match the R function's output.
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-
 # Convert waiting time from hours to seconds.
 # Note that we can apply UDF to DataFrame.
 schema <- structType(structField("eruptions", "double"), structField("waiting", "double"),
                      structField("waiting_secs", "double"))
-df1 <- dapply(df, function(x) {x <- cbind(x, x$waiting * 60)}, schema)
+df1 <- dapply(df, function(x) { x <- cbind(x, x$waiting * 60) }, schema)
 head(collect(df1))
 ##  eruptions waiting waiting_secs
 ##1     3.600      79         4740
@@ -313,9 +323,9 @@ Similar to `lapply` in native R, `spark.lapply` runs a function over a list of e
 Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations
 should fit in a single machine. If that is not the case they can do something like `df <- createDataFrame(list)` and then use
 `dapply`
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-
 # Perform distributed training of multiple models with spark.lapply. Here, we pass
 # a read-only list of arguments which specifies family the generalized linear model should be.
 families <- c("gaussian", "poisson")
@@ -355,32 +365,39 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR supports the following Machine Learning algorithms.
+SparkR supports the following machine learning algorithms currently: `Generalized Linear Model`, `Accelerated Failure Time (AFT) Survival Regression Model`, `Naive Bayes Model` and `KMeans Model`.
+Under the hood, SparkR uses MLlib to train the model.
+Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
+SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
 
-* Generalized Linear Regression Model [spark.glm()](api/R/spark.glm.html)
-* Naive Bayes [spark.naiveBayes()](api/R/spark.naiveBayes.html)
-* KMeans [spark.kmeans()](api/R/spark.kmeans.html)
-* AFT Survival Regression [spark.survreg()](api/R/spark.survreg.html)
+## Algorithms
 
-[Generalized Linear Regression](api/R/spark.glm.html) can be used to train a model from a specified family. Currently the Gaussian, Binomial, Poisson and Gamma families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
+### Generalized Linear Model
 
-The [summary()](api/R/summary.html) function gives the summary of a model produced by different algorithms listed above.
-It produces the similar result compared with R summary function.
+[spark.glm()](api/R/spark.glm.html) or [glm()](api/R/glm.html) fits generalized linear model against a Spark DataFrame.
+Currently "gaussian", "binomial", "poisson" and "gamma" families are supported.
+{% include_example glm r/ml.R %}
+
+### Accelerated Failure Time (AFT) Survival Regression Model
+
+[spark.survreg()](api/R/spark.survreg.html) fits an accelerated failure time (AFT) survival regression model on a SparkDataFrame.
+Note that the formula of [spark.survreg()](api/R/spark.survreg.html) does not support operator '.' currently.
+{% include_example survreg r/ml.R %}
+
+### Naive Bayes Model
+
+[spark.naiveBayes()](api/R/spark.naiveBayes.html) fits a Bernoulli naive Bayes model against a SparkDataFrame. Only categorical data is supported.
+{% include_example naiveBayes r/ml.R %}
+
+### KMeans Model
+
+[spark.kmeans()](api/R/spark.kmeans.html) fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
+{% include_example kmeans r/ml.R %}
 
 ## Model persistence
 
-* [write.ml](api/R/write.ml.html) allows users to save a fitted model in a given input path
-* [read.ml](api/R/read.ml.html) allows users to read/load the model which was saved using write.ml in a given path
-
-Model persistence is supported for all Machine Learning algorithms for all families.
-
-The examples below show how to build several models:
-* GLM using the Gaussian and Binomial model families
-* AFT survival regression model
-* Naive Bayes model
-* K-Means model
-
-{% include_example r/ml.R %}
+The following example shows how to save/load a MLlib model by SparkR.
+{% include_example read_write r/ml.R %}
 
 # R Function Name Conflicts
 
@@ -429,4 +446,3 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
  - The method `registerTempTable` has been deprecated to be replaced by `createOrReplaceTempView`.
  - The method `dropTempTable` has been deprecated to be replaced by `dropTempView`.
  - The `sc` SparkContext parameter is no longer required for these functions: `setJobGroup`, `clearJobGroup`, `cancelJobGroup`
- 

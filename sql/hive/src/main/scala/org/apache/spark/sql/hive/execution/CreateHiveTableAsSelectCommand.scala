@@ -95,7 +95,8 @@ case class CreateHiveTableAsSelectCommand(
       } catch {
         case NonFatal(e) =>
           // drop the created table.
-          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true)
+          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true,
+            purge = false)
           throw e
       }
     }

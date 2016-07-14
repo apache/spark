@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
@@ -63,7 +63,6 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 }
 
 /**
- * :: Experimental ::
  * Naive Bayes Classifiers.
  * It supports both Multinomial NB
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html]])
@@ -74,7 +73,6 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * The input feature values must be nonnegative.
  */
 @Since("1.5.0")
-@Experimental
 class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
@@ -121,14 +119,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[NaiveBayes]]
  * @param pi log of class priors, whose dimension is C (number of classes)
  * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
  *              by D (number of features)
  */
 @Since("1.5.0")
-@Experimental
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("2.0.0") val pi: Vector,
