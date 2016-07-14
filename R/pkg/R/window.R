@@ -45,7 +45,7 @@ setMethod("windowPartitionBy",
             windowSpec(
               callJStatic("org.apache.spark.sql.expressions.Window",
                           "partitionBy",
-                          x,
+                          col,
                           list(...)))
           })
 
