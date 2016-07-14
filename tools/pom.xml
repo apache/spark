@@ -24,7 +24,6 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-tools_2.11</artifactId>
   <properties>
     <sbt.project.name>tools</sbt.project.name>
