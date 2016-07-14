@@ -242,9 +242,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    // A hook to decide the availability for new resource offers
-    def isClusterAvailableForNewOffers(): Boolean = true
-
     private def executorIsAlive(executorId: String): Boolean = synchronized {
       !executorsPendingToRemove.contains(executorId) &&
         !executorsPendingLossReason.contains(executorId)
@@ -353,6 +350,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // TODO (prashant) send conf instead of properties
     driverEndpoint = createDriverEndpointRef(properties)
   }
+
+  def isClusterAvailableForNewOffers(): Boolean = true
 
   protected def createDriverEndpointRef(
       properties: ArrayBuffer[(String, String)]): RpcEndpointRef = {
