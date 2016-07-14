@@ -309,7 +309,7 @@ private[history] abstract class HistoryMetricSource(val prefix: String) extends 
 
   /**
    * Dump the counters and gauges.
-   * @return a string for logging and diagnostics —not for parsing by machines.
+   * @return a string for logging and diagnostics -not for parsing by machines.
    */
   override def toString: String = {
     val sb = new StringBuilder(s"Metrics for $sourceName:\n")
