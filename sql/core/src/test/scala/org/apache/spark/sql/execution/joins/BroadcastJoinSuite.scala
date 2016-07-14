@@ -154,45 +154,26 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("MAPJOIN Hint") {
+  test("Broadcast Hint") {
     import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join}
 
     spark.range(10).createOrReplaceTempView("t")
     spark.range(10).createOrReplaceTempView("u")
 
-    val plan1 = sql("SELECT /*+ MAPJOIN(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-      .optimizedPlan
-    val plan2 = sql("SELECT /*+ MAPJOIN(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-      .optimizedPlan
-    val plan3 = sql("SELECT /*+ MAPJOIN(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
-      .optimizedPlan
+    for (name <- Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN")) {
+      val plan1 = sql(s"SELECT /*+ $name(t) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+        .optimizedPlan
+      val plan2 = sql(s"SELECT /*+ $name(u) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+        .optimizedPlan
+      val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
+        .optimizedPlan
 
-    assert(plan1.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-    assert(!plan1.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-    assert(!plan2.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-    assert(plan2.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-    assert(!plan3.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-    assert(!plan3.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-  }
-
-  test("BROADCAST JOIN Hint") {
-    import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join}
-
-    spark.range(10).createOrReplaceTempView("t")
-    spark.range(10).createOrReplaceTempView("u")
-
-    val plan1 = sql("SELECT * FROM t JOIN BROADCAST u ON t.id = u.id").queryExecution
-      .optimizedPlan
-    val plan2 = sql("SELECT * FROM t JOIN BROADCAST LEFT u ON t.id = u.id").queryExecution
-      .optimizedPlan
-    val plan3 = sql("SELECT * FROM t JOIN BROADCAST RIGHT u ON t.id = u.id").queryExecution
-      .optimizedPlan
-
-    assert(!plan1.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-    assert(plan1.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-    assert(plan2.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-    assert(!plan2.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-    assert(!plan3.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-    assert(plan3.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+      assert(plan1.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
+      assert(!plan1.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+      assert(!plan2.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
+      assert(plan2.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+      assert(!plan3.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
+      assert(!plan3.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+    }
   }
 }

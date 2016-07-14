@@ -1793,8 +1793,8 @@ class Analyzer(
   object SubstituteHint extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformDown {
-        // MAPJOIN
-        case h @ Hint(name, parameters, child) if name.equalsIgnoreCase("MAPJOIN") =>
+        case h @ Hint(name, parameters, child)
+            if Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN").contains(name) =>
           var resolvedChild = child
           for (table <- parameters) {
             var stop = false
@@ -1806,16 +1806,11 @@ class Analyzer(
             }
           }
           resolvedChild
-        // BROADCAST (LEFT|RIGHT)
-        case h @ Hint(name, parameters, j @ Join(left, _, _, _))
-            if name.equalsIgnoreCase("BROADCAST_LEFT") =>
-          j.copy(left = BroadcastHint(left))
-        case h @ Hint(name, parameters, j @ Join(_, right, _, _))
-          if name.equalsIgnoreCase("BROADCAST_RIGHT") =>
-          j.copy(right = BroadcastHint(right))
 
         // Remove unrecognized hint
-        case Hint(_, _, child) => child
+        case Hint(name, _, child) =>
+          logDebug(s"Ignore Unknown Hint: $name")
+          child
       }
     }
   }
