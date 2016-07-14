@@ -784,7 +784,11 @@ class DistributedLDAModel private[clustering] (
   @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
-      val topIndices = argtopk(topicCounts, k)
+      val topIndices = if (k == topicCounts.length) {
+        Seq.range(0, k)
+      } else {
+        argtopk(topicCounts, k)
+      }
       val sumCounts = sum(topicCounts)
       val weights = if (sumCounts != 0) {
         topicCounts(topIndices) / sumCounts
