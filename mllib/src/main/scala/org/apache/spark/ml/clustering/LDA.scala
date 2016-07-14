@@ -84,8 +84,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *     - Values should be >= 0
    *     - default = uniformly (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
-    *
-    * @group param
+   *
+   * @group param
    */
   @Since("1.6.0")
   final val docConcentration = new DoubleArrayParam(this, "docConcentration",
@@ -126,8 +126,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *     - Value should be >= 0
    *     - default = (1.0 / k), following the implementation from
    *       [[https://github.com/Blei-Lab/onlineldavb]].
-    *
-    * @group param
+   *
+   * @group param
    */
   @Since("1.6.0")
   final val topicConcentration = new DoubleParam(this, "topicConcentration",
@@ -566,11 +566,11 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
   }
 
   private case class Data(
-                           vocabSize: Int,
-                           topicsMatrix: Matrix,
-                           docConcentration: Vector,
-                           topicConcentration: Double,
-                           gammaShape: Double)
+                          vocabSize: Int,
+                          topicsMatrix: Matrix,
+                          docConcentration: Vector,
+                          topicConcentration: Double,
+                          gammaShape: Double)
 
   private class LocalLDAModelReader extends MLReader[LocalLDAModel] {
 
@@ -580,6 +580,8 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       // Import implicits for Dataset Encoder
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
+      // Pattern to determine sparkversion
+      val pattern = """\\d+.\\d+(.\\d+)?(-SNAPSHOT)?""".r
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
@@ -587,11 +589,10 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
         topicConcentration: Double, gammaShape: Double) = MLUtils.convertMatrixColumnsToML(
-        vectorConverted, "topicsMatrix").as[Data]
+        vectorConverted, "topicsMatrix").as[Data].head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
         gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
-
       metadata.sparkVersion match {
         case "1.6" =>
           implicit val format = DefaultFormats
@@ -608,7 +609,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
              throw new IllegalArgumentException(
                s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
            }
-        case "2.x" =>
+        case pattern =>
           DefaultParamsReader.getAndSetParams(model, metadata)
       }
       model
@@ -753,15 +754,39 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
     private val className = classOf[DistributedLDAModel].getName
 
     override def load(path: String): DistributedLDAModel = {
+
+      // Pattern to determine sparkversion
+      val pattern =
+        """\\d+.\\d+(.\\d+)?(-SNAPSHOT)?""".r
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)
-      val model = new DistributedLDAModel(
-        metadata.uid, oldModel.vocabSize, oldModel, sparkSession, None)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      val model = new DistributedLDAModel(metadata.uid, oldModel.vocabSize,
+        oldModel, sparkSession, None)
+      metadata.sparkVersion match {
+        case "1.6" =>
+          implicit val format = DefaultFormats
+          metadata.params match {
+            case JObject(pairs) =>
+              pairs.foreach { case (paramName, jsonValue) =>
+                val origParam =
+                  if (paramName == "topicDistribution") "topicDistributionCol" else paramName
+                val param = model.getParam(origParam)
+                val value = param.jsonDecode(compact(render(jsonValue)))
+                model.set(param, value)
+              }
+            case _ =>
+              throw new IllegalArgumentException(
+                s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
+          }
+        case pattern =>
+          DefaultParamsReader.getAndSetParams(model, metadata)
+      }
       model
     }
   }
+
 
   @Since("1.6.0")
   override def read: MLReader[DistributedLDAModel] = new DistributedLDAModelReader
