@@ -16,6 +16,8 @@
  */
 package org.apache.spark.ml.feature
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -198,6 +200,10 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
   override def load(path: String): CountVectorizer = super.load(path)
 }
 
+object Blah {
+  def convert(a: java.lang.Iterable[String]): Array[String] = a.asScala.toArray
+}
+
 /**
  * Converts a text document to a sparse vector of token counts.
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
@@ -215,6 +221,9 @@ class CountVectorizerModel(
     this(Identifiable.randomUID("cntVecModel"), vocabulary)
     set(vocabSize, vocabulary.length)
   }
+
+  //@Since("2.1.0")
+  def this(vocabulary: java.lang.Iterable[String]) = this(vocabulary.asScala.toArray)
 
   /** @group setParam */
   @Since("1.5.0")

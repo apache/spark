@@ -59,6 +59,23 @@ class JavaWrapper(object):
         java_args = [_py2java(sc, arg) for arg in args]
         return java_obj(*java_args)
 
+    @staticmethod
+    def _new_java_primitive_array(pylist):
+        sc = SparkContext._active_spark_context
+        if isinstance(pylist[0], basestring):
+            java_class = sc._gateway.jvm.java.lang.String
+        else:
+            raise TypeError("Unknown type for Java primitive array")
+        return JavaWrapper._new_java_arr(pylist, java_class)
+
+    @staticmethod
+    def _new_java_array(pylist, java_class):
+        sc = SparkContext._active_spark_context
+        jvocab = sc._gateway.new_array(java_class, len(pylist))
+        for i in xrange(len(pylist)):
+            jvocab[i] = pylist[i]
+        return jvocab
+
 
 @inherit_doc
 class JavaParams(JavaWrapper, Params):
