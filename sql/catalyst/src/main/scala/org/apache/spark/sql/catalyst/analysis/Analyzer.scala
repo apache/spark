@@ -1789,6 +1789,7 @@ class Analyzer(
 
   /**
    * Substitute Hints.
+   * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
    */
   object SubstituteHint extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
