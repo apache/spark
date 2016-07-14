@@ -155,8 +155,8 @@ sparkR.sparkContext <- function(
 
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (existingPort != "") {
-    if(sparkPackages != ""){
-        warning("--packages flag should be used with with spark-submit")
+    if (length(sparkPackages) != 0) {
+      warning("--packages flag should be used with with spark-submit or sparkR shell")
     }
     backendPort <- existingPort
   } else {
