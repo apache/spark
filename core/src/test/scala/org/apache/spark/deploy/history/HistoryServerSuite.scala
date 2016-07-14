@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileInputStream, FileWriter, IOException, InputStream}
+import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
