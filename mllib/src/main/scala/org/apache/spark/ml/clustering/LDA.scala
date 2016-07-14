@@ -589,7 +589,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
         topicConcentration: Double, gammaShape: Double) = MLUtils.convertMatrixColumnsToML(
-        vectorConverted, "topicsMatrix").as[Data].head()
+        vectorConverted, "topicsMatrix").as[Data]
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
         gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
