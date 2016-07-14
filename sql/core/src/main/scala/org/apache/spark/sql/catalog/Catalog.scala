@@ -222,6 +222,9 @@ abstract class Catalog {
    * If this table is cached as an InMemoryRelation, drop the original cached version and make the
    * new version cached lazily.
    *
+   * If the table's schema is inferred at runtime, infer the schema again and update the schema
+   * in the external catalog.
+   *
    * @since 2.0.0
    */
   def refreshTable(tableName: String): Unit

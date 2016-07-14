@@ -485,6 +485,10 @@ object DDLUtils {
     isDatasourceTable(table.properties)
   }
 
+  def isSchemaInferred(table: CatalogTable): Boolean = {
+    table.properties.get(DATASOURCE_SCHEMA_TYPE) == Option(SchemaType.INFERRED.name)
+  }
+
   /**
    * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
    * issue an exception [[AnalysisException]].

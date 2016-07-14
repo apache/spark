@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
@@ -27,7 +28,8 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, TableIdentifie
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.datasources.CreateTableUsing
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils}
+import org.apache.spark.sql.execution.datasources.{CreateTableUsing, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.types.StructType
 
 
@@ -347,6 +349,40 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Refresh the inferred schema stored in the external catalog for data source tables.
+   */
+  private def refreshInferredSchema(tableIdent: TableIdentifier): Unit = {
+    val table = sessionCatalog.getTableMetadataOption(tableIdent)
+    table.foreach { tableDesc =>
+      if (DDLUtils.isDatasourceTable(tableDesc) && DDLUtils.isSchemaInferred(tableDesc)) {
+        val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(tableDesc)
+        val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(tableDesc)
+        val dataSource =
+          DataSource(
+            sparkSession,
+            userSpecifiedSchema = None,
+            partitionColumns = partitionColumns,
+            bucketSpec = bucketSpec,
+            className = tableDesc.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
+            options = tableDesc.storage.serdeProperties)
+            .resolveRelation().asInstanceOf[HadoopFsRelation]
+
+        // TODO: If we do not remove them, the table properties might contain useless part.
+        // Should we remove them?
+        // val tableProperties = tableDesc.properties.filterKeys { k =>
+        //   k != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS &&
+        //     !k.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS) }
+        val properties = new mutable.HashMap[String, String]
+        CreateDataSourceTableUtils.createTablePropertiesForSchema(
+          sparkSession, dataSource.schema, dataSource.partitionSchema.fieldNames, properties)
+
+        val newTable = tableDesc.copy(properties = tableDesc.properties ++ properties)
+        sessionCatalog.alterTable(newTable)
+      }
+    }
+  }
+
+  /**
    * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
    * is refreshed.
    *
@@ -355,6 +391,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    refreshInferredSchema(tableIdent)
     sessionCatalog.refreshTable(tableIdent)
 
     // If this table is cached as an InMemoryRelation, drop the original

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
+import org.apache.spark.sql.execution.command.SchemaType
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -703,7 +704,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           createDataSourceTable(
             sparkSession = spark,
             tableIdent = TableIdentifier("wide_schema"),
-            userSpecifiedSchema = Some(schema),
+            schema = schema,
+            schemaType = SchemaType.USER,
             partitionColumns = Array.empty[String],
             bucketSpec = None,
             provider = "json",
@@ -988,7 +990,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
-        userSpecifiedSchema = Some(schema),
+        schema = schema,
+        schemaType = SchemaType.USER,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
@@ -1003,7 +1006,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("skip_hive_metadata"),
-        userSpecifiedSchema = Some(schema),
+        schema = schema,
+        schemaType = SchemaType.USER,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
