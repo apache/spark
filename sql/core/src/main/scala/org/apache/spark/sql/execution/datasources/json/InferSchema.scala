@@ -263,8 +263,8 @@ private[sql] object InferSchema {
         case (t1: DecimalType, t2: DecimalType) =>
           val scale = math.max(t1.scale, t2.scale)
           val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
-          if (range + scale > 38) {
-            // DecimalType can't support precision > 38
+          if (range + scale > DecimalType.MAX_PRECISION) {
+            // DecimalType can't support precision > DecimalType.MAX_PRECISION
             DoubleType
           } else {
             DecimalType(range + scale, scale)
