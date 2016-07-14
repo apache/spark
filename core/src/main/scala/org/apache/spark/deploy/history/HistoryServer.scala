@@ -22,10 +22,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
 
-import com.codahale.metrics.{Gauge, MetricRegistry}
+import com.codahale.metrics.{Counter, Counting, Gauge, Metric, MetricFilter, MetricRegistry, Timer}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -70,7 +71,7 @@ class HistoryServer(
 
   private[history] val metricsSystem = MetricsSystem.createMetricsSystem("history",
     conf, securityManager)
-  private[history] var metricsReg = metricsSystem.getMetricRegistry
+  private[history] var metricsRegistry = metricsSystem.getMetricRegistry
 
   // and its metrics, for testing as well as monitoring
   val cacheMetrics = appCache.metrics
@@ -119,6 +120,11 @@ class HistoryServer(
     appCache.getSparkUI(appKey)
   }
 
+  val historyMetrics = new HistoryMetrics(this, "history.server")
+  // provider metrics are None until the provider is started, and only after that
+  // point if the provider returns any.
+  var providerMetrics: Option[Source] = None
+
   initialize()
 
   /**
@@ -141,9 +147,10 @@ class HistoryServer(
       attachHandler(contextHandler)
 
       // hook up metrics
-      provider.start().foreach(metricsSystem.registerSource)
-      metricsSystem.registerSource(new HistoryMetrics(this))
+      metricsSystem.registerSource(historyMetrics)
       metricsSystem.registerSource(appCache.metrics)
+      providerMetrics = provider.start()
+      providerMetrics.foreach(metricsSystem.registerSource)
       metricsSystem.start()
       metricsSystem.getServletHandlers.foreach(attachHandler)
     }
@@ -276,12 +283,102 @@ class HistoryServer(
 }
 
 /**
- * History system metrics independent of providers go in here
+ * An abstract implementation of the metrics [[Source]] trait with some common operations.
+ */
+private[history] abstract class HistoryMetricSource(val prefix: String) extends Source {
+  override val metricRegistry = new MetricRegistry()
+
+  /**
+   * Register a sequence of metrics
+   * @param metrics sequence of metrics to register
+   */
+  def register(metrics: Seq[(String, Metric)]): Unit = {
+    metrics.foreach { case (name, metric) =>
+      metricRegistry.register(fullname(name), metric)
+    }
+  }
+
+  /**
+   * Create the full name of a metric by prepending the prefix to the name
+   * @param name short name
+   * @return the full name to use in registration
+   */
+  def fullname(name: String): String = {
+    MetricRegistry.name(prefix, name)
+  }
+
+  /**
+   * Dump the counters and gauges.
+   * @return a string for logging and diagnostics —not for parsing by machines.
+   */
+  override def toString: String = {
+    val sb = new StringBuilder(s"Metrics for $sourceName:\n")
+    sb.append("  Counters\n")
+    metricRegistry.getCounters.asScala.foreach { entry =>
+        sb.append("    ").append(entry._1).append(" = ").append(entry._2.getCount).append('\n')
+    }
+    sb.append("  Gauges\n")
+    metricRegistry.getGauges.asScala.foreach { entry =>
+      sb.append("    ").append(entry._1).append(" = ").append(entry._2.getValue).append('\n')
+    }
+    sb.toString()
+  }
+
+  /**
+   * Get a named counter.
+   * @param counterName name of the counter
+   * @return the counter, if found
+   */
+  def getCounter(counterName: String): Option[Counter] = {
+    Option(metricRegistry.getCounters(new MetricFilter {
+      def matches(name: String, metric: Metric): Boolean = name == counterName
+    }).get(counterName))
+  }
+
+  /**
+   * Get a gauge of an unknown numeric type.
+   * @param gaugeName name of the gauge
+   * @return gauge, if found
+   */
+  def getGauge(gaugeName: String): Option[Gauge[_]] = {
+    Option(metricRegistry.getGauges(new MetricFilter {
+      def matches(name: String, metric: Metric): Boolean = name == gaugeName
+    }).get(gaugeName))
+  }
+
+  /**
+   * Get a Long gauge.
+   * @param gaugeName name of the gauge
+   * @return gauge, if found
+   * @throws ClassCastException if the gauge is found but of the wrong type
+   */
+  def getLongGauge(gaugeName: String): Option[Gauge[Long]] = {
+    Option(metricRegistry.getGauges(new MetricFilter {
+      def matches(name: String, metric: Metric): Boolean = name == gaugeName
+    }).get(gaugeName)).asInstanceOf[Option[Gauge[Long]]]
+  }
+
+  /**
+   * Get a timer.
+   * @param timerName name of the timer
+   * @return the timer, if found.
+   */
+  def getTimer(timerName: String): Option[Timer] = {
+    Option(metricRegistry.getTimers(new MetricFilter {
+      def matches(name: String, metric: Metric): Boolean = name == timerName
+    }).get(timerName))
+  }
+
+}
+
+/**
+ * History system metrics independent of providers go in here.
  * @param owner owning instance
  */
-private[history] class HistoryMetrics(val owner: HistoryServer) extends Source {
-  override val metricRegistry = new MetricRegistry()
+private[history] class HistoryMetrics(val owner: HistoryServer, prefix: String)
+    extends HistoryMetricSource(prefix) {
   override val sourceName = "history"
+
 }
 
 /**
@@ -294,7 +391,7 @@ private[history] class Timestamp extends Gauge[Long] {
   /** Current value. */
   override def getValue: Long = time
 
-  /** set a new value. */
+  /** Set a new value. */
   def setValue(t: Long): Unit = {
     time = t
   }
@@ -303,6 +400,15 @@ private[history] class Timestamp extends Gauge[Long] {
   def touch(): Unit = {
     setValue(System.currentTimeMillis())
   }
+}
+
+/**
+ * A Long gauge from a lambda expression; the expression is evaluated
+ * whenever the metrics are queried
+ * @param expression expression which generates the value.
+ */
+private[history] class LambdaLongGauge(expression: (() => Long)) extends Gauge[Long] {
+  override def getValue: Long = expression()
 }
 
 /**

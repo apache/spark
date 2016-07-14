@@ -131,7 +131,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
   /** filesystem metrics: visible for test access */
-  private[history] val metrics = new FsHistoryProviderMetrics(this)
+  private[history] val metrics = new FsHistoryProviderMetrics(this, "history.provider")
 
   /**
    * Return a runnable that performs the given operation on the event logs.
@@ -266,8 +266,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
-  metrics.appUILoadCount.inc()
-    time(metrics.appUiLoadTimer) {
+    metrics.appUILoadCount.inc()
+    time(metrics.appUiLoadTimer, Some(metrics.appUITotalLoadTime)) {
       try {
         applications.get(appId).flatMap { appInfo =>
           appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
@@ -283,7 +283,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
 
             val (appListener, count) = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-            metrics.eventReplayedCount.inc(count)
+            metrics.appUIEventCount.inc(count)
 
             if (appListener.appId.isDefined) {
               ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
@@ -387,8 +387,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         try {
           for (file <- logInfos) {
             tasks += replayExecutor.submit(new Runnable {
-              override def run(): Unit = time(metrics.mergeApplicationListingTimer) {
-                mergeApplicationListing(file)
+              override def run(): Unit =
+                time(metrics.historyMergeTimer, Some(metrics.historyTotalMergeTime)) {
+                  mergeApplicationListing(file)
               }
             })
           }
@@ -510,7 +511,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val lastUpdated = if (appCompleted) fileStatus.getModificationTime else clock.getTimeMillis()
 
       val (appListener, count) = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
-      metrics.eventReplayedCount.inc(count)
+      metrics.historyEventCount.inc(count)
 
       // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
       // try to show their UI.
@@ -620,7 +621,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appsToRetain += (app.id -> app)
         } else if (toRetain.nonEmpty) {
           appsToRetain += (app.id ->
-            new FsApplicationHistoryInfo(app.id, app.name, toRetain.toList))
+            new FsApplicationHistoryInfo(app.id, app.name, toRetain))
         }
       }
 
@@ -790,19 +791,22 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Metrics integration: the various counters of activity
    * Time a closure, returning its output.
+   * The timer is updated with the duration, and if a counter is supplied, it's count
+   * is incremented by the duration.
    * @param timer timer
+   * @param counter counter: an optional counter of the duration
    * @param fn function
    * @tparam T type of return value of time
    * @return the result of the function.
    */
-  private def time[T](timer: Timer)(fn: => T): T = {
+  private def time[T](timer: Timer, counter: Option[Counter] = None)(fn: => T): T = {
     val timeCtx = timer.time()
     try {
       fn
     } finally {
-      timeCtx.close()
+      val duration = timeCtx.stop()
+      counter.foreach(_.inc(duration))
     }
   }
 }
@@ -810,14 +814,22 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 /**
  * Metrics integration: the various counters of activity.
  */
-private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extends Source {
+private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider, prefix: String)
+    extends HistoryMetricSource(prefix) {
+
+  /**
+   * Function to return an average; if the count is 0, so is the average.
+   * @param value value to average
+   * @param count event count to divide by
+   * @return the average, or 0 if the counter is itself 0
+   */
+  private def average(value: Long, count: Long): Long = {
+    if (count> 0) value / count else 0
+  }
 
   override val sourceName = "history.fs"
 
   private val name = MetricRegistry.name(sourceName)
-
-  /** Metrics registry. */
-  override val metricRegistry = new MetricRegistry()
 
   /** Number of updates. */
   val updateCount = new Counter()
@@ -825,8 +837,21 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extend
   /** Number of update failures. */
   val updateFailureCount = new Counter()
 
-  /** Number of events replayed. This includes those on UI playback as well as listing merge. */
-  val eventReplayedCount = new Counter()
+  /** Number of events replayed as listing merge. */
+  val historyEventCount = new Counter()
+
+  /** Timer of listing merges. */
+  val historyMergeTimer = new Timer()
+
+  /** Total time to merge all histories. */
+  val historyTotalMergeTime = new Counter()
+
+  /** Average time to load a single event in the App UI */
+  val historyEventMergeTime = new LambdaLongGauge(() =>
+    average(historyTotalMergeTime.getCount, historyEventCount.getCount))
+
+  /** Number of events replayed. */
+  val appUIEventCount = new Counter()
 
   /** Update duration timer. */
   val updateTimer = new Timer()
@@ -849,33 +874,38 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extend
   /** Statistics on time to load app UIs. */
   val appUiLoadTimer = new Timer()
 
-  /** Statistics on time to replay and merge listings. */
-  val mergeApplicationListingTimer = new Timer()
+  /** Total load time of all App UIs. */
+  val appUITotalLoadTime = new Counter()
+
+  /** Average time to load a single event in the App UI */
+  val appUIEventReplayTime = new LambdaLongGauge(() =>
+    average(appUITotalLoadTime.getCount, appUIEventCount.getCount))
 
   private val countersAndGauges = Seq(
-    ("event.replay.count", eventReplayedCount),
+    ("history.merge.event.count", historyEventCount),
+    ("history.merge.event.time", historyEventMergeTime),
+    ("history.merge.duration", historyTotalMergeTime),
     ("update.count", updateCount),
     ("update.failure.count", updateFailureCount),
     ("update.last.attempted", updateLastAttempted),
     ("update.last.succeeded", updateLastSucceeded),
     ("appui.load.count", appUILoadCount),
-    ("appui.load.failure.count", appUILoadFailureCount))
-    ("appui.load.not-found.count", appUILoadNotFoundCount)
+    ("appui.load.duration", appUITotalLoadTime),
+    ("appui.load.failure.count", appUILoadFailureCount),
+    ("appui.load.not-found.count", appUILoadNotFoundCount),
+    ("appui.event.count", appUIEventCount),
+    ("appui.event.replay.time", appUIEventReplayTime)
+  )
 
   private val timers = Seq (
     ("update.timer", updateTimer),
-    ("merge.application.listings.timer", mergeApplicationListingTimer),
+    ("history.merge.timer", historyMergeTimer),
     ("appui.load.timer", appUiLoadTimer))
 
   val allMetrics = countersAndGauges ++ timers
 
-  allMetrics.foreach(elt => metricRegistry.register(elt._1, elt._2))
+  register(allMetrics)
 
-  override def toString: String = {
-    def sb = new StringBuilder(countersAndGauges.size * 20)
-    allMetrics.foreach(elt => sb.append(s" ${elt._1} = ${elt._2}\n"))
-    sb.toString()
-  }
 }
 
 private[history] object FsHistoryProvider {
