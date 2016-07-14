@@ -455,10 +455,9 @@ class PlanParserSuite extends PlanTest {
     }.getMessage
     assert(m.contains("no viable alternative at input"))
 
-    // Case-insensitive hint name.
     comparePlans(
-      parsePlan("SELECT /*+ BroadCast(u) */ * FROM t"),
-      Hint("BROADCAST", Seq("u"), table("t")).select(star()))
+      parsePlan("SELECT /*+ HINT */ * FROM t"),
+      Hint("HINT", Seq.empty, table("t")).select(star()))
 
     comparePlans(
       parsePlan("SELECT /*+ BROADCASTJOIN(u) */ * FROM t"),

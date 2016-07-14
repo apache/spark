@@ -1794,7 +1794,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformDown {
         case h @ Hint(name, parameters, child)
-            if Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN").contains(name) =>
+            if Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN").contains(name.toUpperCase) =>
           var resolvedChild = child
           for (table <- parameters) {
             var stop = false
