@@ -854,8 +854,9 @@ private[spark] class TaskSetManager(
       val blacklistedExecutors =
         execToFailures.filter(_._2.totalFailures >= MAX_FAILURES_PER_EXEC_STAGE)
       if (blacklistedExecutors.size >= MAX_FAILED_EXEC_PER_NODE_STAGE) {
-        logInfo(s"Blacklisting ${host} for stage $stageId")
-        blacklistedNodes += host
+        if (blacklistedNodes.add(host)) {
+          logInfo(s"Blacklisting ${host} for stage $stageId")
+        }
       }
     }
   }

@@ -239,6 +239,12 @@ private[yarn] class YarnAllocator(
       // in order to avoid allocating new Container on the problematic nodes.
       val blacklistAdditions = nodeBlacklist -- currentNodeBlacklist
       val blacklistRemovals = currentNodeBlacklist -- nodeBlacklist
+      if (blacklistAdditions.nonEmpty) {
+        logInfo(s"adding nodes to blacklist: $blacklistAdditions")
+      }
+      if (blacklistRemovals.nonEmpty) {
+        logInfo(s"removing nodes from blacklist: $blacklistRemovals")
+      }
       amClient.updateBlacklist(blacklistAdditions.toList.asJava, blacklistRemovals.toList.asJava)
       currentNodeBlacklist = nodeBlacklist
       true

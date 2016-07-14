@@ -128,9 +128,10 @@ private[spark] abstract class YarnSchedulerBackend(
 
     val nodeBlacklist: Set[String] =
       scheduler.blacklistTracker.map(_.nodeBlacklist()).getOrElse(Set())
+    val filteredHostToLocalTaskCount = hostToLocalTaskCount.filterKeys(!nodeBlacklist.contains(_))
 
-    yarnSchedulerEndpointRef.askWithRetry[Boolean](
-      RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount, nodeBlacklist))
+    yarnSchedulerEndpointRef.askWithRetry[Boolean](RequestExecutors(
+      requestedTotal, localityAwareTasks, filteredHostToLocalTaskCount, nodeBlacklist))
   }
 
   /**
