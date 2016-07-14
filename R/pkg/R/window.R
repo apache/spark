@@ -21,6 +21,11 @@
 #'
 #' Creates a WindowSpec with the partitioning defined.
 #'
+#' @param col A column name or Column by which rows are partitioned to 
+#'            windows.
+#' @param ... Optional column names or Columns in addition to col, by 
+#'            which rows are partitioned to windows.
+#'
 #' @rdname windowPartitionBy
 #' @name windowPartitionBy
 #' @export
@@ -62,6 +67,11 @@ setMethod("windowPartitionBy",
 #' windowOrderBy
 #'
 #' Creates a WindowSpec with the ordering defined.
+#'
+#' @param col A column name or Column by which rows are ordered within 
+#'            windows.
+#' @param ... Optional column names or Columns in addition to col, by 
+#'            which rows are ordered within windows.
 #'
 #' @rdname windowOrderBy
 #' @name windowOrderBy
