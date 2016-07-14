@@ -68,7 +68,7 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
   private static final boolean DEFAULT_SPARK_AUTHENTICATE = false;
 
-  private static final String RECOVERY_FILE_NAME = "registeredExecutor.ldb";
+  private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
 
   // An entity that manages the shuffle secret per application
   // This is used only if authentication is enabled
