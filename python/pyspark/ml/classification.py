@@ -49,8 +49,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
                          HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Logistic regression.
     Currently, this class only supports binary classification.
 
@@ -216,8 +214,6 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
 class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by LogisticRegression.
 
     .. versionadded:: 1.3.0
@@ -277,6 +273,8 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 class LogisticRegressionSummary(JavaWrapper):
     """
+    .. note:: Experimental
+
     Abstraction for Logistic Regression Results for a given model.
 
     .. versionadded:: 2.0.0
@@ -321,6 +319,8 @@ class LogisticRegressionSummary(JavaWrapper):
 @inherit_doc
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     """
+    .. note:: Experimental
+
     Abstraction for multinomial Logistic Regression Training results.
     Currently, the training summary ignores the training weights except
     for the objective trace.
@@ -501,8 +501,6 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                              JavaMLReadable):
     """
-    .. note:: Experimental
-
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -599,8 +597,6 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 @inherit_doc
 class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by DecisionTreeClassifier.
 
     .. versionadded:: 1.4.0
@@ -634,8 +630,6 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              RandomForestParams, TreeClassifierParams, HasCheckpointInterval,
                              JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -730,8 +724,6 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by RandomForestClassifier.
 
     .. versionadded:: 1.4.0
@@ -764,8 +756,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                     GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
-    .. note:: Experimental
-
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
     It supports binary labels, as well as both continuous and categorical features.
@@ -885,8 +875,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by GBTClassifier.
 
     .. versionadded:: 1.4.0
@@ -918,8 +906,6 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
                  HasRawPredictionCol, HasThresholds, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. `Multinomial NB
     <http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html>`_
@@ -1043,8 +1029,6 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
 
 class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by NaiveBayes.
 
     .. versionadded:: 1.5.0
