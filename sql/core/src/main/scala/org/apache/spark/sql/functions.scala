@@ -619,8 +619,9 @@ object functions {
    * @group agg_funcs
    * @since 2.1.0
    */
-  def percentile(e: Column, pc: Seq[Double]): Column =
-    withAggregateFunction {Percentile(e.expr, pc)}
+  def percentile(e: Column, pc: Seq[Double]): Column = withAggregateFunction {
+    Percentile(e.expr, CreateArray(pc.map(v => Literal(v))))
+  }
 
   /**
    * Aggregate function: returns the exact percentile(s) of the column in a group at pc with range
@@ -630,6 +631,24 @@ object functions {
    * @since 2.1.0
    */
   def percentile(columnName: String, pc: Seq[Double]): Column = percentile(Column(columnName), pc)
+
+  /**
+   * Aggregate function: returns the exact percentile of the expression in a group at pc with
+   * range in [0, 1].
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  def percentile(e: Column, pc: Double): Column = percentile(e, Seq(pc))
+
+  /**
+   * Aggregate function: returns the exact percentile of the column in a group at pc with range
+   * in [0, 1].
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  def percentile(columnName: String, pc: Double): Column = percentile(Column(columnName), pc)
 
   /**
    * Aggregate function: returns the skewness of the values in a group.
