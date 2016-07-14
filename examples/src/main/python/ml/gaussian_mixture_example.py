@@ -31,7 +31,7 @@ Run with:
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("PythonGuassianMixtureExample")\
+        .appName("GaussianMixtureExample")\
         .getOrCreate()
 
     # $example on$
