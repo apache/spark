@@ -275,7 +275,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
     def hasPartitionColumns(relation: HadoopFsRelation): Boolean = {
       try {
-        // HACK!
+        // HACK for "[SPARK-16313][SQL][BRANCH-1.6] Spark should not silently drop exceptions in
+        // file listing" https://github.com/apache/spark/pull/14139
         // Calling hadoopFsRelation.partitionColumns will trigger the refresh call of
         // the HadoopFsRelation, which will validate input paths. However, when we create
         // an empty table, the dir of the table has not been created, which will
@@ -304,7 +305,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       HiveTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        // HACK!
+        // HACK for "[SPARK-16313][SQL][BRANCH-1.6] Spark should not silently drop exceptions in
+        // file listing" https://github.com/apache/spark/pull/14139
         // Since the table is not partitioned, we use dataSchema instead of using schema.
         // Using schema which will trigger partition discovery on the path that
         // may not be created causing FileNotFoundException. So, we just get dataSchema
