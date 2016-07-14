@@ -2405,7 +2405,8 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   a <- 1:3
   b <- c("a", "b", "c")
   ldf <- data.frame(a, b)
-  df <- suppressWarnings(createDataFrame(sqlContext, ldf))
+  # Call function with namespace :: operator - SPARK-16538
+  df <- suppressWarnings(SparkR::createDataFrame(sqlContext, ldf))
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
   expect_equal(count(df), 3)
