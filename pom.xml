@@ -186,7 +186,6 @@
     <maven-antrun.version>1.8</maven-antrun.version>
 
     <test.java.home>${java.home}</test.java.home>
-    <test.exclude.tags></test.exclude.tags>
 
     <!-- When using different JDKs for the build, we can't use Zinc for the jdk8 part. -->
     <useZincForJdk8>true</useZincForJdk8>
@@ -2168,9 +2167,6 @@
                       <goal>build-classpath</goal>
                     </goals>
                   </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
                 </pluginExecution>
                 <pluginExecution>
                   <pluginExecutionFilter>
@@ -2181,9 +2177,6 @@
                       <goal>test-jar</goal>
                     </goals>
                   </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
                 </pluginExecution>
                 <pluginExecution>
                   <pluginExecutionFilter>
@@ -2194,9 +2187,6 @@
                       <goal>run</goal>
                     </goals>
                   </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
                 </pluginExecution>
               </pluginExecutions>
             </lifecycleMappingMetadata>
