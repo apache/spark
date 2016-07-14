@@ -22,25 +22,33 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.internal.Logging
+import org.apache.spark.SparkException
+import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.clustering.{LDA, LDAModel}
+import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.types.StringType
 
 private[r] class LDAWrapper private (
     val pipeline: PipelineModel,
     val likelihood: Double,
-    val perplexity: Double) extends MLWritable {
+    val perplexity: Double,
+    val vocabulary: Array[String]) extends MLWritable {
 
-  private val lda: LDAModel = pipeline.stages(0).asInstanceOf[LDAModel]
+  import LDAWrapper._
+
+  private val lda: LDAModel = pipeline.stages.last.asInstanceOf[LDAModel]
   private val preprocessor: PipelineModel =
-    new PipelineModel(s"${pipeline.uid}-preprocessor", pipeline.stages.dropRight(1))
+    new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", pipeline.stages.dropRight(1))
 
-  def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(lda.getFeaturesCol)
+  def transform(data: Dataset[_]): DataFrame = {
+    pipeline.transform(data).drop(TOKENIZER_COL, STOPWORDS_REMOVER_COL, COUNT_VECTOR_COL)
   }
 
-  def perplexityFor(data: Dataset[_]): Double = {
+  def computePerplexity(data: Dataset[_]): Double = {
     math.exp(lda.logPerplexity(preprocessor.transform(data)))
   }
 
@@ -53,7 +61,30 @@ private[r] class LDAWrapper private (
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
 
-private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
+private[r] object LDAWrapper extends MLReadable[LDAWrapper] with Logging {
+
+  val TOKENIZER_COL = s"${Identifiable.randomUID("rawTokens")}"
+  val STOPWORDS_REMOVER_COL = s"${Identifiable.randomUID("tokens")}"
+  val COUNT_VECTOR_COL = s"${Identifiable.randomUID("features")}"
+
+  private def getPreStages(
+      features: String,
+      customizedStopWords: Array[String],
+      maxVocabSize: Int): Array[PipelineStage] = {
+    val tokenizer = new RegexTokenizer()
+      .setInputCol(features)
+      .setOutputCol(TOKENIZER_COL)
+    val stopWordsRemover = new StopWordsRemover()
+      .setInputCol(TOKENIZER_COL)
+      .setOutputCol(STOPWORDS_REMOVER_COL)
+    stopWordsRemover.setStopWords(stopWordsRemover.getStopWords ++ customizedStopWords)
+    val countVectorizer = new CountVectorizer()
+      .setVocabSize(maxVocabSize)
+      .setInputCol(STOPWORDS_REMOVER_COL)
+      .setOutputCol(COUNT_VECTOR_COL)
+
+    Array(tokenizer, stopWordsRemover, countVectorizer)
+  }
 
   def fit(
       data: DataFrame,
@@ -63,10 +94,26 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       optimizer: String,
       subsamplingRate: Double,
       topicConcentration: Double,
-      docConcentration: Array[Double]): LDAWrapper = {
+      docConcentration: Array[Double],
+      customizedStopWords: Array[String],
+      maxVocabSize: Int): LDAWrapper = {
+
+    val featureSchema = data.schema(features)
+    val preStages = featureSchema.dataType match {
+      case d: StringType =>
+        logDebug(s"Feature ($features) schema is StringType, use the built-in preprocessor.")
+        getPreStages(features, customizedStopWords, maxVocabSize)
+      case d: VectorUDT =>
+        logDebug(s"Feature ($features) schema is VectorUDT, use the LDA directly.")
+        Array.empty[PipelineStage]
+      case _ =>
+        throw new SparkException(
+          s"Unsupported input features type of ${featureSchema.dataType.typeName}," +
+            s" only String type and Vector type are supported now.")
+    }
 
     val lda = new LDA()
-      .setFeaturesCol(features)
+      .setFeaturesCol(COUNT_VECTOR_COL)
       .setK(k)
       .setMaxIter(maxIter)
       .setSubsamplingRate(subsamplingRate)
@@ -87,12 +134,28 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       lda.setDocConcentration(docConcentration)
     }
 
-    val pipeline = new Pipeline().setStages(Array(lda))
+    val pipeline = new Pipeline().setStages(preStages ++ Array(lda))
     val model = pipeline.fit(data)
-    val ldaModel = model.stages(0).asInstanceOf[LDAModel]
+
+    val vocabulary: Array[String] = featureSchema.dataType match {
+      case d: StringType =>
+        val countVectorModel = model.stages(preStages.length - 1).asInstanceOf[CountVectorizerModel]
+        countVectorModel.vocabulary
+      case _ => Array.empty[String]
+    }
+
+    val ldaModel: LDAModel = model.stages.last.asInstanceOf[LDAModel]
+    val preprocessor: PipelineModel =
+      new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", model.stages.dropRight(1))
+
+
+    val preprocessedData = preprocessor.transform(data)
 
     new LDAWrapper(
-      model, math.exp(ldaModel.logLikelihood(data)), math.exp(ldaModel.logPerplexity(data)))
+      model,
+      math.exp(ldaModel.logLikelihood(preprocessedData)),
+      math.exp(ldaModel.logPerplexity(preprocessedData)),
+      vocabulary)
   }
 
   override def read: MLReader[LDAWrapper] = new LDAWrapperReader
@@ -107,7 +170,8 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("likelihood" -> instance.likelihood) ~
-        ("perplexity" -> instance.perplexity)
+        ("perplexity" -> instance.perplexity) ~
+        ("vocabulary" -> instance.vocabulary.toList)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
@@ -126,9 +190,10 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       val rMetadata = parse(rMetadataStr)
       val logLikelihood = (rMetadata \ "likelihood").extract[Double]
       val logPerplexity = (rMetadata \ "perplexity").extract[Double]
+      val vocabulary = (rMetadata \ "vocabulary").extract[List[String]].toArray
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new LDAWrapper(pipeline, logLikelihood, logPerplexity)
+      new LDAWrapper(pipeline, logLikelihood, logPerplexity, vocabulary)
     }
   }
 }

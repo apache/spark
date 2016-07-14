@@ -352,7 +352,7 @@ setMethod("summary", signature(object = "LDAModel"),
 setMethod("spark.perplexity", signature(object = "LDAModel"),
           function(object, data) {
             return(ifelse(missing(data), callJMethod(object@jobj, "perplexity"),
-                   callJMethod(object@jobj, "perplexityFor", data@sdf)))
+                   callJMethod(object@jobj, "computePerplexity", data@sdf)))
          })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
@@ -723,11 +723,13 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @note spark.lda since 2.1.0
 setMethod("spark.lda", signature(data = "SparkDataFrame"),
           function(data, features = "features", k = 10, maxIter = 20, optimizer = c("online", "em"),
-                   subsamplingRate = 0.05, topicConcentration = -1, docConcentration = -1) {
+                   subsamplingRate = 0.05, topicConcentration = -1, docConcentration = -1,
+                   customizedStopWords = "", maxVocabSize = bitwShiftL(1, 18)) {
             optimizer <- match.arg(optimizer)
             jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features,
                                 as.integer(k), as.integer(maxIter), optimizer, subsamplingRate,
-                                topicConcentration, as.array(docConcentration))
+                                topicConcentration, as.array(docConcentration),
+                                as.array(customizedStopWords), maxVocabSize)
             return(new("LDAModel", jobj = jobj))
           })
 
