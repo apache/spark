@@ -262,11 +262,7 @@ public class UnsafeArrayWriter {
   }
 
   private void writePrimitiveArray(Object input, int offset, int elementSize, int length)  {
-    // uncomment this if SPARK-16043 is merged
-    // Platform.copyMemory(input, offset, holder.buffer, startingOffset + headerInBytes,
-    //   elementSize * length);
     Platform.copyMemory(input, offset, holder.buffer, holder.cursor, elementSize * length);
-    // remove the followings if SPARK-15962 is merged
     for (int ordinal = 0; ordinal < length; ordinal++) {
       Platform.putInt(holder.buffer, getElementOffset(ordinal),
         (holder.cursor + ordinal * elementSize) - startingOffset);
@@ -275,8 +271,6 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveBooleanArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // boolean[] intput = ((GenericBooleanArrayData)arrayData).primitiveArray();
     boolean[] input = arrayData.toBooleanArray();
     int length = input.length;
     int offset = Platform.BYTE_ARRAY_OFFSET;
@@ -284,8 +278,6 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveByteArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // byte[] intput = ((GenericByteArrayData)arrayData).primitiveArray();
     byte[] input = arrayData.toByteArray();
     int length = input.length;
     int offset = Platform.BYTE_ARRAY_OFFSET;
@@ -293,8 +285,6 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveShortArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // short[] input = ((GenericShortArrayData)arrayData).primitiveArray();
     short[] input = arrayData.toShortArray();
     int length = input.length;
     int offset = Platform.SHORT_ARRAY_OFFSET;
@@ -302,8 +292,6 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveIntArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // int[] input = ((GenericIntArrayData)arrayData).primitiveArray();
     int[] input = arrayData.toIntArray();
     int length = input.length;
     int offset = Platform.INT_ARRAY_OFFSET;
@@ -311,8 +299,6 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveLongArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // long[] input = ((GenericLongArrayData)arrayData).primitiveArray();
     long[] input = arrayData.toLongArray();
     int length = input.length;
     int offset = Platform.LONG_ARRAY_OFFSET;
@@ -320,8 +306,6 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveFloatArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // float[] input = ((GenericFloatArrayData)arrayData).primitiveArray();
     float[] input = arrayData.toFloatArray();
     int length = input.length;
     int offset = Platform.FLOAT_ARRAY_OFFSET;
@@ -329,11 +313,126 @@ public class UnsafeArrayWriter {
   }
 
   public void writePrimitiveDoubleArray(ArrayData arrayData) {
-    // uncomment this if SPARK-16043 is merged
-    // double[] input = ((GenericDoubleArrayData)arrayData).primitiveArray();
     double[] input = arrayData.toDoubleArray();
     int length = input.length;
     int offset = Platform.DOUBLE_ARRAY_OFFSET;
     writePrimitiveArray(input, offset, 8, length);
   }
+
+/** uncomment this if SPARK-16043 is merged
+
+  // remove this method if SPARK-15962 is merged
+  private void updateIndex(int elementSize, int length)  {
+    for (int ordinal = 0; ordinal < length; ordinal++) {
+      Platform.putInt(holder.buffer, getElementOffset(ordinal),
+              (holder.cursor + ordinal * elementSize) - startingOffset);
+    }
+    holder.cursor += elementSize * length;
+  }
+
+  public void writePrimitiveBooleanArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericBooleanArrayData) {
+      boolean[] input = ((GenericBooleanArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.BOOLEAN_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putBoolean(holder.buffer, holder.cursor + i, arrayData.getBoolean(i));
+      }
+      updateIndex(1, length);
+    }
+  }
+
+  public void writePrimitiveByteArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericByteArrayData) {
+      byte[] input = ((GenericByteArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putByte(holder.buffer, holder.cursor + i, arrayData.getByte(i));
+      }
+      updateIndex(1, length);
+    }
+  }
+
+  public void writePrimitiveShortArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericShortArrayData) {
+      short[] input = ((GenericShortArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.SHORT_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putShort(holder.buffer, holder.cursor + i, arrayData.getShort(i));
+      }
+      updateIndex(2, length);
+    }
+  }
+
+  public void writePrimitiveIntArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericIntArrayData) {
+      int[] input = ((GenericIntArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.INT_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putInt(holder.buffer, holder.cursor + i, arrayData.getInt(i));
+      }
+      updateIndex(4, length);
+    }
+  }
+
+  public void writePrimitiveLongArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericLongArrayData) {
+      long[] input = ((GenericLongArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.LONG_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putLong(holder.buffer, holder.cursor + i, arrayData.getLong(i));
+      }
+      updateIndex(8, length);
+    }
+  }
+
+  public void writePrimitiveFloatArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericFloatArrayData) {
+      float[] input = ((GenericFloatArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.FLOAT_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putFloat(holder.buffer, holder.cursor + i, arrayData.getFloat(i));
+      }
+      updateIndex(4, length);
+    }
+  }
+
+  public void writePrimitiveDoubleArray(ArrayData arrayData) {
+    if (arrayData instanceof GenericDoubleArrayData) {
+      double[] input = ((GenericDoubleArrayData)arrayData).primitiveArray();
+      int length = input.length;
+      Platform.copyMemory(input, Platform.DOUBLE_ARRAY_OFFSET,
+              holder.buffer, startingOffset + headerInBytes, length);
+    } else {
+      int length = arrayData.numElements();
+      for (int i = 0; i < length; i++) {
+        Platform.putFloat(holder.buffer, holder.cursor + i, arrayData.getFloat(i));
+      }
+      updateIndex(8, length);
+    }
+  }
+*/
 }
