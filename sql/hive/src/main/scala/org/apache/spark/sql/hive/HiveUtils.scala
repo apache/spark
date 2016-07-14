@@ -79,7 +79,7 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. A classpath in the standard format for both Hive and Hadoop.
       """.stripMargin)
-    .pathConf
+    .stringConf
     .createWithDefault("builtin")
 
   val CONVERT_METASTORE_PARQUET = SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet")

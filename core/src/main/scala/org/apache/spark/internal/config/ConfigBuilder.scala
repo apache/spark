@@ -109,7 +109,7 @@ private[spark] class TypedConfigBuilder[T](
   /** Creates a [[ConfigEntry]] that does not have a default value. */
   def createOptional: OptionalConfigEntry[T] = {
     val entry = new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc,
-      parent._public, parent._expandVars)
+      parent._public)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -118,7 +118,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefault(default: T): ConfigEntry[T] = {
     val transformedDefault = converter(stringConverter(default))
     val entry = new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter,
-      stringConverter, parent._doc, parent._public, parent._expandVars)
+      stringConverter, parent._doc, parent._public)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -130,7 +130,7 @@ private[spark] class TypedConfigBuilder[T](
   def createWithDefaultString(default: String): ConfigEntry[T] = {
     val typedDefault = converter(default)
     val entry = new ConfigEntryWithDefault[T](parent.key, typedDefault, converter, stringConverter,
-      parent._doc, parent._public, parent._expandVars)
+      parent._doc, parent._public)
     parent._onCreate.foreach(_(entry))
     entry
   }
@@ -149,7 +149,6 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _public = true
   private[config] var _doc = ""
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
-  private[config] var _expandVars = false
 
   def internal(): ConfigBuilder = {
     _public = false
@@ -158,30 +157,6 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def doc(s: String): ConfigBuilder = {
     _doc = s
-    this
-  }
-
-  /**
-   * Enable variable expansion in config values. If the config value contains variable references
-   * of the form "${prefix:variableName}", the reference will be replaced with the value of the
-   * variable depending on the prefix. The prefix can be one of:
-   *
-   * - no prefix: looks for the value in the Spark configuration
-   * - system: looks for the value in the system properties
-   * - env: looks for the value in the environment
-   *
-   * So referencing "${spark.master}" will look for the value of "spark.master" in the Spark
-   * configuration, while referencing "${env:MASTER}" will read the value from the "MASTER"
-   * environment variable.
-   *
-   * For known Spark configuration keys (i.e. those created using `ConfigBuilder`), references
-   * will also consider the default value when it exists.
-   *
-   * If the reference cannot be resolved, the original string will be retained. Variable expansion
-   * only applies to user-provided values, not to default values.
-   */
-  def withVariableExpansion(): ConfigBuilder = {
-    _expandVars = true
     this
   }
 
@@ -223,10 +198,7 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
-    new FallbackConfigEntry(key, _doc, _public, fallback, _expandVars)
+    new FallbackConfigEntry(key, _doc, _public, fallback)
   }
-
-  /** A path config entry has type String and allows variable expansion. */
-  def pathConf: TypedConfigBuilder[String] = withVariableExpansion.stringConf
 
 }

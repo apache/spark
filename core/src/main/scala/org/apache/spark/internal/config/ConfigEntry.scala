@@ -24,6 +24,24 @@ import org.apache.spark.SparkConf
 /**
  * An entry contains all meta information for a configuration.
  *
+ * Config options created using this feature support variable expansion. If the config value
+ * contains variable references of the form "${prefix:variableName}", the reference will be replaced
+ * with the value of the variable depending on the prefix. The prefix can be one of:
+ *
+ * - no prefix: if the config key starts with "spark", looks for the value in the Spark config
+ * - system: looks for the value in the system properties
+ * - env: looks for the value in the environment
+ *
+ * So referencing "${spark.master}" will look for the value of "spark.master" in the Spark
+ * configuration, while referencing "${env:MASTER}" will read the value from the "MASTER"
+ * environment variable.
+ *
+ * For known Spark configuration keys (i.e. those created using `ConfigBuilder`), references
+ * will also consider the default value when it exists.
+ *
+ * If the reference cannot be resolved, the original string will be retained. Variable expansion
+ * only applies to user-provided values, not to default values.
+ *
  * @param key the key for the configuration
  * @param defaultValue the default value for the configuration
  * @param valueConverter how to convert a string to the value. It should throw an exception if the
@@ -42,8 +60,7 @@ private[spark] abstract class ConfigEntry[T] (
     val valueConverter: String => T,
     val stringConverter: T => String,
     val doc: String,
-    val isPublic: Boolean,
-    private val expandVars: Boolean) {
+    val isPublic: Boolean) {
 
   import ConfigEntry._
 
@@ -63,9 +80,7 @@ private[spark] abstract class ConfigEntry[T] (
       conf: JMap[String, String],
       getenv: String => String,
       usedRefs: Set[String] = Set()): Option[String] = {
-    Option(conf.get(key)).map { value =>
-      if (expandVars) expand(value, conf, getenv, usedRefs) else value
-    }
+    Option(conf.get(key)).map(expand(_, conf, getenv, usedRefs))
   }
 
 }
@@ -76,9 +91,8 @@ private class ConfigEntryWithDefault[T] (
     valueConverter: String => T,
     stringConverter: T => String,
     doc: String,
-    isPublic: Boolean,
-    private val expandVars: Boolean)
-    extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic, expandVars) {
+    isPublic: Boolean)
+    extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
 
   override def defaultValue: Option[T] = Some(_defaultValue)
 
@@ -98,10 +112,9 @@ private[spark] class OptionalConfigEntry[T](
     val rawValueConverter: String => T,
     val rawStringConverter: T => String,
     doc: String,
-    isPublic: Boolean,
-    private val expandVars: Boolean)
+    isPublic: Boolean)
     extends ConfigEntry[Option[T]](key, s => Some(rawValueConverter(s)),
-      v => v.map(rawStringConverter).orNull, doc, isPublic, expandVars) {
+      v => v.map(rawStringConverter).orNull, doc, isPublic) {
 
   override def defaultValueString: String = "<undefined>"
 
@@ -118,15 +131,8 @@ private class FallbackConfigEntry[T] (
     key: String,
     doc: String,
     isPublic: Boolean,
-    private[config] val fallback: ConfigEntry[T],
-    private val expandVars: Boolean)
-    extends ConfigEntry[T](
-        key,
-        fallback.valueConverter,
-        fallback.stringConverter,
-        doc,
-        isPublic,
-        expandVars) {
+    private[config] val fallback: ConfigEntry[T])
+    extends ConfigEntry[T](key, fallback.valueConverter, fallback.stringConverter, doc, isPublic) {
 
   override def defaultValueString: String = s"<value of ${fallback.key}>"
 
@@ -170,10 +176,14 @@ private object ConfigEntry {
       val replacement = prefix match {
         case null =>
           require(!usedRefs.contains(name), s"Circular reference in $value: $name")
-          Option(findEntry(name))
-            .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + name))
-            .orElse(Option(conf.get(name)))
-            .orElse(defaultValueString(name))
+          if (name.startsWith("spark.")) {
+            Option(findEntry(name))
+              .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + name))
+              .orElse(Option(conf.get(name)))
+              .orElse(defaultValueString(name))
+          } else {
+            None
+          }
         case "system" => sys.props.get(name)
         case "env" => Option(getenv(name))
         case _ => throw new IllegalArgumentException(s"Invalid prefix: $prefix")

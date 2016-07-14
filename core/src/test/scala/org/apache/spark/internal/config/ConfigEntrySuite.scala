@@ -174,6 +174,10 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(expand("${spark.value1} ${spark.value2}") === "value1 value2")
     assert(expand("${spark.value3}") === "${spark.value3}")
 
+    // Make sure anything that is not in the "spark." namespace is ignored.
+    conf("notspark.key") = "value"
+    assert(expand("${notspark.key}") === "${notspark.key}")
+
     assert(expand("${env:ENV1}") === "env1")
     assert(expand("${system:user.name}") === sys.props("user.name"))
 
@@ -204,11 +208,9 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     // Chained references.
     val conf1 = ConfigBuilder(testKey("conf1"))
-      .withVariableExpansion
       .stringConf
       .createWithDefault("value1")
     val conf2 = ConfigBuilder(testKey("conf2"))
-      .withVariableExpansion
       .stringConf
       .createWithDefault("value2")
 
@@ -221,13 +223,6 @@ class ConfigEntrySuite extends SparkFunSuite {
       expand("${" + conf2.key + "}")
     }
     assert(e.getMessage().contains("Circular"))
-  }
-
-  test("path conf") {
-    val conf = new SparkConf()
-    val path = ConfigBuilder(testKey("path")).pathConf.createWithDefault("unset")
-    conf.set(path, "/${system:user.name}")
-    assert(conf.get(path) === s"/${sys.props("user.name")}")
   }
 
 }
