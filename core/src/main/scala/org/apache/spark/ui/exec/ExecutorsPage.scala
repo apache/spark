@@ -76,6 +76,7 @@ private[ui] class ExecutorsPage(
     implicit val idOrder = Ordering[Int].on((s: String) => idStrToInt(s)).reverse
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
+    val workerExist = execInfo.exists(_.worker.nonEmpty)
 
     val execTable = {
       <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
@@ -104,9 +105,10 @@ private[ui] class ExecutorsPage(
           </th>
           {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
+          {if (workerExist) <th class="sorttable_nosort">Worker</th> else Seq.empty}
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow(_, logsExist))}
+          {execInfoSorted.map(execRow(_, logsExist, workerExist))}
         </tbody>
       </table>
     }
@@ -129,7 +131,8 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
+  private def execRow(info: ExecutorSummary, logsExist: Boolean, workerExist: Boolean)
+    : Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -193,6 +196,20 @@ private[ui] class ExecutorsPage(
           }
         } else {
           Seq.empty
+        }
+      }
+      {
+        if (workerExist) {
+          val uiUrl = info.worker.get("ui_url")
+          if (uiUrl.isDefined) {
+            <td>
+              <a href={uiUrl.get} >
+                Worker
+              </a>
+            </td>
+          } else {
+            <td> </td>
+          }
         }
       }
     </tr>
@@ -365,6 +382,7 @@ private[spark] object ExecutorsPage {
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
+    val worker = listener.executorToWorkerUrls.getOrElse(execId, Map.empty)
 
     new ExecutorSummary(
       execId,
@@ -385,7 +403,8 @@ private[spark] object ExecutorsPage {
       totalShuffleRead,
       totalShuffleWrite,
       maxMem,
-      executorLogs
+      executorLogs,
+      worker
     )
   }
 }

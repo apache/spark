@@ -59,6 +59,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
   val executorToLogUrls = HashMap[String, Map[String, String]]()
+  val executorToWorkerUrls = HashMap[String, Map[String, String]]()
   val executorIdToData = HashMap[String, ExecutorUIData]()
 
   def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
@@ -68,6 +69,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
+    executorToWorkerUrls(eid) = executorAdded.executorInfo.workerUrl
     executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
     executorToTasksMax(eid) = executorToTotalCores(eid) / conf.getInt("spark.task.cpus", 1)
     executorIdToData(eid) = new ExecutorUIData(executorAdded.time)
