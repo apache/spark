@@ -459,7 +459,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
     }
 
-    val historyServerRoot = new URL(s"http://localhost:$port/")
+    // check that a dynamically calculated average returns 0 and not a division by zero error.
+    val replayTime = providerMetrics.fullname("appui.event.replay.time")
+    assertGaugeEvaluates(providerMetrics, replayTime,
+      providerMetrics.getLongGauge(replayTime).get, _ == 0)
 
     // start initial job
     val d = sc.parallelize(1 to 10)
@@ -592,7 +595,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     assert(metricsDump.contains(loadcount), s"No $loadcount in metrics dump <$metricsDump>")
     assertCounterEvaluates(providerMetrics, loadcount,
       providerMetrics.getCounter(loadcount).get, _ > 0)
-    val replayTime = providerMetrics.fullname("appui.event.replay.time")
     assertGaugeEvaluates(providerMetrics, replayTime,
       providerMetrics.getLongGauge(replayTime).get, _ > 0)
 
