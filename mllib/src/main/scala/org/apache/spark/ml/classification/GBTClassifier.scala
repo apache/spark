@@ -21,7 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
@@ -40,7 +40,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for classification.
  * It supports binary labels, as well as both continuous and categorical features.
@@ -57,7 +56,6 @@ import org.apache.spark.sql.types.DoubleType
  *    [https://issues.apache.org/jira/browse/SPARK-4240]
  */
 @Since("1.4.0")
-@Experimental
 class GBTClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTClassifier, GBTClassificationModel]
@@ -149,7 +147,6 @@ class GBTClassifier @Since("1.4.0") (
 }
 
 @Since("1.4.0")
-@Experimental
 object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
 
   /** Accessor for supported loss settings: logistic */
@@ -161,7 +158,6 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
 }
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
@@ -171,7 +167,6 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @Since("1.6.0")
-@Experimental
 class GBTClassificationModel private[ml](
     @Since("1.6.0") override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],

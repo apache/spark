@@ -237,7 +237,7 @@ test_that("read csv as DataFrame", {
                    "Empty,Dummy,Placeholder")
   writeLines(mockLinesCsv, csvPath)
 
-  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.string = "Empty")
+  df2 <- read.df(csvPath, "csv", header = "true", inferSchema = "true", na.strings = "Empty")
   expect_equal(count(df2), 4)
   withoutna2 <- na.omit(df2, how = "any", cols = "year")
   expect_equal(count(withoutna2), 3)
@@ -2376,7 +2376,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 test_that("Window functions on a DataFrame", {
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
-  ws <- orderBy(window.partitionBy("key"), "value")
+  ws <- orderBy(windowPartitionBy("key"), "value")
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expected <- data.frame(key = c(1L, NA, 2L, NA),
@@ -2384,17 +2384,17 @@ test_that("Window functions on a DataFrame", {
                        stringsAsFactors = FALSE)
   expect_equal(result, expected)
 
-  ws <- orderBy(window.partitionBy(df$key), df$value)
+  ws <- orderBy(windowPartitionBy(df$key), df$value)
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
 
-  ws <- partitionBy(window.orderBy("value"), "key")
+  ws <- partitionBy(windowOrderBy("value"), "key")
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
 
-  ws <- partitionBy(window.orderBy(df$value), df$key)
+  ws <- partitionBy(windowOrderBy(df$value), df$key)
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
@@ -2405,7 +2405,8 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   a <- 1:3
   b <- c("a", "b", "c")
   ldf <- data.frame(a, b)
-  df <- suppressWarnings(createDataFrame(sqlContext, ldf))
+  # Call function with namespace :: operator - SPARK-16538
+  df <- suppressWarnings(SparkR::createDataFrame(sqlContext, ldf))
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
   expect_equal(count(df), 3)

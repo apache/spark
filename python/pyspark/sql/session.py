@@ -234,6 +234,12 @@ class SparkSession(object):
 
     @property
     @since(2.0)
+    def version(self):
+        """The version of Spark on which this application is running."""
+        return self._jsparkSession.version()
+
+    @property
+    @since(2.0)
     def conf(self):
         """Runtime configuration interface for Spark.
 

@@ -341,5 +341,5 @@ export("partitionBy",
        "rowsBetween",
        "rangeBetween")
 
-export("window.partitionBy",
-       "window.orderBy")
+export("windowPartitionBy",
+       "windowOrderBy")

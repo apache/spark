@@ -293,7 +293,7 @@ private[hive] class HiveClientImpl(
         database.name,
         database.description,
         database.locationUri,
-        database.properties.asJava),
+        Option(database.properties).map(_.asJava).orNull),
         ignoreIfExists)
   }
 
@@ -311,7 +311,7 @@ private[hive] class HiveClientImpl(
         database.name,
         database.description,
         database.locationUri,
-        database.properties.asJava))
+        Option(database.properties).map(_.asJava).orNull))
   }
 
   override def getDatabaseOption(name: String): Option[CatalogDatabase] = withHiveState {
@@ -320,7 +320,7 @@ private[hive] class HiveClientImpl(
         name = d.getName,
         description = d.getDescription,
         locationUri = d.getLocationUri,
-        properties = d.getParameters.asScala.toMap)
+        properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }
   }
 
@@ -353,7 +353,7 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "bucketing"
       }
 
-      val properties = h.getParameters.asScala.toMap
+      val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -390,7 +390,8 @@ private[hive] class HiveClientImpl(
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
-          serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
+          serdeProperties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
+            .map(_.asScala.toMap).orNull
         ),
         properties = properties,
         viewOriginalText = Option(h.getViewOriginalText),
@@ -817,6 +818,7 @@ private[hive] class HiveClientImpl(
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
-        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
+        serdeProperties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
+          .map(_.asScala.toMap).orNull))
   }
 }
