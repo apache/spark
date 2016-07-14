@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockManagerId
 
@@ -381,7 +382,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // we should schedule all tasks.
-    assert(firstTaskAttempts.size == 6)
+    assert(firstTaskAttempts.size === 6)
     def tasksForStage(stageId: Int): Seq[TaskDescription] = {
       firstTaskAttempts.filter{_.name.contains(s"stage $stageId")}
     }
@@ -389,7 +390,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       // exec 1 & 2 blacklisted for node
       // exec 0 blacklisted just for part 0
       if (task.index == 0) {
-        assert(task.executorId == "executor3")
+        assert(task.executorId === "executor3")
       } else {
         assert(Set("executor0", "executor3").contains(task.executorId))
       }
@@ -410,16 +411,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         var task = tasks(0)
         val taskIndex = task.index
         (0 until 4).foreach { attempt =>
-          assert(task.attemptNumber == attempt)
+          assert(task.attemptNumber === attempt)
           tsm.handleFailedTask(task.taskId, TaskState.FAILED, TaskResultLost)
           val nextAttempts =
             taskScheduler.resourceOffers(Seq(WorkerOffer("executor4", "host4", 1))).flatten
           if (attempt < 3) {
-            assert(nextAttempts.size == 1)
+            assert(nextAttempts.size === 1)
             task = nextAttempts(0)
-            assert(task.index == taskIndex)
+            assert(task.index === taskIndex)
           } else {
-            assert(nextAttempts.size == 0)
+            assert(nextAttempts.size === 0)
           }
         }
         // end the other task of the taskset, doesn't matter whether it succeeds or fails
@@ -487,15 +488,53 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
+  test("abort stage when all executors are blacklisted") {
+    val blacklist = mock[BlacklistTracker]
+    taskScheduler = setupSchedulerWithMockTsm(blacklist)
+    val taskSet = FakeTask.createTaskSet(numTasks = 2, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTsm(0)
+
+    // first just submit some offers so the scheduler knows about all the executors
+    taskScheduler.resourceOffers(Seq(
+      WorkerOffer("executor0", "host0", 2),
+      WorkerOffer("executor1", "host0", 2),
+      WorkerOffer("executor2", "host0", 2),
+      WorkerOffer("executor3", "host1", 2)
+    ))
+
+    // now say our blacklist updates to blacklist a bunch of resources, but *not* everything
+    when(blacklist.isNodeBlacklisted(anyString())).thenReturn(false)
+    when(blacklist.isNodeBlacklisted("host1")).thenReturn(true)
+    when(blacklist.isExecutorBlacklisted(anyString())).thenReturn(false)
+    when(blacklist.isExecutorBlacklisted("executor0")).thenReturn(true)
+
+    // make an offer on the blacklisted resources.  We won't schedule anything, but also won't
+    // abort yet, since we know of other resources that work
+    assert(taskScheduler.resourceOffers(Seq(
+      WorkerOffer("executor0", "host0", 2),
+      WorkerOffer("executor3", "host1", 2)
+    )).flatten.size === 0)
+    assert(!tsm.isZombie)
+
+    // now update the blacklist so that everything really is blacklisted
+    when(blacklist.isExecutorBlacklisted("executor1")).thenReturn(true)
+    when(blacklist.isExecutorBlacklisted("executor2")).thenReturn(true)
+    assert(taskScheduler.resourceOffers(Seq(
+      WorkerOffer("executor0", "host0", 2),
+      WorkerOffer("executor3", "host1", 2)
+    )).flatten.size === 0)
+    assert(tsm.isZombie)
+    verify(tsm).abort(anyString(), anyObject())
+  }
+
   test("abort stage if executor loss results in unschedulability from previously failed tasks") {
     // Make sure we can detect when a taskset becomes unschedulable from a blacklisting.  This
     // test explores a particular corner case -- you may have one task fail, but still be
     // schedulable on another executor.  However, that executor may fail later on, leaving the
     // first task with no place to run.
     val taskScheduler = setupScheduler(
-      // set this to something much longer than the test duration so that executors don't get
-      // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+      config.BLACKLIST_ENABLED.key -> "true"
     )
 
     val taskSet = FakeTask.createTaskSet(2)
@@ -534,7 +573,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(tsm.isZombie)
     assert(failedTaskSet)
     val idx = failedTask.index
-    assert(failedTaskSetReason == s"Aborting TaskSet 0.0 because task $idx (partition $idx) " +
+    assert(failedTaskSetReason === s"Aborting TaskSet 0.0 because task $idx (partition $idx) " +
       s"cannot run anywhere due to node and executor blacklist.")
   }
 
@@ -545,9 +584,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // available and not bail on the job
 
     val taskScheduler = setupScheduler(
-      // set this to something much longer than the test duration so that executors don't get
-      // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+      config.BLACKLIST_ENABLED.key -> "true"
     )
 
     val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)
@@ -636,7 +673,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskScheduler.submitTasks(stage0)
     val taskDescs = taskScheduler.resourceOffers(
       Seq(new WorkerOffer("executor0", "host0", 10))).flatten
-    assert(taskDescs.size == 2)
+    assert(taskDescs.size === 2)
 
     val tsm = stageToMockTsm(0)
     taskScheduler.handleFailedTask(tsm, taskDescs(0).taskId, TaskState.FAILED,

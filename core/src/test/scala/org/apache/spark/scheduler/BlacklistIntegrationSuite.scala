@@ -16,7 +16,6 @@
  */
 package org.apache.spark.scheduler
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 
 import org.apache.spark._
@@ -111,8 +110,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
       "spark.scheduler.blacklist.enabled" -> "true",
-      // just set this to something much longer than the test duration
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       // just to avoid this test taking too long
       "spark.locality.wait" -> "10ms"
     )
@@ -132,9 +129,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
       "spark.scheduler.blacklist.enabled" -> "true",
-      // set this to something much longer than the test duration so that executors don't get
-      // removed from the blacklist during the test
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
       "spark.testing.nCoresPerExecutor" -> "1"
@@ -146,7 +140,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
-      Await.ready(jobFuture, duration)
+      awaitJobTermination(jobFuture, duration)
       val pattern = ("Aborting TaskSet 0.0 because task .* " +
         "cannot run anywhere due to node and executor blacklist").r
       assert(pattern.findFirstIn(failure.getMessage).isDefined,

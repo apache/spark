@@ -175,27 +175,25 @@ private[scheduler] object BlacklistTracker extends Logging {
       case Some(isEnabled) =>
         isEnabled
       case None =>
-      // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
-      // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
+        // if they've got a non-zero setting for the legacy conf, always enable the blacklist,
+        // otherwise, use the default based on the cluster-mode (off for local-mode, on otherwise).
         val legacyKey = config.BLACKLIST_LEGACY_TIMEOUT_CONF.key
-      conf.getOption(legacyKey) match {
-        case Some(legacyTimeout) =>
-          if (legacyTimeout.toLong > 0) {
-            // mostly this is necessary just for tests, since real users that want the blacklist
-            // will get it anyway by default
-            logWarning(s"Turning on blacklisting due to legacy configuration:" +
-              s" $legacyKey > 0")
-            true
-          } else {
+        conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF) match {
+          case Some(legacyTimeout) if legacyTimeout == 0 =>
             logWarning(s"Turning off blacklisting due to legacy configuaration:" +
               s" $legacyKey == 0")
             false
-          }
-        case None =>
-          // local-cluster is *not* considered local for these purposes, we still want the blacklist
-          // enabled by default
-          !Utils.isLocalMaster(conf)
-      }
+          case Some(legacyTimeout) =>
+              // mostly this is necessary just for tests, since real users that want the blacklist
+              // will get it anyway by default
+              logWarning(s"Turning on blacklisting due to legacy configuration:" +
+                s" $legacyKey > 0")
+              true
+          case None =>
+            // local-cluster is *not* considered local for these purposes, we still want the
+            // blacklist enabled by default
+            !Utils.isLocalMaster(conf)
+        }
     }
   }
 

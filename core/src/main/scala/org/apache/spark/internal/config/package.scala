@@ -136,7 +136,7 @@ package object config {
   private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
     ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
     .internal()
-    .longConf
+    .timeConf(TimeUnit.MILLISECONDS)
     .createOptional
   // End blacklist confs
 

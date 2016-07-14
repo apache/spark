@@ -257,11 +257,7 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      val taskBlacklisted = blacklistTracker.map { bl =>
-        isNodeBlacklistedForTask(host, index) ||
-          isExecutorBlacklistedForTask(execId, index)
-      }.getOrElse(false)
-      if (!taskBlacklisted) {
+      if (!blacklistedOnExec(execId, host, index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -277,6 +273,13 @@ private[spark] class TaskSetManager(
     taskAttempts(taskIndex).exists(_.host == host)
   }
 
+  private def blacklistedOnExec(execId: String, host: String, index: Int): Boolean = {
+    blacklistTracker.map { bl =>
+      isNodeBlacklistedForTask(host, index) ||
+        isExecutorBlacklistedForTask(execId, index)
+    }.getOrElse(false)
+  }
+
   /**
    * Return a speculative task for a given executor if any are available. The task should not have
    * an attempt running on this host, in case the host is slow. In addition, the task should meet
@@ -289,10 +292,8 @@ private[spark] class TaskSetManager(
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
 
     def canRunOnHost(index: Int): Boolean = {
-      !hasAttemptOnHost(index, host) && blacklistTracker.map { bl =>
-        !isNodeBlacklistedForTask(host, index) &&
-          !isExecutorBlacklistedForTask(execId, index)
-      }.getOrElse(true)
+      !hasAttemptOnHost(index, host) &&
+        !blacklistedOnExec(execId, host, index)
     }
 
     if (!speculatableTasks.isEmpty) {
@@ -618,28 +619,28 @@ private[spark] class TaskSetManager(
       // take any task that needs to be scheduled, and see if we can find some executor it *could*
       // run on
       pendingTask.foreach { indexInTaskSet =>
-        val stage = taskSet.stageId
-        executorsByHost.foreach { case (host, execs) =>
-          if (!blacklist.isNodeBlacklisted(host) &&
-                !isNodeBlacklistedForTaskSet(host) &&
-                !isNodeBlacklistedForTask(host, indexInTaskSet)) {
-            execs.foreach { exec =>
-              if (
-                !blacklist.isExecutorBlacklisted(exec) &&
-                  !isExecutorBlacklistedForTaskSet(exec) &&
-                  !isExecutorBlacklistedForTask(exec, indexInTaskSet)
-              ) {
-                // we've found some executor this task can run on.  Its possible that some *other*
-                // task isn't schedulable anywhere, but we will discover that in some later call,
-                // when that unschedulable task is the last task remaining.
-                return
-              }
+        // try to find some executor this task can run on.  Its possible that some *other*
+        // task isn't schedulable anywhere, but we will discover that in some later call,
+        // when that unschedulable task is the last task remaining.
+        val blacklistedEverywhere = executorsByHost.forall { case (host, execs) =>
+          val nodeBlacklisted = blacklist.isNodeBlacklisted(host) ||
+            isNodeBlacklistedForTaskSet(host) ||
+            isNodeBlacklistedForTask(host, indexInTaskSet)
+          if (nodeBlacklisted) {
+            true
+          } else {
+            execs.forall { exec =>
+              blacklist.isExecutorBlacklisted(exec) ||
+                isExecutorBlacklistedForTaskSet(exec) ||
+                isExecutorBlacklistedForTask(exec, indexInTaskSet)
             }
           }
         }
-        val partition = tasks(indexInTaskSet).partitionId
-        abort(s"Aborting ${taskSet} because task $indexInTaskSet (partition $partition) cannot " +
-          s"run anywhere due to node and executor blacklist.")
+        if (blacklistedEverywhere) {
+          val partition = tasks(indexInTaskSet).partitionId
+          abort(s"Aborting ${taskSet} because task $indexInTaskSet (partition $partition) cannot " +
+            s"run anywhere due to node and executor blacklist.")
+        }
       }
     }
   }

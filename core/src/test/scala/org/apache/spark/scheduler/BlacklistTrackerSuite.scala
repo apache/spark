@@ -22,30 +22,15 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark._
-import org.apache.spark.internal.config.{BLACKLIST_EXPIRY_TIMEOUT_CONF, BLACKLIST_LEGACY_TIMEOUT_CONF}
+import org.apache.spark.internal.config.{BLACKLIST_ENABLED, BLACKLIST_EXPIRY_TIMEOUT_CONF, BLACKLIST_LEGACY_TIMEOUT_CONF}
 import org.apache.spark.util.ManualClock
 
 class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with MockitoSugar
     with LocalSparkContext {
 
-  val stage1 = 1
-  val stage2 = 2
+  private val clock = new ManualClock(0)
 
-  val partition1 = 1
-  val partition2 = 2
-  val partition3 = 3
-
-  // Variable name can indicate basic information of taskInfo
-  // hostA: executor 1, 2, 4
-  // hostB: executor 3
-  // The format is "taskInfo_executorId_hostName"
-  val taskInfo_1_hostA = new TaskInfo(1L, 1, 1, 0L, "1", "hostA", TaskLocality.ANY, false)
-  val taskInfo_2_hostA = new TaskInfo(2L, 1, 1, 0L, "2", "hostA", TaskLocality.ANY, false)
-  val taskInfo_3_hostB = new TaskInfo(3L, 3, 1, 0L, "3", "hostB", TaskLocality.ANY, false)
-
-  val clock = new ManualClock(0)
-
-  var blacklistTracker: BlacklistTracker = _
+  private var blacklistTracker: BlacklistTracker = _
 
   override def afterEach(): Unit = {
     if (blacklistTracker != null) {
@@ -81,8 +66,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   test("Blacklisting individual tasks") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.ui.enabled", "false")
-      .set("spark.scheduler.executorTaskBlacklistTime", "1000")
+      .set(BLACKLIST_ENABLED.key, "true")
     val scheduler = mockTaskSchedWithConf(conf)
     when(scheduler.getExecutorsAliveOnHost("hostA")).thenReturn(Some(Set("1", "2", "4")))
     Set("1", "2", "4").foreach { execId =>
@@ -149,8 +133,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   def trackerFixture: (BlacklistTracker, TaskSchedulerImpl) = {
      val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.ui.enabled", "false")
-      .set("spark.scheduler.executorTaskBlacklistTime", "1000")
+      .set(BLACKLIST_ENABLED.key, "true")
     val scheduler = mockTaskSchedWithConf(conf)
     when(scheduler.getExecutorsAliveOnHost("hostA")).thenReturn(Some(Set("1", "2", "4")))
     Set("1", "2", "4").foreach { execId =>
@@ -263,7 +246,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       assert(!BlacklistTracker.isBlacklistEnabled(localConf))
       localConf.set(legacyKey, "5000")
       assert(BlacklistTracker.isBlacklistEnabled(localConf))
-      assert(5000 == BlacklistTracker.getBlacklistExpiryTime(localConf))
+      assert(5000 === BlacklistTracker.getBlacklistExpiryTime(localConf))
 
       localConf.set(legacyKey, "0")
       assert(!BlacklistTracker.isBlacklistEnabled(localConf))
@@ -272,9 +255,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     {
       val distConf = new SparkConf().setMaster("yarn-cluster")
       assert(BlacklistTracker.isBlacklistEnabled(distConf))
-      assert(60 * 60 * 1000L == BlacklistTracker.getBlacklistExpiryTime(distConf))
+      assert(60 * 60 * 1000L === BlacklistTracker.getBlacklistExpiryTime(distConf))
       distConf.set(legacyKey, "5000")
-      assert(5000 == BlacklistTracker.getBlacklistExpiryTime(distConf))
+      assert(5000 === BlacklistTracker.getBlacklistExpiryTime(distConf))
       distConf.set(BLACKLIST_EXPIRY_TIMEOUT_CONF.key, "10h")
       assert(10 * 60 * 60 * 1000L == BlacklistTracker.getBlacklistExpiryTime(distConf))
     }

@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.Mockito.{mock, verify}
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
@@ -413,7 +414,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   test("executors should be blacklisted after task failure, in spite of locality preferences") {
     val rescheduleDelay = 300L
     val conf = new SparkConf().
-      set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
+      set(config.BLACKLIST_ENABLED.key, "true").
+      set(config.BLACKLIST_EXPIRY_TIMEOUT_CONF.key, rescheduleDelay.toString).
       // don't wait to jump locality levels in this test
       set("spark.locality.wait", "0")
 

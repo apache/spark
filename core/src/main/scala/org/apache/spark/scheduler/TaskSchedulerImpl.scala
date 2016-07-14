@@ -312,13 +312,10 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private[scheduler] def areAllExecutorsBlacklisted(): Boolean = {
     blacklistTracker match {
       case Some(bl) =>
-        executorsByHost.foreach { case (host, execs) =>
-          if (!bl.isNodeBlacklisted(host) &&
-            execs.exists(!bl.isExecutorBlacklisted(_))) {
-            return false
-          }
+        executorsByHost.forall { case (host, execs) =>
+          bl.isNodeBlacklisted(host) ||
+            execs.forall(bl.isExecutorBlacklisted(_))
         }
-        true
       case None => false
     }
   }
