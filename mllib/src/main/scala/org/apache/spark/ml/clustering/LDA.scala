@@ -581,7 +581,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
       // Pattern to determine sparkversion
-      val pattern = """\\d+.\\d+(.\\d+)?(-SNAPSHOT)?""".r
+      val versionRegex = """\\d+.\\d+(.\\d+)?(-SNAPSHOT)?""".r
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
@@ -589,7 +589,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val vectorConverted = MLUtils.convertVectorColumnsToML(data, "docConcentration")
       val Row(vocabSize: Int, topicsMatrix: Matrix, docConcentration: Vector,
         topicConcentration: Double, gammaShape: Double) = MLUtils.convertMatrixColumnsToML(
-        vectorConverted, "topicsMatrix").as[Data]
+        vectorConverted, "topicsMatrix").as[Data].head()
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
         gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
@@ -609,7 +609,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
              throw new IllegalArgumentException(
                s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
            }
-        case pattern =>
+        case versionRegex =>
           DefaultParamsReader.getAndSetParams(model, metadata)
       }
       model
