@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import scala.collection.mutable
 import scala.util.Try
 
@@ -35,12 +37,16 @@ import org.apache.spark.sql.types.StructType
  * @param paths a list of paths to scan
  * @param partitionSchema an optional partition schema that will be use to provide types for the
  *                        discovered partitions
+ * @param ignoreFileNotFound if true, return empty file list when encountering a
+ *                           [[FileNotFoundException]] in file listing. Note that this is a hack
+ *                           for SPARK-16313. We should get rid of this flag in the future.
  */
 class ListingFileCatalog(
     sparkSession: SparkSession,
     override val paths: Seq[Path],
     parameters: Map[String, String],
-    partitionSchema: Option[StructType])
+    partitionSchema: Option[StructType],
+    ignoreFileNotFound: Boolean = false)
   extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) {
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
@@ -77,10 +83,12 @@ class ListingFileCatalog(
    * List leaf files of given paths. This method will submit a Spark job to do parallel
    * listing whenever there is a path having more files than the parallel partition discovery
    * discovery threshold.
+   *
+   * This is publicly visible for testing.
    */
-  protected[spark] def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+  def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession, ignoreFileNotFound)
     } else {
       // Right now, the number of paths is less than the value of
       // parallelPartitionDiscoveryThreshold. So, we will list file statues at the driver.
@@ -96,8 +104,12 @@ class ListingFileCatalog(
         logTrace(s"Listing $path on driver")
 
         val childStatuses = {
-          // TODO: We need to avoid of using Try at here.
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
+          val stats =
+            try {
+              fs.listStatus(path)
+            } catch {
+              case e: FileNotFoundException if ignoreFileNotFound => Array.empty[FileStatus]
+            }
           if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
         }
 

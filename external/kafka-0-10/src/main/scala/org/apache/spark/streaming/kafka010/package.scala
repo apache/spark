@@ -15,21 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg
-
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.types.DataType
+package org.apache.spark.streaming
 
 /**
- * :: DeveloperApi ::
- * SQL data types for vectors and matrices.
+ * Spark Integration for Kafka 0.10
  */
-@DeveloperApi
-object sqlDataTypes {
-
-  /** Data type for [[Vector]]. */
-  val VectorType: DataType = new VectorUDT
-
-  /** Data type for [[Matrix]]. */
-  val MatrixType: DataType = new MatrixUDT
-}
+package object kafka010 //scalastyle:ignore

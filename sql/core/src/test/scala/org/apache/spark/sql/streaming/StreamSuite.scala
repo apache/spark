@@ -120,12 +120,12 @@ class StreamSuite extends StreamTest {
     }
 
     // Running streaming plan as a batch query
-    assertError("startStream" :: Nil) {
+    assertError("start" :: Nil) {
       streamInput.toDS.map { i => i }.count()
     }
 
     // Running non-streaming plan with as a streaming query
-    assertError("without streaming sources" :: "startStream" :: Nil) {
+    assertError("without streaming sources" :: "start" :: Nil) {
       val ds = batchInput.map { i => i }
       testStream(ds)()
     }
@@ -241,6 +241,35 @@ class StreamSuite extends StreamTest {
     assert(o1 === InternalOutputModes.Append)
     val o2 = OutputMode.Complete
     assert(o2 === InternalOutputModes.Complete)
+  }
+
+  test("explain") {
+    val inputData = MemoryStream[String]
+    val df = inputData.toDS().map(_ + "foo")
+    // Test `explain` not throwing errors
+    df.explain()
+    val q = df.writeStream.queryName("memory_explain").format("memory").start()
+      .asInstanceOf[StreamExecution]
+    try {
+      assert("No physical plan. Waiting for data." === q.explainInternal(false))
+      assert("No physical plan. Waiting for data." === q.explainInternal(true))
+
+      inputData.addData("abc")
+      q.processAllAvailable()
+
+      val explainWithoutExtended = q.explainInternal(false)
+      // `extended = false` only displays the physical plan.
+      assert("LocalRelation".r.findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("LocalTableScan".r.findAllMatchIn(explainWithoutExtended).size === 1)
+
+      val explainWithExtended = q.explainInternal(true)
+      // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+      // plan.
+      assert("LocalRelation".r.findAllMatchIn(explainWithExtended).size === 3)
+      assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
+    } finally {
+      q.stop()
+    }
   }
 }
 

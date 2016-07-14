@@ -110,11 +110,53 @@ infer_type <- function(x) {
   }
 }
 
-getDefaultSqlSource <- function() {
+#' Get Runtime Config from the current active SparkSession
+#'
+#' Get Runtime Config from the current active SparkSession.
+#' To change SparkSession Runtime Config, please see `sparkR.session()`.
+#'
+#' @param key (optional) The key of the config to get, if omitted, all config is returned
+#' @param defaultValue (optional) The default value of the config to return if they config is not
+#' set, if omitted, the call fails if the config key is not set
+#' @return a list of config values with keys as their names
+#' @rdname sparkR.conf
+#' @name sparkR.conf
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' allConfigs <- sparkR.conf()
+#' masterValue <- unlist(sparkR.conf("spark.master"))
+#' namedConfig <- sparkR.conf("spark.executor.memory", "0g")
+#' }
+#' @note sparkR.conf since 2.0.0
+sparkR.conf <- function(key, defaultValue) {
   sparkSession <- getSparkSession()
-  conf <- callJMethod(sparkSession, "conf")
-  source <- callJMethod(conf, "get", "spark.sql.sources.default", "org.apache.spark.sql.parquet")
-  source
+  if (missing(key)) {
+    m <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSessionConf", sparkSession)
+    as.list(m, all.names = TRUE, sorted = TRUE)
+  } else {
+    conf <- callJMethod(sparkSession, "conf")
+    value <- if (missing(defaultValue)) {
+      tryCatch(callJMethod(conf, "get", key),
+              error = function(e) {
+                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
+                  stop(paste0("Config '", key, "' is not set"))
+                } else {
+                  stop(paste0("Unknown error: ", as.character(e)))
+                }
+              })
+    } else {
+      callJMethod(conf, "get", key, defaultValue)
+    }
+    l <- setNames(list(value), key)
+    l
+  }
+}
+
+getDefaultSqlSource <- function() {
+  l <- sparkR.conf("spark.sql.sources.default", "org.apache.spark.sql.parquet")
+  l[["spark.sql.sources.default"]]
 }
 
 #' Create a SparkDataFrame
@@ -672,11 +714,14 @@ dropTempView <- function(viewName) {
 #'
 #' The data source is specified by the `source` and a set of options(...).
 #' If `source` is not specified, the default data source configured by
-#' "spark.sql.sources.default" will be used.
+#' "spark.sql.sources.default" will be used. \cr
+#' Similar to R read.csv, when `source` is "csv", by default, a value of "NA" will be interpreted
+#' as NA.
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
+#' @param na.strings Default string value for NA when source is "csv"
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
@@ -693,7 +738,7 @@ dropTempView <- function(viewName) {
 #' @name read.df
 #' @method read.df default
 #' @note read.df since 1.4.0
-read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
+read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
@@ -701,6 +746,9 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   }
   if (is.null(source)) {
     source <- getDefaultSqlSource()
+  }
+  if (source == "csv" && is.null(options[["nullValue"]])) {
+    options[["nullValue"]] <- na.strings
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")

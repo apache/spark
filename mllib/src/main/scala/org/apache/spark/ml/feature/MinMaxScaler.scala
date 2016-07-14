@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
@@ -28,6 +28,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -73,18 +74,16 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 }
 
 /**
- * :: Experimental ::
  * Rescale each feature individually to a common range [min, max] linearly using column summary
  * statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
  * feature E is calculated as,
  *
- * Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
+ * `Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min`
  *
- * For the case E_{max} == E_{min}, Rescaled(e_i) = 0.5 * (max + min)
+ * For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`.
  * Note that since zero values will probably be transformed to non-zero values, output of the
  * transformer will be DenseVector even for sparse input.
  */
-@Experimental
 @Since("1.5.0")
 class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[MinMaxScalerModel] with MinMaxScalerParams with DefaultParamsWritable {
@@ -137,7 +136,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[MinMaxScaler]].
  *
  * @param originalMin min value for each original column during fitting
@@ -145,7 +143,6 @@ object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
  *
  * TODO: The transformer does not yet set the metadata in the output column (SPARK-8529).
  */
-@Experimental
 @Since("1.5.0")
 class MinMaxScalerModel private[ml] (
     @Since("1.5.0") override val uid: String,
@@ -232,9 +229,11 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
     override def load(path: String): MinMaxScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(originalMin: Vector, originalMax: Vector) = sparkSession.read.parquet(dataPath)
-        .select("originalMin", "originalMax")
-        .head()
+      val data = sparkSession.read.parquet(dataPath)
+      val Row(originalMin: Vector, originalMax: Vector) =
+        MLUtils.convertVectorColumnsToML(data, "originalMin", "originalMax")
+          .select("originalMin", "originalMax")
+          .head()
       val model = new MinMaxScalerModel(metadata.uid, originalMin, originalMax)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

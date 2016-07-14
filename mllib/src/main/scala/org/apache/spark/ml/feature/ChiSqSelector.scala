@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -57,11 +57,9 @@ private[feature] trait ChiSqSelectorParams extends Params
 }
 
 /**
- * :: Experimental ::
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
  */
-@Experimental
 @Since("1.6.0")
 final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams with DefaultParamsWritable {
@@ -116,10 +114,8 @@ object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[ChiSqSelector]].
  */
-@Experimental
 @Since("1.6.0")
 final class ChiSqSelectorModel private[ml] (
     @Since("1.6.0") override val uid: String,
@@ -140,7 +136,9 @@ final class ChiSqSelectorModel private[ml] (
   @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  /** @group setParam */
+  /**
+   * @group setParam
+   */
   @Since("1.6.0")
   @deprecated("labelCol is not used by ChiSqSelectorModel.", "2.0.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)

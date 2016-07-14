@@ -264,10 +264,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'}
 #' @note spark.lapply since 2.0.0
 spark.lapply <- function(list, func) {
-  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    stop("SparkR has not been initialized. Please call sparkR.session()")
-  }
-  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc <- getSparkContext()
   rdd <- parallelize(sc, list, length(list))
   results <- map(rdd, func)
   local <- collect(results)
@@ -287,9 +284,6 @@ spark.lapply <- function(list, func) {
 #'}
 #' @note setLogLevel since 2.0.0
 setLogLevel <- function(level) {
-  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    stop("SparkR has not been initialized. Please call sparkR.session()")
-  }
-  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  sc <- getSparkContext()
   callJMethod(sc, "setLogLevel", level)
 }

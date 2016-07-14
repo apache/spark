@@ -28,6 +28,7 @@ import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -221,7 +222,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
@@ -231,7 +232,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("self-join") {
@@ -460,6 +461,40 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val expected = data.toDF()
         checkAnswer(actual, expected)
       }
+    }
+  }
+
+  test("SPARK-15198 Support for pushing down filters for boolean types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(_ => (true, false))
+      withOrcFile(data) { file =>
+        val df = spark.read.orc(file).where("_2 == true")
+        val actual = stripSparkFilter(df).count()
+
+        // ORC filter should be applied and the total count should be 0.
+        assert(actual === 0)
+      }
+    }
+  }
+
+  test("column nullability and comment - write and then read") {
+    val schema = (new StructType)
+      .add("cl1", IntegerType, nullable = false, comment = "test")
+      .add("cl2", IntegerType, nullable = true)
+      .add("cl3", IntegerType, nullable = true)
+    val row = Row(3, null, 4)
+    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+    val tableName = "tab"
+    withTable(tableName) {
+      df.write.format("orc").mode("overwrite").saveAsTable(tableName)
+      // Verify the DDL command result: DESCRIBE TABLE
+      checkAnswer(
+        sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
+        Row("cl1", "test") :: Nil)
+      // Verify the schema
+      val expectedFields = schema.fields.map(f => f.copy(nullable = true))
+      assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
     }
   }
 }

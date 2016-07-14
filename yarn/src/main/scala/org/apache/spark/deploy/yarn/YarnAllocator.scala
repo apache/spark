@@ -352,7 +352,7 @@ private[yarn] class YarnAllocator(
         logInfo(s"Submitted container request (host: ${hostStr(request)}, capability: $resource)")
       }
 
-    } else if (missing < 0) {
+    } else if (numPendingAllocate > 0 && missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
       logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired " +
         s"total $targetNumExecutors executors.")

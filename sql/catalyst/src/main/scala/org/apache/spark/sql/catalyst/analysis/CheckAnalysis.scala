@@ -46,6 +46,21 @@ trait CheckAnalysis extends PredicateHelper {
     }).length > 1
   }
 
+  private def checkLimitClause(limitExpr: Expression): Unit = {
+    limitExpr match {
+      case e if !e.foldable => failAnalysis(
+        "The limit expression must evaluate to a constant value, but got " +
+          limitExpr.sql)
+      case e if e.dataType != IntegerType => failAnalysis(
+        s"The limit expression must be integer type, but got " +
+          e.dataType.simpleString)
+      case e if e.eval().asInstanceOf[Int] < 0 => failAnalysis(
+        "The limit expression must be equal to or greater than 0, but got " +
+          e.eval().asInstanceOf[Int])
+      case e => // OK
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
@@ -73,9 +88,9 @@ trait CheckAnalysis extends PredicateHelper {
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
           case g: Grouping =>
-            failAnalysis(s"grouping() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
           case g: GroupingID =>
-            failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
           case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
@@ -206,7 +221,6 @@ trait CheckAnalysis extends PredicateHelper {
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
-              case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
@@ -251,6 +265,10 @@ trait CheckAnalysis extends PredicateHelper {
               s"Unions can only be performed on tables with the same number of columns, " +
                 s"but one table has '${firstError.output.length}' columns and another table has " +
                 s"'${s.children.head.output.length}' columns")
+
+          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+
+          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
             p match {

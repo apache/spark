@@ -1101,6 +1101,9 @@ for details.
 </tr>
 </table>
 
+The Spark RDD API also exposes asynchronous versions of some actions, like `foreachAsync` for `foreach`, which immediately return a `FutureAction` to the caller instead of blocking on completion of the action. This can be used to manage or wait for the asynchronous execution of the action.
+
+
 ### Shuffle operations
 
 Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's
