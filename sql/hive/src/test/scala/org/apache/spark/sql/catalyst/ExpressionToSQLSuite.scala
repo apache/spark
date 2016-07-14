@@ -156,7 +156,6 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("aggregate functions") {
-    checkSqlGeneration("SELECT percentile(value, array(0.5d, 0.9d)) FROM t3 GROUP BY key")
     checkSqlGeneration("SELECT approx_count_distinct(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT percentile_approx(value, 0.25) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT percentile_approx(value, array(0.25, 0.75)) FROM t1 GROUP BY key")
@@ -176,7 +175,7 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT max(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT mean(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT min(value) FROM t1 GROUP BY key")
-    //checkSqlGeneration("SELECT percentile(value, array(0.5d, 0.9d)) FROM t3 GROUP BY key")
+    checkSqlGeneration("SELECT percentile(value, array(0.5d, 0.9d)) FROM t3 GROUP BY key")
     checkSqlGeneration("SELECT skewness(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT stddev(value) FROM t1 GROUP BY key")
     checkSqlGeneration("SELECT stddev_pop(value) FROM t1 GROUP BY key")
