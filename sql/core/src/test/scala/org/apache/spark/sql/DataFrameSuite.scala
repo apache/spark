@@ -1581,12 +1581,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("cannot push projects down beneath sample when amplifying data") {
     val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
-    val amplifyDf = df.sample(true, 2.0)
+    val amplifyDf = df.sample(true, 0.99)
     def checkQuery(c: Column): Unit = {
       val d = amplifyDf.withColumn("c", c).select($"c").collect
       assert(d.size == d.distinct.size)
     }
     checkQuery(monotonically_increasing_id)
     checkQuery(rand)
+  }
+
+  test("sampling fraction must be greate than 0.0 and less than 1.0") {
+    def checkException(v: Double): Unit = {
+      val e = intercept[AnalysisException] {
+        Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b").sample(true, 2.0)
+      }
+      assert(e.getMessage.startsWith("`fraction` must be greater than 0.0 and less than 1.0"))
+    }
+    checkException(1.1)
+    checkException(-1.2)
   }
 }

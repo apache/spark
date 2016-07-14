@@ -154,7 +154,7 @@ object PushProjectThroughSample extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down projection into sample
     case proj @ Project(projectList, Sample(lb, up, replace, seed, child)) =>
-      if (up - lb <= 1.0 && !projectList.exists(_.find(!_.deterministic).nonEmpty)) {
+      if (!projectList.exists(_.find(!_.deterministic).nonEmpty)) {
         Sample(lb, up, replace, seed, Project(projectList, child))()
       } else {
         proj
