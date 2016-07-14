@@ -19,6 +19,8 @@ package org.apache.spark.internal.config
 
 import java.util.{Map => JMap}
 
+import scala.util.matching.Regex
+
 import org.apache.spark.SparkConf
 
 /**
@@ -146,7 +148,7 @@ private object ConfigEntry {
 
   private val knownConfigs = new java.util.concurrent.ConcurrentHashMap[String, ConfigEntry[_]]()
 
-  private val REF_RE = "\\$\\{(?:(\\w+?):)?(\\S+?)\\}".r.pattern
+  private val REF_RE = "\\$\\{(?:(\\w+?):)?(\\S+?)\\}".r
 
   def registerEntry(entry: ConfigEntry[_]): Unit = {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)
@@ -156,23 +158,16 @@ private object ConfigEntry {
   def findEntry(key: String): ConfigEntry[_] = knownConfigs.get(key)
 
   /**
-   * Expand the `value` according to the rules explained in `ConfigBuilder.withVariableExpansion`.
+   * Expand the `value` according to the rules explained in ConfigEntry.
    */
   def expand(
       value: String,
       conf: JMap[String, String],
       getenv: String => String,
       usedRefs: Set[String]): String = {
-    val matcher = REF_RE.matcher(value)
-    val result = new StringBuilder()
-    var end = 0
-
-    while (end < value.length() && matcher.find(end)) {
-      val prefix = matcher.group(1)
-      val name = matcher.group(2)
-
-      result.append(value.substring(end, matcher.start()))
-
+    REF_RE.replaceAllIn(value, { m =>
+      val prefix = m.group(1)
+      val name = m.group(2)
       val replacement = prefix match {
         case null =>
           require(!usedRefs.contains(name), s"Circular reference in $value: $name")
@@ -188,15 +183,8 @@ private object ConfigEntry {
         case "env" => Option(getenv(name))
         case _ => throw new IllegalArgumentException(s"Invalid prefix: $prefix")
       }
-
-      result.append(replacement.getOrElse(matcher.group(0)))
-      end = matcher.end()
-    }
-
-    if (end < value.length()) {
-      result.append(value.substring(end, value.length()))
-    }
-    result.toString()
+      Regex.quoteReplacement(replacement.getOrElse(m.matched))
+    })
   }
 
   private def defaultValueString(key: String): Option[String] = {
