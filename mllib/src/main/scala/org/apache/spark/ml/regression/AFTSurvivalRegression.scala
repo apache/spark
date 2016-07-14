@@ -245,6 +245,11 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         throw new SparkException(msg)
       }
 
+      if (!state.actuallyConverged) {
+        logWarning("AFTSurvivalRegression training fininshed but the result " +
+          s"is not converged because: ${state.convergedReason.get.reason}")
+      }
+
       state.x.toArray.clone()
     }
 
