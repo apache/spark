@@ -263,7 +263,7 @@ In SparkR, we support several kinds of User-Defined Functions:
 ##### dapply
 Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
 and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function
-should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match to [data types of R function's output fields](#data-type-mapping-between-r-and-spark).
+should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match to [data types](#data-type-mapping-between-r-and-spark) of returned `data.frame`.
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -311,7 +311,7 @@ head(ldf, 3)
 Apply a function to each group of a `SparkDataFrame`. The function is to be applied to each group of the `SparkDataFrame` and should have only two parameters: grouping key and R `data.frame` corresponding to
 that key. The groups are chosen from `SparkDataFrame`s column(s).
 The output of function should be a `data.frame`. Schema specifies the row format of the resulting
-`SparkDataFrame`. It must represent R function's output schema on the basis of Spark data types. The column names of each output field in the schema are set by user. Bellow data type mapping between R
+`SparkDataFrame`. It must represent R function's output schema on the basis of Spark data types. The column names of the returned `data.frame` are set by user. Below data type mapping between R
 and Spark.
 
 #### Data type mapping between R and Spark
