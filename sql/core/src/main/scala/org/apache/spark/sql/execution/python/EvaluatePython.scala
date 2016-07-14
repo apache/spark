@@ -118,6 +118,10 @@ object EvaluatePython {
 
     case (c: Double, DoubleType) => c
 
+    case (c: Float, FloatType) => c
+
+    case (c: Float, DoubleType) => c.toDouble
+
     case (c: java.math.BigDecimal, dt: DecimalType) => Decimal(c, dt.precision, dt.scale)
 
     case (c: Int, DateType) => c
