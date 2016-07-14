@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 import scala.concurrent.duration._
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 
 class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
@@ -43,7 +44,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // according to locality preferences, and so the job fails
   testScheduler("If preferred node is bad, without blacklist job will fail",
     extraConfs = Seq(
-      "spark.scheduler.blacklist.enabled" -> "false"
+      config.BLACKLIST_ENABLED.key -> "false"
   )) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
@@ -59,12 +60,12 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "With blacklist on, job will still fail if there are too many bad executors on bad host",
     extraConfs = Seq(
-      "spark.scheduler.blacklist.enabled" -> "true",
+      config.BLACKLIST_ENABLED.key -> "true",
+      config.MAX_TASK_ATTEMPTS_PER_NODE.key -> "5",
+      "spark.task.maxFailures" -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
-      "spark.testing.nCoresPerExecutor" -> "10",
-      "spark.task.maxFailures" -> "4",
-      "spark.blacklist.maxFailedTasksPerNode" -> "5"
+      "spark.testing.nCoresPerExecutor" -> "10"
     )
   ) {
     // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this
@@ -84,11 +85,11 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
-      "spark.scheduler.blacklist.enabled" -> "true",
+      config.BLACKLIST_ENABLED.key -> "true",
+      "spark.task.maxFailures" -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
-      "spark.testing.nCoresPerExecutor" -> "10",
-      "spark.task.maxFailures" -> "4"
+      "spark.testing.nCoresPerExecutor" -> "10"
     )
   ) {
     // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this
@@ -109,7 +110,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
-      "spark.scheduler.blacklist.enabled" -> "true",
+       config.BLACKLIST_ENABLED.key -> "true",
       // just to avoid this test taking too long
       "spark.locality.wait" -> "10ms"
     )
@@ -128,7 +129,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
-      "spark.scheduler.blacklist.enabled" -> "true",
+      config.BLACKLIST_ENABLED.key -> "true",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
       "spark.testing.nCoresPerExecutor" -> "1"
