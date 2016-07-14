@@ -318,7 +318,7 @@ setMethod("spark.posterior", signature(object = "LDAModel", data = "SparkDataFra
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
 #' @return \code{summary} returns a list containing \code{docConcentration},
 #'         \code{topicConcentration}, \code{likelihood}, \code{perplexity}, \code{isDistributed},
-#'         \code{vocabSize},  \code{topicTopTerms} and \code{topicTopTermsWeights}.
+#'         \code{vocabSize},  \code{topicTopTerms}, \code{topicTopTermsWeights} and \code{vocabulary}.
 #' @rdname spark.lda
 #' @export
 #' @note summary(LDAModel) since 2.1.0
@@ -332,12 +332,14 @@ setMethod("summary", signature(object = "LDAModel"),
             isDistributed <- callJMethod(jobj, "isDistributed")
             vocabSize <- callJMethod(jobj, "vocabSize")
             described <- dataFrame(callJMethod(jobj, "described"))
+            vocabulary <- callJMethod(jobj, "vocabulary")
             return(list(docConcentration = unlist(docConcentration),
                         topicConcentration = topicConcentration,
                         likelihood = likelihood, perplexity = perplexity,
                         isDistributed = isDistributed, vocabSize = vocabSize,
                         topicTopTerms = collect(select(described, "termIndices")),
-                        topicTopTermsWeights = collect(select(described, "termWeights"))))
+                        topicTopTermsWeights = collect(select(described, "termWeights")),
+                        vocabulary = unlist(vocabulary)))
           })
 
 # Returns the perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}

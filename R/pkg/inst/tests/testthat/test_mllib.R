@@ -465,11 +465,13 @@ test_that("spark.lda", {
   vocabSize <- stats$vocabSize
   topics <- stats$topicTopTerms
   weights <- stats$topicTopTermsWeights
+  vocabulary <- stats$vocabulary
 
   expect_false(isDistributed)
-  expect_true(likelihood <= 0 & is.finite(likelihood))
-  expect_true(perplexity >= 0 & is.finite(perplexity))
+  expect_true(is.finite(likelihood))
+  expect_true(is.finite(perplexity))
   expect_equal(vocabSize, 11)
+  expect_true(is.null(vocabulary))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-lda", fileext = ".tmp")
@@ -483,6 +485,7 @@ test_that("spark.lda", {
   expect_equal(likelihood, stats2$logLikelihood)
   expect_equal(perplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
+  expect_equal(vocabulary, stats2$vocabulary)
 
   unlink(modelPath)
 })
