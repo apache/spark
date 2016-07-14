@@ -1595,7 +1595,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val e = intercept[AnalysisException] {
         Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b").sample(true, 2.0)
       }
-      assert(e.getMessage.startsWith("`fraction` must be greater than 0.0 and less than 1.0"))
+      assert(e.getMessage.startsWith("A valid range is 0.0 < `fraction` <= 1.0"))
     }
     checkException(1.1)
     checkException(-1.2)
