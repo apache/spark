@@ -65,7 +65,7 @@ private[spark] class TaskSetManager(
   }
 
   val conf = sched.sc.conf
-  private val MAX_TASK_FAILURES_PER_NODE = conf.get(config.MAX_TASK_FAILURES_PER_NODE)
+  private val MAX_TASK_ATTEMPTS_PER_NODE = conf.get(config.MAX_TASK_ATTEMPTS_PER_NODE)
   private val MAX_FAILURES_PER_EXEC_STAGE = conf.get(config.MAX_FAILURES_PER_EXEC_STAGE)
   private val MAX_FAILED_EXEC_PER_NODE_STAGE = conf.get(config.MAX_FAILED_EXEC_PER_NODE_STAGE)
 
@@ -844,7 +844,7 @@ private[spark] class TaskSetManager(
     } yield {
       if (failures.tasksWithFailures.contains(index)) 1 else 0
     }).sum
-    if (failuresOnHost >= MAX_TASK_FAILURES_PER_NODE) {
+    if (failuresOnHost >= MAX_TASK_ATTEMPTS_PER_NODE) {
       nodeBlacklistedTasks.getOrElseUpdate(host, new HashSet()) += index
     }
 
