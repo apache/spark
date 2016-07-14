@@ -292,7 +292,7 @@ where `[base-app-id]` is the YARN application ID.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/allexecutors</code></td>
-    <td>A list of all(active/dead) executors for the given application.</td>
+    <td>A list of all(active and dead) executors for the given application.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/storage/rdd</code></td>
