@@ -78,11 +78,9 @@ private[sql] case class InsertIntoHadoopFsRelationCommand(
         "cannot save to file.")
     }
 
-    bucketSpec.foreach { spec =>
-      if (spec.numBuckets <= 0) {
-        throw new AnalysisException(
-          s"Expected positive number of buckets, but got `${spec.numBuckets}`.")
-      }
+    if (bucketSpec.exists(_.numBuckets <= 0)) {
+      throw new AnalysisException(
+        s"Expected positive number of buckets, but got `${bucketSpec.get.numBuckets}`.")
     }
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
