@@ -116,11 +116,6 @@ object StronglyConnectedComponents {
           }
         },
         (final1, final2) => final1 || final2)
-
-        // ensure sccGraph's rdd are marked as recently used to not be evicted between iterations
-        sccGraph.vertices.count()
-        sccGraph.edges.count()
-
     }
     sccGraph
   }
