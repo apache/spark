@@ -878,6 +878,7 @@ public class VectorizedColumnReader {
           repetitions[maxRepLevel]++;
         }
       }
+      if (rowIds[1] == total) return resetNestedRecord;
     }
     // Insert the last repeated record if any.
     if (!endOfPage && !resetNestedRecord) {
