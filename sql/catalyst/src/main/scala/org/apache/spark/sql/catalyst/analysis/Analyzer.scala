@@ -1790,6 +1790,8 @@ class Analyzer(
   /**
    * Substitute Hints.
    * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
+   *
+   * This rule should be executed before ResolveRelations rule.
    */
   object SubstituteHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1799,8 +1801,11 @@ class Analyzer(
           var resolvedChild = child
           for (table <- parameters) {
             var stop = false
-            resolvedChild = child.transformDown {
-              case r @ BroadcastHint(UnresolvedRelation(_, _)) => r
+            resolvedChild = resolvedChild.transformDown {
+              case r @ BroadcastHint(UnresolvedRelation(t, _))
+                  if !stop && resolver(t.table, table) =>
+                stop = true
+                r
               case r @ UnresolvedRelation(t, _) if !stop && resolver(t.table, table) =>
                 stop = true
                 BroadcastHint(r)
@@ -1809,8 +1814,7 @@ class Analyzer(
           resolvedChild
 
         // Remove unrecognized hints
-        case Hint(name, _, child) =>
-          child
+        case Hint(name, _, child) => child
       }
     }
   }
