@@ -17,15 +17,16 @@
 
 package org.apache.spark.ml.linalg
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.types.DataType
 
 /**
  * :: DeveloperApi ::
  * SQL data types for vectors and matrices.
  */
+@Since("2.0.0")
 @DeveloperApi
-object sqlDataTypes {
+object SQLDataTypes {
 
   /** Data type for [[Vector]]. */
   val VectorType: DataType = new VectorUDT

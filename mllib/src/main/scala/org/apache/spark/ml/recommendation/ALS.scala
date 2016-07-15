@@ -26,12 +26,12 @@ import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
 import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -222,14 +222,12 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 }
 
 /**
- * :: Experimental ::
  * Model fitted by ALS.
  *
  * @param rank rank of the matrix factorization model
  * @param userFactors a DataFrame that stores user factors in two columns: `id` and `features`
  * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
  */
-@Experimental
 @Since("1.3.0")
 class ALSModel private[ml] (
     @Since("1.4.0") override val uid: String,
@@ -333,7 +331,6 @@ object ALSModel extends MLReadable[ALSModel] {
 }
 
 /**
- * :: Experimental ::
  * Alternating Least Squares (ALS) matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
@@ -362,7 +359,6 @@ object ALSModel extends MLReadable[ALSModel] {
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-@Experimental
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
   with DefaultParamsWritable {

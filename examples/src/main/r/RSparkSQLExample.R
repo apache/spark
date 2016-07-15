@@ -195,3 +195,6 @@ results <- collect(sql("FROM src SELECT key, value"))
 # $example on:jdbc$
 df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
 # $example off:jdbc$
+
+# Stop the SparkSession now
+sparkR.session.stop()

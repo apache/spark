@@ -626,52 +626,49 @@ The result tables would look something like the following.
 
 ![Window Operations](img/structured-streaming-window.png)
 
-Since this windowing is similar to grouping, in code, you can use `groupBy()` and `window()` operations to express windowed aggregations.
+Since this windowing is similar to grouping, in code, you can use `groupBy()` and `window()` operations to express windowed aggregations. You can see the full code for the below examples in
+[Scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCountWindowed.scala)/
+[Java]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCountWindowed.java)/
+[Python]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/sql/streaming/structured_network_wordcount_windowed.py).
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-// Number of events in every 1 minute time windows
-df.groupBy(window(df.col("time"), "1 minute"))
-  .count()
+import spark.implicits._
 
+val words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
-// Average number of events for each device type in every 1 minute time windows
-df.groupBy(
-     df.col("type"),
-     window(df.col("time"), "1 minute"))
-  .avg("signal")
+// Group the data by window and word and compute the count of each group
+val windowedCounts = words.groupBy(
+  window($"timestamp", "10 minutes", "5 minutes"),
+  $"word"
+).count()
 {% endhighlight %}
 
 </div>
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-import static org.apache.spark.sql.functions.window;
+Dataset<Row> words = ... // streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
-// Number of events in every 1 minute time windows
-df.groupBy(window(df.col("time"), "1 minute"))
-  .count();
-
-// Average number of events for each device type in every 1 minute time windows
-df.groupBy(
-     df.col("type"),
-     window(df.col("time"), "1 minute"))
-  .avg("signal");
-
+// Group the data by window and word and compute the count of each group
+Dataset<Row> windowedCounts = words.groupBy(
+  functions.window(words.col("timestamp"), "10 minutes", "5 minutes"),
+  words.col("word")
+).count();
 {% endhighlight %}
 
 </div>
 <div data-lang="python"  markdown="1">
 {% highlight python %}
-from pyspark.sql.functions import window
+words = ... # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
-# Number of events in every 1 minute time windows
-df.groupBy(window("time", "1 minute")).count()
-
-# Average number of events for each device type in every 1 minute time windows
-df.groupBy("type", window("time", "1 minute")).avg("signal")
+# Group the data by window and word and compute the count of each group
+windowedCounts = words.groupBy(
+    window(words.timestamp, '10 minutes', '5 minutes'),
+    words.word
+).count()
 {% endhighlight %}
 
 </div>
