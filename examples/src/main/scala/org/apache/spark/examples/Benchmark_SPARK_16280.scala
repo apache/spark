@@ -27,9 +27,18 @@ object Benchmark_SPARK_16280 {
   private def rnd = scala.util.Random
 
   def main(args: Array[String]) {
-    val sqlContext = SparkSession.builder().master("local").appName("Spark-16280").getOrCreate()
+    val sqlContext = SparkSession.builder().master("local[4]").appName("Spark-16280").getOrCreate()
     val sc = sqlContext.sparkContext
     import sqlContext.implicits._
+//    val df1 = sc.makeRDD(Seq.tabulate(10)((i) => rnd.nextInt(10000))).
+//      toDF("value").cache()
+//    val elapseds1 = Seq.tabulate(1)((_) => {
+//      val start1 = java.lang.System.currentTimeMillis()
+//      df1.select(codegen_histogram_numeric("value", 3)).debugCodegen()
+//      df1.select(codegen_histogram_numeric("value", 3)).debug()
+//      df1.select(codegen_histogram_numeric("value", 3)).collect()
+//      java.lang.System.currentTimeMillis() - start1
+//    })
     val statistics = Seq((10, 1),
       (10, 10),
       (10, 100),
@@ -44,36 +53,30 @@ object Benchmark_SPARK_16280 {
       println(pair)
       val df1 = sc.makeRDD(Seq.tabulate(rows)((i) => rnd.nextInt(10000))).
         toDF("value").cache()
-//        println($"rows: $rows, bins: $bins")
-      val elapseds1 = Seq.tabulate(3)((_) => {
+      val elapseds1 = Seq.tabulate(4)((_) => {
         val start1 = java.lang.System.currentTimeMillis()
         df1.select(codegen_histogram_numeric("value", bins)).collect()
         java.lang.System.currentTimeMillis() - start1
       })
-      val elapseds2 = Seq.tabulate(3)((_) => {
+      val elapseds2 = Seq.tabulate(4)((_) => {
         val start2 = java.lang.System.currentTimeMillis()
         df1.select(imperative_histogram_numeric("value", bins)).collect()
         java.lang.System.currentTimeMillis() - start2
       })
-      val elapseds3 = Seq.tabulate(3)((_) => {
+      val elapseds3 = Seq.tabulate(4)((_) => {
         val start3 = java.lang.System.currentTimeMillis()
         df1.select(declarative_histogram_numeric("value", bins)).collect()
         java.lang.System.currentTimeMillis() - start3
       })
-      Seq(pair, elapseds1.tail.sum / elapseds1.tail.size,
-        elapseds2.tail.sum / elapseds2.tail.size,
-        elapseds3.tail.sum / elapseds3.tail.size)
+      Seq(pair, elapseds1.sum / elapseds1.size,
+        elapseds2.sum / elapseds2.size,
+        elapseds3.sum / elapseds3.size)
     })
 
     println(Tabulator.format(Seq(
       Seq("(rows, numOfBins)","codegen_histogram_numeric",
         "imperative_histogram_numeric",
         "declarative_histogram_numeric")) ++ statistics))
-
-//    println(result2)
-//    sql2.debug()
-//    sql2.debugCodegen()
-//    println(sql2.collect().mkString(","))
   }
 }
 
@@ -104,5 +107,5 @@ object Tabulator {
   }
 
   def rowSeparator(colSizes: Seq[Int]): String =
-    colSizes map { "-" * _ } mkString("+", "+", "+")
+    colSizes map { "-" * _ } mkString("|", "|", "|")
 }
