@@ -30,26 +30,32 @@ object Benchmark_SPARK_16280 {
     val sqlContext = SparkSession.builder().master("local").appName("Spark-16280").getOrCreate()
     val sc = sqlContext.sparkContext
     import sqlContext.implicits._
-    val df1 = sc.makeRDD(Seq.tabulate(1000)((i) => rnd.nextInt(10000))).
-      toDF("value").cache()
-    val elapseds1 = Seq.tabulate(3)((_) => {
-      val start1 = java.lang.System.currentTimeMillis()
-      df1.select(codegen_histogram_numeric("value", 100)).collect()
-      java.lang.System.currentTimeMillis() - start1
+    Seq(10, 1000, 100000).foreach((rows) => {
+      Seq(1, 10, 100).foreach((bins) => {
+        val df1 = sc.makeRDD(Seq.tabulate(rows)((i) => rnd.nextInt(10000))).
+          toDF("value").cache()
+        println($"rows: $rows, bins: $bins")
+        val elapseds1 = Seq.tabulate(3)((_) => {
+          val start1 = java.lang.System.currentTimeMillis()
+          df1.select(codegen_histogram_numeric("value", bins)).collect()
+          java.lang.System.currentTimeMillis() - start1
+        })
+        println($"codegen_histogram_numeric: ${elapseds1.sum / elapseds1.size}")
+        val elapseds2 = Seq.tabulate(3)((_) => {
+          val start2 = java.lang.System.currentTimeMillis()
+          df1.select(imperative_histogram_numeric("value", bins)).collect()
+          java.lang.System.currentTimeMillis() - start2
+        })
+        println($"imperative_histogram_numeric: ${elapseds2.sum / elapseds2.size}")
+        val elapseds3 = Seq.tabulate(3)((_) => {
+          val start3 = java.lang.System.currentTimeMillis()
+          df1.select(declarative_histogram_numeric("value", bins)).collect()
+          java.lang.System.currentTimeMillis() - start3
+        })
+        println($"declarative_histogram_numeric: ${elapseds3.sum / elapseds3.size}")
+      })
     })
-    println(elapseds1.sum / elapseds1.size)
-    val elapseds3 = Seq.tabulate(3)((_) => {
-      val start3 = java.lang.System.currentTimeMillis();
-      df1.select(declarative_histogram_numeric("value", 100)).collect()
-      java.lang.System.currentTimeMillis() - start3
-    })
-    println(elapseds3.sum / elapseds3.size)
-    val elapseds2 = Seq.tabulate(3)((_) => {
-      val start2 = java.lang.System.currentTimeMillis();
-      df1.select(imperative_histogram_numeric("value", 100)).collect()
-      java.lang.System.currentTimeMillis() - start2
-    })
-    println(elapseds2.sum / elapseds2.size)
+
 
 //    println(result2)
 //    sql2.debug()
