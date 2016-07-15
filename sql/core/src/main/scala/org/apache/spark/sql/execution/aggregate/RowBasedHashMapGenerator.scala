@@ -121,6 +121,7 @@ class RowBasedHashMapGenerator(
        |  private Object emptyVBase;
        |  private long emptyVOff;
        |  private int emptyVLen;
+       |  private boolean isBatchFull = false;
        |
        |
        |  public $generatedClassName(
@@ -230,7 +231,7 @@ class RowBasedHashMapGenerator(
        |  while (step < maxSteps) {
        |    // Return bucket index if it's either an empty slot or already contains the key
        |    if (buckets[idx] == -1) {
-       |      if (numRows < capacity) {
+       |      if (numRows < capacity && !isBatchFull) {
        |        // creating the unsafe for new entry
        |        UnsafeRow agg_result = new UnsafeRow(${groupingKeySchema.length});
        |        org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder agg_holder
@@ -247,9 +248,15 @@ class RowBasedHashMapGenerator(
        |        Object kbase = agg_result.getBaseObject();
        |        long koff = agg_result.getBaseOffset();
        |        int klen = agg_result.getSizeInBytes();
-       |        batch.appendRow(kbase, koff, klen, emptyVBase, emptyVOff, emptyVLen);
-       |        buckets[idx] = numRows++;
-       |        return batch.getValueFromKey(buckets[idx]);
+       |
+       |        UnsafeRow vRow
+       |            = batch.appendRow(kbase, koff, klen, emptyVBase, emptyVOff, emptyVLen);
+       |        if (vRow == null) {
+       |          isBatchFull = true;
+       |        } else {
+       |          buckets[idx] = numRows++;
+       |        }
+       |        return vRow;
        |      } else {
        |        // No more space
        |        return null;

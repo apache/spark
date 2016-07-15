@@ -105,7 +105,7 @@ public final class RowBatch extends MemoryConsumer{
 
     public UnsafeRow appendRow(Object kbase, long koff, int klen,
                                Object vbase, long voff, int vlen) {
-        if (numRows < capacity) {
+        if (numRows >= capacity) {
             return null;
         }
 
