@@ -367,11 +367,15 @@ and Spark.
   <td>boolean</td>
 </tr>
 <tr>
-  <td>timestamp</td>
+  <td>[POSIXct](https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html)</td>
   <td>timestamp</td>
 </tr>
 <tr>
-  <td>date</td>
+  <td>[POSIXlt](https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html)</td>
+  <td>timestamp</td>
+</tr>
+<tr>
+  <td>[Date](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html)</td>
   <td>date</td>
 </tr>
 <tr>
@@ -383,16 +387,8 @@ and Spark.
   <td>array</td>
 </tr>
 <tr>
-  <td>map</td>
-  <td>map</td>
-</tr>
-<tr>
   <td>env</td>
   <td>map</td>
-</tr>
-<tr>
-  <td>struct</td>
-  <td>struct</td>
 </tr>
 </table>
 
