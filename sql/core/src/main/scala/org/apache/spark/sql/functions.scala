@@ -605,32 +605,36 @@ object functions {
 
 
   /**
-   * Aggregate function: returns the approximate histogram of
-   * a numerical column using a user-specified number of bins
-   *
-   *
-   * @group agg_funcs
-   * @since 2.1.0
-   */
-  def histogram_numeric(e: Column, nb: Int): Column =
-    withAggregateFunction { NumericHistogram(e.expr, Literal(nb)) }
+    * Aggregate function: returns the approximate histogram of
+    * a numerical column using a user-specified number of bins
+    *
+    * @group agg_funcs
+    * @since 2.1.0
+    */
+  def codegen_histogram_numeric(e: Column, nb: Int): Column =
+    withAggregateFunction { CodeGenNumericHistogram(e.expr, Literal(nb)) }
 
   /**
-   * Aggregate function: returns the approximate histogram of
-   * a numerical column using a user-specified number of bins
-   *
-   *
-   * @group agg_funcs
-   * @since 2.1.0
-   */
-  def histogram_numeric(columnName: String, nb: Int): Column =
-    histogram_numeric(Column(columnName), nb)
+    * Aggregate function: returns the approximate histogram of
+    * a numerical column using a user-specified number of bins
+    *
+    * @group agg_funcs
+    * @since 2.1.0
+    */
+  def codegen_histogram_numeric(columnName: String, nb: Int): Column =
+    codegen_histogram_numeric(Column(columnName), nb)
 
   def imperative_histogram_numeric(e: Column, nb: Int): Column =
     withAggregateFunction { ImperativeNumericHistogram(e.expr, Literal(nb)) }
 
   def imperative_histogram_numeric(columnName: String, nb: Int): Column =
     imperative_histogram_numeric(Column(columnName), nb)
+
+  def declarative_histogram_numeric(e: Column, nb: Int): Column =
+    withAggregateFunction { DeclarativeAggregateNumericHistogram(e.expr, Literal(nb)) }
+
+  def declarative_histogram_numeric(columnName: String, nb: Int): Column =
+    declarative_histogram_numeric(Column(columnName), nb)
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
