@@ -17,20 +17,24 @@
 
 package org.apache.spark.ml.r
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.clustering.{LDA, LDAModel}
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
+
 
 private[r] class LDAWrapper private (
     val pipeline: PipelineModel,
@@ -52,8 +56,16 @@ private[r] class LDAWrapper private (
     math.exp(lda.logPerplexity(preprocessor.transform(data)))
   }
 
+  lazy val topicIndices: DataFrame = lda.describeTopics()
+
+  lazy val topics = if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
+    topicIndices
+  } else {
+    val index2term = udf { indices: mutable.WrappedArray[Int] => indices.map(i => vocabulary(i)) }
+    topicIndices.select(col("topic"), index2term(col("termIndices")).as("term"), col("termWeights"))
+  }
+
   lazy val isDistributed: Boolean = lda.isDistributed
-  lazy val described: DataFrame = lda.describeTopics()
   lazy val vocabSize: Int = lda.vocabSize
   lazy val docConcentration: Array[Double] = lda.getEffectiveDocConcentration
   lazy val topicConcentration: Double = lda.getEffectiveTopicConcentration
@@ -98,25 +110,25 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] with Logging {
       customizedStopWords: Array[String],
       maxVocabSize: Int): LDAWrapper = {
 
+    val lda = new LDA()
+      .setK(k)
+      .setMaxIter(maxIter)
+      .setSubsamplingRate(subsamplingRate)
+
     val featureSchema = data.schema(features)
-    val preStages = featureSchema.dataType match {
+    val stages = featureSchema.dataType match {
       case d: StringType =>
         logDebug(s"Feature ($features) schema is StringType, use the built-in preprocessor.")
-        getPreStages(features, customizedStopWords, maxVocabSize)
+        getPreStages(features, customizedStopWords, maxVocabSize) ++
+          Array(lda.setFeaturesCol(COUNT_VECTOR_COL))
       case d: VectorUDT =>
         logDebug(s"Feature ($features) schema is VectorUDT, use the LDA directly.")
-        Array.empty[PipelineStage]
+        Array(lda.setFeaturesCol(features))
       case _ =>
         throw new SparkException(
           s"Unsupported input features type of ${featureSchema.dataType.typeName}," +
             s" only String type and Vector type are supported now.")
     }
-
-    val lda = new LDA()
-      .setFeaturesCol(COUNT_VECTOR_COL)
-      .setK(k)
-      .setMaxIter(maxIter)
-      .setSubsamplingRate(subsamplingRate)
 
     if (topicConcentration != -1) {
       lda.setTopicConcentration(topicConcentration)
@@ -134,12 +146,12 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] with Logging {
       lda.setDocConcentration(docConcentration)
     }
 
-    val pipeline = new Pipeline().setStages(preStages ++ Array(lda))
+    val pipeline = new Pipeline().setStages(stages)
     val model = pipeline.fit(data)
 
     val vocabulary: Array[String] = featureSchema.dataType match {
       case d: StringType =>
-        val countVectorModel = model.stages(preStages.length - 1).asInstanceOf[CountVectorizerModel]
+        val countVectorModel = model.stages(2).asInstanceOf[CountVectorizerModel]
         countVectorModel.vocabulary
       case _ => Array.empty[String]
     }

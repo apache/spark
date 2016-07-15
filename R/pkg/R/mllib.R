@@ -331,14 +331,13 @@ setMethod("summary", signature(object = "LDAModel"),
             perplexity <- callJMethod(jobj, "perplexity")
             isDistributed <- callJMethod(jobj, "isDistributed")
             vocabSize <- callJMethod(jobj, "vocabSize")
-            described <- dataFrame(callJMethod(jobj, "described"))
+            topics <- dataFrame(callJMethod(jobj, "topics"))
             vocabulary <- callJMethod(jobj, "vocabulary")
             return(list(docConcentration = unlist(docConcentration),
                         topicConcentration = topicConcentration,
                         likelihood = likelihood, perplexity = perplexity,
                         isDistributed = isDistributed, vocabSize = vocabSize,
-                        topicTopTerms = collect(select(described, "termIndices")),
-                        topicTopTermsWeights = collect(select(described, "termWeights")),
+                        topics = topics,
                         vocabulary = unlist(vocabulary)))
           })
 
