@@ -160,7 +160,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       df3.write.mode(SaveMode.Overwrite).option("truncate", true)
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
     }.getMessage
-    assert(m.contains("Column \"SEQ\" not found"))
+    assert(m.contains("Column \"seq\" not found"))
   }
 
   test("Incompatible INSERT to append") {
