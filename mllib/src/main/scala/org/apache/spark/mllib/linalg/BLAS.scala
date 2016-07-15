@@ -630,13 +630,14 @@ private[spark] object BLAS extends Serializable with Logging {
       return true
     }
     
-    val xValuesAndIndices = isSorted(x.indices) match{
-      case false => (x.values zip x.indices).sortBy(_._2)
-      case _     => (x.values zip x.indices)
+    val (xValues,xIndices) = isSorted(x.indices) match{
+      case false => {
+        val xValuesAndIndices = (x.values zip x.indices).sortBy(_._2)
+        (xValuesAndIndices.map(l => l._1), xValuesAndIndices.map(l => l._2))
+      }
+      case _     => (x.values, x.indices)
     }
     
-    val xValues = xValuesAndIndices.map(l => l._1)
-    val xIndices = xValuesAndIndices.map(l => l._2)
     val xNnz = xIndices.length
 
     val yValues = y.values
