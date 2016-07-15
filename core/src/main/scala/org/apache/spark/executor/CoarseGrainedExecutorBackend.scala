@@ -149,7 +149,11 @@ private[spark] class CoarseGrainedExecutorBackend(
    * back-end may not want to take the parent process down.
    */
   protected def exitExecutor(code: Int, reason: String, throwable: Throwable = null) = {
-    logError(reason, throwable)
+    if (throwable == null) {
+      logError(reason)
+    } else {
+      logError(reason, throwable)
+    }
     System.exit(code)
   }
 }
