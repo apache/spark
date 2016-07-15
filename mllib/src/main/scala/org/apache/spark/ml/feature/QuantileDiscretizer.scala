@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
@@ -64,7 +64,6 @@ private[feature] trait QuantileDiscretizerBase extends Params
 }
 
 /**
- * :: Experimental ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
  * categorical features. The number of bins can be set using the `numBuckets` parameter.
  * The bin ranges are chosen using an approximate algorithm (see the documentation for
@@ -73,24 +72,30 @@ private[feature] trait QuantileDiscretizerBase extends Params
  * `relativeError` parameter. The lower and upper bin bounds will be `-Infinity` and `+Infinity`,
  * covering all real values.
  */
-@Experimental
-final class QuantileDiscretizer(override val uid: String)
+@Since("1.6.0")
+final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[Bucketizer] with QuantileDiscretizerBase with DefaultParamsWritable {
 
+  @Since("1.6.0")
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
   /** @group setParam */
+  @Since("2.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setNumBuckets(value: Int): this.type = set(numBuckets, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
     val inputFields = schema.fields
@@ -112,6 +117,7 @@ final class QuantileDiscretizer(override val uid: String)
     copyValues(bucketizer.setParent(this))
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 }
 

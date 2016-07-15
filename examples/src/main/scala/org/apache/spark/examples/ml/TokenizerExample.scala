@@ -45,6 +45,7 @@ object TokenizerExample {
 
     val tokenized = tokenizer.transform(sentenceDataFrame)
     tokenized.select("words", "label").take(3).foreach(println)
+
     val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
     regexTokenized.select("words", "label").take(3).foreach(println)
     // $example off$

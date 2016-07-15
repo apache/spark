@@ -432,7 +432,7 @@ sealed abstract class LDAModel private[ml] (
    * If Online LDA was used and [[optimizeDocConcentration]] was set to false,
    * then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def estimatedDocConcentration: Vector = getModel.docConcentration
 
   /**
@@ -444,7 +444,7 @@ sealed abstract class LDAModel private[ml] (
    *          the Expectation-Maximization ("em") [[optimizer]], then this method could involve
    *          collecting a large amount of data to the driver (on the order of vocabSize x k).
    */
-  @Since("1.6.0")
+  @Since("2.0.0")
   def topicsMatrix: Matrix = oldLocalModel.topicsMatrix.asML
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
@@ -880,11 +880,13 @@ class LDA @Since("1.6.0") (
   }
 }
 
-
-private[clustering] object LDA extends DefaultParamsReadable[LDA] {
+@Since("2.0.0")
+object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, OldVector)] = {
+  private[clustering] def getOldDataset(
+       dataset: Dataset[_],
+       featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
@@ -894,6 +896,6 @@ private[clustering] object LDA extends DefaultParamsReadable[LDA] {
       }
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): LDA = super.load(path)
 }

@@ -33,8 +33,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.Accumulator;
-import org.apache.spark.AccumulatorParam;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -300,43 +298,6 @@ public class Java8RDDAPISuite implements Serializable {
       };
     JavaRDD<Integer> sizes = rdd1.zipPartitions(rdd2, sizesFn);
     Assert.assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
-  }
-
-  @Test
-  public void accumulators() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
-
-    Accumulator<Integer> intAccum = sc.intAccumulator(10);
-    rdd.foreach(intAccum::add);
-    Assert.assertEquals((Integer) 25, intAccum.value());
-
-    Accumulator<Double> doubleAccum = sc.doubleAccumulator(10.0);
-    rdd.foreach(x -> doubleAccum.add((double) x));
-    Assert.assertEquals((Double) 25.0, doubleAccum.value());
-
-    // Try a custom accumulator type
-    AccumulatorParam<Float> floatAccumulatorParam = new AccumulatorParam<Float>() {
-      @Override
-      public Float addInPlace(Float r, Float t) {
-        return r + t;
-      }
-      @Override
-      public Float addAccumulator(Float r, Float t) {
-        return r + t;
-      }
-      @Override
-      public Float zero(Float initialValue) {
-        return 0.0f;
-      }
-    };
-
-    Accumulator<Float> floatAccum = sc.accumulator(10.0f, floatAccumulatorParam);
-    rdd.foreach(x -> floatAccum.add((float) x));
-    Assert.assertEquals((Float) 25.0f, floatAccum.value());
-
-    // Test the setValue method
-    floatAccum.setValue(5.0f);
-    Assert.assertEquals((Float) 5.0f, floatAccum.value());
   }
 
   @Test

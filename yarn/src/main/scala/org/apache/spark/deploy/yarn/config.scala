@@ -243,10 +243,21 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val TOKEN_RENEWAL_INTERVAL = ConfigBuilder("spark.yarn.token.renewal.interval")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createOptional
+  /* Rolled log aggregation configuration. */
+
+  private[spark] val ROLLED_LOG_INCLUDE_PATTERN =
+    ConfigBuilder("spark.yarn.rolledLog.includePattern")
+      .doc("Java Regex to filter the log files which match the defined include pattern and those " +
+        "log files will be aggregated in a rolling fashion.")
+      .stringConf
+      .createOptional
+
+  private[spark] val ROLLED_LOG_EXCLUDE_PATTERN =
+    ConfigBuilder("spark.yarn.rolledLog.excludePattern")
+      .doc("Java Regex to filter the log files which match the defined exclude pattern and those " +
+        "log files will not be aggregated in a rolling fashion.")
+      .stringConf
+      .createOptional
 
   /* Private configs. */
 

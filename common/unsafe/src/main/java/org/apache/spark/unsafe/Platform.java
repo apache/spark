@@ -176,6 +176,10 @@ public final class Platform {
     throw new IllegalStateException("unreachable");
   }
 
+  public static void setMemory(Object object, long offset, long size, byte value) {
+    _UNSAFE.setMemory(object, offset, size, value);
+  }
+
   public static void setMemory(long address, byte value, long size) {
     _UNSAFE.setMemory(address, size, value);
   }

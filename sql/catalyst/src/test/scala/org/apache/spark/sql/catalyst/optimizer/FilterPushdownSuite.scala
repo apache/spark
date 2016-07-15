@@ -34,7 +34,7 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
-        SamplePushDown,
+        PushProjectThroughSample,
         CombineFilters,
         PushDownPredicate,
         BooleanSimplification,
@@ -92,6 +92,24 @@ class FilterPushdownSuite extends PlanTest {
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
+    val originalQuery =
+      testRelation
+        .where('a === 1)
+        .select('a, 'b)
+        .where('b === 1)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 1 && 'b === 1)
+        .select('a, 'b)
+        .analyze
+
+    // We can not use comparePlans here because it normalized the plan.
+    assert(optimized == correctAnswer)
   }
 
   test("can't push without rewrite") {
@@ -513,14 +531,14 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = {
       testRelationWithArrayType
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
         .generate(Explode('c_arr), true, false, Some("arr"))
-        .where('a + Rand(10).as("rnd") > 6)
+        .where('a + Rand(10).as("rnd") > 6 && 'c > 6)
         .analyze
     }
 
@@ -697,14 +715,14 @@ class FilterPushdownSuite extends PlanTest {
     val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
 
     val originalQuery = Union(Seq(testRelation, testRelation2))
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3 && 'c > 5L)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
       testRelation.where('a === 2L),
       testRelation2.where('d === 2L)))
-      .where('b + Rand(10).as("rnd") === 3)
+      .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
       .analyze
 
     comparePlans(optimized, correctAnswer)

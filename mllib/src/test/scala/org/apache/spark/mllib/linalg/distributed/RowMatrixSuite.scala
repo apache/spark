@@ -28,6 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.TestingUtils._
 
 class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -280,6 +281,22 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (i <- 0 until cov.numRows; j <- 0 until i) {
       assert(cov(i, j) === cov(j, i))
     }
+  }
+
+  test("QR decomposition should aware of empty partition (SPARK-16369)") {
+    val mat: RowMatrix = new RowMatrix(sc.parallelize(denseData, 1))
+    val qrResult = mat.tallSkinnyQR(true)
+
+    val matWithEmptyPartition = new RowMatrix(sc.parallelize(denseData, 8))
+    val qrResult2 = matWithEmptyPartition.tallSkinnyQR(true)
+
+    assert(qrResult.Q.numCols() === qrResult2.Q.numCols(), "Q matrix ncol not match")
+    assert(qrResult.Q.numRows() === qrResult2.Q.numRows(), "Q matrix nrow not match")
+    qrResult.Q.rows.collect().zip(qrResult2.Q.rows.collect())
+      .foreach(x => assert(x._1 ~== x._2 relTol 1E-8, "Q matrix not match"))
+
+    qrResult.R.toArray.zip(qrResult2.R.toArray)
+      .foreach(x => assert(x._1 ~== x._2 relTol 1E-8, "R matrix not match"))
   }
 }
 
