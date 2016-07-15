@@ -617,8 +617,9 @@ private[spark] object BLAS extends Serializable with Logging {
       x: SparseVector,
       beta: Double,
       y: DenseVector): Unit = {
-    val xValues = x.values
-    val xIndices = x.indices
+    val xValuesAndIndices = (x.values zip x.indices).sortBy(_._2)
+    val xValues = xValuesAndIndices.map(l => l._1)
+    val xIndices = xValuesAndIndices.map(l => l._2)
     val xNnz = xIndices.length
 
     val yValues = y.values
