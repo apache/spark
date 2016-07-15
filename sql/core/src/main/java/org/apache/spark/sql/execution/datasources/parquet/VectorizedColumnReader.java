@@ -82,9 +82,21 @@ public class VectorizedColumnReader {
   private SpecificParquetRecordReaderBase.IntIterator definitionLevelColumn;
   private ValuesReader dataColumn;
 
+  /**
+   * Repetition level values. Only poplulated when reading a repeated column.
+   */
+  private int[] repLevelValues;
+
+  /**
+   * The offset used to access `repLevelValues`.
+   */
+  private int repLevelOffset;
+
   // Only set if vectorized decoding is true. This is used instead of the row by row decoding
   // with `definitionLevelColumn`.
   private VectorizedRleValuesReader defColumn;
+
+  // Only set when reading complex column.
   private VectorizedRleValuesReader defColumnCopy;
  
   /**
@@ -124,55 +136,88 @@ public class VectorizedColumnReader {
       throw new IOException("totalValueCount == 0");
     }
   }
-  
+
   /**
    * Reads `total` values from this columnReader into column.
    */
   public void readBatch(int total, ColumnVector column) throws IOException {
-    boolean isNestedColumn = column.getParentColumn() != null;
+    boolean isComplexColumn = column.getParentColumn() != null;
     boolean isRepeatedColumn = maxRepLevel > 0;
     int rowId = 0;
-    int valuesReadInPage = 0;
+    int valuesReadInPreviousRun = 0;
     int repeatedRowId = 0;
+    int remaining = total;
 
+    // The number of values to read.
+    int num = 0;
+
+    // Stores row ids and offsets during constructing nested records.
     int[] rowIds = new int[maxRepLevel + 2];
     int[] offsets = new int[maxRepLevel + 2];
+
+    // Keeps repetition levels and corresponding repetition counts.
+    int[] repetitions = new int[maxRepLevel + 2];
+
+    // The flag used in constructing nested records. When it is true, the previous status
+    // will be reset.
+    boolean resetNestedRecord = true;
 
     while (true) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
-      // When we reach the end of this page, we construct nested records of this column
-      // and then read next page.
-      if (leftInPage == 0) {
-        // Constructs nested records if needed.
-        if (valuesReadInPage > 0 && isNestedColumn) {
-          constructNestedRecords(column, rowIds, offsets, valuesReadInPage, total);
-          repeatedRowId = rowIds[1];
-          valuesReadInPage = 0;
-        }
+
+      // Constructs nested/repeated records if needed.
+      if (isComplexColumn) {
+        boolean endOfPage = leftInPage == 0;
+        resetNestedRecord = constructNestedRecords(column, repetitions, rowIds, offsets,
+          valuesReadInPreviousRun, total, resetNestedRecord, endOfPage);
+        repeatedRowId = rowIds[1];
       }
+
       // Stop condition:
       // If we are going to read data in repeated column, the stop condition is that we
       // read `total` repeated columns. Eg., if we want to read 5 records of an array of int column.
       // we can't just read 5 integers. Instead, we have to read the integers until 5 arrays are put
       // into this array column.
       if (isRepeatedColumn) {
-        if (repeatedRowId >= total) break;
+        if (repeatedRowId == total) break;
       } else {
-        if (total <= 0) break;
+        if (remaining == 0) break;
       }
 
+      // Reaching the end of current page.
       if (leftInPage == 0) {
         boolean pageExists = readPage();
+        if (isRepeatedColumn) {
+          // Repetition level encoding will be split across two pages.
+          // We need to check if it is happen.
+          if (this.repLevelValues[0] == 0 || !pageExists) {
+            // No split of repetition level encoding, going to insert last array if any that we skip
+            // during the end of last page.
+            if (!resetNestedRecord) {
+              insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
+              resetNestedRecord = true;
+              repeatedRowId = rowIds[1];
+              if (repeatedRowId == total) break;
+            }
+          }
+        }
         if (!pageExists) {
-          return;
+          // Should not reach here.
+          throw new IOException("Failed to read page. No page exists anymore!");
         }
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
-      int num = Math.min(total, leftInPage);
+
+      if (isRepeatedColumn) {
+        num = getValueCountToReadForRepeatedRowNums(total - repeatedRowId);
+      } else {
+        num = Math.min(remaining, leftInPage);
+      }
+
       if (useDictionary) {
         // Read and decode dictionary ids.
-        int dictionaryCapacity = Math.max(total, rowId + num);
+        int dictionaryCapacity = Math.max(remaining, rowId + num);
         ColumnVector dictionaryIds = column.reserveDictionaryIds(dictionaryCapacity);
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
@@ -197,6 +242,9 @@ public class VectorizedColumnReader {
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);
+        if (isRepeatedColumn) {
+          column.reserve(Math.max(remaining, rowId + num));
+        }
         switch (descriptor.getType()) {
           case BOOLEAN:
             readBooleanBatch(rowId, num, column);
@@ -226,13 +274,10 @@ public class VectorizedColumnReader {
             throw new IOException("Unsupported type: " + descriptor.getType());
         }
       }
-
-      valuesReadInPage += num;
+      valuesReadInPreviousRun = num;
       valuesRead += num;
       rowId += num;
-      if (!isRepeatedColumn) {
-        total -= num;
-      }
+      remaining -= num;
     }
   }
 
@@ -652,148 +697,200 @@ public class VectorizedColumnReader {
   }
 
   /**
+   * Returns the array of repetition level values.
+   */
+  private int[] getRepetitionLevels() throws IOException {
+    int[] repetitions = new int[this.pageValueCount];
+    for (int i = 0; i < this.pageValueCount; i++) {
+      repetitions[i] = this.repetitionLevelColumn.nextInt();
+    }
+    return repetitions;
+  }
+
+  /**
+   * Returns the number of repeated rows in the current page.
+   */
+  private int getRepeatedRowNumsForCurrentPage() {
+    if (this.repLevelValues != null) {
+      int rowNums = 0;
+      for (int i = 0; i < this.repLevelValues.length; i++) {
+        if (repLevelValues[i] == 0) rowNums++;
+      }
+      return rowNums;
+    } else {
+      return 0;
+    }
+  }
+
+  /**
+   * Returns the number of values needed to read in order to have the number of repeated rows.
+   * @param num the number of repeated rows.
+   */
+  private int getValueCountToReadForRepeatedRowNums(int num) {
+    int rowNum = 0;
+    if (this.repLevelValues[this.repLevelOffset] != 0) rowNum++;
+    for (int i = this.repLevelOffset; i < this.repLevelValues.length; i++) {
+      if (repLevelValues[i] == 0) {
+        rowNum++;
+        if (rowNum > num) {
+          return i - this.repLevelOffset;
+        }
+      }
+    }
+    return this.repLevelValues.length - this.repLevelOffset;
+  }
+
+  /**
    * Iterates the values of definition and repetition levels for the values read in the page,
    * and constructs nested records accordingly.
    * @param column The ColumnVector which the data in the page are read into.
+   @ @param repetitions Mapping between repetition levels and their counts.
    * @param rowIds Mapping between repetition levels and their current row ids for constructing.
    * @param offsets The beginning offsets in columns which we use to construct nested records.
-   * @param valuesReadInPage The number of values read in the current page.
+   * @param num The number of values read.
    * @param total The total number of rows to construct.
+   * @param resetNestedRecord When it is true, the previous status will be reset.
+   * @param endOfPage Whether reaching the end of current page.
+   * @return the updated resetNestedRecord flag.
    */
-  private void constructNestedRecords(
+  private boolean constructNestedRecords(
       ColumnVector column,
+      int[] repetitions,
       int[] rowIds,
       int[] offsets,
-      int valuesReadInPage,
-      int total) throws IOException {
-    // Keeps repetition levels and corresponding repetition counts.
-    int[] repetitions = new int[maxRepLevel + 2];
+      int num,
+      int total,
+      boolean resetNestedRecord,
+      boolean endOfPage) throws IOException {
+    for (int i = 0; i < num; i++) {
+      int repLevel;
+      if (repLevelValues != null) {
+        repLevel = repLevelValues[repLevelOffset++];
+      } else {
+        repLevel = maxRepLevel;
+      }
+      int defLevel = definitionLevelColumn.nextInt();
 
-    if (column.getParentColumn() != null) {
-      boolean newBeginning = true;
-
-      for (int i = 0; i < valuesReadInPage; i++) {
-        int repLevel = repetitionLevelColumn.nextInt();
-        int defLevel = definitionLevelColumn.nextInt();
-
-        if (!newBeginning) {
-          // When a new record begins at lower repetition level,
-          // we insert array into repeated column.
-          if (repLevel < maxRepLevel) {
-            insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
-          }
+      // If there are previous values and counts needed to be consider.
+      if (!resetNestedRecord) {
+        // When a new record begins at lower repetition level,
+        // we insert array into repeated column.
+        if (repLevel < maxRepLevel) {
+          insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
         }
-        newBeginning = false;
+      }
+      resetNestedRecord = false;
 
-        // When definition level is less than max definition level,
-        // there is a null value.
-        if (defLevel < maxDefLevel) {
-          int offset = offsets[maxRepLevel];
+      // When definition level is less than max definition level,
+      // there is a null value.
+      if (defLevel < maxDefLevel) {
+        int offset = offsets[maxRepLevel];
 
-          // The null value is defined at the root level.
-          // Insert a null record.
-          if (repLevel == 0 && defLevel == 0) {
-            ColumnVector parent = column.getParentColumn();
-            if (parent != null && parent.getDefLevel() == maxDefLevel
-              && parent.getRepLevel() == maxRepLevel) {
-              // A repeated element at root level.
-              // E.g., The repeatedPrimitive at the following schema.
-              // Going to insert an empty record.
-              // messageType: message spark_schema {
-              //   optional int32 optionalPrimitive;
-              //   required int32 requiredPrimitive;
-              //
-              //   repeated int32 repeatedPrimitive;
-              //
-              //   optional group optionalMessage {
-              //     optional int32 someId;
-              //   }
-              //   required group requiredMessage {
-              //     optional int32 someId;
-              //   }
-              //   repeated group repeatedMessage {
-              //     optional int32 someId;
-              //   }
-              // }
-              insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
-            } else {
-              // Obtain most outside column.
-              ColumnVector topColumn = column.getParentColumn();
-              while (topColumn.getParentColumn() != null) {
-                topColumn = topColumn.getParentColumn();
-              }
-
-              insertNullRecord(topColumn, rowIds, repetitions);
-            }
-            // Move to next offset in max repetition level as we processed the current value.
-            offsets[maxRepLevel]++;
-            newBeginning = true;
-          } else if (isLegacyArray(column) &&
-            column.getNearestParentArrayColumn().getDefLevel() == defLevel) {
-            // For a legacy array, if a null is defined at the repeated group column, it actually
-            // means an element with null value.
-
-            repetitions[maxRepLevel]++;
-          } else if (!column.getParentColumn().isArray() &&
-            column.getParentColumn().getDefLevel() == defLevel) {
-            // A null element defined in the wrapping non-repeated group.
-            rowIds[1]++;
-          } else {
-            // An empty element defined in outside group.
-            // E.g., the element in the following schema.
+        // The null value is defined at the root level.
+        // Insert a null record.
+        if (repLevel == 0 && defLevel == 0) {
+          ColumnVector parent = column.getParentColumn();
+          if (parent != null && parent.getDefLevel() == maxDefLevel
+            && parent.getRepLevel() == maxRepLevel) {
+            // A repeated element at root level.
+            // E.g., The repeatedPrimitive at the following schema.
+            // Going to insert an empty record.
             // messageType: message spark_schema {
-            //   required int32 index;
-            //   optional group col {
-            //     optional float f1;
-            //     optional group f2 (LIST) {
-            //       repeated group list {
-            //         optional boolean element;
-            //       }
-            //     }
+            //   optional int32 optionalPrimitive;
+            //   required int32 requiredPrimitive;
+            //
+            //   repeated int32 repeatedPrimitive;
+            //
+            //   optional group optionalMessage {
+            //     optional int32 someId;
+            //   }
+            //   required group requiredMessage {
+            //     optional int32 someId;
+            //   }
+            //   repeated group repeatedMessage {
+            //     optional int32 someId;
             //   }
             // }
-            ColumnVector parent = findInnerElementWithDefLevel(column, defLevel);
-            if (parent != null) {
-              // Found the group with the same definition level.
-              // Insert a null record at definition level.
-              // E.g, R=0, D=1 for above schema.
-              insertNullRecord(parent, rowIds, repetitions);
-              offsets[maxRepLevel]++;
-              newBeginning = true;
-            } else {
-              // Found the group with lower definition level.
-              // Insert an empty record.
-              // E.g, R=0, D=2 for above schema.
-              parent = findHiddenInnerElementWithDefLevel(column, defLevel);
-              insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
-              offsets[maxRepLevel]++;
-              newBeginning = true;
-            }
-          }
-        } else {
-          // Determine the repetition level of non-null values.
-          // A new record begins with non-null value.
-          if (maxRepLevel == 0) {
-            // A required record at root level.
-            repetitions[1]++;
-            insertRepeatedArray(column, rowIds, offsets, repetitions, total, maxRepLevel - 1);
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
           } else {
-            // Repeated values. We increase repetition count.
-            repetitions[maxRepLevel]++;
+            // Obtain most outside column.
+            ColumnVector topColumn = column.getParentColumn();
+            while (topColumn.getParentColumn() != null) {
+              topColumn = topColumn.getParentColumn();
+            }
+
+            insertNullRecord(topColumn, rowIds, repetitions);
+          }
+          // Move to next offset in max repetition level as we processed the current value.
+          offsets[maxRepLevel]++;
+          resetNestedRecord = true;
+        } else if (isLegacyArray(column) &&
+          column.getNearestParentArrayColumn().getDefLevel() == defLevel) {
+          // For a legacy array, if a null is defined at the repeated group column, it actually
+          // means an element with null value.
+
+          repetitions[maxRepLevel]++;
+        } else if (!column.getParentColumn().isArray() &&
+          column.getParentColumn().getDefLevel() == defLevel) {
+          // A null element defined in the wrapping non-repeated group.
+          rowIds[1]++;
+        } else {
+          // An empty element defined in outside group.
+          // E.g., the element in the following schema.
+          // messageType: message spark_schema {
+          //   required int32 index;
+          //   optional group col {
+          //     optional float f1;
+          //     optional group f2 (LIST) {
+          //       repeated group list {
+          //         optional boolean element;
+          //       }
+          //     }
+          //   }
+          // }
+          ColumnVector parent = findInnerElementWithDefLevel(column, defLevel);
+          if (parent != null) {
+            // Found the group with the same definition level.
+            // Insert a null record at definition level.
+            // E.g, R=0, D=1 for above schema.
+            insertNullRecord(parent, rowIds, repetitions);
+            offsets[maxRepLevel]++;
+            resetNestedRecord = true;
+          } else {
+            // Found the group with lower definition level.
+            // Insert an empty record.
+            // E.g, R=0, D=2 for above schema.
+            parent = findHiddenInnerElementWithDefLevel(column, defLevel);
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, repLevel);
+            offsets[maxRepLevel]++;
+            resetNestedRecord = true;
           }
         }
-      }
-      if (!newBeginning) {
-        insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
+      } else {
+        // Determine the repetition level of non-null values.
+        // A new record begins with non-null value.
+        if (maxRepLevel == 0) {
+          // A required record at root level.
+          repetitions[1]++;
+          insertRepeatedArray(column, rowIds, offsets, repetitions, total, maxRepLevel - 1);
+        } else {
+          // Repeated values. We increase repetition count.
+          repetitions[maxRepLevel]++;
+        }
       }
     }
+    // Insert the last repeated record if any.
+    if (!endOfPage && !resetNestedRecord) {
+      insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
+      resetNestedRecord = true;
+    }
+    return resetNestedRecord;
   }
 
   private void readPageV1(DataPageV1 page) throws IOException {
     this.pageValueCount = page.getValueCount();
     ValuesReader rlReader = page.getRlEncoding().getValuesReader(descriptor, REPETITION_LEVEL);
     ValuesReader dlReader;
-    ValuesReader dlReaderCopy;
 
     // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
@@ -801,17 +898,27 @@ public class VectorizedColumnReader {
     }
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
-    this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
     dlReader = this.defColumn;
-    dlReaderCopy = this.defColumnCopy;
     this.repetitionLevelColumn = new ValuesReaderIntIterator(rlReader);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(dlReaderCopy);
     try {
       byte[] bytes = page.getBytes().toByteArray();
       rlReader.initFromPage(pageValueCount, bytes, 0);
       int next = rlReader.getNextOffset();
       dlReader.initFromPage(pageValueCount, bytes, next);
+
+      ValuesReader dlReaderCopy;
+      this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+      dlReaderCopy = this.defColumnCopy;
+      this.definitionLevelColumn = new ValuesReaderIntIterator(dlReaderCopy);
       dlReaderCopy.initFromPage(pageValueCount, bytes, next);
+
+      // If this is a repeated column, read repetition level values for this page.
+      if (maxRepLevel > 0) {
+        this.repLevelValues = getRepetitionLevels();
+        int numOfRepeatedRow = getRepeatedRowNumsForCurrentPage();
+        this.repLevelOffset = 0;
+      }
+
       next = dlReader.getNextOffset();
       initDataReader(page.getValueEncoding(), bytes, next);
     } catch (IOException e) {
@@ -826,12 +933,21 @@ public class VectorizedColumnReader {
 
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
     this.defColumn = new VectorizedRleValuesReader(bitWidth);
-    this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumnCopy);
     this.defColumn.initFromBuffer(
         this.pageValueCount, page.getDefinitionLevels().toByteArray());
+
+    this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumnCopy);
     this.defColumnCopy.initFromBuffer(
-        this.pageValueCount, page.getDefinitionLevels().toByteArray());
+      this.pageValueCount, page.getDefinitionLevels().toByteArray());
+
+    // If this is a repeated column, read repetition level values for this page.
+    if (maxRepLevel > 0) {
+      this.repLevelValues = getRepetitionLevels();
+      int numOfRepeatedRow = getRepeatedRowNumsForCurrentPage();
+      this.repLevelOffset = 0;
+    }
+
     try {
       initDataReader(page.getDataEncoding(), page.getData().toByteArray(), 0);
     } catch (IOException e) {
