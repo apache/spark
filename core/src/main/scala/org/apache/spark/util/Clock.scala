@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import java.util.concurrent.TimeUnit
+
 /**
  * An interface to represent clocks, so that they can be mocked out in unit tests.
  */
@@ -26,6 +28,7 @@ private[spark] trait Clock {
 
   /**
    * Wait until a clock's view of current time reaches the specified target time.
+   *
    * @param targetTime block until the current time is at least this value
    * @return clock's view of current time when the wait has completed
    */
@@ -42,8 +45,7 @@ private[spark] class SystemClock extends Clock {
   /**
    * @return the same time in milliseconds as is derived from `System.nanoTime()`
    */
-  def getTimeMillis(): Long = System.nanoTime() / (1000 * 1000)
-
+  def getTimeMillis(): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
 
   /**
    * @param targetTime block until the current time is at least this value
