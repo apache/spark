@@ -1271,6 +1271,10 @@ setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark
 #' @export
 setGeneric("fitted")
 
+#' @rdname spark.multilayerPerceptronClassifier
+#' @export
+setGeneric("spark.monmlp", function(data, formula, ...) { standardGeneric("spark.monmlp") })
+
 #' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })

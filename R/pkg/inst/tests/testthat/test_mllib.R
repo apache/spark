@@ -321,6 +321,10 @@ test_that("spark.kmeans", {
   unlink(modelPath)
 })
 
+test_that("spark.monmlp", {
+
+})
+
 test_that("spark.naiveBayes", {
   # R code to reproduce the result.
   # We do not support instance weights yet. So we ignore the frequencies.
