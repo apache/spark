@@ -73,7 +73,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *   ds.groupByKey(_._1).mapValues(_._2) // Scala
    * }}}
    *
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def mapValues[W : Encoder](func: V => W): KeyValueGroupedDataset[K, W] = {
     val withNewData = AppendColumns(func, dataAttributes, logicalPlan)
@@ -99,7 +99,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *     ds.groupByKey(t -> t._1, Encoders.STRING()).mapValues(t -> t._2, Encoders.INT()); // Java 8
    * }}}
    *
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def mapValues[W](func: MapFunction[V, W], encoder: Encoder[W]): KeyValueGroupedDataset[K, W] = {
     implicit val uEnc = encoder
