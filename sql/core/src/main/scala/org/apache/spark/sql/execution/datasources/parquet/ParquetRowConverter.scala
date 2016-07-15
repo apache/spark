@@ -214,6 +214,10 @@ private[parquet] class ParquetRowConverter(
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     catalystType match {
+      case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType
+        if ParquetSchemaCompatibility.isCompatible(catalystType, parquetType) =>
+          ParquetSchemaCompatibility.newCompatibleConverter(parquetType, catalystType, updater)
+
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
