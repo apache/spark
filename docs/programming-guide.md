@@ -1571,7 +1571,7 @@ have changed from returning (key, list of values) pairs to (key, iterable of val
 </div>
 
 Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](mllib-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
+[MLlib](ml-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
 
 
 # Where to Go from Here
