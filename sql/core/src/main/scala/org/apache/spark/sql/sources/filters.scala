@@ -40,7 +40,7 @@ abstract class Filter {
 }
 
 /**
- * A filter that evaluates to `true` iff the attribute evaluates to a value
+ * A filter that evaluates to `true` if the attribute evaluates to a value
  * equal to `value`.
  *
  * @since 1.3.0
