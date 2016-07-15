@@ -75,7 +75,14 @@ private[sql] case class InsertIntoHadoopFsRelationCommand(
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }.mkString(", ")
       throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-          s"cannot save to file.")
+        "cannot save to file.")
+    }
+
+    bucketSpec.foreach { spec =>
+      if (spec.numBuckets <= 0) {
+        throw new AnalysisException(
+          s"Expected positive number of buckets, but got `${spec.numBuckets}`.")
+      }
     }
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
