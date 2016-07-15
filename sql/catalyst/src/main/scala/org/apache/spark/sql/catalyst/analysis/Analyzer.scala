@@ -85,7 +85,7 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      SubstituteHint),
+      SubstituteHints),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -1791,7 +1791,7 @@ class Analyzer(
    * Substitute Hints.
    * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
    */
-  object SubstituteHint extends Rule[LogicalPlan] {
+  object SubstituteHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformDown {
         case h @ Hint(name, parameters, child)
@@ -1801,16 +1801,15 @@ class Analyzer(
             var stop = false
             resolvedChild = child.transformDown {
               case r @ BroadcastHint(UnresolvedRelation(_, _)) => r
-              case r @ UnresolvedRelation(t, _) if !stop && t.table == table =>
+              case r @ UnresolvedRelation(t, _) if !stop && resolver(t.table, table) =>
                 stop = true
                 BroadcastHint(r)
             }
           }
           resolvedChild
 
-        // Remove unrecognized hint
+        // Remove unrecognized hints
         case Hint(name, _, child) =>
-          logDebug(s"Ignore Unknown Hint: $name")
           child
       }
     }

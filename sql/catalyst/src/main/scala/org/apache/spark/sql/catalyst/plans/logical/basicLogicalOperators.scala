@@ -356,9 +356,10 @@ case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
 
 /**
  * A general hint for the child.
- * a pair of (name, parameters).
+ * A pair of (name, parameters).
  */
 case class Hint(name: String, parameters: Seq[String], child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
 }
 
