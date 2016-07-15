@@ -580,44 +580,45 @@ case class SortHistograms(left: Seq[Expression],
         |
         |     int $notNullCount = 0;
         |     for (int $iterationIndex = 0; $iterationIndex < $localArray.length / 2; $iterationIndex++) {
+        |
         |       if($localArray[$iterationIndex * 2] != null)
         |          $notNullCount++;
-        |       }
-        |       if($notNullCount > limit) {
-        |         Object[] result = new Object[limit * 2];
-        |         Double $min = Double.MAX_VALUE;
-        |         int $minIndex = -1;
-        |         for (int $iterationIndex = 0; $iterationIndex < ($localArray.length / 2 - 1); $iterationIndex++) {
-        |           if($localArray[($iterationIndex + 1) * 2] == null || $localArray[$iterationIndex * 2] == null) {
-        |             continue;
-        |           }
-        |           if((Double)$localArray[($iterationIndex + 1) * 2] - (Double)$localArray[($iterationIndex) * 2] < $min) {
-        |             $min = (Double)$localArray[($iterationIndex + 1) * 2] - (Double)$localArray[$iterationIndex * 2];
-        |             $minIndex = $iterationIndex;
-        |           }
+        |     }
+        |     if($notNullCount > limit) {
+        |       Object[] result = new Object[$localArray.length];
+        |       Double $min = Double.MAX_VALUE;
+        |       int $minIndex = -1;
+        |       for (int $iterationIndex = 0; $iterationIndex < ($localArray.length / 2 - 1); $iterationIndex++) {
+        |         if($localArray[($iterationIndex + 1) * 2] == null || $localArray[$iterationIndex * 2] == null) {
+        |           continue;
         |         }
-        |         for(int $iterationIndex = 0; $iterationIndex < $localArray.length / 2; $iterationIndex++) {
-        |           if($iterationIndex == $minIndex) {
-        |             Double $q1 = (Double)$localArray[$iterationIndex * 2];
-        |             Double $k1 = (Double)$localArray[$iterationIndex * 2 + 1];
-        |             Double $q2 = (Double)$localArray[($iterationIndex + 1) * 2];
-        |             Double $k2 = (Double)$localArray[($iterationIndex + 1) * 2 + 1];
-        |             result[$iterationIndex * 2] = ($q1 * $k1 + $q2 * $k2) / ($k1 + $k2);
-        |             result[$iterationIndex * 2 + 1] = $k1 + $k2;
-        |           } else if($iterationIndex == $minIndex + 1) {
-        |             continue;
-        |           } else if($iterationIndex < $minIndex) {
-        |             result[$iterationIndex * 2] = $localArray[$iterationIndex * 2];
-        |             result[$iterationIndex * 2 + 1] = $localArray[$iterationIndex * 2 + 1];
-        |           } else if( $iterationIndex > $minIndex) {
-        |             result[($iterationIndex - 1) * 2] = $localArray[$iterationIndex * 2];
-        |             result[($iterationIndex - 1) * 2 + 1] = $localArray[$iterationIndex * 2 + 1];
-        |           }
+        |         if((Double)$localArray[($iterationIndex + 1) * 2] - (Double)$localArray[($iterationIndex) * 2] < $min) {
+        |           $min = (Double)$localArray[($iterationIndex + 1) * 2] - (Double)$localArray[$iterationIndex * 2];
+        |           $minIndex = $iterationIndex;
+        |         }
         |       }
-        |         return $trimFunc(result, limit);
-        |       } else {
-        |         return $localArray;
-        |       }
+        |       for(int $iterationIndex = 0; $iterationIndex < $localArray.length / 2; $iterationIndex++) {
+        |         if($iterationIndex == $minIndex) {
+        |           Double $q1 = (Double)$localArray[$iterationIndex * 2];
+        |           Double $k1 = (Double)$localArray[$iterationIndex * 2 + 1];
+        |           Double $q2 = (Double)$localArray[($iterationIndex + 1) * 2];
+        |           Double $k2 = (Double)$localArray[($iterationIndex + 1) * 2 + 1];
+        |           result[$iterationIndex * 2] = ($q1 * $k1 + $q2 * $k2) / ($k1 + $k2);
+        |           result[$iterationIndex * 2 + 1] = $k1 + $k2;
+        |         } else if($iterationIndex == $minIndex + 1) {
+        |           continue;
+        |         } else if($iterationIndex < $minIndex) {
+        |           result[$iterationIndex * 2] = $localArray[$iterationIndex * 2];
+        |           result[$iterationIndex * 2 + 1] = $localArray[$iterationIndex * 2 + 1];
+        |         } else if( $iterationIndex > $minIndex) {
+        |           result[($iterationIndex - 1) * 2] = $localArray[$iterationIndex * 2];
+        |           result[($iterationIndex - 1) * 2 + 1] = $localArray[$iterationIndex * 2 + 1];
+        |         }
+        |     }
+        |       return $trimFunc(result, limit);
+        |     } else {
+        |       return $localArray;
+        |     }
         |
         | }
       """.stripMargin)
