@@ -79,43 +79,45 @@ object StronglyConnectedComponents {
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
       } while (sccWorkGraph.numVertices < numVertices)
 
-      sccWorkGraph = sccWorkGraph.mapVertices{ case (vid, (color, isFinal)) => (vid, isFinal) }
+      if (iter < numIter) {
+        sccWorkGraph = sccWorkGraph.mapVertices { case (vid, (color, isFinal)) => (vid, isFinal) }
 
-      // collect min of all my neighbor's scc values, update if it's smaller than mine
-      // then notify any neighbors with scc values larger than mine
-      sccWorkGraph = Pregel[(VertexId, Boolean), ED, VertexId](
-        sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
-        (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
-        e => {
-          if (e.srcAttr._1 < e.dstAttr._1) {
-            Iterator((e.dstId, e.srcAttr._1))
-          } else {
-            Iterator()
-          }
-        },
-        (vid1, vid2) => math.min(vid1, vid2))
+        // collect min of all my neighbor's scc values, update if it's smaller than mine
+        // then notify any neighbors with scc values larger than mine
+        sccWorkGraph = Pregel[(VertexId, Boolean), ED, VertexId](
+          sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
+          (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
+          e => {
+            if (e.srcAttr._1 < e.dstAttr._1) {
+              Iterator((e.dstId, e.srcAttr._1))
+            } else {
+              Iterator()
+            }
+          },
+          (vid1, vid2) => math.min(vid1, vid2))
 
-      // start at root of SCCs. Traverse values in reverse, notify all my neighbors
-      // do not propagate if colors do not match!
-      sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
-        sccWorkGraph, false, activeDirection = EdgeDirection.In)(
-        // vertex is final if it is the root of a color
-        // or it has the same color as a neighbor that is final
-        (vid, myScc, existsSameColorFinalNeighbor) => {
-          val isColorRoot = vid == myScc._1
-          (myScc._1, myScc._2 || isColorRoot || existsSameColorFinalNeighbor)
-        },
-        // activate neighbor if they are not final, you are, and you have the same color
-        e => {
-          val sameColor = e.dstAttr._1 == e.srcAttr._1
-          val onlyDstIsFinal = e.dstAttr._2 && !e.srcAttr._2
-          if (sameColor && onlyDstIsFinal) {
-            Iterator((e.srcId, e.dstAttr._2))
-          } else {
-            Iterator()
-          }
-        },
-        (final1, final2) => final1 || final2)
+        // start at root of SCCs. Traverse values in reverse, notify all my neighbors
+        // do not propagate if colors do not match!
+        sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
+          sccWorkGraph, false, activeDirection = EdgeDirection.In)(
+          // vertex is final if it is the root of a color
+          // or it has the same color as a neighbor that is final
+          (vid, myScc, existsSameColorFinalNeighbor) => {
+            val isColorRoot = vid == myScc._1
+            (myScc._1, myScc._2 || isColorRoot || existsSameColorFinalNeighbor)
+          },
+          // activate neighbor if they are not final, you are, and you have the same color
+          e => {
+            val sameColor = e.dstAttr._1 == e.srcAttr._1
+            val onlyDstIsFinal = e.dstAttr._2 && !e.srcAttr._2
+            if (sameColor && onlyDstIsFinal) {
+              Iterator((e.srcId, e.dstAttr._2))
+            } else {
+              Iterator()
+            }
+          },
+          (final1, final2) => final1 || final2)
+      }
     }
     sccGraph
   }
