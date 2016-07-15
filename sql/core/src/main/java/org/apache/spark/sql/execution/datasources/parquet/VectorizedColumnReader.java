@@ -136,6 +136,13 @@ public class VectorizedColumnReader {
    */
   void readBatch(int total, ColumnVector column) throws IOException {
     int rowId = 0;
+    ColumnVector dictionaryIds = null;
+    if (useDictionary) {
+      // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
+      // decode all previous dictionary encoded pages if we ever encounter a non-dictionary encoded
+      // page.
+      dictionaryIds = column.reserveDictionaryIds(total);
+    }
     while (total > 0) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
@@ -146,10 +153,8 @@ public class VectorizedColumnReader {
       int num = Math.min(total, leftInPage);
       if (useDictionary) {
         // Read and decode dictionary ids.
-        ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
