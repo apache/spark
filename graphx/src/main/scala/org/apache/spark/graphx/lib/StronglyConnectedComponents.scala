@@ -79,6 +79,8 @@ object StronglyConnectedComponents {
         sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
       } while (sccWorkGraph.numVertices < numVertices)
 
+      // if iter < numIter at this point sccGraph that is returned
+      // will not be recomputed and pregel executions are pointless
       if (iter < numIter) {
         sccWorkGraph = sccWorkGraph.mapVertices { case (vid, (color, isFinal)) => (vid, isFinal) }
 
