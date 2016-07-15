@@ -37,10 +37,10 @@ import org.apache.spark.sql.types.StringType
 
 
 private[r] class LDAWrapper private (
-                                      val pipeline: PipelineModel,
-                                      val logLikelihood: Double,
-                                      val logPerplexity: Double,
-                                      val vocabulary: Array[String]) extends MLWritable {
+    val pipeline: PipelineModel,
+    val logLikelihood: Double,
+    val logPerplexity: Double,
+    val vocabulary: Array[String]) extends MLWritable {
 
   import LDAWrapper._
 
@@ -56,7 +56,7 @@ private[r] class LDAWrapper private (
     lda.logPerplexity(preprocessor.transform(data))
   }
 
-  lazy val topicIndices: DataFrame = lda.describeTopics()
+  lazy val topicIndices: DataFrame = lda.describeTopics(10)
 
   lazy val topics = if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
     topicIndices

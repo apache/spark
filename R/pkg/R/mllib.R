@@ -316,9 +316,18 @@ setMethod("spark.posterior", signature(object = "LDAModel", data = "SparkDataFra
 # Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
 
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
-#' @return \code{summary} returns a list containing \code{docConcentration},
-#'         \code{topicConcentration}, \code{likelihood}, \code{perplexity}, \code{isDistributed},
-#'         \code{vocabSize},  \code{topicTopTerms}, \code{topicTopTermsWeights} and \code{vocabulary}.
+#' @return \code{summary} returns a list containing
+#'         \code{docConcentration}, concentration parameter (commonly named \code{alpha}) for the
+#'         prior placed on documents distributions over topics (\code{theta});
+#'         \code{topicConcentration}, concentration parameter (commonly named \{beta} or \{eta}) for
+#'         the prior placed on topic distributions over terms;
+#'         \code{logLikelihood}, log likelihood of the entire corpus;
+#'         \code{logPerplexity}, log perplexity;
+#'         \code{isDistributed}, TRUE for distribuetd model while FALSE for local model;
+#'         \code{vocabSize}, number of terms in the corpus;
+#'         \code{topics}, top 10 terms and their weights of all topics;
+#'         \code{vocabulary}, whole terms of the training corpus, NULL if libsvm format file used as
+#          training set.
 #' @rdname spark.lda
 #' @export
 #' @note summary(LDAModel) since 2.1.0
@@ -341,12 +350,12 @@ setMethod("summary", signature(object = "LDAModel"),
                         vocabulary = unlist(vocabulary)))
           })
 
-# Returns the perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
+# Returns the log perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
 
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
 #' @param data A SparkDataFrame for computing
-#' @return \code{spark.perplexity} returns the perplexity of given SparkDataFrame, or the perplexity
-#'         of training data if missing argument data.
+#' @return \code{spark.perplexity} returns the log perplexity of given SparkDataFrame, or the log
+#'         perplexity of the training data if missing argument "data".
 #' @rdname spark.lda
 #' @export
 #' @note summary(LDAModel) since 2.1.0
@@ -684,21 +693,28 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 
 #' Latent Dirichlet Allocation
 #'
-#' \code{spark.lda} fits a Latent Dirichlet Allocation model on
-#' a SparkDataFrame. Users can call \code{summary} to get a summary of the fitted LDA model,
-#' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
-#' save/load fitted models.
+#' \code{spark.lda} fits a Latent Dirichlet Allocation model on a SparkDataFrame. Users can call
+#' \code{summary} to get a summary of the fitted LDA model, \code{spark.posterior} to compute
+#' posterior probabilities on new data, \code{spark.perplexity} to compute log perplexity on new
+#' data and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data A SparkDataFrame for training
-#' @param features Features column name
-#' @param k Number of topics
-#' @param maxIter Maximum iterations
-#' @param optimizer Optimizer to train an LDA model, "online" or "em"
-#' @param seed Random seed
-#' @param subsamplingRate Subsampling rate
-#' @param topicConcentration
-#' @param docConcentration
-#' @param checkpointInterval
+#' @param features Features column name, default "features". Either Vector format column or String
+#'        format column are accepted.
+#' @param k Number of topics, default 10
+#' @param maxIter Maximum iterations, default 20
+#' @param optimizer Optimizer to train an LDA model, "online" or "em", default "online"
+#' @param subsamplingRate (For online optimizer) Fraction of the corpus to be sampled and used in
+#         each iteration of mini-batch gradient descent, in range (0, 1], default 0.05
+#' @param topicConcentration concentration parameter (commonly named \{beta} or \{eta}) for the
+#'        prior placed on topic distributions over terms, default -1 to set automatically on Spark
+#'        side. Use \code{summary} to retrieve the effective topicConcentration
+#' @param docConcentration concentration parameter (commonly named \code{alpha}) for the
+#'        prior placed on documents distributions over topics (\code{theta}), default -1 to set
+#'        automatically on Spark side. Use \code{summary} to retrieve the effective docConcentration
+#' @param customizedStopWords stopwords that need to be removed from the given corpus. Only effected
+#'        given training data with string format column.
+#' @param maxVocabSize maximum vocabulary size, default 1 << 18.
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/topicmodels/}
@@ -711,9 +727,12 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' # get a summary of the model
 #' summary(model)
 #'
-#' # make predictions
-#' predicted <- predict(model, df)
-#' showDF(predicted)
+#' # compute posterior probabilities
+#' posterior <- spark.posterior(model, df)
+#' showDF(posterior)
+#'
+#' # compute perplexity
+#' perplexity <- spark.perplexity(model, df)
 #'
 #' # save and load the model
 #' path <- "path/to/model"
