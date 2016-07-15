@@ -95,7 +95,11 @@ case class ExternalRDD[T](
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  override def producedAttributes: AttributeSet = outputSet
+
+  @transient override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None):
+  Statistics =
+    Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
@@ -147,7 +151,8 @@ case class LogicalRDD(
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
 
-  @transient override lazy val statistics: Statistics = Statistics(
+  @transient override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None):
+  Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)

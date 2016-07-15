@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
@@ -73,7 +73,7 @@ case class InMemoryRelation(
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  override lazy val statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     if (batchStats.value.isEmpty) {
       // Underlying columnar RDD hasn't been materialized, no useful statistics information
       // available, return the default statistics.

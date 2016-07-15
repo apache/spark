@@ -87,11 +87,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    *
    * [[LeafNode]]s must override this.
    */
-  def statistics: Statistics = {
+  def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
+//    def statistics(): Statistics = {
     if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
-    Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)
+    Statistics(sizeInBytes = children.map(
+      _.statistics(Option(this +: parents.getOrElse(Seq.empty[LogicalPlan]))).sizeInBytes).product)
   }
 
   /**
@@ -306,20 +308,24 @@ abstract class UnaryNode extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = child.constraints
 
-  override def statistics: Statistics = {
+  override def statistics(implicit parents: Option[Seq[LogicalPlan]] = None): Statistics = {
     // There should be some overhead in Row object, the size should not be zero when there is
     // no columns, this help to prevent divide-by-zero error.
     val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
     val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
+    val childStats = child.statistics(
+      Option(this +: parents.getOrElse(Seq.empty[LogicalPlan]))
+    )
+    val childNumRows = childStats.sizeInBytes / childRowSize
     // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    var sizeInBytes = (childNumRows * outputRowSize)
     if (sizeInBytes == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
       sizeInBytes = 1
     }
 
-    child.statistics.copy(sizeInBytes = sizeInBytes)
+    childStats.copy(sizeInBytes = sizeInBytes)
   }
 }
 

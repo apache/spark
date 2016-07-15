@@ -18,16 +18,22 @@
 package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
+import java.util.UUID
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, In, IsNotNull, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.DataTypes
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
@@ -106,10 +112,136 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
         assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
         assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
 
-        val sizeInBytes = relation.statistics.sizeInBytes
+        val sizeInBytes = relation.statistics().sizeInBytes
         assert(sizeInBytes === BigInt(file1.length() + file2.length()))
       }
     } finally {
+      spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, enableFallBackToHdfsForStats)
+      sql("DROP TABLE csv_table ")
+    }
+  }
+
+  test("MetastoreRelations partition pruning enabled for stats estimation.") {
+    val enablePartitionPruning = spark.sessionState.conf.prunedPartitionStatsEnabled
+    val enableFallBackToHdfsForStats = spark.sessionState.conf.fallBackToHdfsForStatsEnabled
+    try {
+      withTempDir { tempDir =>
+
+        def writeNRecords(n: Int): File = {
+          val file1 = new File(tempDir, UUID.randomUUID.toString)
+          val writer1 = new PrintWriter(file1)
+          for(i <- 1 to n) {
+            writer1.write("1,2")
+          }
+          writer1.close()
+          file1
+        }
+
+        val largeFile = writeNRecords(1000)
+        val smallFile = writeNRecords(10)
+
+        spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, true)
+
+        sql(
+          s"""CREATE TABLE csv_table(page_id INT, impressions INT)
+            PARTITIONED BY (dateint INT, hour INT)
+            ROW FORMAT delimited fields terminated by ','
+          """)
+
+        sql(
+          s"""LOAD DATA LOCAL INPATH '${largeFile.getAbsolutePath}' INTO TABLE csv_table partition
+               (dateint=20160717, hour=10)
+          """)
+        sql(
+          s"""LOAD DATA LOCAL INPATH '${largeFile.getAbsolutePath}' INTO TABLE csv_table partition
+               (dateint=20160717, hour=11)
+          """)
+        sql(
+          s"""LOAD DATA LOCAL INPATH '${smallFile.getAbsolutePath}' INTO TABLE csv_table partition
+               (dateint=20160718, hour=10)
+          """)
+        sql(
+          s"""LOAD DATA LOCAL INPATH '${smallFile.getAbsolutePath}' INTO TABLE csv_table partition
+               (dateint=20160718, hour=11)
+          """)
+
+        val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier("csv_table"))
+          .asInstanceOf[MetastoreRelation]
+
+        val hadoopConf = spark.sessionState.newHadoopConf
+        val fs: FileSystem = relation.hiveQlTable.getPath.getFileSystem(hadoopConf)
+
+        val totalSize = relation.getSize
+        val lLen = fs.getContentSummary(new Path(relation.hiveQlTable.getPath,
+          "dateint=20160717")).getLength/2
+        val sLen = fs.getContentSummary(new Path(relation.hiveQlTable.getPath,
+          "dateint=20160718")).getLength/2
+
+        def assertion(filter: Filter, partitionPrunedSize: Long, message: String): Unit = {
+          assert(relation.statistics(Some(Seq(filter))).sizeInBytes == BigInt(totalSize), message)
+
+          spark.conf.set(SQLConf.ENABLE_PRUNED_PARTITION_STATS.key, true)
+          val sizeInBytes = relation.statistics(Some(Seq(filter))).sizeInBytes
+          assert(sizeInBytes == BigInt(partitionPrunedSize), message)
+          spark.conf.set(SQLConf.ENABLE_PRUNED_PARTITION_STATS.key, false)
+        }
+
+        val dateInt = relation.partitionKeys.find(_.name.equals("dateint")).get
+        val hour = relation.partitionKeys.find(_.name.equals("hour")).get
+        val literalDate17 = Literal.create(20160717, DataTypes.IntegerType)
+        val literalDate18 = Literal.create(20160718, DataTypes.IntegerType)
+        val literalHour10 = Literal.create(10, DataTypes.IntegerType)
+        val literalHour11 = Literal.create(11, DataTypes.IntegerType)
+
+        val equalToDate17 = EqualTo(dateInt, literalDate17)
+        val equalToDate18 = EqualTo(dateInt, literalDate18)
+        val equalToHour10 = EqualTo(hour, literalHour10)
+        val equalToHour11 = EqualTo(hour, literalHour11)
+
+        val hour10Or11 = Or(equalToHour10, equalToHour11)
+        val date17AndHour10Or11 = And(equalToDate17, hour10Or11)
+        val date18AndHour11 = And(equalToDate18, equalToHour11)
+        val hour10orDate18AndHour11 = Or(equalToHour10, date18AndHour11)
+
+        val notNull = IsNotNull(literalHour10)
+        val notNullAndDate18AndHour11 = And(notNull, date18AndHour11)
+
+        val not = Not(hour10orDate18AndHour11)
+        val greaterThanHour10 = GreaterThan(hour, literalHour10)
+        val date18AndGreaterThanHour10 = And(equalToDate18, greaterThanHour10)
+
+        val date18andHourIn1011 = And(equalToDate18, In(hour, List(literalHour10, literalHour11)))
+
+        val testFilters = Seq(
+          // equality check
+          (new Filter(equalToDate17, null), lLen * 2, "equalToDate17"),
+
+          // And and Or check
+          (new Filter(date17AndHour10Or11, null), lLen * 2, "date17AndHour10Or11"),
+
+          // And and Or check, but or has only hour so it should be ignored.
+          (new Filter(hour10orDate18AndHour11, null), sLen, "hour10orDate18AndHour11"),
+
+          // not Null should not blacklist partition column
+          (new Filter(notNullAndDate18AndHour11, null), sLen, "notNullAndDate18AndHour11"),
+
+          // Not should blacklist partition col, falling back to total size.
+          (new Filter(not, null), totalSize, "not"),
+
+          // unsupported operator should fall back to total size.
+          (new Filter(greaterThanHour10, null), totalSize, "greaterThanHour10"),
+
+          // unsupported operator should only blacklist col used in that operator.
+          (new Filter(date18AndGreaterThanHour10, null), sLen * 2, "date18AndGreaterThanHour10"),
+
+          // In Check with And
+          (new Filter(date18andHourIn1011, null), sLen * 2, "date18andHourIn1011")
+        )
+
+        testFilters.foreach(tuple => assertion(tuple._1, tuple._2, tuple._3))
+      }
+    } finally {
+      spark.conf.set(SQLConf.ENABLE_PRUNED_PARTITION_STATS.key, enablePartitionPruning)
       spark.conf.set(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key, enableFallBackToHdfsForStats)
       sql("DROP TABLE csv_table ")
     }
