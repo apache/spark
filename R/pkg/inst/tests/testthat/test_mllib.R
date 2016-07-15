@@ -460,16 +460,16 @@ test_that("spark.lda", {
 
   stats <- summary(model)
   isDistributed <- stats$isDistributed
-  likelihood <- stats$logLikelihood
-  perplexity <- stats$logPerplexity
+  logLikelihood<- stats$logLikelihood
+  logPerplexity <- stats$logPerplexity
   vocabSize <- stats$vocabSize
   topics <- stats$topicTopTerms
   weights <- stats$topicTopTermsWeights
   vocabulary <- stats$vocabulary
 
   expect_false(isDistributed)
-  expect_true(is.finite(likelihood))
-  expect_true(is.finite(perplexity))
+  expect_true(logLikelihood <= 0 & is.finite(logLikelihood))
+  expect_true(logPerplexity >= 0 & is.finite(logPerplexity))
   expect_equal(vocabSize, 11)
   expect_true(is.null(vocabulary))
 
@@ -482,8 +482,8 @@ test_that("spark.lda", {
   stats2 <- summary(model2)
 
   expect_false(stats2$isDistributed)
-  expect_equal(likelihood, stats2$logLikelihood)
-  expect_equal(perplexity, stats2$logPerplexity)
+  expect_equal(logLikelihood, stats2$logLikelihood)
+  expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_equal(vocabulary, stats2$vocabulary)
 

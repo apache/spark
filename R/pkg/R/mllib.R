@@ -327,15 +327,15 @@ setMethod("summary", signature(object = "LDAModel"),
             jobj <- object@jobj
             docConcentration <- callJMethod(jobj, "docConcentration")
             topicConcentration <- callJMethod(jobj, "topicConcentration")
-            likelihood <- callJMethod(jobj, "likelihood")
-            perplexity <- callJMethod(jobj, "perplexity")
+            logLikelihood <- callJMethod(jobj, "logLikelihood")
+            logPerplexity <- callJMethod(jobj, "logPerplexity")
             isDistributed <- callJMethod(jobj, "isDistributed")
             vocabSize <- callJMethod(jobj, "vocabSize")
             topics <- dataFrame(callJMethod(jobj, "topics"))
             vocabulary <- callJMethod(jobj, "vocabulary")
             return(list(docConcentration = unlist(docConcentration),
                         topicConcentration = topicConcentration,
-                        likelihood = likelihood, perplexity = perplexity,
+                        logLikelihood = logLikelihood, logPerplexity = logPerplexity,
                         isDistributed = isDistributed, vocabSize = vocabSize,
                         topics = topics,
                         vocabulary = unlist(vocabulary)))
@@ -352,8 +352,8 @@ setMethod("summary", signature(object = "LDAModel"),
 #' @note summary(LDAModel) since 2.1.0
 setMethod("spark.perplexity", signature(object = "LDAModel"),
           function(object, data) {
-            return(ifelse(missing(data), callJMethod(object@jobj, "perplexity"),
-                   callJMethod(object@jobj, "computePerplexity", data@sdf)))
+            return(ifelse(missing(data), callJMethod(object@jobj, "logPerplexity"),
+                   callJMethod(object@jobj, "computeLogPerplexity", data@sdf)))
          })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
