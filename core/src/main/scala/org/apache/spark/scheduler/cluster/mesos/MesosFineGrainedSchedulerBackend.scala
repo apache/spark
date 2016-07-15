@@ -153,7 +153,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
       MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
         image,
-        sc.conf.getOption,
+        sc.conf,
         executorInfo.getContainerBuilder()
       )
     }
