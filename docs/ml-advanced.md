@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Advanced topics - spark.ml
-displayTitle: Advanced topics - spark.ml
+title: Advanced topics
+displayTitle: Advanced topics
 ---
 
 * Table of contents
