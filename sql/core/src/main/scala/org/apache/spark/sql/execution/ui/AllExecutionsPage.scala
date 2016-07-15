@@ -25,7 +25,7 @@ import scala.xml.Node
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
 
@@ -183,10 +183,18 @@ private[ui] abstract class ExecutionTable(
   def toNodeSeq: Seq[Node] = {
     val showSqlText = executionUIDatas.exists(_.sqlText.isDefined)
     val headerFull = header ++ {if (showSqlText) Seq("SQL Text") else Seq.empty}
+    val sqlTextToolTip = {if (showSqlText) {
+      Seq(Some(ToolTips.SQL_TEXT, "top"))
+    } else {
+      Seq.empty
+    }}
+    val headerToolTips: Seq[Option[(String, String)]] = header.map(_ => None) ++ sqlTextToolTip
+
     <div>
       <h4>{tableName}</h4>
       {UIUtils.listingTable[SQLExecutionUIData](
-        headerFull, row(currentTime, _, showSqlText), executionUIDatas, id = Some(tableId))}
+        headerFull, row(currentTime, _, showSqlText), executionUIDatas, id = Some(tableId),
+        headerToolTips = headerToolTips)}
     </div>
   }
 

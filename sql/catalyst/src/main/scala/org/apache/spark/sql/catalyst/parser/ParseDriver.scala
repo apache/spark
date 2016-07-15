@@ -75,7 +75,18 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
       }
     }
     // Record the original sql text in the top logical plan for checking in the web UI.
-    logicalPlan.sqlText = Some(sqlText)
+    // Truncate the text to avoid downing browsers or web UI servers by running out of memory.
+    val maxLength = 1000
+    val suffix = " ... (truncated)"
+    val truncateLength = maxLength - suffix.length
+    val truncatedSqlText = {
+      if (sqlText.length <= maxLength) {
+        sqlText
+      } else {
+        sqlText.substring(0, truncateLength) + suffix
+      }
+    }
+    logicalPlan.sqlText = Some(truncatedSqlText)
     logicalPlan
   }
 
