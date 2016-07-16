@@ -161,7 +161,7 @@ private[sql] case class InMemoryTableScanExec(
                   val value = cachedBatch.stats.get(i, a.dataType)
                   s"${a.name}: $value"
               }.mkString(", ")
-              println(s"Skipping partition based on stats $statsString")
+              logInfo(s"Skipping partition based on stats $statsString")
               false
             } else {
               true
