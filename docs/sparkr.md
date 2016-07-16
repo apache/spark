@@ -273,6 +273,7 @@ In SparkR, we support several kinds of User-Defined Functions:
 ##### dapply
 Apply a function to each partition of a `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame`
 and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function should be a `data.frame`. Schema specifies the row format of the resulting a `SparkDataFrame`. It must match to [data types](#data-type-mapping-between-r-and-spark) of returned value.
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -295,6 +296,7 @@ head(collect(df1))
 ##### dapplyCollect
 Like `dapply`, apply a function to each partition of a `SparkDataFrame` and collect the result back. The output of function
 should be a `data.frame`. But, Schema is not required to be passed. Note that `dapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
@@ -320,7 +322,7 @@ head(ldf, 3)
 Apply a function to each group of a `SparkDataFrame`. The function is to be applied to each group of the `SparkDataFrame` and should have only two parameters: grouping key and R `data.frame` corresponding to
 that key. The groups are chosen from `SparkDataFrame`s column(s).
 The output of function should be a `data.frame`. Schema specifies the row format of the resulting
-`SparkDataFrame`. It must represent R function's output schema on the basis of Spark data types. The column names of the returned `data.frame` are set by user. Below data type mapping between R
+`SparkDataFrame`. It must represent R function's output schema on the basis of Spark data types. The column names of the returned `data.frame` are set by user. Below is the data type mapping between R
 and Spark.
 
 #### Data type mapping between R and Spark
@@ -367,15 +369,15 @@ and Spark.
   <td>boolean</td>
 </tr>
 <tr>
-  <td>[POSIXct](https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html)</td>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXct</a></td>
   <td>timestamp</td>
 </tr>
 <tr>
-  <td>[POSIXlt](https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html)</td>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/DateTimeClasses.html">POSIXlt</a></td>
   <td>timestamp</td>
 </tr>
 <tr>
-  <td>[Date](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html)</td>
+  <td><a href="https://stat.ethz.ch/R-manual/R-devel/library/base/html/Dates.html">Date</a></td>
   <td>date</td>
 </tr>
 <tr>
@@ -418,6 +420,7 @@ head(collect(arrange(result, "max_eruption", decreasing = TRUE)))
 
 ##### gapplyCollect
 Like `gapply`, applies a function to each partition of a `SparkDataFrame` and collect the result back to R data.frame. The output of the function should be a `data.frame`. But, the schema is not required to be passed. Note that `gapplyCollect` can fail if the output of UDF run on all the partition cannot be pulled to the driver and fit in driver memory.
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 
