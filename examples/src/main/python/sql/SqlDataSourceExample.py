@@ -18,6 +18,9 @@
 from __future__ import print_function
 
 from pyspark.sql import SparkSession
+# $example on:schema_merging$
+from pyspark.sql import Row
+# $example off:schema_merging$
 
 """
 A simple example demonstrating Spark SQL Data Source.
@@ -65,6 +68,78 @@ def runBasicParquetExample(spark):
     # +------+
     # $example off:basic_parquet_example$
 
+
+def runParquetSchemaMergingExample(spark):
+    # $example on:schema_merging$
+    # spark is from the previous example.
+    # Create a simple DataFrame, stored into a partition directory
+    sc = spark.sparkContext
+
+    squaresDF = spark.createDataFrame(sc.parallelize(range(1, 6))
+                                      .map(lambda i: Row(single=i, double=i ** 2)))
+    squaresDF.write.parquet("data/test_table/key=1")
+
+    # Create another DataFrame in a new partition directory,
+    # adding a new column and dropping an existing column
+    cubesDF = spark.createDataFrame(sc.parallelize(range(6, 11))
+                                    .map(lambda i: Row(single=i, triple=i ** 3)))
+    cubesDF.write.parquet("data/test_table/key=2")
+
+    # Read the partitioned table
+    mergedDF = spark.read.option("mergeSchema", "true").parquet("data/test_table")
+    mergedDF.printSchema()
+
+    # The final schema consists of all 3 columns in the Parquet files together
+    # with the partitioning column appeared in the partition directory paths.
+    # root
+    # |-- double: long (nullable = true)
+    # |-- single: long (nullable = true)
+    # |-- triple: long (nullable = true)
+    # |-- key: integer (nullable = true)
+    # $example off:schema_merging$
+
+
+def runJsonDatasetExample(spark):
+    # $example on:json_dataset$
+    # spark is from the previous example.
+    sc = spark.sparkContext
+
+    # A JSON dataset is pointed to by path.
+    # The path can be either a single text file or a directory storing text files
+    path = "examples/src/main/resources/people.json"
+    peopleDF = spark.read.json(path)
+
+    # The inferred schema can be visualized using the printSchema() method
+    peopleDF.printSchema()
+    # root
+    # |-- age: long (nullable = true)
+    # |-- name: string (nullable = true)
+
+    # Creates a temporary view using the DataFrame
+    peopleDF.createOrReplaceTempView("people")
+
+    # SQL statements can be run by using the sql methods provided by spark
+    teenagerNamesDF = spark.sql("SELECT name FROM people WHERE age BETWEEN 13 AND 19")
+    teenagerNamesDF.show()
+    # +------+
+    # |  name|
+    # +------+
+    # |Justin|
+    # +------+
+
+    # Alternatively, a DataFrame can be created for a JSON dataset represented by
+    # an RDD[String] storing one JSON object per string
+    jsonStrings = ['{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}']
+    otherPeopleRDD = sc.parallelize(jsonStrings)
+    otherPeople = spark.read.json(otherPeopleRDD)
+    otherPeople.show()
+    # +---------------+----+
+    # |        address|name|
+    # +---------------+----+
+    # |[Columbus,Ohio]| Yin|
+    # +---------------+----+
+    # $example off:json_dataset$
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
@@ -74,5 +149,7 @@ if __name__ == "__main__":
 
     runBasicDataSourceExample(spark)
     runBasicParquetExample(spark)
+    runParquetSchemaMergingExample(spark)
+    runJsonDatasetExample(spark)
 
     spark.stop()
