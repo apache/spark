@@ -316,17 +316,17 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
 #' @return \code{summary} returns a list containing
-#'         \code{docConcentration}, concentration parameter (commonly named \code{alpha}) for the
-#'         prior placed on documents distributions over topics (\code{theta});
-#'         \code{topicConcentration}, concentration parameter (commonly named \{beta} or \{eta}) for
-#'         the prior placed on topic distributions over terms;
+#'         \code{docConcentration}, concentration parameter commonly named \code{alpha} for the
+#'         prior placed on documents distributions over topics \code{theta};
+#'         \code{topicConcentration}, concentration parameter commonly named \code{beta} or
+#'         \code{eta} for the prior placed on topic distributions over terms;
 #'         \code{logLikelihood}, log likelihood of the entire corpus;
 #'         \code{logPerplexity}, log perplexity;
 #'         \code{isDistributed}, TRUE for distribuetd model while FALSE for local model;
 #'         \code{vocabSize}, number of terms in the corpus;
 #'         \code{topics}, top 10 terms and their weights of all topics;
 #'         \code{vocabulary}, whole terms of the training corpus, NULL if libsvm format file used as
-#          training set.
+#'         training set.
 #' @rdname spark.lda
 #' @export
 #' @note summary(LDAModel) since 2.1.0
