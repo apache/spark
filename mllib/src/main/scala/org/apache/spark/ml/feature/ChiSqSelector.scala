@@ -42,8 +42,8 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   /**
    * Number of features that selector will select (ordered by statistic value descending). If the
-   * number of features is < numTopFeatures, then this will select all features. The default value
-   * of numTopFeatures is 50.
+   * number of features is less than numTopFeatures, then this will select all features.
+   * The default value of numTopFeatures is 50.
    * @group param
    */
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
