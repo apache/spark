@@ -331,7 +331,7 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
-          function(object, dict, ...) {
+          function(object, ...) {
             jobj <- object@jobj
             docConcentration <- callJMethod(jobj, "docConcentration")
             topicConcentration <- callJMethod(jobj, "topicConcentration")
