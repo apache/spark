@@ -35,6 +35,9 @@ import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
  *     shuffle service. It returns a StreamHandle.
  *   - UploadBlock is only handled by the NettyBlockTransferService.
  *   - RegisterExecutor is only handled by the external shuffle service.
+ *   - StreamHandle is only handled by the OneForOneBlockFetcher.
+ *   - RegisterDriver is only handled by the MesosExternalShuffleService.
+ *   - HearBeat is only handled by the MesosExternalShuffleService.
  */
 public abstract class BlockTransferMessage implements Encodable {
   protected abstract Type type();
