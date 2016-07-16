@@ -41,7 +41,7 @@ public class SparkLauncherSuite {
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
-  private static SparkLauncher launcher;
+  private SparkLauncher launcher;
 
   @Before
   public void configureLauncher() {
@@ -94,11 +94,10 @@ public class SparkLauncherSuite {
   @Test(expected=IllegalStateException.class)
   public void testRedirectTwiceFails() throws Exception {
     launcher.setAppResource("fake-resource.jar")
-            .setMainClass("my.fake.class.Fake")
-            .redirectError()
-            .redirectError(ProcessBuilder.Redirect.PIPE)
-            .launch();
-    fail();
+      .setMainClass("my.fake.class.Fake")
+      .redirectError()
+      .redirectError(ProcessBuilder.Redirect.PIPE)
+      .launch();
   }
 
   @Test(expected=IllegalStateException.class)
@@ -108,7 +107,6 @@ public class SparkLauncherSuite {
             .redirectToLog("fakeLog")
             .redirectError(ProcessBuilder.Redirect.PIPE)
             .launch();
-    fail();
   }
 
   @Test

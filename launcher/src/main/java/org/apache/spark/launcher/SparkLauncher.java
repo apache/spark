@@ -560,11 +560,11 @@ public class SparkLauncher {
 
     // Only one of redirectError and redirectError(...) can be specified.
     // Similarly, if redirectToLog is specified, no other redirections should be specified.
-    checkState(!redirectErrorStream || (redirectErrorStream && errorStream == null),
-            "Cannot specify both redirectError() and redirectError(...) ");
+    checkState(!redirectErrorStream || errorStream == null,
+      "Cannot specify both redirectError() and redirectError(...) ");
     checkState(!redirectToLog ||
-            (redirectToLog && !redirectErrorStream && errorStream == null && outputStream == null),
-            "Cannot used redirectToLog() in conjunction with other redirection methods.");
+      (!redirectErrorStream && errorStream == null && outputStream == null),
+      "Cannot used redirectToLog() in conjunction with other redirection methods.");
 
     if (redirectErrorStream || redirectToLog) {
       pb.redirectErrorStream(true);
