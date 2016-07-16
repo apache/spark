@@ -77,8 +77,8 @@ case class Percentile(
   override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   override def initialize(buffer: MutableRow): Unit = {
-    //The counts OpenHashMap will contain values of other groups if we don't initialize it here.
-    //Since OpenHashMap doesn't support deletions, we have to create a new instance.
+    // The counts OpenHashMap will contain values of other groups if we don't initialize it here.
+    // Since OpenHashMap doesn't support deletions, we have to create a new instance.
     counts = new OpenHashMap[Number, Long]
   }
 
@@ -105,12 +105,12 @@ case class Percentile(
   }
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    //Eval percentiles and check whether its value is valid.
+    // Eval percentiles and check whether its value is valid.
     val percentiles = evalPercentiles(input)
 
     val key = child.eval(input).asInstanceOf[Number]
 
-    //Null values are ignored when computing percentiles.
+    // Null values are ignored when computing percentiles.
     if (key != null) {
       counts.changeValue(key, 1L, _ + 1L)
     }
@@ -128,8 +128,8 @@ case class Percentile(
     val percentiles = evalPercentiles(buffer)
 
     // Sort all items and generate a sequence, then accumulate the counts
-    var ascOrder = new Ordering[Int](){
-      override def compare(a:Int,b:Int):Int = a - b
+    var ascOrder = new Ordering[Int]() {
+      override def compare(a: Int, b: Int): Int = a - b
     }
     val sortedCounts = counts.toSeq.sortBy(_._1)(new Ordering[Number]() {
       override def compare(a: Number, b: Number): Int =
