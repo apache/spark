@@ -136,7 +136,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("SPARK-2693 udaf aggregates test") {
     checkAnswer(sql("SELECT percentile(key, 1) FROM src LIMIT 1"),
-      sql("SELECT max(key) FROM src").collect().toSeq)
+      sql("SELECT array(max(key)) FROM src").collect().toSeq)
 
     checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)

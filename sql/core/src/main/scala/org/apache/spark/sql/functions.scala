@@ -639,7 +639,9 @@ object functions {
    * @group agg_funcs
    * @since 2.1.0
    */
-  def percentile(e: Column, pc: Double): Column = percentile(e, Seq(pc))
+  def percentile(e: Column, pc: Double): Column = withAggregateFunction {
+    Percentile(e.expr, Literal(pc))
+  }
 
   /**
    * Aggregate function: returns the exact percentile of the column in a group at pc with range

@@ -517,7 +517,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   test("percentile functions") {
     val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a")
     checkAnswer(
-      df.select(percentile($"a", 0.5d), percentile($"a", Seq(0d, 0.75d, 1d))),
+      df.select(percentile($"a", 0.5), percentile($"a", Seq(0, 0.75, 1))),
       Seq(Row(Seq(5.5), Seq(1.0, 26.0, 400.0)))
     )
   }
@@ -525,8 +525,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   test("percentile functions with zero input rows.") {
     val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a").where($"a" < 0)
     checkAnswer(
-      df.select(percentile($"a", 0.5d)),
+      df.select(percentile($"a", 0.5)),
       Seq(Row(Seq.empty))
     )
+  }
+
+  test("percentile functions with empty percentile param") {
+    val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a")
+    val error = intercept[IllegalArgumentException] {
+      df.select(percentile($"a", Seq()))
+    }
   }
 }

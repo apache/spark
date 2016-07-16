@@ -47,11 +47,43 @@ case class Percentile(
     this(child = child, pc = pc, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
   }
 
-  private val percentiles: Seq[Double] = pc match {
-    case Literal(ar: GenericArrayData, _: ArrayType) =>
-      ar.asInstanceOf[GenericArrayData].array.map{ d => d.asInstanceOf[Double]}
-    case _ => Seq.empty
+  private val percentiles: Seq[Number] = pc match {
+    case e: Literal =>
+      analyzePercentile(e)
+    case CreateArray(e: Seq[Expression]) =>
+      analyzePercentile(e)
+    case e: Expression =>
+      analyzePercentile(e.children)
+    case _ => sys.error("Percentiles expression cannot be analyzed.")
   }
+
+  private def analyzePercentile(e: Expression): Seq[Number] = e match {
+    case Literal(ar: GenericArrayData, _: ArrayType) =>
+      ar.asInstanceOf[GenericArrayData].array.map{ d => d.asInstanceOf[Number]}
+    case Literal(d: Any, _: NumericType) =>
+      Seq(d.asInstanceOf[Number])
+    case PrettyAttribute(n: String, _: NumericType) =>
+      Seq(n.toDouble.asInstanceOf[Number])
+    case _ => sys.error("Percentiles expression cannot be analyzed.")
+  }
+
+  private def analyzePercentile(e: Seq[Expression]): Seq[Number] = {
+    e.map { expr =>
+      expr match {
+        case Literal(d: Any, _: NumericType) =>
+          d.asInstanceOf[Number]
+        case PrettyAttribute(n: String, _: NumericType) =>
+          n.toDouble.asInstanceOf[Number]
+        case _ => sys.error("Percentiles expression cannot be analyzed.")
+      }
+    }
+  }
+
+  require(percentiles.size > 0, "Percentiles should not be empty.")
+
+  require(percentiles.forall(percentile =>
+    percentile.doubleValue() >= 0.0 && percentile.doubleValue() <= 1.0),
+    "Percentile value must be within the range of 0 to 1.")
 
   override def prettyName: String = "percentile"
 
@@ -61,7 +93,7 @@ case class Percentile(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  private var counts = new OpenHashMap[Double, Long]()
+  private var counts = new OpenHashMap[Number, Long]
 
   override def children: Seq[Expression] = child :: pc :: Nil
 
@@ -78,11 +110,9 @@ case class Percentile(
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  override val aggBufferAttributes: Seq[AttributeReference] = percentiles.map(percentile =>
-    AttributeReference(percentile.toString, DoubleType)())
+  override val aggBufferAttributes: Seq[AttributeReference] = Nil
 
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
+  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   override def initialize(buffer: MutableRow): Unit = {
     var i = 0
@@ -90,21 +120,13 @@ case class Percentile(
       buffer.setNullAt(mutableAggBufferOffset + i)
       i += 1
     }
+
+    //The counts openhashmap will contain values of other groups if we don't initialize it here.
+    counts = new OpenHashMap[Number, Long]
   }
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val v = child.eval(input)
-
-    val key = v match {
-      case o: Byte => o.toDouble
-      case o: Short => o.toDouble
-      case o: Int => o.toDouble
-      case o: Long => o.toDouble
-      case o: Float => o.toDouble
-      case o: Decimal => o.toDouble
-      case o: Double => o
-      case _ => sys.error("Percentile is restricted to Numeric types only.")
-    }
+    val key = child.eval(input).asInstanceOf[Number]
 
     counts.changeValue(key, 1L, _ + 1L)
   }
@@ -114,30 +136,31 @@ case class Percentile(
   }
 
   override def eval(buffer: InternalRow): Any = {
-    if (percentiles.forall(percentile => percentile >= 0.0 && percentile <= 1.0)) {
-      if (counts.size == 0) {
-        return new GenericArrayData(Seq.empty)
-      }
-
-      // Sort all items and generate a sequence, then accumulate the counts
-      val sortedCounts = counts.toSeq.sortBy(_._1)
-      val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
-        (k1: (Double, Long), k2: (Double, Long)) => (k2._1, k1._2 + k2._2)
-      }.drop(1)
-      val maxPosition = aggreCounts.last._2 - 1
-
-      new GenericArrayData(percentiles.map { percentile =>
-        getPercentile(aggreCounts, maxPosition * percentile)
-      })
-    } else {
-      sys.error("Percentile value must be within the range of 0 to 1.")
+    if (counts.isEmpty) {
+      return new GenericArrayData(Seq.empty)
     }
+    // Sort all items and generate a sequence, then accumulate the counts
+    var ascOrder = new Ordering[Int](){
+      override def compare(a:Int,b:Int):Int = a - b
+    }
+    val sortedCounts = counts.toSeq.sortBy(_._1)(new Ordering[Number]() {
+      override def compare(a: Number, b: Number): Int =
+        scala.math.signum(a.doubleValue() - b.doubleValue()).toInt
+    })
+    val aggreCounts = sortedCounts.scanLeft(sortedCounts.head._1, 0L) {
+      (k1: (Number, Long), k2: (Number, Long)) => (k2._1, k1._2 + k2._2)
+    }.drop(1)
+    val maxPosition = aggreCounts.last._2 - 1
+
+    new GenericArrayData(percentiles.map { percentile =>
+      getPercentile(aggreCounts, maxPosition * percentile.doubleValue()).doubleValue()
+    })
   }
 
   /**
    * Get the percentile value.
    */
-  private def getPercentile(aggreCounts: Seq[(Double, Long)], position: Double): Double = {
+  private def getPercentile(aggreCounts: Seq[(Number, Long)], position: Double): Number = {
     // We may need to do linear interpolation to get the exact percentile
     val lower = position.floor
     val higher = position.ceil
@@ -167,6 +190,7 @@ case class Percentile(
     }
 
     // Linear interpolation to get the exact percentile
-    return (higher - position) * lowerKey + (position - lower) * higherKey
+    return (higher - position) * lowerKey.doubleValue() +
+      (position - lower) * higherKey.doubleValue()
   }
 }
