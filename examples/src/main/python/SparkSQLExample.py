@@ -21,15 +21,15 @@ from __future__ import print_function
 from pyspark.sql import SparkSession
 # $example off:init_session$
 
-# $example on:schema_infer$
+# $example on:schema_inferring$
 # spark is an existing SparkSession.
 from pyspark.sql import Row
-# $example off:schema_infer$
+# $example off:schema_inferring$
 
-# $example on:schema_spec$
+# $example on:programmatic_schema$
 # Import SparkSession and data types
 from pyspark.sql.types import *
-# $example off:schema_spec$
+# $example off:programmatic_schema$
 
 """
 A simple example demonstrating Spark SQL.
@@ -37,26 +37,19 @@ Run with:
   ./bin/spark-submit examples/src/main/python/SparkSQLExample.py
 """
 
-if __name__ == "__main__":
-    # $example on:init_session$
-    spark = SparkSession\
-        .builder\
-        .appName("PythonSQL")\
-        .config("spark.some.config.option", "some-value")\
-        .getOrCreate()
-    # $example off:init_session$
-
+def runBasicDataFrameExample(spark):
     # $example on:create_df$
     # spark is an existing SparkSession
     df = spark.read.json("examples/src/main/resources/people.json")
-
     # Displays the content of the DataFrame to stdout
     df.show()
-    # age  name
-    # null Michael
-    # 30   Andy
-    # 19   Justin
-    # $example off:create_df$
+    # +----+-------+
+    # | age|   name|
+    # +----+-------+
+    # |null|Michael|
+    # |  30|   Andy|
+    # |  19| Justin|
+    # +----+-------+
 
     # $example on:untyped_ops$
     # spark, df are from the previous example
@@ -68,29 +61,41 @@ if __name__ == "__main__":
 
     # Select only the "name" column
     df.select("name").show()
-    # name
-    # Michael
-    # Andy
-    # Justin
+    # +-------+
+    # |   name|
+    # +-------+
+    # |Michael|
+    # |   Andy|
+    # | Justin|
+    # +-------+
 
     # Select everybody, but increment the age by 1
     df.select(df['name'], df['age'] + 1).show()
-    # name    (age + 1)
-    # Michael null
-    # Andy    31
-    # Justin  20
+    # +-------+---------+
+    # |   name|(age + 1)|
+    # +-------+---------+
+    # |Michael|     null|
+    # |   Andy|       31|
+    # | Justin|       20|
+    # +-------+---------+
 
     # Select people older than 21
     df.filter(df['age'] > 21).show()
-    # age name
-    # 30  Andy
+    # +---+----+
+    # |age|name|
+    # +---+----+
+    # | 30|Andy|
+    # +---+----+
 
     # Count people by age
     df.groupBy("age").count().show()
-    # age  count
-    # null 1
-    # 19   1
-    # 30   1
+    # +----+-----+
+    # | age|count|
+    # +----+-----+
+    # |  19|    1|
+    # |null|    1|
+    # |  30|    1|
+    # +----+-----+
     # $example off:untyped_ops$
 
     # $example on:run_sql$
@@ -99,9 +104,17 @@ if __name__ == "__main__":
 
     sqlDF = spark.sql("SELECT * FROM people")
     sqlDF.show()
+    # +----+-------+
+    # | age|   name|
+    # +----+-------+
+    # |null|Michael|
+    # |  30|   Andy|
+    # |  19| Justin|
+    # +----+-------+
     # $example off:run_sql$
 
-    # $example on:schema_infer$
+def runInferSchemaExample(spark):
+    # $example on:schema_inferring$
     sc = spark.sparkContext
 
     # Load a text file and convert each line to a Row.
@@ -121,10 +134,16 @@ if __name__ == "__main__":
     teenNames = teenagers.rdd.map(lambda p: "Name: " + p.name)
     for teenName in teenNames.collect():
         print(teenName)
-    # $example off:schema_infer$
+    # Name: Justin
+    # $example on:schema_inferring$
 
-    # $example on:schema_spec$
-    # parts is from previous example.
+def runProgrammaticSchemaExample(spark):
+    # $example on:programmatic_schema$
+    sc = spark.sparkContext
+
+    # Load a text file and convert each line to a Row.
+    lines = sc.textFile("examples/src/main/resources/people.txt")
+    parts = lines.map(lambda l: l.split(","))
     # Each line is converted to a tuple.
     people = parts.map(lambda p: (p[0], p[1].strip()))
 
@@ -147,37 +166,27 @@ if __name__ == "__main__":
     results = spark.sql("SELECT name FROM people")
 
     results.show()
-    # $example off:schema_spec$
+    # +-------+
+    # |   name|
+    # +-------+
+    # |Michael|
+    # |   Andy|
+    # | Justin|
+    # +-------+
+    # $example off:programmatic_schema$
 
-    # $example on:ds_gen_ls$
-    df = spark.read.load("examples/src/main/resources/users.parquet")
-    df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
-    # $example off:ds_gen_ls$
+if __name__ == "__main__":
+    # $example on:init_session$
+    spark = SparkSession\
+      .builder\
+      .appName("PythonSQL")\
+      .config("spark.some.config.option", "some-value")\
+      .getOrCreate()
+    # $example off:init_session$
 
-    # $example on:ds_man_op$
-    df = spark.read.load("examples/src/main/resources/people.json", format="json")
-    df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
-    # $example off:ds_man_op$
-
-    # $example on:run_sql_file$
-    df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
-    # $example off:run_sql_file$
-
-    # $example on:ld_data_prog$
-    # The DataFrame from the previous example.
-    # DataFrames can be saved as Parquet files, maintaining the schema information.
-    schemaPeople.write.parquet("people.parquet")
-
-    # Read in the Parquet file created above.
-    # Parquet files are self-describing so the schema is preserved.
-    # The result of loading a parquet file is also a DataFrame.
-    parquetFile = spark.read.parquet("people.parquet")
-
-    # Parquet files can also be used to create a temporary view and then used in SQL statements.
-    parquetFile.createOrReplaceTempView("parquetFile")
-    teenagers = spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-    teenagers.show()
-    # $example off:ld_data_prog$
+    runBasicDataFrameExample(spark)
+    runInferSchemaExample(spark)
+    runProgrammaticSchemaExample(spark)
 
     # $example on:schema_merge$
     # spark is from the previous example.
