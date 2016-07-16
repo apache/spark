@@ -25,6 +25,7 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/SqlDataSourceExample.py
 """
 
+
 def runBasicDataSourceExample(spark):
     # $example on:generic_load_save_functions$
     df = spark.read.load("examples/src/main/resources/users.parquet")
@@ -39,6 +40,7 @@ def runBasicDataSourceExample(spark):
     # $example on:direct_sql$
     df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     # $example off:direct_sql$
+
 
 def runBasicParquetExample(spark):
     # $example on:basic_parquet_example$
@@ -65,10 +67,10 @@ def runBasicParquetExample(spark):
 
 if __name__ == "__main__":
     spark = SparkSession \
-      .builder \
-      .appName("PythonSQL") \
-      .config("spark.some.config.option", "some-value") \
-      .getOrCreate()
+        .builder \
+        .appName("PythonSQL") \
+        .config("spark.some.config.option", "some-value") \
+        .getOrCreate()
 
     runBasicDataSourceExample(spark)
     runBasicParquetExample(spark)

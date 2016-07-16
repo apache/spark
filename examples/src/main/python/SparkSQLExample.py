@@ -37,6 +37,7 @@ Run with:
   ./bin/spark-submit examples/src/main/python/SparkSQLExample.py
 """
 
+
 def runBasicDataFrameExample(spark):
     # $example on:create_df$
     # spark is an existing SparkSession
@@ -113,6 +114,7 @@ def runBasicDataFrameExample(spark):
     # +----+-------+
     # $example off:run_sql$
 
+
 def runInferSchemaExample(spark):
     # $example on:schema_inferring$
     sc = spark.sparkContext
@@ -136,6 +138,7 @@ def runInferSchemaExample(spark):
         print(teenName)
     # Name: Justin
     # $example on:schema_inferring$
+
 
 def runProgrammaticSchemaExample(spark):
     # $example on:programmatic_schema$
@@ -178,10 +181,10 @@ def runProgrammaticSchemaExample(spark):
 if __name__ == "__main__":
     # $example on:init_session$
     spark = SparkSession\
-      .builder\
-      .appName("PythonSQL")\
-      .config("spark.some.config.option", "some-value")\
-      .getOrCreate()
+        .builder\
+        .appName("PythonSQL")\
+        .config("spark.some.config.option", "some-value")\
+        .getOrCreate()
     # $example off:init_session$
 
     runBasicDataFrameExample(spark)
