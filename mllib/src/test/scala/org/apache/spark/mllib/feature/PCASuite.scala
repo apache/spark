@@ -43,7 +43,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val pca_transform = pca.transform(dataRDD).collect()
     val mat_multiply = mat.multiply(pc).rows.collect()
 
-    pca_transform.zip(mat_multiply).foreach { case (calculated: Vector, expected: Vector) =>
+    pca_transform.zip(mat_multiply).foreach { case (calculated, expected) =>
       assert(calculated ~== expected relTol 1e-8)
     }
     assert(pca.explainedVariance ~== explainedVariance relTol 1e-8)
