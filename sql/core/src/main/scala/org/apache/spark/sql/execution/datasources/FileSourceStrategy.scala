@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.DataSourceScanExec.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
@@ -76,6 +77,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
             a.withName(l.output.find(_.semanticEquals(a)).get.name)
         }
       }
+      println("physical planning")
 
       val partitionColumns =
         l.resolve(
@@ -95,8 +97,6 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val afterScanFilters = filterSet -- partitionKeyFilters
       logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
 
-      val selectedPartitions = fsRelation.location.listFiles(partitionKeyFilters.toSeq)
-
       val filterAttributes = AttributeSet(afterScanFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
@@ -111,22 +111,49 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
       logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
-      val readFile: (PartitionedFile) => Iterator[InternalRow] =
-        fsRelation.fileFormat.buildReaderWithPartitionValues(
-          sparkSession = fsRelation.sparkSession,
-          dataSchema = fsRelation.dataSchema,
-          partitionSchema = fsRelation.partitionSchema,
-          requiredSchema = prunedDataSchema,
-          filters = pushedDownFilters,
-          options = fsRelation.options,
-          hadoopConf =
-            fsRelation.sparkSession.sessionState.newHadoopConfWithOptions(fsRelation.options))
+      val outputAttributes = readDataColumns ++ partitionColumns
 
-      val rdd = fsRelation.bucketSpec match {
-        case Some(bucketing) if fsRelation.sparkSession.sessionState.conf.bucketingEnabled =>
-          createBucketedReadRDD(bucketing, readFile, selectedPartitions, fsRelation)
-        case _ =>
-          createNonBucketedReadRDD(readFile, selectedPartitions, fsRelation)
+      val outputPartitioning = {
+        val bucketSpec = if (fsRelation.sparkSession.sessionState.conf.bucketingEnabled) {
+          fsRelation.bucketSpec
+        } else {
+          None
+        }
+        bucketSpec.map { spec =>
+          val numBuckets = spec.numBuckets
+          val bucketColumns = spec.bucketColumnNames.flatMap { n =>
+            outputAttributes.find(_.name == n)
+          }
+          if (bucketColumns.size == spec.bucketColumnNames.size) {
+            HashPartitioning(bucketColumns, numBuckets)
+          } else {
+            UnknownPartitioning(0)
+          }
+        }.getOrElse {
+          UnknownPartitioning(0)
+        }
+      }
+
+      val buildScan = () => {
+        val selectedPartitions = fsRelation.location.listFiles(partitionKeyFilters.toSeq)
+
+        val readFile: (PartitionedFile) => Iterator[InternalRow] =
+          fsRelation.fileFormat.buildReaderWithPartitionValues(
+            sparkSession = fsRelation.sparkSession,
+            dataSchema = fsRelation.dataSchema,
+            partitionSchema = fsRelation.partitionSchema,
+            requiredSchema = prunedDataSchema,
+            filters = pushedDownFilters,
+            options = fsRelation.options,
+            hadoopConf =
+              fsRelation.sparkSession.sessionState.newHadoopConfWithOptions(fsRelation.options))
+
+        fsRelation.bucketSpec match {
+          case Some(bucketing) if fsRelation.sparkSession.sessionState.conf.bucketingEnabled =>
+            createBucketedReadRDD(bucketing, readFile, selectedPartitions, fsRelation)
+          case _ =>
+            createNonBucketedReadRDD(readFile, selectedPartitions, fsRelation)
+        }
       }
 
       val meta = Map(
@@ -136,10 +163,11 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         INPUT_PATHS -> fsRelation.location.paths.mkString(", "))
 
       val scan =
-        DataSourceScanExec.create(
-          readDataColumns ++ partitionColumns,
-          rdd,
+        DataSourceScanExec.createFileScan(
+          outputAttributes,
+          buildScan,
           fsRelation,
+          outputPartitioning,
           meta,
           table)
 
