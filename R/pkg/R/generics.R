@@ -1285,7 +1285,7 @@ setGeneric("spark.lda", function(data, ...) { standardGeneric("spark.lda") })
 
 #' @rdname spark.lda
 #' @export
-setGeneric("spark.posterior", function(object, data, ...) { standardGeneric("spark.posterior") })
+setGeneric("spark.posterior", function(object, newData, ...) { standardGeneric("spark.posterior") })
 
 #' @rdname spark.lda
 #' @export

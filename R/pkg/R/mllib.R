@@ -301,16 +301,15 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 
 # Returns posterior probabilities from a Latent Dirichlet Allocation model produced by spark.lda()
 
-#' @param object An LDA model produced by spark.lda()
-#' @param data A SparkDataFrame for testing
+#' @param newData A SparkDataFrame for testing
 #' @return \code{spark.posterior} returns a SparkDataFrame containing posterior probabilities
 #'         vectors named "topicDistribution"
 #' @rdname spark.lda
 #' @export
 #' @note spark.posterior(LDAModel) since 2.1.0
-setMethod("spark.posterior", signature(object = "LDAModel", data = "SparkDataFrame"),
-          function(object, data) {
-            return(dataFrame(callJMethod(object@jobj, "transform", data@sdf)))
+setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkDataFrame"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
 # Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
@@ -352,17 +351,15 @@ setMethod("summary", signature(object = "LDAModel"),
 
 # Returns the log perplexity of a Latent Dirichlet Allocation model produced by \code{spark.lda}
 
-#' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
-#' @param data A SparkDataFrame for computing
 #' @return \code{spark.perplexity} returns the log perplexity of given SparkDataFrame, or the log
 #'         perplexity of the training data if missing argument "data".
 #' @rdname spark.lda
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("spark.perplexity", signature(object = "LDAModel"),
-          function(object, data) {
-            return(ifelse(missing(data), callJMethod(object@jobj, "logPerplexity"),
-                   callJMethod(object@jobj, "computeLogPerplexity", data@sdf)))
+          function(object, newData) {
+            return(ifelse(missing(newData), callJMethod(object@jobj, "logPerplexity"),
+                   callJMethod(object@jobj, "computeLogPerplexity", newData@sdf)))
          })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
