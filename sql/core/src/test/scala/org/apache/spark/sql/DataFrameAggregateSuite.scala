@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -532,8 +533,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("percentile functions with empty percentile param") {
     val df = Seq(1, 3, 3, 6, 5, 4, 17, 38, 29, 400).toDF("a")
-    val error = intercept[IllegalArgumentException] {
-      df.select(percentile($"a", Seq()))
+    val error = intercept[SparkException] {
+      df.select(percentile($"a", Seq())).collect()
     }
+    assert(error.getMessage.contains("Percentiles should not be empty."))
   }
 }
