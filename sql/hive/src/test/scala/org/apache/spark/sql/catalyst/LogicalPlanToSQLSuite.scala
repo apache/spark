@@ -1104,34 +1104,242 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
-  test("broadcast hint") {
-    checkHiveQl(
+  test("broadcast hint on single table") {
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0",
       """
-        |SELECT /*+ MAPJOIN(parquet_t1) */ *
-        |FROM parquet_t1
-        |JOIN parquet_t2
-        |ON key = a
+        |SELECT `gen_attr` AS `id`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0)
+        |      AS parquet_t0
+        |""".stripMargin)
+
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0, parquet_t0) */ * FROM parquet_t0",
+      """
+        |SELECT `gen_attr` AS `id`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0)
+        |      AS parquet_t0
+        |""".stripMargin)
+
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 as a",
+      """
+        |SELECT `gen_attr` AS `id`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |      FROM ((SELECT `id` AS `gen_attr`
+        |             FROM `default`.`parquet_t0`)
+        |             AS gen_subquery_0)
+        |            AS a)
+        |      AS a
       """.stripMargin)
 
-    checkHiveQl(
+    checkGeneratedSQL(
       """
-        |SELECT /*+ MAPJOIN(parquet_t1, parquet_t2) */ *
-        |FROM parquet_t1
-        |JOIN parquet_t2
-        |ON key = a
+        |SELECT /*+ MAPJOIN(parquet_t0) */ *
+        |FROM (SELECT id tid FROM parquet_t0) T
+        |JOIN (SELECT id uid FROM parquet_t0) U
+        |ON tid=uid
+      """.stripMargin,
+      """
+        |SELECT `gen_attr` AS `tid`, `gen_attr` AS `uid`
+        |FROM (SELECT `gen_attr`, `gen_attr`
+        |      FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr` AS `gen_attr`
+        |            FROM (SELECT `id` AS `gen_attr`
+        |                  FROM `default`.`parquet_t0`)
+        |                  AS gen_subquery_0)
+        |            AS T
+        |            INNER JOIN (SELECT `gen_attr` AS `gen_attr`
+        |                        FROM (SELECT `id` AS `gen_attr`
+        |                              FROM `default`.`parquet_t0`)
+        |                              AS gen_subquery_1)
+        |                        AS U
+        |            ON (`gen_attr` = `gen_attr`))
+        |      AS gen_subquery_2
       """.stripMargin)
+  }
 
-    // Note that the following test case turns into this query because we can not figure out the
-    // original position of broadcast comment hints.
-    //    SELECT *
-    //    FROM (SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t1)
-    //    JOIN (SELECT /*+ MAPJOIN(parquet_t2) */ * FROM parquet_t2)
-    checkHiveQl(
+  test("broadcast hint on multiple tables") {
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0, parquet_t1",
       """
-        |SELECT /*+ MAPJOIN(parquet_t2) */ *
-        |FROM (SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t1)
-        |JOIN (SELECT * FROM parquet_t2)
-        |ON key = a
+        |SELECT `gen_attr` AS `id`, `gen_attr` AS `key`, `gen_attr` AS `value`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`, `gen_attr`, `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0
+        |           INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                       FROM `default`.`parquet_t1`)
+        |                       AS gen_subquery_1)
+        |      AS gen_subquery_2
       """.stripMargin)
+  }
+
+  test("broadcast hint on multiple tables 2") {
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t0, parquet_t1",
+      """
+        |SELECT `gen_attr` AS `id`, `gen_attr` AS `key`, `gen_attr` AS `value`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t1) */ `gen_attr`, `gen_attr`, `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0
+        |           INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                       FROM `default`.`parquet_t1`)
+        |                       AS gen_subquery_1)
+        |      AS gen_subquery_2
+      """.stripMargin)
+  }
+
+  test("broadcast hint on multiple tables 3") {
+    checkGeneratedSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t0) */ *
+        |FROM (SELECT id tid FROM parquet_t0) T
+        |JOIN (SELECT key uid FROM parquet_t1) U
+        |ON tid=uid
+      """.stripMargin,
+      """
+        |SELECT `gen_attr` AS `tid`, `gen_attr` AS `uid`
+        |FROM (SELECT `gen_attr`, `gen_attr`
+        |      FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr` AS `gen_attr`
+        |            FROM (SELECT `id` AS `gen_attr`
+        |                  FROM `default`.`parquet_t0`)
+        |                  AS gen_subquery_0)
+        |            AS T
+        |           INNER JOIN (SELECT `gen_attr` AS `gen_attr`
+        |                       FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                             FROM `default`.`parquet_t1`)
+        |                             AS gen_subquery_1)
+        |                       AS U
+        |           ON (`gen_attr` = `gen_attr`))
+        |      AS gen_subquery_2
+      """.stripMargin)
+  }
+
+  test("broadcast hint on multiple tables 4") {
+    checkGeneratedSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1) */ tid
+        |FROM (SELECT id tid FROM parquet_t0) T
+        |JOIN (SELECT key uid FROM parquet_t1) U
+        |ON tid=uid
+      """.stripMargin,
+      """
+        |SELECT `gen_attr` AS `tid`
+        |FROM (SELECT `gen_attr`
+        |      FROM (SELECT `gen_attr` AS `gen_attr`
+        |            FROM (SELECT `id` AS `gen_attr`
+        |                  FROM `default`.`parquet_t0`)
+        |                  AS gen_subquery_0)
+        |            AS T
+        |      INNER JOIN (SELECT /*+ MAPJOIN(parquet_t1) */ `gen_attr` AS `gen_attr`
+        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                        FROM `default`.`parquet_t1`)
+        |                        AS gen_subquery_1)
+        |                  AS U
+        |      ON (`gen_attr` = `gen_attr`)) AS T
+      """.stripMargin)
+  }
+
+  test("broadcast hints on multiple tables") {
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0, parquet_t1) */ * FROM parquet_t0, parquet_t1",
+      """
+        |SELECT `gen_attr` AS `id`, `gen_attr` AS `key`, `gen_attr` AS `value`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0, parquet_t1) */ `gen_attr`, `gen_attr`, `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0
+        |           INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                       FROM `default`.`parquet_t1`)
+        |                       AS gen_subquery_1)
+        |      AS gen_subquery_2
+      """.stripMargin)
+  }
+
+  test("broadcast hint with filter") {
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 WHERE id < 10",
+      """
+        |SELECT `gen_attr` AS `id`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0
+        |      WHERE (`gen_attr` < CAST(10 AS BIGINT)))
+        |      AS parquet_t0
+      """.stripMargin)
+  }
+
+  test("broadcast hint with filter/limit") {
+    checkGeneratedSQL(
+      "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 WHERE id < 10 LIMIT 10",
+      """
+        |SELECT `gen_attr` AS `id`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |      FROM (SELECT `id` AS `gen_attr`
+        |            FROM `default`.`parquet_t0`)
+        |            AS gen_subquery_0
+        |      WHERE (`gen_attr` < CAST(10 AS BIGINT))
+        |      LIMIT 10)
+        |      AS parquet_t0
+      """.stripMargin)
+  }
+
+  test("broadcast hint with generators") {
+    checkGeneratedSQL(
+      "SELECT * FROM (SELECT /*+ MAPJOIN(parquet_t0) */ EXPLODE(ARRAY(1,2,3)) FROM parquet_t0) T",
+      """
+        |SELECT `gen_attr` AS `col`
+        |FROM (SELECT `gen_attr`
+        |      FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |            FROM (SELECT `id` AS `gen_attr`
+        |                  FROM `default`.`parquet_t0`)
+        |                  AS gen_subquery_0
+        |            LATERAL VIEW explode(array(1, 2, 3)) gen_subquery_1 AS `gen_attr`)
+        |            AS T)
+        |      AS T
+      """.stripMargin
+    )
+  }
+
+  test("broadcast hint with groupby/having/orderby") {
+    checkGeneratedSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t0) */ *
+        |FROM parquet_t0
+        |WHERE id > 0
+        |GROUP BY id
+        |HAVING count(*) > 0
+        |ORDER BY id
+      """.stripMargin,
+      """
+        |SELECT `gen_attr` AS `id`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr`
+        |      FROM (SELECT `gen_attr`, count(1) AS `gen_attr`
+        |            FROM (SELECT `id` AS `gen_attr`
+        |                  FROM `default`.`parquet_t0`)
+        |                  AS gen_subquery_0
+        |            WHERE (`gen_attr` > CAST(0 AS BIGINT))
+        |            GROUP BY `gen_attr`
+        |            HAVING (`gen_attr` > CAST(0 AS BIGINT)))
+        |            AS gen_subquery_1
+        |      ORDER BY `gen_attr` ASC)
+        |      AS parquet_t0
+      """.stripMargin
+    )
+  }
+
+  // This will be removed in favor of SPARK-16590.
+  private def checkGeneratedSQL(sqlString: String, expectedString: String): Unit = {
+    val generatedSQL = new SQLBuilder(sql(sqlString)).toSQL
+    val normalizedGenSQL = generatedSQL.replaceAll("gen_attr_\\d+", "gen_attr")
+    assert(normalizedGenSQL == expectedString.replaceAll("[\n]?\\s+", " ").trim())
   }
 }

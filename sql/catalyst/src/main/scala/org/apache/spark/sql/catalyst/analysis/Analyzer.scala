@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogRelation, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -84,10 +84,10 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions,
-      SubstituteHints),
+      EliminateUnions),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
+      SubstituteHints ::
       ResolveReferences ::
       ResolveDeserializer ::
       ResolveNewInstance ::
@@ -1790,8 +1790,6 @@ class Analyzer(
   /**
    * Substitute Hints.
    * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
-   *
-   * This rule should be executed before ResolveRelations rule.
    */
   object SubstituteHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1799,16 +1797,31 @@ class Analyzer(
         case h @ Hint(name, parameters, child)
             if Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN").contains(name.toUpperCase) =>
           var resolvedChild = child
-          for (table <- parameters) {
-            var stop = false
-            resolvedChild = resolvedChild.transformDown {
-              case r @ BroadcastHint(UnresolvedRelation(t, _))
-                  if !stop && resolver(t.table, table) =>
-                stop = true
-                r
-              case r @ UnresolvedRelation(t, _) if !stop && resolver(t.table, table) =>
-                stop = true
-                BroadcastHint(r)
+
+          for (param <- parameters) {
+            val names = param.split("\\.")
+            val tid = if (names.length > 1) {
+              TableIdentifier(names(1), Some(names(0)))
+            } else {
+              TableIdentifier(param, None)
+            }
+            try {
+              catalog.lookupRelation(tid)
+
+              var stop = false
+              resolvedChild = resolvedChild.transformDown {
+                case r @ BroadcastHint(SubqueryAlias(t, _))
+                  if !stop && resolver(t, tid.identifier) =>
+                  stop = true
+                  r
+                case r @ SubqueryAlias(t, _) if !stop && resolver(t, tid.identifier) =>
+                  stop = true
+                  BroadcastHint(r)
+              }
+            } catch {
+              // Hints does not raise exceptions.
+              case _: NoSuchDatabaseException =>
+              case _: NoSuchTableException =>
             }
           }
           resolvedChild

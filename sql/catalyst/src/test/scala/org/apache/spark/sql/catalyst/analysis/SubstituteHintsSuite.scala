@@ -17,192 +17,88 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 
 class SubstituteHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  val a = testRelation.output(0)
+  val b = testRelation2.output(0)
+
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
+      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
       BroadcastHint(testRelation),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
+      Hint("MAPJOIN", Seq("table"), table("TaBlE")),
       BroadcastHint(testRelation),
       caseSensitive = false)
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"), UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
+      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
       BroadcastHint(testRelation))
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("table"), UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL"))),
+      Hint("MAPJOIN", Seq("table"), table("TaBlE")),
       testRelation)
   }
 
   test("single hint") {
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        Project(Seq(UnresolvedAttribute("a")),
-          UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")))),
-      Project(testRelation.output, BroadcastHint(testRelation)))
+      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").select(a)),
+      BroadcastHint(testRelation).select(a))
 
     checkAnalysis(
-      Hint("MAPJOIN", Seq("TaBlE"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"),
-            UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          BroadcastHint(testRelation),
-          testRelation2,
-          Inner,
-          None
-        )))
+      Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
+      BroadcastHint(testRelation).join(testRelation2).select(a))
 
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE2"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"),
-            UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          testRelation,
-          BroadcastHint(testRelation2),
-          Inner,
-          None
-        )))
+        table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
+      testRelation.join(BroadcastHint(testRelation2)).select(a))
   }
 
   test("single hint with multiple parameters") {
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE", "TaBlE"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"),
-            UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          BroadcastHint(testRelation),
-          testRelation2,
-          Inner,
-          None
-        )))
+        table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
+      BroadcastHint(testRelation).join(testRelation2).select(a))
 
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE", "TaBlE2"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"),
-            UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          BroadcastHint(testRelation),
-          BroadcastHint(testRelation2),
-          Inner,
-          None
-        )))
+        table("TaBlE").as("t").join(table("TaBlE2").as("u")).select(a)),
+      BroadcastHint(testRelation).join(BroadcastHint(testRelation2)).select(a))
   }
 
   test("duplicated nested hints are transformed into one") {
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            Hint("MAPJOIN", Seq("TaBlE"),
-              Project(Seq(UnresolvedAttribute("t.a")),
-                UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"))),
-            UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          Project(testRelation.output,
-            BroadcastHint(testRelation)),
-          testRelation2,
-          Inner,
-          None
-        )))
+        Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").as("t").select('a))
+          .join(table("TaBlE2").as("u")).select(a)),
+      BroadcastHint(testRelation).select(a).join(testRelation2).select(a))
 
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE2"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            Project(Seq(UnresolvedAttribute("t.a")),
-              UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t")),
-            Hint("MAPJOIN", Seq("TaBlE2"),
-              Project(Seq(UnresolvedAttribute("u.a")),
-                UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"))),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          Project(testRelation.output, testRelation),
-          Project(Seq(testRelation2.output(0)), BroadcastHint(testRelation2)),
-          Inner,
-          None
-        )))
+        table("TaBlE").as("t").select(a)
+          .join(Hint("MAPJOIN", Seq("TaBlE2"), table("TaBlE2").as("u").select(b))).select(a)),
+      testRelation.select(a).join(BroadcastHint(testRelation2).select(b)).select(a))
   }
 
   test("distinct nested two hints are handled separately") {
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE2"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            Hint("MAPJOIN", Seq("TaBlE"),
-              Project(Seq(UnresolvedAttribute("t.a")),
-                UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"))),
-            UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          Project(testRelation.output,
-            BroadcastHint(testRelation)),
-          BroadcastHint(testRelation2),
-          Inner,
-          None
-        )))
+        Hint("MAPJOIN", Seq("TaBlE"), table("TaBlE").as("t").select(a))
+          .join(table("TaBlE2").as("u")).select(a)),
+      BroadcastHint(testRelation).select(a).join(BroadcastHint(testRelation2)).select(a))
 
     checkAnalysis(
       Hint("MAPJOIN", Seq("TaBlE"),
-        Project(Seq(UnresolvedAttribute("t.a")),
-          Join(
-            UnresolvedRelation(TableIdentifier("TaBlE"), Some("TbL")).as("t"),
-            Hint("MAPJOIN", Seq("TaBlE2"),
-              Project(Seq(UnresolvedAttribute("u.a")),
-                UnresolvedRelation(TableIdentifier("TaBlE2"), Some("TbL")).as("u"))),
-            Inner,
-            None
-          ))),
-      Project(testRelation.output,
-        Join(
-          BroadcastHint(testRelation),
-          Project(Seq(testRelation2.output(0)), BroadcastHint(testRelation2)),
-          Inner,
-          None
-        )))
+        table("TaBlE").as("t")
+          .join(Hint("MAPJOIN", Seq("TaBlE2"), table("TaBlE2").as("u").select(b))).select(a)),
+      BroadcastHint(testRelation).join(BroadcastHint(testRelation2).select(b)).select(a))
   }
 }
