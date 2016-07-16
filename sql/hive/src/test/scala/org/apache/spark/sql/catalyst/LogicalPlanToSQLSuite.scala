@@ -1103,4 +1103,35 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       checkSQL("select * from orc_t", "select_orc_table")
     }
   }
+
+  test("broadcast hint") {
+    checkHiveQl(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1) */ *
+        |FROM parquet_t1
+        |JOIN parquet_t2
+        |ON key = a
+      """.stripMargin)
+
+    checkHiveQl(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1, parquet_t2) */ *
+        |FROM parquet_t1
+        |JOIN parquet_t2
+        |ON key = a
+      """.stripMargin)
+
+    // Note that the following test case turns into this query because we can not figure out the
+    // original position of broadcast comment hints.
+    //    SELECT *
+    //    FROM (SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t1)
+    //    JOIN (SELECT /*+ MAPJOIN(parquet_t2) */ * FROM parquet_t2)
+    checkHiveQl(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t2) */ *
+        |FROM (SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t1)
+        |JOIN (SELECT * FROM parquet_t2)
+        |ON key = a
+      """.stripMargin)
+  }
 }

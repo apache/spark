@@ -208,6 +208,9 @@ class SQLBuilder private (
     case OneRowRelation =>
       ""
 
+    case BroadcastHint(child) =>
+      toSQL(child)
+
     case _ =>
       throw new UnsupportedOperationException(s"unsupported plan $node")
   }
@@ -220,9 +223,31 @@ class SQLBuilder private (
   private def build(segments: String*): String =
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
+  /**
+   * Collect broadcasted tables which are not inside other Project plan.
+   */
+  private def collectBroadcastedTables(plan: LogicalPlan): Seq[String] = plan match {
+    case t: SQLTable => Seq(t.table)
+    case _: Project => Seq.empty
+    case plan => plan.children.flatMap(collectBroadcastedTables)
+  }
+
+  /**
+   * Build broadcast hint comment string.
+   */
+  private def buildBroadcastHintComment(plan: Project): String = {
+    val broadcastedTables = plan.children.flatMap(collectBroadcastedTables)
+    if (broadcastedTables.isEmpty) {
+      ""
+    } else {
+      s"/*+ MAPJOIN(${broadcastedTables.mkString(", ")}) */"
+    }
+  }
+
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
     build(
       "SELECT",
+      buildBroadcastHintComment(plan),
       if (isDistinct) "DISTINCT" else "",
       plan.projectList.map(_.sql).mkString(", "),
       if (plan.child == OneRowRelation) "" else "FROM",
