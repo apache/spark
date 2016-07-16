@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Basic Statistics - spark.mllib
-displayTitle: Basic Statistics - spark.mllib
+title: Basic Statistics - RDD-based API
+displayTitle: Basic Statistics - RDD-based API
 ---
 
 * Table of contents
