@@ -455,6 +455,16 @@ class PlanParserSuite extends PlanTest {
     }.getMessage
     assert(m.contains("no viable alternative at input"))
 
+    // Hive compatibility: No database.
+    val m2 = intercept[ParseException] {
+      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t;")
+    }.getMessage
+    assert(m2.contains("no viable alternative at input"))
+
+    comparePlans(
+      parsePlan("SELECT /*+ HINT */ * FROM t"),
+      Hint("HINT", Seq.empty, table("t")).select(star()))
+
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
       Hint("HINT", Seq.empty, table("t")).select(star()))

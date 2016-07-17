@@ -201,7 +201,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
     val correct_answer =
       tbl_a.as("tbl_a").as("A")
-        .join(broadcast(tbl_b.as("tbl_b").as("B")), $"B.id" === $"A.id", "inner")
+        .join(broadcast(tbl_b.as("tbl_b")).as("B"), $"B.id" === $"A.id", "inner")
         .join(tbl_b.as("tbl_b").as("XA")
           .join(tbl_c.as("tbl_c").as("XB"), $"XB.id" === $"XA.id", "leftsemi")
           .select("XA.id").as("C"), $"C.id" === $"A.id", "inner")
@@ -234,10 +234,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       """.stripMargin).queryExecution.analyzed
 
     val correct_answer =
-      broadcast(tbl_a.as("tbl_a").as("A"))
+      broadcast(tbl_a.as("tbl_a")).as("A")
         .join(tbl_b.as("tbl_b").as("B"), $"B.id" === $"A.id", "inner")
         .join(tbl_b.as("tbl_b").as("XA")
-          .join(broadcast(tbl_c.as("tbl_c").as("XB")), $"XB.id" === $"XA.id", "leftsemi")
+          .join(broadcast(tbl_c.as("tbl_c")).as("XB"), $"XB.id" === $"XA.id", "leftsemi")
             .select("XA.id").as("C"), $"C.id" === $"A.id", "inner")
         .select(col("*")).logicalPlan
 
