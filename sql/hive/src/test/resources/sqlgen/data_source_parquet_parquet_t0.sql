@@ -1,0 +1,1 @@
+SELECT `gen_attr` AS `id` FROM (SELECT `gen_attr` FROM (SELECT `id` AS `gen_attr` FROM `default`.`parquet_parquet_t0`) AS gen_subquery_0) AS parquet_parquet_t0

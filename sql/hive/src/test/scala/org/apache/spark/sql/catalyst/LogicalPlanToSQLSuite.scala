@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Column
@@ -76,22 +79,29 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
+  // Used for generating new query answer files by saving
+  private val saveQuery = false
+
   /**
    * Compare the generated SQL with the expected answer string.
    * Note that there exists a normalization for both arguments for the convenience.
    * - Remove the id from the generated attributes, e.g., `gen_attr_1` -> `gen_attr`.
-   * - Multiple spaces are replaced into a single space.
-   * - New line characters are replaced into space.
-   * - Trim the left and right finally.
    */
-  private def checkSQLStructure(convertedSQL: String, expectedString: String): Unit = {
-    val normalizedGenSQL = convertedSQL
-      .replaceAll("`gen_attr_\\d+`", "`gen_attr`")
-      .replaceAll("  ", " ")
-    assert(normalizedGenSQL == expectedString.replaceAll("[ \n]+", " ").trim())
+  private def checkSQLStructure(convertedSQL: String, answerFile: String): Unit = {
+    val normalizedGenSQL = convertedSQL.replaceAll("`gen_attr_\\d+`", "`gen_attr`")
+    if (answerFile != null) {
+      val path = s"src/test/resources/sqlgen/$answerFile.sql"
+      if (saveQuery) {
+        Files.write(Paths.get(path), normalizedGenSQL.getBytes(StandardCharsets.UTF_8))
+      } else {
+        val answerSQL = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
+        val normalizedExpectSQL = answerSQL.replaceAll("`gen_attr_\\d+`", "`gen_attr`")
+        assert(normalizedGenSQL == normalizedExpectSQL)
+      }
+    }
   }
 
-  private def checkHiveQl(hiveQl: String, expectedString: String = null): Unit = {
+  private def checkHiveQl(hiveQl: String, answerFile: String = null): Unit = {
     val df = sql(hiveQl)
 
     val convertedSQL = try new SQLBuilder(df).toSQL catch {
@@ -107,7 +117,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
            """.stripMargin, e)
     }
 
-    if (expectedString != null) checkSQLStructure(convertedSQL, expectedString)
+    checkSQLStructure(convertedSQL, answerFile)
 
     try {
       checkAnswer(sql(convertedSQL), df)
@@ -128,74 +138,23 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("in") {
-    checkHiveQl("SELECT id FROM parquet_t0 WHERE id IN (1, 2, 3)",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0
-        |      WHERE (CAST(`gen_attr` AS BIGINT)
-        |             IN (CAST(1 AS BIGINT), CAST(2 AS BIGINT), CAST(3 AS BIGINT))))
-        |      AS parquet_t0
-      """.stripMargin)
+    checkHiveQl("SELECT id FROM parquet_t0 WHERE id IN (1, 2, 3)", "in")
   }
 
   test("not in") {
-    checkHiveQl("SELECT id FROM t0 WHERE id NOT IN (1, 2, 3)",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr` FROM `default`.`t0`) AS gen_subquery_0
-        |      WHERE (NOT (CAST(`gen_attr` AS BIGINT)
-        |                  IN (CAST(1 AS BIGINT), CAST(2 AS BIGINT), CAST(3 AS BIGINT)))))
-        |      AS t0
-      """.stripMargin)
+    checkHiveQl("SELECT id FROM t0 WHERE id NOT IN (1, 2, 3)", "not_in")
   }
 
   test("not like") {
-    checkHiveQl("SELECT id FROM t0 WHERE id + 5 NOT LIKE '1%'",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`t0`)
-        |            AS gen_subquery_0
-        |      WHERE (NOT CAST((`gen_attr` + CAST(5 AS BIGINT)) AS STRING) LIKE "1%"))
-        |      AS t0
-      """.stripMargin)
+    checkHiveQl("SELECT id FROM t0 WHERE id + 5 NOT LIKE '1%'", "not_like")
   }
 
   test("aggregate function in having clause") {
-    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key HAVING MAX(key) > 0",
-      """
-        |SELECT `gen_attr` AS `count(value)`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT count(`gen_attr`) AS `gen_attr`, max(`gen_attr`) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0
-        |            GROUP BY `gen_attr`
-        |            HAVING (`gen_attr` > CAST(0 AS BIGINT)))
-        |            AS gen_subquery_1)
-        |      AS gen_subquery_2
-      """.stripMargin)
+    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key HAVING MAX(key) > 0", "agg1")
   }
 
   test("aggregate function in order by clause") {
-    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY MAX(key)",
-      """
-        |SELECT `gen_attr` AS `count(value)`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT count(`gen_attr`) AS `gen_attr`, max(`gen_attr`) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0
-        |            GROUP BY `gen_attr`
-        |            ORDER BY `gen_attr` ASC)
-        |            AS gen_subquery_1)
-        |      AS gen_subquery_2
-      """.stripMargin)
+    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY MAX(key)", "agg2")
   }
 
   // When there are multiple aggregate functions in ORDER BY clause, all of them are extracted into
@@ -203,54 +162,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   // execution since these aliases have different expression ID.  But this introduces name collision
   // when converting resolved plans back to SQL query strings as expression IDs are stripped.
   test("aggregate function in order by clause with multiple order keys") {
-    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key, MAX(key)",
-      """
-        |SELECT `gen_attr` AS `count(value)`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT count(`gen_attr`) AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |                   max(`gen_attr`) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0
-        |            GROUP BY `gen_attr`
-        |            ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |            AS gen_subquery_1)
-        |      AS gen_subquery_2
-      """.stripMargin)
+    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key ORDER BY key, MAX(key)", "agg3")
   }
 
   test("type widening in union") {
     checkHiveQl("SELECT id FROM parquet_t0 UNION ALL SELECT CAST(id AS INT) AS id FROM parquet_t0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM ((SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`parquet_t0`)
-        |             AS gen_subquery_0)
-        |      UNION ALL
-        |      (SELECT CAST(CAST(`gen_attr` AS INT) AS BIGINT) AS `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`parquet_t0`)
-        |             AS gen_subquery_1))
-        |     AS parquet_t0
-      """.stripMargin)
+      "type_widening")
   }
 
   test("union distinct") {
-    checkHiveQl("SELECT * FROM t0 UNION SELECT * FROM t0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM ((SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`t0`)
-        |             AS gen_subquery_0)
-        |      UNION DISTINCT
-        |      (SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`t0`)
-        |             AS gen_subquery_1))
-        |     AS t0
-      """.stripMargin)
+    checkHiveQl("SELECT * FROM t0 UNION SELECT * FROM t0", "union_distinct")
   }
 
   test("three-child union") {
@@ -260,168 +181,48 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |UNION ALL SELECT id FROM parquet_t0
         |UNION ALL SELECT id FROM parquet_t0
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM ((SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`parquet_t0`)
-        |             AS gen_subquery_0)
-        |      UNION ALL
-        |      (SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`parquet_t0`)
-        |             AS gen_subquery_1)
-        |      UNION ALL
-        |      (SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`parquet_t0`)
-        |             AS gen_subquery_2))
-        |     AS parquet_t0
-      """.stripMargin)
+      "three_child_union")
   }
 
   test("intersect") {
-    checkHiveQl("SELECT * FROM t0 INTERSECT SELECT * FROM t0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM ((SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`t0`)
-        |             AS gen_subquery_0 )
-        |      INTERSECT
-        |      ( SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`t0`)
-        |             AS gen_subquery_1))
-        |     AS t0
-      """.stripMargin)
+    checkHiveQl("SELECT * FROM t0 INTERSECT SELECT * FROM t0", "intersect")
   }
 
   test("except") {
-    checkHiveQl("SELECT * FROM t0 EXCEPT SELECT * FROM t0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM ((SELECT `gen_attr`
-        |       FROM (SELECT `id` AS `gen_attr`
-        |             FROM `default`.`t0`)
-        |             AS gen_subquery_0 )
-        |      EXCEPT ( SELECT `gen_attr`
-        |              FROM (SELECT `id` AS `gen_attr`
-        |                    FROM `default`.`t0`)
-        |                    AS gen_subquery_1))
-        |     AS t0
-      """.stripMargin)
+    checkHiveQl("SELECT * FROM t0 EXCEPT SELECT * FROM t0", "except")
   }
 
   test("self join") {
-    checkHiveQl("SELECT x.key FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key",
-      """
-        |SELECT `gen_attr` AS `key`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |     INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                 FROM `default`.`parquet_t1`)
-        |                 AS gen_subquery_1
-        |     ON (`gen_attr` = `gen_attr`))
-        |     AS x
-      """.stripMargin)
+    checkHiveQl("SELECT x.key FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key", "self_join")
   }
 
   test("self join with group by") {
     checkHiveQl(
       "SELECT x.key, COUNT(*) FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key group by x.key",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `count(1)`
-        |FROM (SELECT `gen_attr`, count(1) AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |     INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                 FROM `default`.`parquet_t1`)
-        |                 AS gen_subquery_1
-        |     ON (`gen_attr` = `gen_attr`)
-        |     GROUP BY `gen_attr`)
-        |     AS x
-      """.stripMargin)
+      "self_join_with_group_by")
   }
 
   test("case") {
-    // scalastyle:off line.size.limit
     checkHiveQl("SELECT CASE WHEN id % 2 > 0 THEN 0 WHEN id % 2 = 0 THEN 1 END FROM parquet_t0",
-      """
-        |SELECT `gen_attr` AS `CASE WHEN ((id % CAST(2 AS BIGINT)) > CAST(0 AS BIGINT)) THEN 0 WHEN ((id % CAST(2 AS BIGINT)) = CAST(0 AS BIGINT)) THEN 1 END`
-        |FROM (SELECT CASE WHEN ((`gen_attr` % CAST(2 AS BIGINT)) > CAST(0 AS BIGINT)) THEN 0
-        |                  WHEN ((`gen_attr` % CAST(2 AS BIGINT)) = CAST(0 AS BIGINT)) THEN 1
-        |             END AS `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "case")
   }
 
   test("case with else") {
-    checkHiveQl("SELECT CASE WHEN id % 2 > 0 THEN 0 ELSE 1 END FROM parquet_t0",
-      """
-        |SELECT `gen_attr`
-        |       AS `CASE WHEN ((id % CAST(2 AS BIGINT)) > CAST(0 AS BIGINT)) THEN 0 ELSE 1 END`
-        |FROM (SELECT CASE WHEN ((`gen_attr` % CAST(2 AS BIGINT)) > CAST(0 AS BIGINT)) THEN 0
-        |                  ELSE 1
-        |             END AS `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+    checkHiveQl("SELECT CASE WHEN id % 2 > 0 THEN 0 ELSE 1 END FROM parquet_t0", "case_with_else")
   }
 
   test("case with key") {
-    // scalastyle:off line.size.limit
     checkHiveQl("SELECT CASE id WHEN 0 THEN 'foo' WHEN 1 THEN 'bar' END FROM parquet_t0",
-      """
-        |SELECT `gen_attr` AS `CASE WHEN (id = CAST(0 AS BIGINT)) THEN foo WHEN (id = CAST(1 AS BIGINT)) THEN bar END`
-        |FROM (SELECT CASE WHEN (`gen_attr` = CAST(0 AS BIGINT)) THEN "foo"
-        |                  WHEN (`gen_attr` = CAST(1 AS BIGINT)) THEN "bar"
-        |             END AS `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "case_with_key")
   }
 
   test("case with key and else") {
-    // scalastyle:off line.size.limit
     checkHiveQl("SELECT CASE id WHEN 0 THEN 'foo' WHEN 1 THEN 'bar' ELSE 'baz' END FROM parquet_t0",
-      """
-        |SELECT `gen_attr` AS `CASE WHEN (id = CAST(0 AS BIGINT)) THEN foo WHEN (id = CAST(1 AS BIGINT)) THEN bar ELSE baz END`
-        |FROM (SELECT CASE WHEN (`gen_attr` = CAST(0 AS BIGINT)) THEN "foo"
-        |                  WHEN (`gen_attr` = CAST(1 AS BIGINT)) THEN "bar"
-        |                  ELSE "baz"
-        |             END AS `gen_attr`
-        |     FROM
-        |     (SELECT `id` AS `gen_attr`
-        |      FROM `default`.`parquet_t0`)
-        |      AS gen_subquery_0)
-        |     AS gen_subquery_1
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "case_with_key_and_else")
   }
 
   test("select distinct without aggregate functions") {
-    checkHiveQl("SELECT DISTINCT id FROM parquet_t0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT DISTINCT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |      AS gen_subquery_0)
-        |     AS parquet_t0
-      """.stripMargin)
+    checkHiveQl("SELECT DISTINCT id FROM parquet_t0", "select_distinct")
   }
 
   test("rollup/cube #1") {
@@ -447,91 +248,29 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     //   GROUPING SETS (((`t1`.`key` % CAST(5 AS BIGINT))), ())
     checkHiveQl(
       "SELECT count(*) as cnt, key%5, grouping_id() FROM parquet_t1 GROUP BY key % 5 WITH ROLLUP",
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `(key % CAST(5 AS BIGINT))`,
-        |       `gen_attr` AS `grouping_id()`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             grouping_id() AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_1_1")
 
     checkHiveQl(
       "SELECT count(*) as cnt, key%5, grouping_id() FROM parquet_t1 GROUP BY key % 5 WITH CUBE",
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `(key % CAST(5 AS BIGINT))`,
-        |       `gen_attr` AS `grouping_id()`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             grouping_id() AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_1_2")
   }
 
   test("rollup/cube #2") {
     checkHiveQl("SELECT key, value, count(value) FROM parquet_t1 GROUP BY key, value WITH ROLLUP",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `count(value)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             count(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_2_1")
 
     checkHiveQl("SELECT key, value, count(value) FROM parquet_t1 GROUP BY key, value WITH CUBE",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `count(value)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             count(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_2_2")
   }
 
   test("rollup/cube #3") {
     checkHiveQl(
       "SELECT key, count(value), grouping_id() FROM parquet_t1 GROUP BY key, value WITH ROLLUP",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `count(value)`, `gen_attr` AS `grouping_id()`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, count(`gen_attr`) AS `gen_attr`,
-        |             grouping_id() AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_3_1")
 
     checkHiveQl(
       "SELECT key, count(value), grouping_id() FROM parquet_t1 GROUP BY key, value WITH CUBE",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `count(value)`, `gen_attr` AS `grouping_id()`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, count(`gen_attr`) AS `gen_attr`,
-        |             grouping_id() AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_3_2")
   }
 
   test("rollup/cube #4") {
@@ -540,39 +279,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM parquet_t1
         |GROUP BY key % 5, key - 5 WITH ROLLUP
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `k1`, `gen_attr` AS `k2`,
-        |       `gen_attr` AS `grouping_id()`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))),
-        |                    ((`gen_attr` % CAST(5 AS BIGINT))), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_4_1")
 
     checkHiveQl(
       s"""
         |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM parquet_t1
         |GROUP BY key % 5, key - 5 WITH CUBE
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `k1`, `gen_attr` AS `k2`,
-        |       `gen_attr` AS `grouping_id()`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))),
-        |                    ((`gen_attr` % CAST(5 AS BIGINT))), ((`gen_attr` - CAST(5 AS BIGINT))),
-        |                    ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_4_2")
   }
 
   test("rollup/cube #5") {
@@ -582,21 +296,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM (SELECT key, key%2, key - 5 FROM parquet_t1) t GROUP BY key%5, key-5
         |WITH ROLLUP
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `k1`, `gen_attr` AS `k2`, `gen_attr` AS `k3`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
-        |      FROM (SELECT `gen_attr`, (`gen_attr` % CAST(2 AS BIGINT)) AS `gen_attr`,
-        |                   (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0)
-        |            AS t
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))),
-        |                    ((`gen_attr` % CAST(5 AS BIGINT))), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_5_1")
 
     checkHiveQl(
       s"""
@@ -604,143 +304,38 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
         |WITH CUBE
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `k1`, `gen_attr` AS `k2`, `gen_attr` AS `k3`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
-        |      FROM (SELECT `gen_attr`, (`gen_attr` % CAST(2 AS BIGINT)) AS `gen_attr`,
-        |                   (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0)
-        |            AS t
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))),
-        |                    ((`gen_attr` % CAST(5 AS BIGINT))), ((`gen_attr` - CAST(5 AS BIGINT))),
-        |                    ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_5_2")
   }
 
   test("rollup/cube #6") {
     checkHiveQl("SELECT a, b, sum(c) FROM parquet_t2 GROUP BY ROLLUP(a, b) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), ())
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_6_1")
 
     checkHiveQl("SELECT a, b, sum(c) FROM parquet_t2 GROUP BY CUBE(a, b) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ())
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_6_2")
 
     checkHiveQl("SELECT a, b, sum(a) FROM parquet_t2 GROUP BY ROLLUP(a, b) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(a)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), ())
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_6_3")
 
     checkHiveQl("SELECT a, b, sum(a) FROM parquet_t2 GROUP BY CUBE(a, b) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(a)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ())
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC) AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_6_4")
 
     checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH ROLLUP",
-      """
-        |SELECT `gen_attr` AS `(a + b)`, `gen_attr` AS `b`, `gen_attr` AS `sum((a - b))`
-        |FROM (SELECT (`gen_attr` + `gen_attr`) AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum((`gen_attr` - `gen_attr`)) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY (`gen_attr` + `gen_attr`), `gen_attr`
-        |      GROUPING SETS(((`gen_attr` + `gen_attr`), `gen_attr`),
-        |                    ((`gen_attr` + `gen_attr`)), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
-    checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH CUBE")
+      "rollup_cube_6_5")
+
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH CUBE",
+      "rollup_cube_6_6")
   }
 
   test("rollup/cube #7") {
     checkHiveQl("SELECT a, b, grouping_id(a, b) FROM parquet_t2 GROUP BY cube(a, b)",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `grouping_id(a, b)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             grouping_id() AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_7_1")
 
     checkHiveQl("SELECT a, b, grouping(b) FROM parquet_t2 GROUP BY cube(a, b)",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `grouping(b)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             grouping(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_7_2")
 
     checkHiveQl("SELECT a, b, grouping(a) FROM parquet_t2 GROUP BY cube(a, b)",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `grouping(a)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             grouping(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`, `gen_attr`), (`gen_attr`), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_7_3")
   }
 
   test("rollup/cube #8") {
@@ -751,19 +346,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM (SELECT hash(key) as hkey, key as value FROM parquet_t1) t GROUP BY hkey, value-5
          |WITH ROLLUP
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `k1`, `gen_attr` AS `k2`, `gen_attr` AS `hgid`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             hash(grouping_id()) AS `gen_attr`
-        |      FROM (SELECT hash(`gen_attr`) AS `gen_attr`, `gen_attr` AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0)
-        |            AS t
-        |      GROUP BY `gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS((`gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))), (`gen_attr`), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_8_1")
 
     checkHiveQl(
       s"""
@@ -771,20 +354,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM (SELECT hash(key) as hkey, key as value FROM parquet_t1) t GROUP BY hkey, value-5
          |WITH CUBE
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `k1`, `gen_attr` AS `k2`, `gen_attr` AS `hgid`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             hash(grouping_id()) AS `gen_attr`
-        |      FROM (SELECT hash(`gen_attr`) AS `gen_attr`, `gen_attr` AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0)
-        |            AS t
-        |      GROUP BY `gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS((`gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))), (`gen_attr`),
-        |                   ((`gen_attr` - CAST(5 AS BIGINT))), ()))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "rollup_cube_8_2")
   }
 
   test("rollup/cube #9") {
@@ -797,25 +367,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |GROUP BY cnt, t.key - 5
          |WITH ROLLUP
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `(key - CAST(5 AS BIGINT))`, `gen_attr` AS `cnt`,
-        |       `gen_attr` AS `sum(cnt)`
-        |FROM (SELECT (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `gen_attr`, count(1) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0
-        |           INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                       FROM `default`.`parquet_t1`)
-        |                       AS gen_subquery_1
-        |           ON (`gen_attr` = `gen_attr`)
-        |           GROUP BY `gen_attr`)
-        |           AS t
-        |      GROUP BY `gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS((`gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))), (`gen_attr`), ()))
-        |      AS gen_subquery_2
-      """.stripMargin)
+      "rollup_cube_9_1")
 
     checkHiveQl(
       s"""
@@ -825,26 +377,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |GROUP BY cnt, t.key - 5
          |WITH CUBE
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `(key - CAST(5 AS BIGINT))`, `gen_attr` AS `cnt`,
-        |       `gen_attr` AS `sum(cnt)`
-        |FROM (SELECT (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `gen_attr`, count(1) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0
-        |           INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                       FROM `default`.`parquet_t1`)
-        |                       AS gen_subquery_1
-        |           ON (`gen_attr` = `gen_attr`)
-        |           GROUP BY `gen_attr`)
-        |           AS t
-        |      GROUP BY `gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS((`gen_attr`, (`gen_attr` - CAST(5 AS BIGINT))), (`gen_attr`),
-        |                   ((`gen_attr` - CAST(5 AS BIGINT))), ()))
-        |      AS gen_subquery_2
-      """.stripMargin)
+      "rollup_cube_9_2")
   }
 
   test("grouping sets #1") {
@@ -854,177 +387,54 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
          |GROUPING SETS (key % 5, key - 5)
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `k1`, `gen_attr` AS `k2`, `gen_attr` AS `k3`
-        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |             (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
-        |      FROM (SELECT `gen_attr`, (`gen_attr` % CAST(2 AS BIGINT)) AS `gen_attr`,
-        |                   (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0)
-        |            AS t
-        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))),
-        |                    ((`gen_attr` - CAST(5 AS BIGINT)))))
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "grouping_sets_1")
   }
 
   test("grouping sets #2") {
     checkHiveQl(
       "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a, b) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`), (`gen_attr`))
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "grouping_sets_2_1")
 
     checkHiveQl(
       "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`))
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "grouping_sets_2_2")
 
     checkHiveQl(
       "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (b) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((`gen_attr`))
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "grouping_sets_2_3")
 
     checkHiveQl(
       "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (()) ORDER BY a, b",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS(())
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "grouping_sets_2_4")
 
     checkHiveQl(
       s"""
          |SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b
          |GROUPING SETS ((), (a), (a, b)) ORDER BY a, b
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `sum(c)`
-        |FROM (SELECT `gen_attr` AS `gen_attr`, `gen_attr` AS `gen_attr`,
-        |             sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`, `gen_attr`
-        |      GROUPING SETS((), (`gen_attr`), (`gen_attr`, `gen_attr`))
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "grouping_sets_2_5")
   }
 
   test("cluster by") {
-    checkHiveQl("SELECT id FROM parquet_t0 CLUSTER BY id",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0
-        |      CLUSTER BY `gen_attr`)
-        |      AS parquet_t0
-      """.stripMargin)
+    checkHiveQl("SELECT id FROM parquet_t0 CLUSTER BY id", "cluster_by")
   }
 
   test("distribute by") {
-    checkHiveQl("SELECT id FROM parquet_t0 DISTRIBUTE BY id",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0
-        |      DISTRIBUTE BY `gen_attr`)
-        |      AS parquet_t0
-      """.stripMargin)
+    checkHiveQl("SELECT id FROM parquet_t0 DISTRIBUTE BY id", "distribute_by")
   }
 
   test("distribute by with sort by") {
     checkHiveQl("SELECT id FROM parquet_t0 DISTRIBUTE BY id SORT BY id",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0
-        |      CLUSTER BY `gen_attr`)
-        |      AS parquet_t0
-      """.stripMargin)
+      "distribute_by_with_sort_by")
   }
 
   test("SPARK-13720: sort by after having") {
     checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key HAVING MAX(key) > 0 SORT BY key",
-      """
-        |SELECT `gen_attr` AS `count(value)`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `gen_attr`, `gen_attr`
-        |            FROM (SELECT count(`gen_attr`) AS `gen_attr`, max(`gen_attr`) AS `gen_attr`,
-        |                         `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0
-        |                  GROUP BY `gen_attr`
-        |                  HAVING (`gen_attr` > CAST(0 AS BIGINT)))
-        |                  AS gen_subquery_1
-        |            SORT BY `gen_attr` ASC)
-        |            AS gen_subquery_2)
-        |      AS gen_subquery_3
-      """.stripMargin)
+      "sort_by_after_having")
   }
 
   test("distinct aggregation") {
-    checkHiveQl("SELECT COUNT(DISTINCT id) FROM parquet_t0",
-      """
-        |SELECT `gen_attr` AS `count(DISTINCT id)`
-        |FROM (SELECT count(DISTINCT `gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+    checkHiveQl("SELECT COUNT(DISTINCT id) FROM parquet_t0", "distinct_aggregation")
   }
 
   test("TABLESAMPLE") {
@@ -1033,102 +443,34 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     //    +- Subquery s
     //       +- Subquery parquet_t0
     //          +- Relation[id#2L] ParquetRelation
-    checkHiveQl("SELECT s.id FROM parquet_t0 TABLESAMPLE(100 PERCENT) s",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`
-        |            TABLESAMPLE(100.0 PERCENT))
-        |            AS gen_subquery_0)
-        |      AS s
-      """.stripMargin)
+    checkHiveQl("SELECT s.id FROM parquet_t0 TABLESAMPLE(100 PERCENT) s", "tablesample_1")
 
     // Project [id#2L]
     // +- Sample 0.0, 1.0, false, ...
     //    +- Subquery parquet_t0
     //       +- Relation[id#2L] ParquetRelation
-    checkHiveQl("SELECT * FROM parquet_t0 TABLESAMPLE(100 PERCENT)",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`
-        |            TABLESAMPLE(100.0 PERCENT))
-        |            AS gen_subquery_0)
-        |      AS parquet_t0
-      """.stripMargin)
+    checkHiveQl("SELECT * FROM parquet_t0 TABLESAMPLE(100 PERCENT)", "tablesample_2")
 
     // Project [id#21L]
     // +- Sample 0.0, 1.0, false, ...
     //    +- MetastoreRelation default, t0, Some(s)
-    checkHiveQl("SELECT s.id FROM t0 TABLESAMPLE(100 PERCENT) s",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`t0`
-        |            TABLESAMPLE(100.0 PERCENT))
-        |            AS gen_subquery_0)
-        |      AS s
-      """.stripMargin)
+    checkHiveQl("SELECT s.id FROM t0 TABLESAMPLE(100 PERCENT) s", "tablesample_3")
 
     // Project [id#24L]
     // +- Sample 0.0, 1.0, false, ...
     //    +- MetastoreRelation default, t0, None
-    checkHiveQl("SELECT * FROM t0 TABLESAMPLE(100 PERCENT)",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`t0`
-        |            TABLESAMPLE(100.0 PERCENT))
-        |            AS gen_subquery_0)
-        |      AS t0
-      """.stripMargin)
+    checkHiveQl("SELECT * FROM t0 TABLESAMPLE(100 PERCENT)", "tablesample_4")
 
     // When a sampling fraction is not 100%, the returned results are random.
     // Thus, added an always-false filter here to check if the generated plan can be successfully
     // executed.
-    checkHiveQl("SELECT s.id FROM parquet_t0 TABLESAMPLE(0.1 PERCENT) s WHERE 1=0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`
-        |            TABLESAMPLE(0.1 PERCENT))
-        |            AS gen_subquery_0
-        |      WHERE (1 = 0))
-        |      AS s
-      """.stripMargin)
-
-    checkHiveQl("SELECT * FROM parquet_t0 TABLESAMPLE(0.1 PERCENT) WHERE 1=0",
-      """
-        |SELECT `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t0`
-        |            TABLESAMPLE(0.1 PERCENT))
-        |            AS gen_subquery_0
-        |      WHERE (1 = 0))
-        |      AS parquet_t0
-      """.stripMargin)
+    checkHiveQl("SELECT s.id FROM parquet_t0 TABLESAMPLE(0.1 PERCENT) s WHERE 1=0", "tablesample_5")
+    checkHiveQl("SELECT * FROM parquet_t0 TABLESAMPLE(0.1 PERCENT) WHERE 1=0", "tablesample_6")
   }
 
   test("multi-distinct columns") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM parquet_t2 GROUP BY a",
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `count(DISTINCT b)`,
-        |       `gen_attr` AS `count(DISTINCT c)`, `gen_attr` AS `sum(d)`
-        |FROM (SELECT `gen_attr`, count(DISTINCT `gen_attr`) AS `gen_attr`,
-        |             count(DISTINCT `gen_attr`) AS `gen_attr`, sum(`gen_attr`) AS `gen_attr`
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0
-        |      GROUP BY `gen_attr`)
-        |      AS parquet_t2
-      """.stripMargin)
+      "multi_distinct")
   }
 
   test("persisted data source relations") {
@@ -1136,91 +478,30 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       val tableName = s"${format}_parquet_t0"
       withTable(tableName) {
         spark.range(10).write.format(format).saveAsTable(tableName)
-        checkHiveQl(s"SELECT id FROM $tableName",
-          s"""
-            |SELECT `gen_attr` AS `id`
-            |FROM (SELECT `gen_attr`
-            |      FROM (SELECT `id` AS `gen_attr`
-            |            FROM `default`.`$tableName`)
-            |            AS gen_subquery_0)
-            |      AS $tableName
-          """.stripMargin)
+        checkHiveQl(s"SELECT id FROM $tableName", s"data_source_$tableName")
       }
     }
   }
 
   test("script transformation - schemaless") {
     checkHiveQl("SELECT TRANSFORM (a, b, c, d) USING 'cat' FROM parquet_t2",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`
-        |FROM (SELECT TRANSFORM (`gen_attr`, `gen_attr`, `gen_attr`, `gen_attr`)
-        |      USING 'cat'
-        |      AS (`gen_attr` string, `gen_attr` string)
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
-
+      "script_transformation_1")
     checkHiveQl("SELECT TRANSFORM (*) USING 'cat' FROM parquet_t2",
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`
-        |FROM (SELECT TRANSFORM (`gen_attr`, `gen_attr`, `gen_attr`, `gen_attr`)
-        |      USING 'cat'
-        |      AS (`gen_attr` string, `gen_attr` string)
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "script_transformation_2")
   }
 
   test("script transformation - alias list") {
-    // scalastyle:off
     checkHiveQl("SELECT TRANSFORM (a, b, c, d) USING 'cat' AS (d1, d2, d3, d4) FROM parquet_t2",
-      """
-        |SELECT `gen_attr` AS `d1`, `gen_attr` AS `d2`, `gen_attr` AS `d3`, `gen_attr` AS `d4`
-        |FROM (SELECT TRANSFORM (`gen_attr`, `gen_attr`, `gen_attr`, `gen_attr`)
-        |      ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |      WITH SERDEPROPERTIES('field.delim' = '	')
-        |      USING 'cat' AS (`gen_attr` string, `gen_attr` string, `gen_attr` string,
-        |                      `gen_attr` string)
-        |      ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |      WITH SERDEPROPERTIES('field.delim' = '	')
-        |      FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                   `d` AS `gen_attr`
-        |            FROM `default`.`parquet_t2`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
-    // scalastyle:on
+      "script_transformation_alias_list")
   }
 
   test("script transformation - alias list with type") {
-    // scalastyle:off
     checkHiveQl(
       """FROM
         |(FROM parquet_t1 SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
         |SELECT thing1 + 1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `(thing1 + 1)`
-        |FROM (SELECT (`gen_attr` + 1) AS `gen_attr`
-        |      FROM (SELECT TRANSFORM (`gen_attr`, `gen_attr`)
-        |            ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |            WITH SERDEPROPERTIES('field.delim' = '	')
-        |            USING 'cat' AS (`gen_attr` int, `gen_attr` string)
-        |            ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |            WITH SERDEPROPERTIES('field.delim' = '	')
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0)
-        |            AS t)
-        |      AS gen_subquery_1
-      """.stripMargin)
-    // scalastyle:on
+      "script_transformation_alias_list_with_type")
   }
 
   test("script transformation - row format delimited clause with only one format property") {
@@ -1229,17 +510,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
         |FROM parquet_t1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `tKey`
-        |FROM (SELECT TRANSFORM (`gen_attr`)
-        |      ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
-        |      USING 'cat' AS (`gen_attr` string)
-        |      ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "script_transformation_row_format_one")
   }
 
   test("script transformation - row format delimited clause with multiple format properties") {
@@ -1250,17 +521,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
         |FROM parquet_t1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `tKey`
-        |FROM (SELECT TRANSFORM (`gen_attr`)
-        |      ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
-        |      USING 'cat' AS (`gen_attr` string)
-        |      ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\t'
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "script_transformation_row_format_multiple")
   }
 
   test("script transformation - row format serde clauses with SERDEPROPERTIES") {
@@ -1273,19 +534,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |WITH SERDEPROPERTIES('field.delim' = '|')
         |FROM parquet_t1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `tKey`, `gen_attr` AS `tValue`
-        |FROM (SELECT TRANSFORM (`gen_attr`, `gen_attr`)
-        |      ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |      WITH SERDEPROPERTIES('field.delim' = '|')
-        |      USING 'cat' AS (`gen_attr` string, `gen_attr` string)
-        |      ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |      WITH SERDEPROPERTIES('field.delim' = '|')
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "script_transformation_row_format_serde")
   }
 
   test("script transformation - row format serde clauses without SERDEPROPERTIES") {
@@ -1296,17 +545,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |FROM parquet_t1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `tKey`, `gen_attr` AS `tValue`
-        |FROM (SELECT TRANSFORM (`gen_attr`, `gen_attr`)
-        |      ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |      USING 'cat' AS (`gen_attr` string, `gen_attr` string)
-        |      ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |            FROM `default`.`parquet_t1`)
-        |            AS gen_subquery_0)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "script_transformation_row_format_without_serde")
   }
 
   test("plans with non-SQL expressions") {
@@ -1373,70 +612,21 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("window basic") {
-    // scalastyle:off line.size.limit
-    checkHiveQl("SELECT MAX(value) OVER (PARTITION BY key % 3) FROM parquet_t1",
-      """
-        |SELECT `gen_attr` AS `max(value) OVER (PARTITION BY (key % CAST(3 AS BIGINT)) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   max(`gen_attr`)
-        |                   OVER (PARTITION BY `gen_attr`  ROWS BETWEEN UNBOUNDED PRECEDING AND
-        |                                                               UNBOUNDED FOLLOWING)
-        |                   AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, (`gen_attr` % CAST(3 AS BIGINT)) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS gen_subquery_3
-      """.stripMargin)
+    checkHiveQl("SELECT MAX(value) OVER (PARTITION BY key % 3) FROM parquet_t1", "window_basic_1")
 
     checkHiveQl(
       """
          |SELECT key, value, ROUND(AVG(key) OVER (), 2)
          |FROM parquet_t1 ORDER BY key
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `round(avg(key) OVER ( ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING), 2)`
-        |FROM (SELECT `gen_attr`, `gen_attr`, round(`gen_attr`, 2) AS `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   avg(`gen_attr`) OVER ( ROWS BETWEEN UNBOUNDED PRECEDING AND
-        |                                                       UNBOUNDED FOLLOWING) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2
-        |      ORDER BY `gen_attr` ASC)
-        |      AS parquet_t1
-      """.stripMargin)
+      "window_basic_2")
 
     checkHiveQl(
       """
          |SELECT value, MAX(key + 1) OVER (PARTITION BY key % 5 ORDER BY key % 7) AS max
          |FROM parquet_t1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `value`, `gen_attr` AS `max`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr` ORDER BY `gen_attr`
-        |                                         ASC RANGE BETWEEN UNBOUNDED PRECEDING AND
-        |                                                           CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, (`gen_attr` + CAST(1 AS BIGINT)) AS `gen_attr`,
-        |                         (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
-        |                         (`gen_attr` % CAST(7 AS BIGINT)) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS parquet_t1
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "window_basic_3")
   }
 
   test("multiple window functions in one expression") {
@@ -1449,46 +639,13 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("regular expressions and window functions in one expression") {
-    // scalastyle:off line.size.limit
     checkHiveQl("SELECT MAX(key) OVER (PARTITION BY key % 3) + key FROM parquet_t1",
-      """
-        |SELECT `gen_attr` AS `(max(key) OVER (PARTITION BY (key % CAST(3 AS BIGINT)) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) + key)`
-        |FROM (SELECT (`gen_attr` + `gen_attr`) AS `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr`
-        |                                         ROWS BETWEEN UNBOUNDED PRECEDING AND
-        |                                                      UNBOUNDED FOLLOWING) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, (`gen_attr` % CAST(3 AS BIGINT)) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS gen_subquery_3
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "regular_expressions_and_window")
   }
 
   test("aggregate functions and window functions in one expression") {
-    // scalastyle:off line.size.limit
     checkHiveQl("SELECT MAX(c) + COUNT(a) OVER () FROM parquet_t2 GROUP BY a, b",
-      """
-        |SELECT `gen_attr` AS `(max(c) + count(a) OVER ( ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING))`
-        |FROM (SELECT (`gen_attr` + `gen_attr`) AS `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   count(`gen_attr`) OVER ( ROWS BETWEEN UNBOUNDED PRECEDING AND
-        |                                                         UNBOUNDED FOLLOWING) AS `gen_attr`
-        |            FROM (SELECT max(`gen_attr`) AS `gen_attr`, `gen_attr`
-        |                  FROM (SELECT `a` AS `gen_attr`, `b` AS `gen_attr`, `c` AS `gen_attr`,
-        |                               `d` AS `gen_attr`
-        |                        FROM `default`.`parquet_t2`)
-        |                        AS gen_subquery_0
-        |                  GROUP BY `gen_attr`, `gen_attr`)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS gen_subquery_3
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "aggregate_functions_and_window")
   }
 
   test("window with different window specification") {
@@ -1498,27 +655,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |DENSE_RANK() OVER (ORDER BY key, value) AS dr,
          |MAX(value) OVER (PARTITION BY key ORDER BY key ASC) AS max
          |FROM parquet_t1
-      """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `dr`, `gen_attr` AS `max`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`,
-        |                   gen_subquery_2.`gen_attr`,
-        |                   DENSE_RANK() OVER ( ORDER BY `gen_attr` ASC, `gen_attr` ASC
-        |                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                         max(`gen_attr`) OVER (PARTITION BY `gen_attr`
-        |                                               ORDER BY `gen_attr` ASC
-        |                                               RANGE BETWEEN UNBOUNDED PRECEDING AND
-        |                                                             CURRENT ROW) AS `gen_attr`
-        |                  FROM (SELECT `gen_attr`, `gen_attr`
-        |                        FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                              FROM `default`.`parquet_t1`)
-        |                              AS gen_subquery_0)
-        |                        AS gen_subquery_1)
-        |                  AS gen_subquery_2)
-        |            AS gen_subquery_3)
-        |      AS parquet_t1
       """.stripMargin)
   }
 
@@ -1529,25 +665,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key DESC) AS max
          |FROM parquet_t1 GROUP BY key, value HAVING key > 5
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `max`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   gen_subquery_1.`gen_attr`,
-        |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr` ORDER BY `gen_attr` DESC
-        |                                         RANGE BETWEEN UNBOUNDED PRECEDING AND
-        |                                                       CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, `gen_attr`,
-        |                         (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0
-        |                  GROUP BY `gen_attr`, `gen_attr`
-        |                  HAVING (`gen_attr` > CAST(5 AS BIGINT)))
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS parquet_t1
-      """.stripMargin)
+      "window_with_the_same_window_with_agg_having")
   }
 
   test("window with the same window specification with aggregate functions") {
@@ -1557,24 +675,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key) AS max
          |FROM parquet_t1 GROUP BY key, value
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `max`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   gen_subquery_1.`gen_attr`,
-        |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr` ORDER BY `gen_attr` ASC
-        |                                         RANGE BETWEEN UNBOUNDED PRECEDING AND
-        |                                         CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, `gen_attr`,
-        |                         (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0
-        |                  GROUP BY `gen_attr`, `gen_attr`)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS parquet_t1
-      """.stripMargin)
+      "window_with_the_same_window_with_agg_functions")
   }
 
   test("window with the same window specification with aggregate") {
@@ -1585,25 +686,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |COUNT(key)
          |FROM parquet_t1 GROUP BY key, value
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `dr`,
-        |       `gen_attr` AS `count(key)`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   gen_subquery_1.`gen_attr`,
-        |                   DENSE_RANK() OVER (PARTITION BY `gen_attr`
-        |                                      ORDER BY `gen_attr` ASC, `gen_attr` ASC
-        |                                      ROWS BETWEEN UNBOUNDED PRECEDING AND
-        |                                                   CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, `gen_attr`, count(`gen_attr`) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0
-        |                  GROUP BY `gen_attr`, `gen_attr`)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS parquet_t1
-      """.stripMargin)
+      "window_with_the_same_window_with_agg")
   }
 
   test("window with the same window specification without aggregate and filter") {
@@ -1614,26 +697,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
          |COUNT(key) OVER(DISTRIBUTE BY key SORT BY key, value) AS ca
          |FROM parquet_t1
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `value`, `gen_attr` AS `dr`, `gen_attr` AS `ca`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_1.`gen_attr`, gen_subquery_1.`gen_attr`,
-        |                   DENSE_RANK() OVER (PARTITION BY `gen_attr`
-        |                                      ORDER BY `gen_attr` ASC, `gen_attr` ASC
-        |                                      ROWS BETWEEN UNBOUNDED PRECEDING AND
-        |                                                   CURRENT ROW) AS `gen_attr`,
-        |                   count(`gen_attr`) OVER (PARTITION BY `gen_attr`
-        |                                           ORDER BY `gen_attr` ASC, `gen_attr` ASC
-        |                                           RANGE BETWEEN UNBOUNDED PRECEDING AND
-        |                                                         CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0)
-        |                  AS gen_subquery_1)
-        |            AS gen_subquery_2)
-        |      AS parquet_t1
-      """.stripMargin)
+      "window_with_the_same_window_with_agg_filter")
   }
 
   test("window clause") {
@@ -1663,34 +727,12 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("window with join") {
-    // scalastyle:off line.size.limit
     checkHiveQl(
       """
         |SELECT x.key, MAX(y.key) OVER (PARTITION BY x.key % 5 ORDER BY x.key)
         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `max(key) OVER (PARTITION BY (key % CAST(5 AS BIGINT)) ORDER BY key ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`,
-        |                   gen_subquery_2.`gen_attr`,
-        |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr` ORDER BY `gen_attr` ASC
-        |                                         RANGE BETWEEN UNBOUNDED PRECEDING AND
-        |                                                       CURRENT ROW) AS `gen_attr`
-        |            FROM (SELECT `gen_attr`, `gen_attr`,
-        |                         (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`
-        |                  FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_0
-        |                  INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                              FROM `default`.`parquet_t1`)
-        |                              AS gen_subquery_1
-        |                  ON (`gen_attr` = `gen_attr`))
-        |                  AS gen_subquery_2)
-        |            AS gen_subquery_3)
-        |      AS x
-      """.stripMargin)
-    // scalastyle:on line.size.limit
+      "window_with_join")
   }
 
   test("join 2 tables and aggregate function in having clause") {
@@ -1701,144 +743,34 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |GROUP BY a.KEY, b.KEY
         |HAVING MAX(a.KEY) > 0
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `count(value)`, `gen_attr` AS `KEY`, `gen_attr` AS `KEY`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT count(`gen_attr`) AS `gen_attr`, `gen_attr`, `gen_attr`,
-        |                   max(`gen_attr`) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0
-        |            INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                        FROM `default`.`parquet_t1`)
-        |                        AS gen_subquery_1
-        |            GROUP BY `gen_attr`, `gen_attr`
-        |            HAVING (`gen_attr` > CAST(0 AS BIGINT)))
-        |            AS gen_subquery_2)
-        |      AS gen_subquery_3
-      """.stripMargin)
+      "join_2_tables")
   }
 
   test("generator in project list without FROM clause") {
-    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3))",
-      """
-        |SELECT `gen_attr` AS `col`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT 1) gen_subquery_1
-        |      LATERAL VIEW explode(array(1, 2, 3)) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_0
-      """.stripMargin)
-
-    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val",
-      """
-        |SELECT `gen_attr` AS `val`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT 1) gen_subquery_1
-        |      LATERAL VIEW explode(array(1, 2, 3)) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_0
-      """.stripMargin)
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3))", "generator_without_from_1")
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val", "generator_without_from_2")
   }
 
   test("generator in project list with non-referenced table") {
-    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) FROM t0",
-      """
-        |SELECT `gen_attr` AS `col`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`t0`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(array(1, 2, 3)) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
-
-    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val FROM t0",
-      """
-        |SELECT `gen_attr` AS `val`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `id` AS `gen_attr`
-        |            FROM `default`.`t0`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(array(1, 2, 3)) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) FROM t0", "generator_non_referenced_table_1")
+    checkHiveQl("SELECT EXPLODE(ARRAY(1,2,3)) AS val FROM t0", "generator_non_referenced_table_2")
   }
 
   test("generator in project list with referenced table") {
-    checkHiveQl("SELECT EXPLODE(arr) FROM parquet_t3",
-      """
-        |SELECT `gen_attr` AS `col`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
-
-    checkHiveQl("SELECT EXPLODE(arr) AS val FROM parquet_t3",
-      """
-        |SELECT `gen_attr` AS `val`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+    checkHiveQl("SELECT EXPLODE(arr) FROM parquet_t3", "generator_referenced_table_1")
+    checkHiveQl("SELECT EXPLODE(arr) AS val FROM parquet_t3", "generator_referenced_table_2")
   }
 
   test("generator in project list with non-UDTF expressions") {
-    checkHiveQl("SELECT EXPLODE(arr), id FROM parquet_t3",
-      """
-        |SELECT `gen_attr` AS `col`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_1 AS `gen_attr`)
-        |      AS parquet_t3
-      """.stripMargin)
-
-    checkHiveQl("SELECT EXPLODE(arr) AS val, id as a FROM parquet_t3",
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `a`
-        |FROM (SELECT `gen_attr`, `gen_attr` AS `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+    checkHiveQl("SELECT EXPLODE(arr), id FROM parquet_t3", "generator_non_udtf_1")
+    checkHiveQl("SELECT EXPLODE(arr) AS val, id as a FROM parquet_t3", "generator_non_udtf_2")
   }
 
   test("generator in lateral view") {
     checkHiveQl("SELECT val, id FROM parquet_t3 LATERAL VIEW EXPLODE(arr) exp AS val",
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
-
+      "generator_in_lateral_view_1")
     checkHiveQl("SELECT val, id FROM parquet_t3 LATERAL VIEW OUTER EXPLODE(arr) exp AS val",
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW OUTER explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "generator_in_lateral_view_2")
   }
 
   test("generator in lateral view with ambiguous names") {
@@ -1848,16 +780,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t3
         |LATERAL VIEW EXPLODE(arr) exp AS id
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `id`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "generator_with_ambiguous_names_1")
 
     checkHiveQl(
       """
@@ -1865,16 +788,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t3
         |LATERAL VIEW OUTER EXPLODE(arr) exp AS id
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `id`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW OUTER explode(`gen_attr`) gen_subquery_2 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "generator_with_ambiguous_names_2")
   }
 
   test("use JSON_TUPLE as generator") {
@@ -1884,17 +798,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t3
         |LATERAL VIEW JSON_TUPLE(json, 'f1', 'f2', 'f3') jt
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `c0`, `gen_attr` AS `c1`, `gen_attr` AS `c2`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW json_tuple(`gen_attr`, "f1", "f2", "f3")
-        |                   gen_subquery_1 AS `gen_attr`, `gen_attr`, `gen_attr`)
-        |      AS jt
-      """.stripMargin)
+      "json_tuple_generator_1")
 
     checkHiveQl(
       """
@@ -1902,17 +806,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t3
         |LATERAL VIEW JSON_TUPLE(json, 'f1', 'f2', 'f3') jt AS a, b, c
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `a`, `gen_attr` AS `b`, `gen_attr` AS `c`
-        |FROM (SELECT `gen_attr`, `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW json_tuple(`gen_attr`, "f1", "f2", "f3")
-        |                   gen_subquery_1 AS `gen_attr`, `gen_attr`, `gen_attr`)
-        |      AS jt
-      """.stripMargin)
+      "json_tuple_generator_2")
   }
 
   test("nested generator in lateral view") {
@@ -1923,17 +817,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
         |LATERAL VIEW EXPLODE(nested_array) exp1 AS val
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_3 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "nested_generator_in_lateral_view_1")
 
     checkHiveQl(
       """
@@ -1942,17 +826,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |LATERAL VIEW EXPLODE(arr2) exp1 AS nested_array
         |LATERAL VIEW OUTER EXPLODE(nested_array) exp1 AS val
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`
-        |      LATERAL VIEW OUTER explode(`gen_attr`) gen_subquery_3 AS `gen_attr`)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "nested_generator_in_lateral_view_2")
   }
 
   test("generate with other operators") {
@@ -1964,21 +838,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |ORDER BY val, id
         |LIMIT 5
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_0.`gen_attr`, gen_subquery_0.`gen_attr`,
-        |                   gen_subquery_0.`gen_attr`, gen_subquery_0.`gen_attr`
-        |            FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                         `id` AS `gen_attr`
-        |                  FROM `default`.`parquet_t3`)
-        |                  AS gen_subquery_0
-        |            WHERE (`gen_attr` > CAST(2 AS BIGINT)))
-        |            AS gen_subquery_1
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC LIMIT 5)
-        |      AS parquet_t3
-      """.stripMargin)
+      "generate_with_other_1")
 
     checkHiveQl(
       """
@@ -1990,62 +850,25 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |ORDER BY val, id
         |LIMIT 5
       """.stripMargin,
-      """
-        |SELECT `gen_attr` AS `val`, `gen_attr` AS `id`
-        |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT `arr` AS `gen_attr`, `arr2` AS `gen_attr`, `json` AS `gen_attr`,
-        |                   `id` AS `gen_attr`
-        |            FROM `default`.`parquet_t3`)
-        |            AS gen_subquery_0
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_2 AS `gen_attr`
-        |      LATERAL VIEW explode(`gen_attr`) gen_subquery_3 AS `gen_attr`
-        |      WHERE (`gen_attr` > CAST(2 AS BIGINT))
-        |      ORDER BY `gen_attr` ASC, `gen_attr` ASC LIMIT 5)
-        |      AS gen_subquery_1
-      """.stripMargin)
+      "generate_with_other_2")
   }
 
   test("filter after subquery") {
     checkHiveQl("SELECT a FROM (SELECT key + 1 AS a FROM parquet_t1) t WHERE a > 5",
-      """
-        |SELECT `gen_attr` AS `a`
-        |FROM (SELECT `gen_attr`
-        |      FROM (SELECT (`gen_attr` + CAST(1 AS BIGINT)) AS `gen_attr`
-        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
-        |                  FROM `default`.`parquet_t1`)
-        |                  AS gen_subquery_0) AS t
-        |            WHERE (`gen_attr` > CAST(5 AS BIGINT)))
-        |      AS t
-      """.stripMargin)
+      "filter_after_subquery")
   }
 
   test("SPARK-14933 - select parquet table") {
     withTable("parquet_t") {
       sql("create table parquet_t stored as parquet as select 1 as c1, 'abc' as c2")
-      checkHiveQl("select * from parquet_t",
-        """
-          |SELECT `gen_attr` AS `c1`, `gen_attr` AS `c2`
-          |FROM (SELECT `gen_attr`, `gen_attr`
-          |      FROM (SELECT `c1` AS `gen_attr`, `c2` AS `gen_attr`
-          |            FROM `default`.`parquet_t`)
-          |            AS gen_subquery_0)
-          |      AS parquet_t
-        """.stripMargin)
+      checkHiveQl("select * from parquet_t", "select_parquet_table")
     }
   }
 
   test("SPARK-14933 - select orc table") {
     withTable("orc_t") {
       sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
-      checkHiveQl("select * from orc_t",
-        """
-          |SELECT `gen_attr` AS `c1`, `gen_attr` AS `c2`
-          |FROM (SELECT `gen_attr`, `gen_attr`
-          |      FROM (SELECT `c1` AS `gen_attr`, `c2` AS `gen_attr`
-          |            FROM `default`.`orc_t`)
-          |            AS gen_subquery_0)
-          |      AS orc_t
-        """.stripMargin)
+      checkHiveQl("select * from orc_t", "select_orc_table")
     }
   }
 }
