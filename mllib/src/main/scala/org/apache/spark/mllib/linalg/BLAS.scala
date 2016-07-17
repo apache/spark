@@ -32,7 +32,7 @@ private[spark] object BLAS extends Serializable with Logging {
 
   /**
    * check whether the array is sorted, 
-   * mainly used for checking sparseVector's indices
+   * mainly used for checking SparseVector's indices
    */
   private def isSorted(array: Array[Int]): Boolean = {
     var index = 1
