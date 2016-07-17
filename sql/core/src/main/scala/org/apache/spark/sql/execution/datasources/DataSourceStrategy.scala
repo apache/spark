@@ -269,7 +269,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.DataSourceScanExec.create(
-        l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
+        l.output, () => toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
@@ -377,7 +377,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       val scan = execution.DataSourceScanExec.create(
         projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
+        () => scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata, relation.metastoreTableIdentifier)
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
@@ -387,7 +387,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       val scan = execution.DataSourceScanExec.create(
         requestedColumns,
-        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
+        () => scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata, relation.metastoreTableIdentifier)
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))

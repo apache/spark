@@ -407,26 +407,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
-  test("partition discovery is not done until execution time") {
-    withSQLConf("fs.file.impl" -> classOf[MockDistributedFileSystem].getName) {
-      withTempPath { path =>
-        val tempDir = path.getCanonicalPath
-        Seq("p1=1/p2=2/p3=3/file1", "p1=1/p2=3/p3=3/file1").foreach { fileName =>
-          val file = new File(tempDir, fileName)
-          assert(file.getParentFile.exists() || file.getParentFile.mkdirs())
-          util.stringToFile(file, fileName)
-        }
-        val df = spark.read.text(tempDir)
-        // remove the underlying files so that partition discovery will crash
-        Utils.deleteRecursively(new File(tempDir))
-        df.queryExecution.executedPlan.toString()  // physical planning does not crash
-        intercept[SparkException] {
-          df.collect()  // however execution does
-        }
-      }
-    }
-  }
-
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

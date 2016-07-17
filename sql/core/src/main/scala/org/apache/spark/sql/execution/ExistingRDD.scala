@@ -281,7 +281,7 @@ private[sql] case class RowDataSourceScanExec(
 private[sql] case class BatchedDataSourceScanExec(
     output: Seq[Attribute],
     @transient buildScan: () => RDD[InternalRow],
-    @transient relation: HadoopFsRelation,
+    @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String],
     override val metastoreTableIdentifier: Option[TableIdentifier])
@@ -398,17 +398,17 @@ private[sql] object DataSourceScanExec {
       output: Seq[Attribute],
       buildScan: () => RDD[InternalRow],
       relation: BaseRelation,
-      outputPartitioning: Partitioning,
       metadata: Map[String, String] = Map.empty,
-      metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
-    relation match {		
-      case r: HadoopFsRelation		
-        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>		
-        BatchedDataSourceScanExec(		
-          output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)		
-      case _ =>		
-        RowDataSourceScanExec(		
-          output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)		
+      metastoreTableIdentifier: Option[TableIdentifier] = None,
+      outputPartitioning: Partitioning = UnknownPartitioning(0)): DataSourceScanExec = {
+    relation match {
+      case r: HadoopFsRelation
+        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
+        BatchedDataSourceScanExec(
+          output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)
+      case _ =>
+        RowDataSourceScanExec(
+          output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)
     }
   }
 }
