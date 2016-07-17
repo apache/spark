@@ -219,7 +219,7 @@ private[sql] case class RowDataSourceScanExec(
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  val outputUnsafeRows = relation match {
+  private val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
       !SparkSession.getActiveSession.get.sessionState.conf.getConf(
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
