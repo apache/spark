@@ -435,6 +435,39 @@ class SparkSubmitSuite
     }
   }
 
+  test("include an external JAR in SparkR") {
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val rScriptDir =
+      Seq(sparkHome, "R", "pkg", "inst", "tests", "testthat", "jarTest.R").mkString(File.separator)
+    assert(new File(rScriptDir).exists)
+
+    // compile a small jar containing a class that will be called from R code.
+    val tempDir = Utils.createTempDir()
+    val srcDir = new File(tempDir, "sparkrtest")
+    srcDir.mkdirs()
+    val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").getAbsolutePath,
+      """package sparkrtest;
+        |
+        |public class DummyClass implements java.io.Serializable {
+        |  public static String helloWorld(String arg) { return "Hello " + arg; }
+        |  public static int addStuff(int arg1, int arg2) { return arg1 + arg2; }
+        |}
+      """.stripMargin)
+    val excFile = TestUtils.createCompiledClass("DummyClass", srcDir, excSource, Seq.empty)
+    val jarFile = new File(tempDir, "sparkRTestJar-%s.jar".format(System.currentTimeMillis()))
+    val jarURL = TestUtils.createJar(Seq(excFile), jarFile, directoryPrefix = Some("sparkrtest"))
+
+    val args = Seq(
+      "--name", "testApp",
+      "--master", "local",
+      "--jars", jarURL.toString,
+      "--verbose",
+      "--conf", "spark.ui.enabled=false",
+      rScriptDir)
+    runSparkSubmit(args)
+  }
+
   test("resolves command line argument paths correctly") {
     val jars = "/jar1,/jar2"                 // --jars
     val files = "hdfs:/file1,file2"          // --files
