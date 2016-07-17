@@ -74,27 +74,33 @@ object RDDConversions {
   }
 }
 
-/** Logical plan node for scanning data from an RDD. */
-private[sql] case class LogicalRDD(
-    output: Seq[Attribute],
-    rdd: RDD[InternalRow])(session: SparkSession)
-  extends LogicalPlan with MultiInstanceRelation {
+private[sql] object ExternalRDD {
 
-  override def children: Seq[LogicalPlan] = Nil
+  def apply[T: Encoder](rdd: RDD[T], session: SparkSession): LogicalPlan = {
+    val externalRdd = ExternalRDD(CatalystSerde.generateObjAttr[T], rdd)(session)
+    CatalystSerde.serialize[T](externalRdd)
+  }
+}
+
+/** Logical plan node for scanning data from an RDD. */
+private[sql] case class ExternalRDD[T](
+    outputObjAttr: Attribute,
+    rdd: RDD[T])(session: SparkSession)
+  extends LeafNode with ObjectProducer with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
-  override def newInstance(): LogicalRDD.this.type =
-    LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
+  override def newInstance(): ExternalRDD.this.type =
+    ExternalRDD(outputObjAttr.newInstance(), rdd)(session).asInstanceOf[this.type]
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case ExternalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case _ => false
+    }
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(output)
-
-  override def producedAttributes: AttributeSet = outputSet
 
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
@@ -104,6 +110,58 @@ private[sql] case class LogicalRDD(
 }
 
 /** Physical plan node for scanning data from an RDD. */
+private[sql] case class ExternalRDDScanExec[T](
+    outputObjAttr: Attribute,
+    rdd: RDD[T]) extends LeafExecNode with ObjectProducerExec {
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    val outputDataType = outputObjAttr.dataType
+    rdd.mapPartitionsInternal { iter =>
+      val outputObject = ObjectOperator.wrapObjectToRow(outputDataType)
+      iter.map { value =>
+        numOutputRows += 1
+        outputObject(value)
+      }
+    }
+  }
+
+  override def simpleString: String = {
+    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+  }
+}
+
+/** Logical plan node for scanning data from an RDD of InternalRow. */
+private[sql] case class LogicalRDD(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow])(session: SparkSession)
+  extends LeafNode with MultiInstanceRelation {
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
+
+  override def newInstance(): LogicalRDD.this.type =
+    LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
+
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    plan.canonicalized match {
+      case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
+      case _ => false
+    }
+  }
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
+  @transient override lazy val statistics: Statistics = Statistics(
+    // TODO: Instead of returning a default value here, find a way to return a meaningful size
+    // estimate for RDDs. See PR 1238 for more discussions.
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
+  )
+}
+
+/** Physical plan node for scanning data from an RDD of InternalRow. */
 private[sql] case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
@@ -128,10 +186,14 @@ private[sql] case class RDDScanExec(
   }
 }
 
-private[sql] trait DataSourceScanExec extends LeafExecNode {
-  val rdd: RDD[InternalRow]
+private[sql] trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
   val metastoreTableIdentifier: Option[TableIdentifier]
+  val buildScan: () => RDD[InternalRow]
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    buildScan() :: Nil
+  }
 
   override val nodeName: String = {
     s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
@@ -147,12 +209,12 @@ private[sql] trait DataSourceScanExec extends LeafExecNode {
 /** Physical plan node for scanning data from a relation. */
 private[sql] case class RowDataSourceScanExec(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow],
+    @transient buildScan: () => RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String],
     override val metastoreTableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec with CodegenSupport {
+  extends DataSourceScanExec {
 
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -167,9 +229,9 @@ private[sql] case class RowDataSourceScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val unsafeRow = if (outputUnsafeRows) {
-      rdd
+      buildScan()
     } else {
-      rdd.mapPartitionsInternal { iter =>
+      buildScan().mapPartitionsInternal { iter =>
         val proj = UnsafeProjection.create(schema)
         iter.map(proj)
       }
@@ -189,10 +251,6 @@ private[sql] case class RowDataSourceScanExec(
 
     s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
       s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
-  }
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    rdd :: Nil
   }
 
   override protected def doProduce(ctx: CodegenContext): String = {
@@ -222,12 +280,12 @@ private[sql] case class RowDataSourceScanExec(
 /** Physical plan node for scanning data from a batched relation. */
 private[sql] case class BatchedDataSourceScanExec(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow],
-    @transient relation: BaseRelation,
+    @transient buildScan: () => RDD[InternalRow],
+    @transient relation: HadoopFsRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String],
     override val metastoreTableIdentifier: Option[TableIdentifier])
-  extends DataSourceScanExec with CodegenSupport {
+  extends DataSourceScanExec {
 
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -246,10 +304,6 @@ private[sql] case class BatchedDataSourceScanExec(
     }
     val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
     s"Batched$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
-  }
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    rdd :: Nil
   }
 
   private def genCodeColumnVector(ctx: CodegenContext, columnVar: String, ordinal: String,
@@ -340,41 +394,31 @@ private[sql] object DataSourceScanExec {
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
 
+  def createFileScan(
+      output: Seq[Attribute],
+      buildScan: () => RDD[InternalRow],
+      relation: HadoopFsRelation,
+      outputPartitioning: Partitioning,
+      metadata: Map[String, String] = Map.empty,
+      metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
+    if (relation.fileFormat.supportBatch(
+        relation.sparkSession, StructType.fromAttributes(output))) {
+      BatchedDataSourceScanExec(
+        output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)
+    } else {
+      RowDataSourceScanExec(
+        output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)
+    }
+  }
+
   def create(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
       metadata: Map[String, String] = Map.empty,
       metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
-    val outputPartitioning = {
-      val bucketSpec = relation match {
-        // TODO: this should be closer to bucket planning.
-        case r: HadoopFsRelation
-          if r.sparkSession.sessionState.conf.bucketingEnabled => r.bucketSpec
-        case _ => None
-      }
-
-      bucketSpec.map { spec =>
-        val numBuckets = spec.numBuckets
-        val bucketColumns = spec.bucketColumnNames.flatMap { n => output.find(_.name == n) }
-        if (bucketColumns.size == spec.bucketColumnNames.size) {
-          HashPartitioning(bucketColumns, numBuckets)
-        } else {
-          UnknownPartitioning(0)
-        }
-      }.getOrElse {
-        UnknownPartitioning(0)
-      }
-    }
-
-    relation match {
-      case r: HadoopFsRelation
-        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
-        BatchedDataSourceScanExec(
-          output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
-      case _ =>
-        RowDataSourceScanExec(
-          output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
-    }
+    assert(!relation.isInstanceOf[HadoopFsRelation], "Should use createFileScan instead")
+    RowDataSourceScanExec(
+      output, () => rdd, relation, UnknownPartitioning(0), metadata, metastoreTableIdentifier)
   }
 }
