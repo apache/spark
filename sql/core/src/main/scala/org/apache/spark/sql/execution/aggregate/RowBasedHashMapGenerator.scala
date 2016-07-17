@@ -109,7 +109,7 @@ class RowBasedHashMapGenerator(
         }.mkString("\n").concat(";")
 
     s"""
-       |  private org.apache.spark.sql.catalyst.expressions.RowBatch batch;
+       |  private org.apache.spark.sql.catalyst.expressions.SimpleRowBatch batch;
        |  private int[] buckets;
        |  private int capacity = 1 << 16;
        |  private double loadFactor = 0.5;
@@ -130,7 +130,7 @@ class RowBasedHashMapGenerator(
        |    super(taskMemoryManager,
        |      taskMemoryManager.pageSizeBytes(),
        |      taskMemoryManager.getTungstenMemoryMode());
-       |    batch = org.apache.spark.sql.catalyst.expressions.RowBatch.allocate(keySchema,
+       |    batch = org.apache.spark.sql.catalyst.expressions.SimpleRowBatch.allocate(keySchema,
        |      valueSchema, taskMemoryManager, capacity);
        |
        |    final UnsafeProjection valueProjection = UnsafeProjection.create(valueSchema);
