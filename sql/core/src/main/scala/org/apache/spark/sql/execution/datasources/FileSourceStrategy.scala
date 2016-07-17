@@ -77,7 +77,6 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
             a.withName(l.output.find(_.semanticEquals(a)).get.name)
         }
       }
-      println("physical planning")
 
       val partitionColumns =
         l.resolve(
@@ -163,7 +162,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         INPUT_PATHS -> fsRelation.location.paths.mkString(", "))
 
       val scan =
-        DataSourceScanExec.createFileScan(
+        DataSourceScanExec.create(
           outputAttributes,
           buildScan,
           fsRelation,

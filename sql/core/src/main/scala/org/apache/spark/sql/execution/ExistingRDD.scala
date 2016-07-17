@@ -394,31 +394,21 @@ private[sql] object DataSourceScanExec {
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
 
-  def createFileScan(
+  def create(
       output: Seq[Attribute],
       buildScan: () => RDD[InternalRow],
-      relation: HadoopFsRelation,
+      relation: BaseRelation,
       outputPartitioning: Partitioning,
       metadata: Map[String, String] = Map.empty,
       metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
-    if (relation.fileFormat.supportBatch(
-        relation.sparkSession, StructType.fromAttributes(output))) {
-      BatchedDataSourceScanExec(
-        output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)
-    } else {
-      RowDataSourceScanExec(
-        output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)
+    relation match {		
+      case r: HadoopFsRelation		
+        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>		
+        BatchedDataSourceScanExec(		
+          output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)		
+      case _ =>		
+        RowDataSourceScanExec(		
+          output, buildScan, relation, outputPartitioning, metadata, metastoreTableIdentifier)		
     }
-  }
-
-  def create(
-      output: Seq[Attribute],
-      rdd: RDD[InternalRow],
-      relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty,
-      metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
-    assert(!relation.isInstanceOf[HadoopFsRelation], "Should use createFileScan instead")
-    RowDataSourceScanExec(
-      output, () => rdd, relation, UnknownPartitioning(0), metadata, metastoreTableIdentifier)
   }
 }
