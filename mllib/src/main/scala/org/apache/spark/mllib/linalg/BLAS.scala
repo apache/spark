@@ -30,6 +30,21 @@ private[spark] object BLAS extends Serializable with Logging {
   @transient private var _f2jBLAS: NetlibBLAS = _
   @transient private var _nativeBLAS: NetlibBLAS = _
 
+  /**
+   * check whether the array is sorted, 
+   * mainly used for checking sparseVector's indices
+   */
+  private def isSorted(array: Array[Int]): Boolean = {
+    var index = 1
+    while (index < array.length) {
+      if (array(index - 1) > array(index)) {
+        return false
+      }
+      index += 1
+    }
+    true
+  }
+  
   // For level-1 routines, we use Java implementation.
   private def f2jBLAS: NetlibBLAS = {
     if (_f2jBLAS == null) {
@@ -150,10 +165,23 @@ private[spark] object BLAS extends Serializable with Logging {
    * dot(x, y)
    */
   private def dot(x: SparseVector, y: SparseVector): Double = {
-    val xValues = x.values
-    val xIndices = x.indices
-    val yValues = y.values
-    val yIndices = y.indices
+    
+    val (xValues, xIndices) =
+      if (isSorted(x.indices)) {
+        (x.values, x.indices)
+      } else {
+        val (xValues,xIndices) = x.values.zip(x.indices).sortBy(_._2).unzip
+        (xValues.toArray, xIndices.toArray)
+      }
+    
+    val (yValues, yIndices) =
+      if (isSorted(y.indices)) {
+        (y.values, y.indices)
+      } else {
+        val (yValues,yIndices) = y.values.zip(y.indices).sortBy(_._2).unzip
+        (yValues.toArray, yIndices.toArray)
+      }
+
     val nnzx = xIndices.length
     val nnzy = yIndices.length
 
@@ -617,18 +645,7 @@ private[spark] object BLAS extends Serializable with Logging {
       x: SparseVector,
       beta: Double,
       y: DenseVector): Unit = {
-    
-    def isSorted(array: Array[Int]): Boolean = {
-      var index = 1
-      while (index < array.length) {
-        if (array(index - 1) > array(index)) {
-          return false
-        }
-        index += 1
-      }
-      true
-    }
-    
+   
     val (xValues, xIndices) =
       if (isSorted(x.indices)) {
         (x.values, x.indices)
