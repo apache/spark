@@ -703,15 +703,16 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param optimizer Optimizer to train an LDA model, "online" or "em", default "online"
 #' @param subsamplingRate (For online optimizer) Fraction of the corpus to be sampled and used in
 #         each iteration of mini-batch gradient descent, in range (0, 1], default 0.05
-#' @param topicConcentration concentration parameter (commonly named \{beta} or \{eta}) for the
-#'        prior placed on topic distributions over terms, default -1 to set automatically on Spark
-#'        side. Use \code{summary} to retrieve the effective topicConcentration
+#' @param topicConcentration concentration parameter (commonly named \code{beta} or \code{eta}) for
+#'        the prior placed on topic distributions over terms, default -1 to set automatically on the
+#'        Spark side. Use \code{summary} to retrieve the effective topicConcentration.
 #' @param docConcentration concentration parameter (commonly named \code{alpha}) for the
 #'        prior placed on documents distributions over topics (\code{theta}), default -1 to set
-#'        automatically on Spark side. Use \code{summary} to retrieve the effective docConcentration
+#'        automatically on the Spark side. Use \code{summary} to retrieve the effective
+#'        docConcentration.
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Only effected
 #'        given training data with string format column.
-#' @param maxVocabSize maximum vocabulary size, default 1 << 18.
+#' @param maxVocabSize maximum vocabulary size, default 1 << 18
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/topicmodels/}
