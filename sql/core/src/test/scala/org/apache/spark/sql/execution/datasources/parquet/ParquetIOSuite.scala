@@ -172,7 +172,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("SPARK-16562 Do not allow downcast in INT32 based types for normal Parquet reader") {
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       withTempPath { file =>
-        (1 to 4).map(Tuple1(_)).toDF("a").write.parquet(file.getAbsolutePath)
+        (1 to 4).toDF("a").write.parquet(file.getAbsolutePath)
         val schema = StructType(StructField("a", ShortType, true) :: Nil)
         val errorMessage = intercept[SparkException] {
           spark.read.schema(schema).parquet(file.getAbsolutePath).collect()
