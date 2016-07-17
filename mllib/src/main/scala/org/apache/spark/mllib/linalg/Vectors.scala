@@ -886,6 +886,26 @@ class SparseVector @Since("1.0.0") (
     }
   }
 
+  def getSortedIndicesAndValues(): (Array[Int], Array[Double]) = {
+    def isSorted(array: Array[Int]): Boolean = {
+      var index = 1
+      while (index < array.length) {
+        if (array(index - 1) > array(index)) {
+          return false
+        }
+        index += 1
+      }
+      true
+    }
+    
+    if (isSorted(this.indices)) {
+        (this.indices, this.values)
+      } else {
+        val (indices, values) = this.indices.zip(this.values).sortBy(_._1).unzip
+        (indices.toArray, values.toArray)
+      }
+  }
+  
   /**
    * Create a slice of this vector based on the given indices.
    * @param selectedIndices Unsorted list of indices into the vector.
