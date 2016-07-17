@@ -26,6 +26,12 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
 
+/**
+ * A testsuite for LogicalPlan-to-SQL conversion.
+ *
+ * To regenerate new answer files, run this suite after making `saveQuery` flag `true`.
+ * After regeneration, restore the flag to `false` and run again to check the tests pass again.
+ */
 class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
@@ -87,16 +93,21 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
    * Note that there exists a normalization for both arguments for the convenience.
    * - Remove the id from the generated attributes, e.g., `gen_attr_1` -> `gen_attr`.
    */
-  private def checkSQLStructure(convertedSQL: String, answerFile: String): Unit = {
+  private def checkSQLStructure(originalSQL: String, convertedSQL: String, answerFile: String) = {
     val normalizedGenSQL = convertedSQL.replaceAll("`gen_attr_\\d+`", "`gen_attr`")
     if (answerFile != null) {
       val path = s"src/test/resources/sqlgen/$answerFile.sql"
+      val separator = "-" * 80
       if (saveQuery) {
-        Files.write(Paths.get(path), normalizedGenSQL.getBytes(StandardCharsets.UTF_8))
+        val answerText = s"${originalSQL.trim()}\n${separator}\n$normalizedGenSQL"
+        Files.write(Paths.get(path), answerText.getBytes(StandardCharsets.UTF_8))
       } else {
-        val answerSQL = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
-        val normalizedExpectSQL = answerSQL.replaceAll("`gen_attr_\\d+`", "`gen_attr`")
-        assert(normalizedGenSQL == normalizedExpectSQL)
+        val answerText = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
+        val sqls = answerText.split(separator)
+        if (sqls.length == 2) {
+          val normalizedExpectSQL = sqls(1).trim()
+          assert(normalizedGenSQL == normalizedExpectSQL)
+        }
       }
     }
   }
@@ -117,7 +128,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
            """.stripMargin, e)
     }
 
-    checkSQLStructure(convertedSQL, answerFile)
+    checkSQLStructure(hiveQl, convertedSQL, answerFile)
 
     try {
       checkAnswer(sql(convertedSQL), df)
