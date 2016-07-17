@@ -33,7 +33,6 @@ object SparkKMeans {
   def parseVector(line: String): Vector[Double] = {
     DenseVector(line.split(' ').map(_.toDouble))
   }
-
   def closestPoint(p: Vector[Double], centers: Array[Vector[Double]]): Int = {
     var bestIndex = 0
     var closest = Double.PositiveInfinity
@@ -75,7 +74,10 @@ object SparkKMeans {
     val data = lines.map(parseVector _).cache()
     val K = args(1).toInt
     val convergeDist = args(2).toDouble
-
+    /*
+     * A requirement of using takeSample() method: the element in data (line 74) should be unique (No duplicates), otherwise the size of newPoints (line 89) will not 
+     * necessarily be the same as K and an execption will be thrown when executing line 94 
+     */
     val kPoints = data.takeSample(withReplacement = false, K, 42)
     var tempDist = 1.0
 
