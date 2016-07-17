@@ -977,7 +977,10 @@ object functions {
    *
    * @group normal_funcs
    * @since 1.4.0
+   * @deprecated As of 2.0.0, replaced by `monotonically_increasing_id`. This will be removed in
+   *            Spark 2.1.
    */
+  @deprecated("Use monotonically_increasing_id. This will be removed in Spark 2.1.", "2.0.0")
   def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
 
   /**
