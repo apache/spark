@@ -618,26 +618,25 @@ private[spark] object BLAS extends Serializable with Logging {
       beta: Double,
       y: DenseVector): Unit = {
     
-    def isSorted(l:Array[Int]): Boolean = {
+    def isSorted(array: Array[Int]): Boolean = {
       var index = 1
-      while(index < l.length){
-        val prevElement = l(index - 1)
-        val currentElement = l(index)
-        
-        if(prevElement > currentElement) return false
+      while (index < array.length) {
+        if (array(index - 1) > array(index)) {
+          return false
+        }
         index += 1
       }
-      return true
+      true
     }
     
-    val (xValues,xIndices) = isSorted(x.indices) match{
-      case false => {
-        val xValuesAndIndices = (x.values zip x.indices).sortBy(_._2)
-        (xValuesAndIndices.map(l => l._1), xValuesAndIndices.map(l => l._2))
+    val (xValues, xIndices) =
+      if (isSorted(x.indices)) {
+        (x.values, x.indices)
+      } else {
+        val (xValues,xIndices) = x.values.zip(x.indices).sortBy(_._2).unzip
+        (xValues.toArray, xIndices.toArray)
       }
-      case _     => (x.values, x.indices)
-    }
-    
+        
     val xNnz = xIndices.length
 
     val yValues = y.values
