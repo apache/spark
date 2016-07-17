@@ -460,7 +460,7 @@ test_that("spark.lda with libsvm", {
 
   stats <- summary(model)
   isDistributed <- stats$isDistributed
-  logLikelihood<- stats$logLikelihood
+  logLikelihood <- stats$logLikelihood
   logPerplexity <- stats$logPerplexity
   vocabSize <- stats$vocabSize
   topics <- stats$topicTopTerms
@@ -496,7 +496,7 @@ test_that("spark.lda with text input", {
 
   stats <- summary(model)
   isDistributed <- stats$isDistributed
-  logLikelihood<- stats$logLikelihood
+  logLikelihood <- stats$logLikelihood
   logPerplexity <- stats$logPerplexity
   vocabSize <- stats$vocabSize
   topics <- stats$topicTopTerms
