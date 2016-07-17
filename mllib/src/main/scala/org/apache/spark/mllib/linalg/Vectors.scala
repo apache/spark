@@ -766,7 +766,6 @@ class SparseVector @Since("1.0.0") (
         (this.indices, this.values)
       } else {
         val (indices, values) = this.indices.zip(this.values).sortBy(_._1).unzip
-        println("gg")
         (indices.toArray, values.toArray)
       }
   }
