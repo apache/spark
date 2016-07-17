@@ -362,7 +362,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     }
 
     if (projects.map(_.toAttribute) == projects &&
-        projectSet.size == projects.size &&
         filterSet.subsetOf(projectSet)) {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
