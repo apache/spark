@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 // $example off:data_types$
 // $example off:programmatic_schema$
 
-object SparkSqlExample {
+object SparkSQLExample {
 
   // $example on:create_ds$
   // Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit,
