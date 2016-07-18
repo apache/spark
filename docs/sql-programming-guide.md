@@ -1879,9 +1879,8 @@ Spark SQL and DataFrames support the following data types:
 
 All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
 You can access them by doing
-{% highlight scala %}
-import  org.apache.spark.sql.types._
-{% endhighlight %}
+
+{% include_example data_types scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
 
 <table class="table">
 <tr>
