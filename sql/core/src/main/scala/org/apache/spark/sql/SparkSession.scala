@@ -115,9 +115,11 @@ class SparkSession private(
 
   /**
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
+   *
+   * @since 2.0.0
    */
   @transient
-  private[spark] val sqlContext: SQLContext = new SQLContext(this)
+  val sqlContext: SQLContext = new SQLContext(this)
 
   /**
    * Runtime configuration interface for Spark.
