@@ -1039,8 +1039,15 @@ class RDDTests(ReusedPySparkTestCase):
     def test_cartesian_chaining(self):
         # Tests for SPARK-16589
         rdd = self.sc.parallelize(range(10), 2)
-        self.assertEqual(rdd.cartesian(rdd).cartesian(rdd).count(), 1000)
-        self.assertEqual(rdd.cartesian(rdd.cartesian(rdd)).count(), 1000)
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd).cartesian(rdd).collect()),
+            set([((x, y), z) for x in range(10) for y in range(10) for z in range(10)])
+        )
+
+        self.assertSetEqual(
+            set(rdd.cartesian(rdd.cartesian(rdd)).collect()),
+            set([(x, (y, z)) for x in range(10) for y in range(10) for z in range(10)])
+        )
 
 
 class ProfilerTests(PySparkTestCase):
