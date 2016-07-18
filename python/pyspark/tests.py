@@ -1036,6 +1036,12 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    def test_cartesian_chaining(self):
+        # Tests for SPARK-16589
+        rdd = self.sc.parallelize(range(10), 2)
+        self.assertEqual(rdd.cartesian(rdd).cartesian(rdd).count(), 1000)
+        self.assertEqual(rdd.cartesian(rdd.cartesian(rdd)).count(), 1000)
+
 
 class ProfilerTests(PySparkTestCase):
 
