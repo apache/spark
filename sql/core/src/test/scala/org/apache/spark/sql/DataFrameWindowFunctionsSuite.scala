@@ -116,11 +116,12 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         dense_rank().over(Window.partitionBy("value").orderBy("key")),
         rank().over(Window.partitionBy("value").orderBy("key")),
         cume_dist().over(Window.partitionBy("value").orderBy("key")),
-        percent_rank().over(Window.partitionBy("value").orderBy("key"))),
-      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
-      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
-      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
-      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+        percent_rank().over(Window.partitionBy("value").orderBy("key")),
+        percentile("key", 0.5).over(Window.partitionBy("value").orderBy("key"))),
+      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d, Seq(1.0)) ::
+      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d, Seq(1.0)) ::
+      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d, Seq(2.0)) ::
+      Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d, Seq(2.0)) :: Nil)
   }
 
   test("window function should fail if order by clause is not specified") {
