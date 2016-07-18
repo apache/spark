@@ -181,7 +181,7 @@ private object ConfigEntry {
           }
         case "system" => sys.props.get(name)
         case "env" => Option(getenv(name))
-        case _ => throw new IllegalArgumentException(s"Invalid prefix: $prefix")
+        case _ => None
       }
       Regex.quoteReplacement(replacement.getOrElse(m.matched))
     })

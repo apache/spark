@@ -206,6 +206,9 @@ class ConfigEntrySuite extends SparkFunSuite {
 
     assert(expand("${spark.value1") === "${spark.value1")
 
+    // Unknown prefixes.
+    assert(expand("${unknown:value}") === "${unknown:value}")
+
     // Chained references.
     val conf1 = ConfigBuilder(testKey("conf1"))
       .stringConf
