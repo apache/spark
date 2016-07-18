@@ -1330,7 +1330,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // SPARK-10310: Special cases LazySimpleSerDe
         val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
           Try(conf.getConfString(configKey, configValue)).toOption
-          defaultRecordHandler(configKey)
         } else {
           None
         }
