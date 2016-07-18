@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import java.io.IOException;
-import java.util.*;
 
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -27,7 +26,7 @@ import org.apache.spark.unsafe.Platform;
 
 
 /**
- * RowBatch stores key value pairs in contiguous memory region.
+ * RowBasedKeyValueBatch stores key value pairs in contiguous memory region.
  *
  * Each key or value is stored as a single UnsafeRow. The format for each record looks like this:
  * [4 bytes total size = (klen + vlen + 4)] [4 bytes key size = klen]
@@ -35,11 +34,12 @@ import org.apache.spark.unsafe.Platform;
  * [8 bytes pointer to next]
  * Thus, record length = 8 + klen + vlen + 8
  *
- * RowBatch will automatically acquire new pages (MemoryBlock) when the current page is used up.
+ * RowBasedKeyValueBatch will automatically acquire new pages (MemoryBlock) when the current page
+ * is used up.
  *
  * TODO: making each entry more compact, e.g., combine key and value into a single UnsafeRow
  */
-public final class SimpleRowBatch extends MemoryConsumer{
+public final class RowBasedKeyValueBatch extends MemoryConsumer{
     private static final int DEFAULT_CAPACITY = 1 << 16;
     private static final long DEFAULT_PAGE_SIZE = 64 * 1024 * 1024;
 
@@ -56,7 +56,6 @@ public final class SimpleRowBatch extends MemoryConsumer{
     private int keyRowId = -1;
 
     // full addresses for key rows and value rows
-    // TODO: opt: this could be eliminated if all fields are fixed length
     private long[] keyOffsets;
 
     // if all data types in the schema are fixed length
@@ -70,14 +69,14 @@ public final class SimpleRowBatch extends MemoryConsumer{
     private long recordStartOffset;
     private long pageCursor = 0;
 
-    public static SimpleRowBatch allocate(StructType keySchema, StructType valueSchema,
-                                    TaskMemoryManager manager) {
-        return new SimpleRowBatch(keySchema, valueSchema, DEFAULT_CAPACITY, manager);
+    public static RowBasedKeyValueBatch allocate(StructType keySchema, StructType valueSchema,
+                                                 TaskMemoryManager manager) {
+        return new RowBasedKeyValueBatch(keySchema, valueSchema, DEFAULT_CAPACITY, manager);
     }
 
-    public static SimpleRowBatch allocate(StructType keySchema, StructType valueSchema,
-                                    TaskMemoryManager manager, int maxRows) {
-        return new SimpleRowBatch(keySchema, valueSchema, maxRows, manager);
+    public static RowBasedKeyValueBatch allocate(StructType keySchema, StructType valueSchema,
+                                                 TaskMemoryManager manager, int maxRows) {
+        return new RowBasedKeyValueBatch(keySchema, valueSchema, maxRows, manager);
     }
 
     public int numRows() { return numRows; }
@@ -201,7 +200,7 @@ public final class SimpleRowBatch extends MemoryConsumer{
     }
 
     public long spill(long size, MemoryConsumer trigger) throws IOException {
-        throw new OutOfMemoryError("RowBatch should never spill");
+        throw new OutOfMemoryError("row batch should never spill");
     }
 
     /**
@@ -281,8 +280,8 @@ public final class SimpleRowBatch extends MemoryConsumer{
         };
     }
 
-    private SimpleRowBatch(StructType keySchema, StructType valueSchema, int maxRows,
-                     TaskMemoryManager manager) {
+    private RowBasedKeyValueBatch(StructType keySchema, StructType valueSchema, int maxRows,
+                                  TaskMemoryManager manager) {
         super(manager, manager.pageSizeBytes(), manager.getTungstenMemoryMode());
 
         this.keySchema = keySchema;

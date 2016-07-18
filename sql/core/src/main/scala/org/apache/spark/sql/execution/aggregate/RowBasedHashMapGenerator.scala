@@ -109,7 +109,7 @@ class RowBasedHashMapGenerator(
         }.mkString("\n").concat(";")
 
     s"""
-       |  private org.apache.spark.sql.catalyst.expressions.SimpleRowBatch batch;
+       |  private org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch batch;
        |  private int[] buckets;
        |  private int capacity = 1 << 16;
        |  private double loadFactor = 0.5;
@@ -130,8 +130,8 @@ class RowBasedHashMapGenerator(
        |    super(taskMemoryManager,
        |      taskMemoryManager.pageSizeBytes(),
        |      taskMemoryManager.getTungstenMemoryMode());
-       |    batch = org.apache.spark.sql.catalyst.expressions.SimpleRowBatch.allocate(keySchema,
-       |      valueSchema, taskMemoryManager, capacity);
+       |    batch = org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch
+       |      .allocate(keySchema, valueSchema, taskMemoryManager, capacity);
        |
        |    final UnsafeProjection valueProjection = UnsafeProjection.create(valueSchema);
        |    final byte[] emptyBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
@@ -180,8 +180,8 @@ class RowBasedHashMapGenerator(
 
   /**
    * Generates a method that returns true if the group-by keys exist at a given index in the
-   * associated [[org.apache.spark.sql.catalyst.expressions.RowBatch]]. For instance, if we
-   * have 2 long group-by keys, the generated function would be of the form:
+   * associated [[org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch]].
+   * For instance, if we have 2 long group-by keys, the generated function would be of the form:
    *
    */
   private def generateEquals(): String = {
@@ -206,7 +206,7 @@ class RowBasedHashMapGenerator(
    * [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]] which keeps track of the
    * aggregate value(s) for a given set of keys. If the corresponding row doesn't exist, the
    * generated method adds the corresponding row in the associated
-   * [[org.apache.spark.sql.catalyst.expressions.RowBatch]].
+   * [[org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch]].
    *
    * TODO: add an example instance
    *

@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import java.util.Random;
 
-public class SimpleRowBatchSuite {
+public class RowBasedKeyValueBatchSuite {
 
     private final Random rand = new Random(42);
 
@@ -87,7 +87,7 @@ public class SimpleRowBatchSuite {
         return row;
     }
 
-    private UnsafeRow appendRow(SimpleRowBatch batch, UnsafeRow key, UnsafeRow value) {
+    private UnsafeRow appendRow(RowBasedKeyValueBatch batch, UnsafeRow key, UnsafeRow value) {
         return batch.appendRow(key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes(),
                 value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes());
     }
@@ -133,7 +133,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void emptyBatch() throws Exception {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         try {
             Assert.assertEquals(0, batch.numRows());
@@ -169,7 +169,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void setAndRetrieve() {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         try {
             UnsafeRow ret1 = appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
@@ -206,7 +206,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void setUpdateAndRetrieve() {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         try {
             appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
@@ -223,7 +223,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void iteratorTest() throws Exception {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         try {
             appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
@@ -255,7 +255,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void fixedLengthTest() throws Exception {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(fixedKeySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(fixedKeySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         try {
             appendRow(batch, makeKeyRow(11, 11), makeValueRow(1, 1));
@@ -295,7 +295,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void appendRowUntilExceedingCapacity() throws Exception {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, 10);
         try {
             UnsafeRow key = makeKeyRow(1, "A");
@@ -323,7 +323,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void appendRowUntilExceedingPageSize() throws Exception {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, 64 * 1024 * 1024); //enough capacity
         try {
             UnsafeRow key = makeKeyRow(1, "A");
@@ -357,7 +357,7 @@ public class SimpleRowBatchSuite {
     @Test
     public void failureToAllocateFirstPage() throws Exception {
         memoryManager.limit(1024);
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         try {
             UnsafeRow key = makeKeyRow(1, "A");
@@ -372,7 +372,7 @@ public class SimpleRowBatchSuite {
 
     @Test
     public void randomizedTest() {
-        SimpleRowBatch batch = SimpleRowBatch.allocate(keySchema,
+        RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
                 valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
         int numEntry = 100;
         long[] expectedK1 = new long[numEntry];
