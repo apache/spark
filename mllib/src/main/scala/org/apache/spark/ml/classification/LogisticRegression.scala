@@ -425,7 +425,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         if (!state.actuallyConverged) {
-          logWarning("LogisticRegression training fininshed but the result " +
+          logWarning("LogisticRegression training finished but the result " +
             s"is not converged because: ${state.convergedReason.get.reason}")
         }
 

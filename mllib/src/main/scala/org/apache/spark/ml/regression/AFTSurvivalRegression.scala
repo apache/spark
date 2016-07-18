@@ -246,7 +246,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       }
 
       if (!state.actuallyConverged) {
-        logWarning("AFTSurvivalRegression training fininshed but the result " +
+        logWarning("AFTSurvivalRegression training finished but the result " +
           s"is not converged because: ${state.convergedReason.get.reason}")
       }
 
