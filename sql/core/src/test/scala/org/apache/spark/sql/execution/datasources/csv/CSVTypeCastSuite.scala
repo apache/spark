@@ -73,10 +73,10 @@ class CSVTypeCastSuite extends SparkFunSuite {
 
   test("String type should always return the same as the input") {
     assert(
-      CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions()) ==
+      CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions("nullValue", null)) ==
         UTF8String.fromString(""))
     assert(
-      CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions()) ==
+      CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions("nullValue", null)) ==
         UTF8String.fromString(""))
   }
 
@@ -180,5 +180,13 @@ class CSVTypeCastSuite extends SparkFunSuite {
       CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
       CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", StringType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", TimestampType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", DateType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", BooleanType, nullable = true, CSVOptions("nullValue", "-")))
   }
 }

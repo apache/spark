@@ -41,6 +41,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
+  // This options below will be applied for the tests for reading in `HadoopFsRelationTest`.
+  val extraReadOptions = Map.empty[String, String]
+
+  // This options below will be applied for the tests for writing in `HadoopFsRelationTest`.
+  val extraWriteOptions = Map.empty[String, String]
+
   protected def supportsDataType(dataType: DataType): Boolean = true
 
   val dataSchema =
@@ -170,13 +176,22 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - non-partitioned table - Overwrite") {
     withTempPath { file =>
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
 
       checkAnswer(
         spark.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(),
         testDF.collect())
     }
@@ -184,12 +199,21 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - non-partitioned table - Append") {
     withTempPath { file =>
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
-      testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Append)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
 
       checkAnswer(
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.union(testDF).orderBy("a").collect())
     }
@@ -217,6 +241,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.ErrorIfExists)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -224,6 +249,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkQueries(
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath))
     }
   }
@@ -232,12 +258,14 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -245,6 +273,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkAnswer(
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
     }
@@ -254,12 +283,14 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Append)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -267,6 +298,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkAnswer(
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath),
         partitionedTestDF.union(partitionedTestDF).collect())
     }
@@ -276,12 +308,14 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF1.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
       partitionedTestDF2.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Append)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -289,6 +323,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkAnswer(
         spark.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
     }
@@ -512,16 +547,24 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       dataInSubdir.write
         .format(dataSourceName)
         .mode(SaveMode.Overwrite)
+        .options(extraWriteOptions)
         .save(subdir.getCanonicalPath)
 
       // Inferring schema should throw error as it should not find any file to infer
       val e = intercept[Exception] {
-        spark.read.format(dataSourceName).load(dir.getCanonicalPath)
+      spark.read
+        .format(dataSourceName)
+        .options(extraReadOptions)
+        .load(dir.getCanonicalPath)
       }
 
       e match {
         case _: AnalysisException =>
           assert(e.getMessage.contains("infer"))
+
+        case _: IllegalArgumentException =>
+          // CSV data source throws this exception when it cannot find any file to infer.
+          assert(e.getMessage.contains("Can not create a Path from an empty string"))
 
         case _: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
           // Ignore error, the source format requires schema to be provided by user
@@ -536,6 +579,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         val df = spark.read
           .format(dataSourceName)
           .schema(dataInDir.schema) // avoid schema inference for any format
+          .options(extraReadOptions)
           .load(path.getCanonicalPath)
         checkAnswer(df, expectedAnswer)
       }
@@ -549,6 +593,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       // Verify that if there is data in dir, then reading by path 'dir/' reads only dataInDir
       dataInDir.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Append)   // append to prevent subdir from being deleted
         .save(dir.getCanonicalPath)
       require(dir.listFiles().exists(!_.isDirectory))
@@ -573,16 +618,19 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       dataInSubdir.write
         .format (dataSourceName)
+        .options(extraWriteOptions)
         .mode (SaveMode.Overwrite)
         .save (subdir.getCanonicalPath)
 
       dataInSubsubdir.write
         .format (dataSourceName)
+        .options(extraWriteOptions)
         .mode (SaveMode.Overwrite)
         .save (subsubdir.getCanonicalPath)
 
       dataInAnotherSubsubdir.write
         .format (dataSourceName)
+        .options(extraWriteOptions)
         .mode (SaveMode.Overwrite)
         .save (anotherSubsubdir.getCanonicalPath)
 
@@ -620,6 +668,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       def check(path: String, expectedDf: DataFrame): Unit = {
         val df = spark.read
           .format(dataSourceName)
+          .options(extraReadOptions)
           .schema(schema) // avoid schema inference for any format, expected to be same format
           .load(path)
         checkAnswer(df, expectedDf)
@@ -644,6 +693,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       val dir = path.getCanonicalPath
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(dir)
@@ -658,6 +708,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           basePath.foreach(reader.option("basePath", _))
           val testDf = reader
             .format(dataSourceName)
+            .options(extraReadOptions)
             .load(path)
           assert(expectedResult.isLeft, s"Error was expected with $path but result found")
           checkAnswer(testDf, expectedResult.left.get)
@@ -796,23 +847,33 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
     val df = spark.range(1, 10).toDF("i")
     withTempPath { dir =>
-      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+      df.write
+        .mode("append")
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(dir.getCanonicalPath)
       // Because there data already exists,
       // this append should succeed because we will use the output committer associated
       // with file format and AlwaysFailOutputCommitter will not be used.
-      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+      df.write
+        .mode("append")
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(dir.getCanonicalPath)
       checkAnswer(
         spark.read
           .format(dataSourceName)
           .option("dataSchema", df.schema.json)
-          .options(extraOptions)
+          .options(extraOptions ++ extraReadOptions)
           .load(dir.getCanonicalPath),
         df.union(df))
 
       // This will fail because AlwaysFailOutputCommitter is used when we do append.
       intercept[Exception] {
         df.write.mode("overwrite")
-          .options(extraOptions).format(dataSourceName).save(dir.getCanonicalPath)
+          .options(extraOptions ++ extraWriteOptions)
+          .format(dataSourceName)
+          .save(dir.getCanonicalPath)
       }
     }
     withTempPath { dir =>
@@ -821,7 +882,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       // and there is no existing data.
       intercept[Exception] {
         df.write.mode("append")
-          .options(extraOptions)
+          .options(extraOptions ++ extraWriteOptions)
           .format(dataSourceName)
           .save(dir.getCanonicalPath)
       }
