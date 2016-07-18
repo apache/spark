@@ -56,7 +56,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
   test("Correctly load default credential providers") {
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager.initialize()
 
     credentialManager.getServiceCredentialProvider("hdfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
@@ -66,7 +65,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   test("disable hive credential provider") {
     sparkConf.set("spark.yarn.security.credentials.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager.initialize()
 
     credentialManager.getServiceCredentialProvider("hdfs") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
@@ -77,7 +75,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     sparkConf.set("spark.yarn.security.tokens.hdfs.enabled", "false")
     sparkConf.set("spark.yarn.security.tokens.hive.enabled", "false")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager.initialize()
 
     credentialManager.getServiceCredentialProvider("hdfs") should be (None)
     credentialManager.getServiceCredentialProvider("hive") should be (None)
@@ -88,7 +85,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   test("plug in customized credential provider") {
     sparkConf.set("spark.yarn.security.credentials.test.enabled", "true")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager.initialize()
 
     credentialManager.getServiceCredentialProvider("test") should not be (None)
   }
@@ -96,7 +92,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   test("verify obtaining credentials from provider") {
     sparkConf.set("spark.yarn.security.credentials.test.enabled", "true")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager.initialize()
     val creds = new Credentials()
 
     // Tokens can only be obtained from TestTokenProvider, for hdfs, hbase and hive tokens cannot
@@ -110,7 +105,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   test("verify getting credential renewal info") {
     sparkConf.set("spark.yarn.security.tokens.test.enabled", "true")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager.initialize()
     val creds = new Credentials()
 
     val testCredentialProvider = credentialManager.getServiceCredentialProvider("test").get

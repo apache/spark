@@ -114,7 +114,6 @@ private[spark] class ApplicationMaster(
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
   private val credentialManager = new ConfigurableCredentialManager(sparkConf, yarnConf)
-  credentialManager.initialize()
 
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in

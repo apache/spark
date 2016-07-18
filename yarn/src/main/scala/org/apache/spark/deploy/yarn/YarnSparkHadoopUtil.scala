@@ -92,7 +92,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
     if (credentialManager == null) {
       credentialManager = new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf))
-      credentialManager.initialize()
     }
     credentialManager.delegationTokenUpdater.updateCredentialsIfRequired()
   }

@@ -33,20 +33,17 @@ import org.apache.spark.util.Utils
  * A ConfigurableCredentialManager to manage all the registered credential providers and offer
  * APIs for other modules to obtain credentials as well as renewal time. By default
  * [[HDFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
- * be loaded in, any plugged-in credential provider wants to be managed by
- * ConfigurableCredentialManager needs to implement [[ServiceCredentialProvider]] interface and put
- * into resources to be loaded by ServiceLoader.
+ * be loaded in if not explicitly disabled, any plugged-in credential provider wants to be
+ * managed by ConfigurableCredentialManager needs to implement [[ServiceCredentialProvider]]
+ * interface and put into resources to be loaded by ServiceLoader.
  *
  * Also the specific credential provider is controlled by
  * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
  */
-final class ConfigurableCredentialManager private[yarn] (
+private[yarn] final class ConfigurableCredentialManager (
     sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
-
-  // Maintain all the registered credential providers
-  private var credentialProviders: Map[String, ServiceCredentialProvider] = _
 
   // AMDelegationTokenRenewer, this will lazily be create and started in the AM
   private lazy val _delegationTokenRenewer =
@@ -57,14 +54,15 @@ final class ConfigurableCredentialManager private[yarn] (
   private lazy val _delegationTokenUpdater =
     new ExecutorDelegationTokenUpdater(sparkConf, hadoopConf, this)
 
-  def initialize(): Unit = {
+  // Maintain all the registered credential providers
+  private val credentialProviders = {
     val defaultServices = Set("hdfs", "hive", "hbase")
 
     val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader).asScala
 
     // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
-    credentialProviders = providers.filter { p =>
+    providers.filter { p =>
       sparkConf.getOption(providerEnabledConfig.format(p.serviceName)).map(_.toBoolean)
         .orElse {
           sparkConf.getOption(deprecatedProviderEnabledConfig.format(p.serviceName)).map { c =>
