@@ -396,8 +396,14 @@ class SQLBuilder private (
       }
     }
 
+    val broadcastHint = project match {
+      case p @ Project(projectList, Hint("BROADCAST", tables, child)) =>
+        if (tables.nonEmpty) s"/*+ MAPJOIN(${tables.mkString(", ")}) */" else ""
+      case _ => ""
+    }
     build(
       "SELECT",
+      broadcastHint,
       aggExprs.map(_.sql).mkString(", "),
       if (agg.child == OneRowRelation) "" else "FROM",
       toSQL(project.child),
@@ -494,6 +500,8 @@ class SQLBuilder private (
           h.copy(child = j.copy(right = hintChild))
         case s @ SubqueryAlias(_, h @ Hint("BROADCAST", _, hintChild)) =>
           h.copy(child = s.copy(child = hintChild))
+        case gg @ GlobalLimit(_, h @ Hint("BROADCAST", _, hintChild)) =>
+          h.copy(child = gg.copy(child = hintChild))
         case ll @ LocalLimit(_, h @ Hint("BROADCAST", _, hintChild)) =>
           h.copy(child = ll.copy(child = hintChild))
         case f @ Filter(_, h @ Hint("BROADCAST", _, hintChild)) =>

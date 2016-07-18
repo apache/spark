@@ -1336,9 +1336,88 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     )
   }
 
+  test("broadcast hint with window") {
+    checkGeneratedSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1) */
+        |       x.key, MAX(y.key) OVER (PARTITION BY x.key % 5 ORDER BY x.key)
+        |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key
+      """.stripMargin,
+      """
+        |SELECT `gen_attr` AS `key`, `gen_attr` AS `max(key) OVER (PARTITION BY (key % CAST(5 AS BIGINT)) ORDER BY key ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`
+        |FROM (SELECT `gen_attr`, `gen_attr`
+        |      FROM (SELECT gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`,
+        |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr` ORDER BY `gen_attr` ASC
+        |                                         RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS `gen_attr`
+        |            FROM (SELECT /*+ MAPJOIN(parquet_t1) */ `gen_attr`, `gen_attr`,
+        |                         (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`
+        |                  FROM ((SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                         FROM `default`.`parquet_t1`)
+        |                         AS gen_subquery_0)
+        |                  AS x
+        |           INNER JOIN (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                       FROM `default`.`parquet_t1`)
+        |                       AS gen_subquery_1
+        |           ON (`gen_attr` = `gen_attr`))
+        |           AS gen_subquery_2)
+        |      AS gen_subquery_3)
+        |      AS x
+      """.stripMargin
+    )
+  }
+
+  test("broadcast hint with rollup") {
+    checkGeneratedSQL(
+      """
+        |SELECT /*+ MAPJOIN(parquet_t1) */
+        |       count(*) as cnt, key%5, grouping_id()
+        |FROM parquet_t1
+        |GROUP BY key % 5 WITH ROLLUP""".stripMargin,
+      """
+        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `(key % CAST(5 AS BIGINT))`, `gen_attr` AS `grouping_id()`
+        |FROM (SELECT /*+ MAPJOIN(parquet_t1) */ count(1) AS `gen_attr`,
+        |             (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
+        |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |            FROM `default`.`parquet_t1`)
+        |            AS gen_subquery_0
+        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT))
+        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))), ()))
+        |      AS gen_subquery_1
+      """.stripMargin)
+
+  }
+
+  test("broadcast hint with grouping sets") {
+    checkGeneratedSQL(
+      s"""
+         |SELECT /*+ MAPJOIN(parquet_t1) */
+         |       count(*) AS cnt, key % 5 AS k1, key - 5 AS k2,grouping_id() AS k3
+         |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
+         |GROUPING SETS (key % 5, key - 5)
+      """.stripMargin,
+      """
+        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `k1`, `gen_attr` AS `k2`, `gen_attr` AS `k3`
+        |FROM (SELECT count(1) AS `gen_attr`, (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`,
+        |             (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
+        |      FROM (SELECT /*+ MAPJOIN(parquet_t1) */ `gen_attr`,
+        |                   (`gen_attr` % CAST(2 AS BIGINT)) AS `gen_attr`,
+        |                   (`gen_attr` - CAST(5 AS BIGINT)) AS `gen_attr`
+        |            FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
+        |                  FROM `default`.`parquet_t1`)
+        |                  AS gen_subquery_0)
+        |            AS t
+        |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
+        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))), ((`gen_attr` - CAST(5 AS BIGINT)))))
+        |      AS gen_subquery_1
+      """.stripMargin)
+  }
+
+
   // This will be removed in favor of SPARK-16590.
   private def checkGeneratedSQL(sqlString: String, expectedString: String): Unit = {
-    val generatedSQL = new SQLBuilder(sql(sqlString)).toSQL
+    val df = sql(sqlString)
+    logError("\n" + df.queryExecution.analyzed.treeString)
+    val generatedSQL = new SQLBuilder(df).toSQL
     val normalizedGenSQL = generatedSQL.replaceAll("gen_attr_\\d+", "gen_attr")
     assert(normalizedGenSQL == expectedString.replaceAll("[\n]?\\s+", " ").trim())
   }
