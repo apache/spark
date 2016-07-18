@@ -1344,11 +1344,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key
       """.stripMargin,
       """
-        |SELECT `gen_attr` AS `key`, `gen_attr` AS `max(key) OVER (PARTITION BY (key % CAST(5 AS BIGINT)) ORDER BY key ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`
+        |SELECT `gen_attr` AS `key`,
+        |       `gen_attr` AS `max(key) OVER (PARTITION BY (key % CAST(5 AS BIGINT))
+        |                                     ORDER BY key ASC RANGE BETWEEN UNBOUNDED PRECEDING AND
+        |                                                                    CURRENT ROW)`
         |FROM (SELECT `gen_attr`, `gen_attr`
-        |      FROM (SELECT gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`,
+        |      FROM (SELECT gen_subquery_2.`gen_attr`, gen_subquery_2.`gen_attr`,
+        |                   gen_subquery_2.`gen_attr`,
         |                   max(`gen_attr`) OVER (PARTITION BY `gen_attr` ORDER BY `gen_attr` ASC
-        |                                         RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS `gen_attr`
+        |                                         RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        |                                         AS `gen_attr`
         |            FROM (SELECT /*+ MAPJOIN(parquet_t1) */ `gen_attr`, `gen_attr`,
         |                         (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`
         |                  FROM ((SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
@@ -1374,7 +1379,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t1
         |GROUP BY key % 5 WITH ROLLUP""".stripMargin,
       """
-        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `(key % CAST(5 AS BIGINT))`, `gen_attr` AS `grouping_id()`
+        |SELECT `gen_attr` AS `cnt`, `gen_attr` AS `(key % CAST(5 AS BIGINT))`,
+        |       `gen_attr` AS `grouping_id()`
         |FROM (SELECT /*+ MAPJOIN(parquet_t1) */ count(1) AS `gen_attr`,
         |             (`gen_attr` % CAST(5 AS BIGINT)) AS `gen_attr`, grouping_id() AS `gen_attr`
         |      FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr`
@@ -1407,7 +1413,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |                  AS gen_subquery_0)
         |            AS t
         |      GROUP BY (`gen_attr` % CAST(5 AS BIGINT)), (`gen_attr` - CAST(5 AS BIGINT))
-        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))), ((`gen_attr` - CAST(5 AS BIGINT)))))
+        |      GROUPING SETS(((`gen_attr` % CAST(5 AS BIGINT))),
+        |                    ((`gen_attr` - CAST(5 AS BIGINT)))))
         |      AS gen_subquery_1
       """.stripMargin)
   }
@@ -1415,9 +1422,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // This will be removed in favor of SPARK-16590.
   private def checkGeneratedSQL(sqlString: String, expectedString: String): Unit = {
-    val df = sql(sqlString)
-    logError("\n" + df.queryExecution.analyzed.treeString)
-    val generatedSQL = new SQLBuilder(df).toSQL
+    val generatedSQL = new SQLBuilder(sql(sqlString)).toSQL
     val normalizedGenSQL = generatedSQL.replaceAll("gen_attr_\\d+", "gen_attr")
     assert(normalizedGenSQL == expectedString.replaceAll("[\n]?\\s+", " ").trim())
   }
