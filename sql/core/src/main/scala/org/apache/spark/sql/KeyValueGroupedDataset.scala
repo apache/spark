@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ou
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.expressions.ReduceAggregator
 
 /**
  * :: Experimental ::
@@ -179,30 +179,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val encoder = encoderFor[V]
-    val intEncoder: ExpressionEncoder[Int] = ExpressionEncoder()
-    val aggregator: TypedColumn[V, V] = new Aggregator[V, (Int, V), V] {
-      def bufferEncoder: Encoder[(Int, V)] = ExpressionEncoder.tuple(intEncoder, encoder)
-      def outputEncoder: Encoder[V] = encoder
-
-      def zero: (Int, V) = (0, null.asInstanceOf[V])
-      def reduce(reducedValue: (Int, V), value: V): (Int, V) = {
-        if (reducedValue._1 == 0) {
-          (1, value)
-        } else {
-          (1, f(reducedValue._2, value))
-        }
-      }
-      def merge(buf1: (Int, V), buf2: (Int, V)): (Int, V) = {
-        if (buf1._1 == 0) {
-          buf2
-        } else if (buf2._2 == 0) {
-          buf1
-        } else {
-          (1, f(buf1._2, buf2._2))
-        }
-      }
-      def finish(result: (Int, V)): V = result._2
-    }.toColumn
+    val aggregator: TypedColumn[V, V] = new ReduceAggregator(f, encoder).toColumn
 
     agg(aggregator)
   }
