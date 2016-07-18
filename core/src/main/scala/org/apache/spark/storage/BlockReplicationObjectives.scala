@@ -129,21 +129,31 @@ object BlockReplicationOptimizer extends Logging {
       // we see how the addition of this peer to optimalPeers changes objectives left/met
       // ideally, we want a peer whose addition, meets more objectives
       // while making sure we still meet objectives met so far
-      val groupedPeers = peers.groupBy {p =>
-        val peersSet = optimalPeers + p
-        val allPreviousObjectivesMet =
-          objectivesMet.forall(_.isObjectiveMet(blockManagerId, peersSet))
-        if(allPreviousObjectivesMet) {
-          objectivesLeft.foldLeft(0) { case (c, o) =>
-            val weight = if (o.isObjectiveMet(blockManagerId, peersSet)) o.weight else 0
-            c + weight
-          }
-        } else {
-          0
-        }
-      }
 
-      val (maxCount, maxPeers) = groupedPeers.maxBy {case (k, v) => k}
+      val (maxCount, maxPeers) = peers.foldLeft((0, Set.empty[BlockManagerId])) {
+        case ((prevMax, maxSet), peer) =>
+          val peersSet = optimalPeers + peer
+          val allPreviousObjectivesMet =
+            objectivesMet.forall(_.isObjectiveMet(blockManagerId, peersSet))
+          val score = if (allPreviousObjectivesMet) {
+            objectivesLeft.foldLeft(0) { case (c, o) =>
+              val weight = if (o.isObjectiveMet(blockManagerId, peersSet)) o.weight else 0
+              c + weight
+            }
+          } else {
+            0
+          }
+          if (score > prevMax) {
+            // we found a peer that gets us a higher score!
+            (score, Set(peer))
+          } else if (score == prevMax) {
+            // this peer matches our highest score so far, add this and continue
+            (prevMax, maxSet + peer)
+          } else {
+            // this peer scores lower, we ignore it
+            (prevMax, maxSet)
+          }
+      }
 
       logDebug(s"Peers ${maxPeers.mkString(", ")} meet $maxCount objective/s")
 
