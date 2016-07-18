@@ -113,7 +113,9 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def taskSetFinished(manager: TaskSetManager): Unit = finishedManagers += manager
+  override def taskSetFinished(manager: TaskSetManager, success: Boolean): Unit = {
+    finishedManagers += manager
+  }
 
   override def isExecutorAlive(execId: String): Boolean = executors.contains(execId)
 
@@ -422,7 +424,9 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // affinity to exec1 on host1 - which we will fail.
     val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
     val clock = new ManualClock
-    val manager = new TaskSetManager(sched, taskSet, 4, clock)
+
+    val blacklist = new BlacklistTrackerImpl(conf, clock)
+    val manager = new TaskSetManager(sched, blacklist, taskSet, 4, clock)
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
@@ -475,19 +479,25 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
     }
 
-    // After reschedule delay, scheduling on exec1 should be possible.
+    // Despite advancing beyond the time for expiring executors from within the blacklist,
+    // we *never* expire from the *within* stage blacklist
     clock.advance(rescheduleDelay)
+    blacklist.expireExecutorsInBlacklist()
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
-      assert(offerResult.isDefined, "Expect resource offer to return a task")
+      assert(offerResult.isEmpty)
+    }
 
+    {
+      val offerResult = manager.resourceOffer("exec3", "host1", NODE_LOCAL)
+      assert(offerResult.isDefined)
       assert(offerResult.get.index === 0)
-      assert(offerResult.get.executorId === "exec1")
+      assert(offerResult.get.executorId === "exec3")
 
-      assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).isEmpty)
+      assert(manager.resourceOffer("exec3", "host1", NODE_LOCAL).isEmpty)
 
-      // Cause exec1 to fail : failure 4
+      // Cause exec3 to fail : failure 4
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
     }
 
@@ -692,13 +702,18 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // node-local tasks are scheduled without delay
+    assert(manager.pollPendingTask.isDefined)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.pollPendingTask != 0)
     assert(manager.resourceOffer("execA", "host2", NODE_LOCAL).get.index === 1)
+    assert(!Set(0, 1).contains(manager.pollPendingTask.get))
     assert(manager.resourceOffer("execA", "host3", NODE_LOCAL).get.index === 3)
+    assert(!Set(0, 1, 3).contains(manager.pollPendingTask.get))
     assert(manager.resourceOffer("execA", "host3", NODE_LOCAL) === None)
 
     // schedule no-preference after node local ones
     assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
+    assert(manager.pollPendingTask === None)
   }
 
   test("SPARK-4939: node-local tasks should be scheduled right after process-local tasks finished")
@@ -714,11 +729,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // process-local tasks are scheduled first
+    assert(manager.pollPendingTask.isDefined)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 2)
+    assert(manager.pollPendingTask.get != 2)
     assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 3)
+    assert(!Set(2, 3).contains(manager.pollPendingTask.get))
     // node-local tasks are scheduled without delay
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(!Set(0, 2, 3).contains(manager.pollPendingTask.get))
     assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.pollPendingTask === None)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
     assert(manager.resourceOffer("execB", "host2", NODE_LOCAL) == None)
   }
@@ -734,12 +754,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // process-local tasks are scheduled first
+    assert(manager.pollPendingTask.isDefined)
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 1)
+    assert(manager.pollPendingTask.get != 1)
     assert(manager.resourceOffer("execB", "host2", PROCESS_LOCAL).get.index === 2)
+    assert(!Set(1, 2).contains(manager.pollPendingTask.get))
     // no-pref tasks are scheduled without delay
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL) == None)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 0)
+    assert(manager.pollPendingTask == None)
     assert(manager.resourceOffer("execA", "host1", ANY) == None)
   }
 
@@ -857,6 +881,10 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // killed, so the FakeTaskScheduler is only told about the successful completion
     // of the speculated task.
     assert(sched.endedTasks(3) === Success)
+  }
+
+  test("don't update blacklist for shuffle fetch failures") {
+    pending
   }
 
   private def createTaskResult(
