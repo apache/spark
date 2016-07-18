@@ -41,8 +41,10 @@ import org.apache.spark.SparkConf
  * For known Spark configuration keys (i.e. those created using `ConfigBuilder`), references
  * will also consider the default value when it exists.
  *
- * If the reference cannot be resolved, the original string will be retained. Variable expansion
- * only applies to user-provided values, not to default values.
+ * If the reference cannot be resolved, the original string will be retained.
+ *
+ * Variable expansion is also applied to the default values of config entries that have a default
+ * value declared as a string.
  *
  * @param key the key for the configuration
  * @param defaultValue the default value for the configuration
@@ -105,6 +107,30 @@ private class ConfigEntryWithDefault[T] (
   }
 
 }
+
+private class ConfigEntryWithDefaultString[T] (
+    key: String,
+    _defaultValue: String,
+    valueConverter: String => T,
+    stringConverter: T => String,
+    doc: String,
+    isPublic: Boolean)
+    extends ConfigEntry(key, valueConverter, stringConverter, doc, isPublic) {
+
+  override def defaultValue: Option[T] = Some(valueConverter(_defaultValue))
+
+  override def defaultValueString: String = _defaultValue
+
+  def readFrom(conf: JMap[String, String], getenv: String => String): T = {
+    Option(conf.get(key))
+      .orElse(Some(_defaultValue))
+      .map(ConfigEntry.expand(_, conf, getenv, Set()))
+      .map(valueConverter)
+      .get
+  }
+
+}
+
 
 /**
  * A config entry that does not have a default value.
@@ -190,6 +216,7 @@ private object ConfigEntry {
   private def defaultValueString(key: String): Option[String] = {
     findEntry(key) match {
       case e: ConfigEntryWithDefault[_] => Some(e.defaultValueString)
+      case e: ConfigEntryWithDefaultString[_] => Some(e.defaultValueString)
       case e: FallbackConfigEntry[_] => defaultValueString(e.fallback.key)
       case _ => None
     }

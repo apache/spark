@@ -27,7 +27,7 @@ import org.apache.spark.network.util.ByteUnit
 
 class ConfigEntrySuite extends SparkFunSuite {
 
-  private val PREFIX = "spark.ConfigEntrySuite."
+  private val PREFIX = "spark.ConfigEntrySuite"
 
   private def testKey(name: String): String = s"$PREFIX.$name"
 
@@ -226,6 +226,12 @@ class ConfigEntrySuite extends SparkFunSuite {
       expand("${" + conf2.key + "}")
     }
     assert(e.getMessage().contains("Circular"))
+
+    // Default string values with variable references.
+    val parameterizedStringConf = ConfigBuilder(testKey("stringWithParams"))
+      .stringConf
+      .createWithDefault("${spark.value1}")
+    assert(parameterizedStringConf.readFrom(conf.asJava, getenv) === conf("spark.value1"))
   }
 
 }
