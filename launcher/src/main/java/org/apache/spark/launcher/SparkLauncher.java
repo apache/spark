@@ -367,7 +367,7 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    return createBuilder().start();
+    return createProcessBuilder().start();
   }
 
   /**
@@ -395,10 +395,6 @@ public class SparkLauncher {
    * @return A handle for the launched application.
    */
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
-    ChildProcAppHandle handle = LauncherServer.newAppHandle();
-    for (SparkAppHandle.Listener l : listeners) {
-      handle.addListener(l);
-    }
 
     String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
     if (appName == null) {
@@ -418,14 +414,26 @@ public class SparkLauncher {
       }
     }
 
-    String loggerPrefix = getClass().getPackage().getName();
-    String loggerName = String.format("%s.app.%s", loggerPrefix, appName);
-    ProcessBuilder pb = createBuilder().redirectErrorStream(true);
+    ProcessBuilder pb = createProcessBuilder().redirectErrorStream(true);
+    return startApplication(appName, pb, listeners);
+  }
+
+  public SparkAppHandle startApplication(String appName, ProcessBuilder pb,
+                                         SparkAppHandle.Listener... listeners) throws IOException {
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    for (SparkAppHandle.Listener l : listeners) {
+      handle.addListener(l);
+    }
+
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
+
+    String loggerPrefix = getClass().getPackage().getName();
+    String loggerName = String.format("%s.app.%s", loggerPrefix, appName);
     try {
-      handle.setChildProc(pb.start(), loggerName);
+      Process proc = pb.start();
+      handle.setChildProc(proc, loggerName);
     } catch (IOException ioe) {
       handle.kill();
       throw ioe;
@@ -434,7 +442,7 @@ public class SparkLauncher {
     return handle;
   }
 
-  private ProcessBuilder createBuilder() {
+  public ProcessBuilder createProcessBuilder() {
     List<String> cmd = new ArrayList<>();
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
