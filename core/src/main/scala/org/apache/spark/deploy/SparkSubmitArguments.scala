@@ -48,6 +48,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
   var driverExtraJavaOptions: String = null
+  var driverJre: Boolean = false
   var queue: String = null
   var numExecutors: String = null
   var files: String = null
@@ -249,6 +250,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (pyFiles != null && !isPython) {
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
+    if (!master.startsWith("yarn") && driverJre) {
+      SparkSubmit.printErrorAndExit("Cannot ship driver JRE except when running on YARN")
+    }
 
     if (master.startsWith("yarn")) {
       val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
@@ -291,6 +295,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     s"""Parsed arguments:
     |  master                  $master
     |  deployMode              $deployMode
+    |  driverJre               $driverJre
     |  executorMemory          $executorMemory
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
@@ -363,6 +368,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case DRIVER_JAVA_OPTIONS =>
         driverExtraJavaOptions = value
+
+      case DRIVER_JRE =>
+        driverJre = true
 
       case DRIVER_LIBRARY_PATH =>
         driverExtraLibraryPath = value
@@ -516,6 +524,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: ${mem_mb}M).
         |  --driver-java-options       Extra Java options to pass to the driver.
+        |  --driver-jre                When specified, the driver will package up and ship a copy
+        |                              of the driver's JRE to be used for running the executors and
+        |                              Application Master on YARN.
         |  --driver-library-path       Extra library path entries to pass to the driver.
         |  --driver-class-path         Extra class path entries to pass to the driver. Note that
         |                              jars added with --jars are automatically included in the

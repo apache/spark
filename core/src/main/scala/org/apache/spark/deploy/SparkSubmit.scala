@@ -17,16 +17,17 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, PrintStream}
+import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
+import java.nio.file.{Files, Path, Paths}
 import java.security.PrivilegedExceptionAction
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
@@ -573,7 +574,7 @@ object SparkSubmit {
         childArgs += ("--primary-py-file", args.primaryResource)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else if (args.isR) {
-        val mainFile = new Path(args.primaryResource).getName
+        val mainFile = new org.apache.hadoop.fs.Path(args.primaryResource).getName
         childArgs += ("--primary-r-file", mainFile)
         childArgs += ("--class", "org.apache.spark.deploy.RRunner")
       } else {
@@ -637,8 +638,79 @@ object SparkSubmit {
       sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
+    /**
+     * Archive the JRE into the a temporary directory to ship to YARN
+     */
+    def archiveJre(javaHome: String): (Path, String) = {
+      // Output into current working directory
+      val EXTENSION = ".zip"
+      val outputName = "driverJre" ++ EXTENSION
+      val tmpPath = Files.createTempDirectory("spark-driver-jre")
+      val outputPath = tmpPath.resolve(outputName).toAbsolutePath
+      val rootPath = Paths.get(javaHome)
+      val zipStream = new ZipArchiveOutputStream(
+        new BufferedOutputStream(new FileOutputStream(outputPath.toString)))
+
+      def compressDir(root: Path, current: Path, zipStream: ZipArchiveOutputStream): Unit = {
+        val rootAbs = root.toAbsolutePath.toString
+        val rootName = root.getFileName.toString
+        val file = current.toFile
+
+        if (file.isFile) {
+          val absPath: String = Paths.get(rootName,
+            current.toAbsolutePath.toString.substring(rootAbs.size)).toString
+          val ent = new ZipArchiveEntry(absPath) // get full path name
+
+          ent.setUnixMode(Files.getAttribute(current, "unix:mode").asInstanceOf[Int])
+          zipStream.putArchiveEntry(ent)
+          zipStream.write(Files.readAllBytes(current))
+          zipStream.closeArchiveEntry()
+        } else {
+          for (child <- file.list()) {
+            compressDir(root, current.resolve(child), zipStream)
+          }
+        }
+      }
+
+      try {
+        compressDir(rootPath, rootPath, zipStream)
+      } catch {
+        case e: IOException => throw new RuntimeException(e.getCause)
+      } finally {
+        zipStream.close()
+      }
+      (outputPath.toAbsolutePath, rootPath.getFileName.toString)
+    }
+
+    if (args.driverJre) {
+      val SPARK_YARN_DIST_ARCHIVES = "spark.yarn.dist.archives"
+      val JAVA_HOME = "java.home"
+
+      if (System.getProperty(JAVA_HOME) == null) {
+        SparkSubmit.printErrorAndExit(s"""Cannot access System property "$JAVA_HOME"""")
+      }
+
+      val javaHome = System.getProperty(JAVA_HOME)
+      // zip the archive to a file
+      val (archiveLocation, jreRoot): (Path, String) = try {
+        archiveJre(javaHome)
+      } catch {
+        case e: IOException => throw new RuntimeException(e.getCause)
+      }
+
+      // Upload directory as archive
+      val distArchives = mergeFileLists(sysProps.getOrElse(SPARK_YARN_DIST_ARCHIVES, null),
+        archiveLocation.toString)
+      sysProps.put(SPARK_YARN_DIST_ARCHIVES, distArchives)
+      // Setup the executors to be using the shipped java distribution
+      val patchedJavaHome = archiveLocation.getFileName.toString ++ "/" ++ jreRoot
+      sysProps("spark.executorEnv.JAVA_HOME") = patchedJavaHome
+      sysProps("spark.yarn.appMasterEnv.JAVA_HOME") = patchedJavaHome
+    }
+
     (childArgs, childClasspath, sysProps, childMainClass)
   }
+
 
   /**
    * Run the main method of the child class using the provided launch environment.

@@ -39,6 +39,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 abstract class AbstractCommandBuilder {
 
   boolean verbose;
+  boolean driverJre;
   String appName;
   String appResource;
   String deployMode;

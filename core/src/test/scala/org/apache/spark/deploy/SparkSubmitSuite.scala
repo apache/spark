@@ -255,6 +255,33 @@ class SparkSubmitSuite
     sysProps("spark.ui.enabled") should be ("false")
   }
 
+  test("handles --driver-jre option without YARN") {
+    val clArgs = Array(
+      "--driver-jre",
+      "--master", "local[1]",
+      "--class", "Fake", "fake.jar")
+    val printStream = new BufferPrintStream
+    SparkSubmit.printStream = printStream
+    SparkSubmit.exitFn = (_) => throw new RuntimeException
+    try {
+      new SparkSubmitArguments(clArgs)
+    } catch {
+      case e: Throwable =>
+        val output = printStream.lineBuffer.mkString("\n")
+        output should include regex ("Cannot ship driver JRE")
+    }
+  }
+
+  test("handles --driver-jre option when using YARN") {
+    val clArgs = Seq(
+      "--driver-jre",
+      "--master", "yarn",
+      "--class", "Fake",
+      "fake.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.driverJre should be (true)
+  }
+
   test("handles standalone cluster mode") {
     testStandaloneCluster(useRest = true)
   }
