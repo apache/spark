@@ -174,7 +174,6 @@ $(document).ready(function () {
     });
 
     executorsSummary = $("#active-executors");
-    searchString = executorsSummary["context"]["location"]["search"];
 
     getStandAloneppId(function (appId) {
     
@@ -349,7 +348,6 @@ $(document).ready(function () {
                 var conf = {
                     "data": response,
                     "columns": [
-                        //{data: 'id'},
                         {
                             data: function (row, type) {
                                 return type !== 'display' ? (isNaN(row.id) ? 0 : row.id ) : row.id;
