@@ -108,10 +108,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       } else {
         val answerText = new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8)
         val sqls = answerText.split(separator)
-        if (sqls.length == 2) {
-          val normalizedExpectSQL = sqls(1).trim()
-          assert(normalizedGenSQL == normalizedExpectSQL)
-        }
+        assert(sqls.length == 2, "Golden sql files should have a separator.")
+        val normalizedExpectSQL = sqls(1).trim()
+        assert(normalizedGenSQL == normalizedExpectSQL)
       }
     }
   }
@@ -158,24 +157,30 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
-  test("checkSQL") {
+  test("Test should fail if the SQL query cannot be parsed") {
     val m = intercept[ParseException] {
       checkSQL("SELE", "NOT_A_FILE")
     }.getMessage
     assert(m.contains("mismatched input"))
+  }
 
+  test("Test should fail if the golden file cannot be found") {
     val m2 = intercept[NoSuchFileException] {
       checkSQL("SELECT 1", "NOT_A_FILE")
     }.getMessage
     assert(m2.contains("NOT_A_FILE"))
+  }
 
+  test("Test should fail if the SQL query cannot be regenerated") {
     spark.range(10).createOrReplaceTempView("not_sql_gen_supported_table_so_far")
     sql("select * from not_sql_gen_supported_table_so_far")
     val m3 = intercept[org.scalatest.exceptions.TestFailedException] {
       checkSQL("select * from not_sql_gen_supported_table_so_far", "in")
     }.getMessage
     assert(m3.contains("Cannot convert the following SQL query plan back to SQL query string"))
+  }
 
+  test("Test should fail if the SQL query did not equal to the golden SQL") {
     val m4 = intercept[org.scalatest.exceptions.TestFailedException] {
       checkSQL("SELECT 1", "in")
     }.getMessage
