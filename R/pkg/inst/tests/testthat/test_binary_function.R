@@ -18,7 +18,7 @@
 context("binary functions")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
@@ -100,3 +100,5 @@ test_that("zipPartitions() on RDDs", {
 
   unlink(fileName)
 })
+
+sparkR.session.stop()
