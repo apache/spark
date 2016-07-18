@@ -439,6 +439,8 @@ class SparkSubmitSuite
   test("include an external JAR in SparkR") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    // Check if the SparkR package is installed
+    assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val rScriptDir =
       Seq(sparkHome, "R", "pkg", "inst", "tests", "testthat", "jarTest.R").mkString(File.separator)
     assert(new File(rScriptDir).exists)
