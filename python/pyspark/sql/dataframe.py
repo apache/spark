@@ -1399,11 +1399,11 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, col):
+    def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
 
-        :param col: a string name of the column to drop, or a
-            :class:`Column` to drop.
+        :param cols: a string name of the column to drop, or a
+            :class:`Column` to drop, or a list of string name of the columns to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
@@ -1416,13 +1416,24 @@ class DataFrame(object):
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
         [Row(age=5, name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name', 'inner').drop('age', 'height').collect()
+        [Row(name=u'Bob')]
         """
-        if isinstance(col, basestring):
-            jdf = self._jdf.drop(col)
-        elif isinstance(col, Column):
-            jdf = self._jdf.drop(col._jc)
+        if len(cols) == 1:
+            col = cols[0]
+            if isinstance(col, basestring):
+                jdf = self._jdf.drop(col)
+            elif isinstance(col, Column):
+                jdf = self._jdf.drop(col._jc)
+            else:
+                raise TypeError("col should be a string or a Column")
         else:
-            raise TypeError("col should be a string or a Column")
+            for col in cols:
+                if not isinstance(col, basestring):
+                    raise TypeError("each col in the param list should be a string")
+            jdf = self._jdf.drop(self._jseq(cols))
+
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix

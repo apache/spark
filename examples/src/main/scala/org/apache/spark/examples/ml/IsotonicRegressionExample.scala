@@ -33,8 +33,6 @@ import org.apache.spark.sql.SparkSession
 object IsotonicRegressionExample {
 
   def main(args: Array[String]): Unit = {
-
-    // Creates a SparkSession.
     val spark = SparkSession
       .builder
       .appName(s"${this.getClass.getSimpleName}")

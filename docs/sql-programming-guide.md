@@ -249,7 +249,7 @@ In addition to simple column references and expressions, DataFrames also have a 
 <div data-lang="scala"  markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
-{% include_example run_sql scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
+{% include_example run_sql scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">

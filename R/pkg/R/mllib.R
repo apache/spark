@@ -91,6 +91,7 @@ NULL
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param tol Positive convergence tolerance of iterations.
 #' @param maxIter Integer giving the maximal number of IRLS iterations.
+#' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
 #' @rdname spark.glm
 #' @name spark.glm
@@ -306,6 +307,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @param initMode The initialization algorithm choosen to fit the model
 #' @return \code{spark.kmeans} returns a fitted k-means model
 #' @rdname spark.kmeans
+#' @aliases spark.kmeans,SparkDataFrame,formula-method
 #' @name spark.kmeans
 #' @export
 #' @examples
@@ -418,6 +420,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param smoothing Smoothing parameter
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model
 #' @rdname spark.naiveBayes
+#' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
 #' @export
@@ -512,7 +515,6 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.kmeans
-#' @name write.ml
 #' @export
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
