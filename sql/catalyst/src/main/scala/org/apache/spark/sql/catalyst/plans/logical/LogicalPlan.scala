@@ -265,6 +265,11 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
           s"Reference '$name' is ambiguous, could be: $referenceNames.")
     }
   }
+
+  /**
+   * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
+   */
+  def refresh(): Unit = children.foreach(_.refresh())
 }
 
 /**

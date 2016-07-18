@@ -391,6 +391,29 @@ class HiveDDLSuite
     }
   }
 
+  test("create view with mismatched schema") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE VIEW view1 (col1, col3) AS SELECT * FROM tab1")
+        }.getMessage
+        assert(e.contains("the SELECT clause (num: `1`) does not match")
+          && e.contains("CREATE VIEW (num: `2`)"))
+      }
+    }
+  }
+
+  test("create view with specified schema") {
+    withView("view1") {
+      sql("CREATE VIEW view1 (col1, col2) AS SELECT 1, 2")
+      checkAnswer(
+        sql("SELECT * FROM view1"),
+        Row(1, 2) :: Nil
+      )
+    }
+  }
+
   test("desc table for Hive table") {
     withTable("tab1") {
       val tabName = "tab1"
@@ -449,6 +472,7 @@ class HiveDDLSuite
       sql(s"DROP TABLE $tabName")
 
       assert(tmpDir.listFiles.isEmpty)
+      sql("USE default")
       sql(s"DROP DATABASE $dbName")
       assert(!fs.exists(new Path(tmpDir.toString)))
     }
@@ -503,6 +527,7 @@ class HiveDDLSuite
           assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
         }
 
+        sql(s"USE default")
         val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
         if (tableExists && !cascade) {
           val message = intercept[AnalysisException] {
@@ -554,6 +579,21 @@ class HiveDDLSuite
     }
   }
 
+  test("Create Cataloged Table As Select - Drop Table After Runtime Exception") {
+    withTable("tab") {
+      intercept[RuntimeException] {
+        sql(
+          """
+            |CREATE TABLE tab
+            |STORED AS TEXTFILE
+            |SELECT 1 AS a, (SELECT a FROM (SELECT 1 AS a UNION ALL SELECT 2 AS a) t) AS b
+          """.stripMargin)
+      }
+      // After hitting runtime exception, we should drop the created table.
+      assert(!spark.sessionState.catalog.tableExists(TableIdentifier("tab")))
+    }
+  }
+
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
@@ -572,15 +612,17 @@ class HiveDDLSuite
   }
 
   test("desc table for data source table - no user-defined schema") {
-    withTable("t1") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(1).write.parquet(path)
-        sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
+    Seq("parquet", "json", "orc").foreach { fileFormat =>
+      withTable("t1") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(1).write.format(fileFormat).save(path)
+          sql(s"CREATE TABLE t1 USING $fileFormat OPTIONS (PATH '$path')")
 
-        val desc = sql("DESC FORMATTED t1").collect().toSeq
+          val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-        assert(desc.contains(Row("# Schema of this table is inferred at runtime", "", "")))
+          assert(desc.contains(Row("id", "bigint", "")))
+        }
       }
     }
   }

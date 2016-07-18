@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear Methods - spark.mllib
-displayTitle: Linear Methods - spark.mllib
+title: Linear Methods - RDD-based API
+displayTitle: Linear Methods - RDD-based API
 ---
 
 * Table of contents

@@ -147,10 +147,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    invalidateTable(tableIdent)
-  }
-
-  def invalidateTable(tableIdent: TableIdentifier): Unit = {
     cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
   }
 
@@ -184,13 +180,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText))
       }
     } else {
-      MetastoreRelation(
-        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client, sparkSession)
+      val qualifiedTable =
+        MetastoreRelation(
+          qualifiedTableName.database, qualifiedTableName.name)(table, client, sparkSession)
+      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
     }
   }
 
   private def getCached(
       tableIdentifier: QualifiedTableName,
+      pathsInMetastore: Seq[String],
       metastoreRelation: MetastoreRelation,
       schemaInMetastore: StructType,
       expectedFileFormat: Class[_ <: FileFormat],
@@ -200,7 +199,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     cachedDataSourceTables.getIfPresent(tableIdentifier) match {
       case null => None // Cache miss
       case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
-        val pathsInMetastore = metastoreRelation.catalogTable.storage.locationUri.toSeq
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {
@@ -265,9 +263,22 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         PartitionDirectory(values, location)
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
+      val partitionPaths = partitions.map(_.path.toString)
+
+      // By convention (for example, see MetaStorePartitionedTableFileCatalog), the definition of a
+      // partitioned table's paths depends on whether that table has any actual partitions.
+      // Partitioned tables without partitions use the location of the table's base path.
+      // Partitioned tables with partitions use the locations of those partitions' data locations,
+      // _omitting_ the table's base path.
+      val paths = if (partitionPaths.isEmpty) {
+        Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+      } else {
+        partitionPaths
+      }
 
       val cached = getCached(
         tableIdentifier,
+        paths,
         metastoreRelation,
         metastoreSchema,
         fileFormatClass,
@@ -312,6 +323,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
 
       val cached = getCached(tableIdentifier,
+        paths,
         metastoreRelation,
         metastoreSchema,
         fileFormatClass,
@@ -372,16 +384,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
           InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists)
 
-        // Write path
-        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
-          // Inserting into partitioned table is not supported in Parquet data source (yet).
-          if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
-          InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists)
-
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
           val parquetRelation = convertToParquetRelation(relation)
-          SubqueryAlias(relation.alias.getOrElse(relation.tableName), parquetRelation)
+          SubqueryAlias(relation.tableName, parquetRelation)
       }
     }
   }
@@ -416,16 +422,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
           InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists)
 
-        // Write path
-        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
-          // Inserting into partitioned table is not supported in Orc data source (yet).
-          if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
-          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists)
-
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
           val orcRelation = convertToOrcRelation(relation)
-          SubqueryAlias(relation.alias.getOrElse(relation.tableName), orcRelation)
+          SubqueryAlias(relation.tableName, orcRelation)
       }
     }
   }
@@ -487,32 +487,5 @@ private[hive] object MetaStorePartitionedTableFileCatalog {
     } else {
       partitionSpec.partitions.map(_.path)
     }
-  }
-}
-
-/**
- * A logical plan representing insertion into Hive table.
- * This plan ignores nullability of ArrayType, MapType, StructType unlike InsertIntoTable
- * because Hive table doesn't have nullability for ARRAY, MAP, STRUCT types.
- */
-private[hive] case class InsertIntoHiveTable(
-    table: MetastoreRelation,
-    partition: Map[String, Option[String]],
-    child: LogicalPlan,
-    overwrite: Boolean,
-    ifNotExists: Boolean)
-  extends LogicalPlan with Command {
-
-  override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
-
-  val numDynamicPartitions = partition.values.count(_.isEmpty)
-
-  // This is the expected schema of the table prepared to be inserted into,
-  // including dynamic partition columns.
-  val tableOutput = table.attributes ++ table.partitionKeys.takeRight(numDynamicPartitions)
-
-  override lazy val resolved: Boolean = childrenResolved && child.output.zip(tableOutput).forall {
-    case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
   }
 }

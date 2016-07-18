@@ -101,7 +101,9 @@ private[sql] object SQLMetrics {
    */
   def stringValue(metricsType: String, values: Seq[Long]): String = {
     if (metricsType == SUM_METRIC) {
-      NumberFormat.getInstance().format(values.sum)
+      val numberFormat = NumberFormat.getInstance()
+      numberFormat.setGroupingUsed(false)
+      numberFormat.format(values.sum)
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString

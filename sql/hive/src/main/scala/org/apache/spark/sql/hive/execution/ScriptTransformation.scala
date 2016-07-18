@@ -314,15 +314,15 @@ private class ScriptTransformationWriterThread(
       }
       threwException = false
     } catch {
-      case NonFatal(e) =>
+      case t: Throwable =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
-        _exception = e
+        _exception = t
         proc.destroy()
-        throw e
+        throw t
     } finally {
       try {
-        outputStream.close()
+        Utils.tryLogNonFatalError(outputStream.close())
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }

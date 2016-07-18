@@ -109,7 +109,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * :: Experimental ::
-   * Specifies the name of the [[StreamingQuery]] that can be started with `startStream()`.
+   * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0

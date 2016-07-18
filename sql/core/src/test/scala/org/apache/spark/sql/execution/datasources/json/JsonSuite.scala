@@ -21,10 +21,7 @@ import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -847,7 +844,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     sql(
       s"""
-        |CREATE TEMPORARY TABLE jsonTableSQL
+        |CREATE TEMPORARY VIEW jsonTableSQL
         |USING org.apache.spark.sql.json
         |OPTIONS (
         |  path '$path'
