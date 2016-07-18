@@ -55,6 +55,7 @@ import org.apache.parquet.hadoop.ParquetInputSplit;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.metadata.BlockMetaData;
+import org.apache.parquet.hadoop.metadata.FileMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
@@ -74,6 +75,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  protected FileMetaData fileMetaData;
 
   /**
    * The total number of rows this RecordReader will eventually read. The sum of the
@@ -131,13 +133,14 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     this.fileSchema = footer.getFileMetaData().getSchema();
+    this.fileMetaData = footer.getFileMetaData();
     Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
     this.sparkSchema = new ParquetSchemaConverter(configuration).convert(requestedSchema);
-    this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
+    this.reader = new ParquetFileReader(configuration, fileMetaData, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }
@@ -182,6 +185,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
     List<BlockMetaData> blocks = footer.getBlocks();
     this.fileSchema = footer.getFileMetaData().getSchema();
+    this.fileMetaData = footer.getFileMetaData();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
@@ -201,7 +205,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
-    this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
+    this.reader = new ParquetFileReader(config, fileMetaData, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }
