@@ -264,6 +264,13 @@ tablePropertyValue
     | STRING
     ;
 
+tablePropertyValue
+    : INTEGER_VALUE
+    | DECIMAL_VALUE
+    | booleanValue
+    | STRING
+    ;
+
 constantList
     : '(' constant (',' constant)* ')'
     ;
