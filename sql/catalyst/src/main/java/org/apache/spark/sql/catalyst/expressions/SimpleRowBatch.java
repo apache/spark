@@ -65,12 +65,10 @@ public final class SimpleRowBatch extends MemoryConsumer{
     private int vlen;
     private int recordLength;
 
-    private MemoryBlock currentPage = null;
+    private MemoryBlock currentAndOnlyPage = null;
     private Object currentAndOnlyBase = null;
     private long recordStartOffset;
     private long pageCursor = 0;
-
-    private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
 
     public static SimpleRowBatch allocate(StructType keySchema, StructType valueSchema,
                                     TaskMemoryManager manager) {
@@ -85,26 +83,23 @@ public final class SimpleRowBatch extends MemoryConsumer{
     public int numRows() { return numRows; }
 
     public void close() {
-        if (dataPages.size() != 0) {
-            currentPage = dataPages.remove();
-            freePage(currentPage);
-            assert(dataPages.size() == 0);
+        if (currentAndOnlyPage != null) {
+            freePage(currentAndOnlyPage);
+            currentAndOnlyPage = null;
         }
     }
 
     private boolean acquireNewPage(long required) {
         try {
-            currentPage = allocatePage(required);
+            currentAndOnlyPage = allocatePage(required);
         } catch (OutOfMemoryError e) {
             return false;
         }
-        Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
+        currentAndOnlyBase = currentAndOnlyPage.getBaseObject();
+        Platform.putInt(currentAndOnlyBase, currentAndOnlyPage.getBaseOffset(), 0);
         pageCursor = 4;
-        recordStartOffset = pageCursor + currentPage.getBaseOffset();
+        recordStartOffset = pageCursor + currentAndOnlyPage.getBaseOffset();
 
-        //System.out.println("acquired a new page");
-        dataPages.add(currentPage);
-        //TODO: add code to recycle the pages when we destroy this map
         return true;
     }
 
@@ -116,21 +111,13 @@ public final class SimpleRowBatch extends MemoryConsumer{
                                Object vbase, long voff, int vlen) {
         final long recordLength = 8 + klen + vlen + 8;
         // if run out of max supported rows or page size, return null
-        if (numRows >= capacity || currentPage == null
-                || currentPage.size() - pageCursor < recordLength) {
+        if (numRows >= capacity || currentAndOnlyPage == null
+                || currentAndOnlyPage.size() - pageCursor < recordLength) {
             return null;
         }
 
-        // We now keeps only one big 64MB page, so no need to do the following page acquisition:
-        // if (currentPage == null || currentPage.size() - pageCursor < recordLength) {
-        //    // acquire new page
-        //    if (!acquireNewPage(recordLength + 4L)) {
-        //        return null;
-        //    }
-        //}
-
-        final Object base = currentPage.getBaseObject();
-        long offset = currentPage.getBaseOffset() + pageCursor;
+        final Object base = currentAndOnlyBase;
+        long offset = currentAndOnlyPage.getBaseOffset() + pageCursor;
         final long recordOffset = offset;
         if (!allFixedLength) { // we only put lengths info for variable length
             Platform.putInt(base, offset, klen + vlen + 4);
@@ -143,7 +130,7 @@ public final class SimpleRowBatch extends MemoryConsumer{
         offset += vlen;
         Platform.putLong(base, offset, 0);
 
-        offset = currentPage.getBaseOffset();
+        offset = currentAndOnlyPage.getBaseOffset();
         Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
         pageCursor += recordLength;
 
@@ -225,8 +212,6 @@ public final class SimpleRowBatch extends MemoryConsumer{
             private final UnsafeRow key = new UnsafeRow(keySchema.length());
             private final UnsafeRow value = new UnsafeRow(valueSchema.length());
 
-            private MemoryBlock currentPage = null;
-            private Object pageBaseObject = null;
             private long offsetInPage = 0;
             private int recordsInPage = 0;
 
@@ -237,11 +222,9 @@ public final class SimpleRowBatch extends MemoryConsumer{
             private boolean inited = false;
 
             private void init() {
-                if (dataPages.size() > 0) {
-                    currentPage = dataPages.remove();
-                    pageBaseObject = currentPage.getBaseObject();
-                    offsetInPage = currentPage.getBaseOffset();
-                    recordsInPage = Platform.getInt(pageBaseObject, offsetInPage);
+                if (currentAndOnlyPage != null) {
+                    offsetInPage = currentAndOnlyPage.getBaseOffset();
+                    recordsInPage = Platform.getInt(currentAndOnlyBase, offsetInPage);
                     offsetInPage += 4;
                 }
                 inited = true;
@@ -251,8 +234,9 @@ public final class SimpleRowBatch extends MemoryConsumer{
             public boolean next() {
                 if (!inited) init();
                 //searching for the next non empty page is records is now zero
-                while (recordsInPage == 0) {
-                    if (!advanceToNextPage()) return false;
+                if (recordsInPage == 0) {
+                    freeCurrentPage();
+                    return false;
                 }
 
                 if (allFixedLength) {
@@ -260,13 +244,13 @@ public final class SimpleRowBatch extends MemoryConsumer{
                     currentklen = klen;
                     currentvlen = vlen;
                 } else {
-                    totalLength = Platform.getInt(pageBaseObject, offsetInPage);
-                    currentklen = Platform.getInt(pageBaseObject, offsetInPage + 4);
+                    totalLength = Platform.getInt(currentAndOnlyBase, offsetInPage);
+                    currentklen = Platform.getInt(currentAndOnlyBase, offsetInPage + 4);
                     currentvlen = totalLength - currentklen - 4;
                 }
 
-                key.pointTo(pageBaseObject, offsetInPage + 8, currentklen);
-                value.pointTo(pageBaseObject, offsetInPage + 8 + currentklen, currentvlen + 4);
+                key.pointTo(currentAndOnlyBase, offsetInPage + 8, currentklen);
+                value.pointTo(currentAndOnlyBase, offsetInPage + 8 + currentklen, currentvlen + 4);
 
                 offsetInPage += 4 + totalLength + 8;
                 recordsInPage -= 1;
@@ -288,17 +272,10 @@ public final class SimpleRowBatch extends MemoryConsumer{
                 // do nothing
             }
 
-            private boolean advanceToNextPage() {
-                if (currentPage != null) freePage(currentPage); //free before advance
-                if (dataPages.size() > 0) {
-                    currentPage = dataPages.remove();
-                    pageBaseObject = currentPage.getBaseObject();
-                    offsetInPage = currentPage.getBaseOffset();
-                    recordsInPage = Platform.getInt(pageBaseObject, offsetInPage);
-                    offsetInPage += 4;
-                    return true;
-                } else {
-                    return false;
+            private void freeCurrentPage() {
+                if (currentAndOnlyPage != null) {
+                    freePage(currentAndOnlyPage);
+                    currentAndOnlyPage = null;
                 }
             }
         };
@@ -316,7 +293,7 @@ public final class SimpleRowBatch extends MemoryConsumer{
         this.valueRow = new UnsafeRow(valueSchema.length());
 
         // checking if there is any variable length fields
-        // there is probably a more succint impl of this
+        // there is probably a more succinct impl of this
         allFixedLength = true;
         for (String name : keySchema.fieldNames()) {
             allFixedLength = allFixedLength
@@ -338,9 +315,9 @@ public final class SimpleRowBatch extends MemoryConsumer{
         }
 
         if (!acquireNewPage(DEFAULT_PAGE_SIZE)) {
-            currentPage = null;
+            currentAndOnlyPage = null;
         } else {
-            currentAndOnlyBase = currentPage.getBaseObject();
+            currentAndOnlyBase = currentAndOnlyPage.getBaseObject();
         }
     }
 }
