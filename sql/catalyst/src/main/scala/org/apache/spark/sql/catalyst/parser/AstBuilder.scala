@@ -132,6 +132,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody.asScala.map {
       body =>
+        assert(body.querySpecification.intoClause == null,
+          "Multi-Insert queries cannot have a into clause in their individual SELECT statements",
+          body)
+
         assert(body.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
@@ -155,13 +159,26 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
+    // Find intoClause
+    val intoClause = ctx.queryTerm match {
+      case queryTermDefault : QueryTermDefaultContext =>
+        queryTermDefault.queryPrimary match {
+          case queryPrimaryDefault : QueryPrimaryDefaultContext =>
+            queryPrimaryDefault.querySpecification.intoClause
+          case _ => null
+        }
+      case _ => null
+    }
+    if (ctx.insertInto != null && intoClause != null) {
+      operationNotAllowed("INSERT INTO ... SELECT INTO", ctx)
+    }
     plan(ctx.queryTerm).
       // Add organization statements.
       optionalMap(ctx.queryOrganization)(withQueryResultClauses).
       // Add insert.
       optionalMap(ctx.insertInto())(withInsertInto).
       // exist intoClause
-      optionalMap(existIntoClause(ctx.queryTerm))(withSelectInto)
+      optionalMap(intoClause)(withSelectInto)
   }
 
   /**
@@ -394,22 +411,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     throw new ParseException("Script Transform is not supported", ctx)
-  }
-
-  /**
-   * Find intoClause.
-   */
-  private def existIntoClause(
-      ctx: QueryTermContext): IntoClauseContext = {
-    ctx match {
-      case queryTermDefault : QueryTermDefaultContext =>
-        queryTermDefault.queryPrimary match {
-          case queryPrimaryDefault : QueryPrimaryDefaultContext =>
-            queryPrimaryDefault.querySpecification.intoClause
-          case _ => null
-        }
-      case _ => null
-    }
   }
 
   /**
