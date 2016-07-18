@@ -214,7 +214,7 @@ object LBFGS extends Logging {
     lossHistory += state.value
 
     if (!state.actuallyConverged) {
-      logWarning("LBFGS training fininshed but the result " +
+      logWarning("LBFGS training finished but the result " +
         s"is not converged because: ${state.convergedReason.get.reason}")
     }
 
