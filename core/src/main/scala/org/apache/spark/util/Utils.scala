@@ -268,6 +268,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Generates a temporary location
+   */
+  def generateTempLocation(root: String = System.getProperty("java.io.tmpdir"),
+                           namePrefix: String = "spark"): File = {
+    new File(root, namePrefix + "-" + UUID.randomUUID.toString)
+  }
+
+  /**
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
@@ -282,7 +290,7 @@ private[spark] object Utils extends Logging {
           maxAttempts + " attempts!")
       }
       try {
-        dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
+        dir = generateTempLocation(root, namePrefix)
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
         }
