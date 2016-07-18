@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * of this option is propagated to this class by the `init()` method and its Hadoop configuration
  * argument.
  */
-private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] with Logging {
+private[parquet] class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to the record consumer.
   // Here we are using `SpecializedGetters` rather than `InternalRow` so that we can directly access
   // data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -73,7 +73,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   private val decimalBuffer = new Array[Byte](minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   override def init(configuration: Configuration): WriteContext = {
-    val schemaString = configuration.get(CatalystWriteSupport.SPARK_ROW_SCHEMA)
+    val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
     this.schema = StructType.fromString(schemaString)
     this.writeLegacyParquetFormat = {
       // `SQLConf.PARQUET_WRITE_LEGACY_FORMAT` should always be explicitly set in ParquetRelation
@@ -424,7 +424,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
   }
 }
 
-private[parquet] object CatalystWriteSupport {
+private[parquet] object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {

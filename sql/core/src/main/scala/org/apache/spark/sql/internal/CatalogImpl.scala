@@ -138,7 +138,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    listColumns(currentDatabase, tableName)
+    listColumns(TableIdentifier(tableName, None))
   }
 
   /**
@@ -147,7 +147,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database or table does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
     requireTableExists(dbName, tableName)
-    val tableMetadata = sessionCatalog.getTableMetadata(TableIdentifier(tableName, Some(dbName)))
+    listColumns(TableIdentifier(tableName, Some(dbName)))
+  }
+
+  private def listColumns(tableIdentifier: TableIdentifier): Dataset[Column] = {
+    val tableMetadata = sessionCatalog.getTableMetadata(tableIdentifier)
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet
     val bucketColumnNames = tableMetadata.bucketColumnNames.toSet
     val columns = tableMetadata.schema.map { c =>
@@ -293,7 +297,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Unit = {
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
-    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true, purge = false)
   }
 
   /**

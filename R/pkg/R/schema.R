@@ -26,6 +26,7 @@
 #' @param x a structField object (created with the field() function)
 #' @param ... additional structField objects
 #' @return a structType object
+#' @rdname structType
 #' @export
 #' @examples
 #'\dontrun{
@@ -40,13 +41,19 @@ structType <- function(x, ...) {
   UseMethod("structType", x)
 }
 
-structType.jobj <- function(x) {
+#' @rdname structType
+#' @method structType jobj
+#' @export
+structType.jobj <- function(x, ...) {
   obj <- structure(list(), class = "structType")
   obj$jobj <- x
   obj$fields <- function() { lapply(callJMethod(obj$jobj, "fields"), structField) }
   obj
 }
 
+#' @rdname structType
+#' @method structType structField
+#' @export
 structType.structField <- function(x, ...) {
   fields <- list(x, ...)
   if (!all(sapply(fields, inherits, "structField"))) {
@@ -104,7 +111,10 @@ structField <- function(x, ...) {
   UseMethod("structField", x)
 }
 
-structField.jobj <- function(x) {
+#' @rdname structField
+#' @method structField jobj
+#' @export
+structField.jobj <- function(x, ...) {
   obj <- structure(list(), class = "structField")
   obj$jobj <- x
   obj$name <- function() { callJMethod(x, "name") }
@@ -179,7 +189,7 @@ checkType <- function(type) {
 #' @param nullable A logical vector indicating whether or not the field is nullable
 #' @rdname structField
 #' @export
-structField.character <- function(x, type, nullable = TRUE) {
+structField.character <- function(x, type, nullable = TRUE, ...) {
   if (class(x) != "character") {
     stop("Field name must be a string.")
   }

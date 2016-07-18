@@ -978,6 +978,7 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
+  @deprecated("Use monotonically_increasing_id()", "2.0.0")
   def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
 
   /**
@@ -2191,6 +2192,16 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: String, replacement: String): Column = withExpr {
     RegExpReplace(e.expr, lit(pattern).expr, lit(replacement).expr)
+  }
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep.
+   *
+   * @group string_funcs
+   * @since 2.1.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column): Column = withExpr {
+    RegExpReplace(e.expr, pattern.expr, replacement.expr)
   }
 
   /**

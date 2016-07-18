@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
@@ -32,10 +32,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
  */
-@Experimental
 @Since("1.4.0")
 class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
