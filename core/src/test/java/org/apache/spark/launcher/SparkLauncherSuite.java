@@ -103,10 +103,10 @@ public class SparkLauncherSuite {
   @Test(expected=IllegalStateException.class)
   public void testRedirectToLogWithOthersFails() throws Exception {
     launcher.setAppResource("fake-resource.jar")
-            .setMainClass("my.fake.class.Fake")
-            .redirectToLog("fakeLog")
-            .redirectError(ProcessBuilder.Redirect.PIPE)
-            .launch();
+      .setMainClass("my.fake.class.Fake")
+      .redirectToLog("fakeLog")
+      .redirectError(ProcessBuilder.Redirect.PIPE)
+      .launch();
   }
 
   @Test
@@ -129,11 +129,11 @@ public class SparkLauncherSuite {
   @Test
   public void testRedirectLastWins() throws Exception {
     launcher.redirectError(ProcessBuilder.Redirect.PIPE)
-            .redirectError(ProcessBuilder.Redirect.INHERIT);
+      .redirectError(ProcessBuilder.Redirect.INHERIT);
     assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
 
     launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
-            .redirectOutput(ProcessBuilder.Redirect.INHERIT);
+      .redirectOutput(ProcessBuilder.Redirect.INHERIT);
     assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
   }
 
@@ -142,7 +142,7 @@ public class SparkLauncherSuite {
     launcher.redirectToLog("fakeLogger");
     assertTrue(launcher.redirectToLog);
     assertTrue(launcher.builder.getEffectiveConfig()
-            .containsKey(SparkLauncher.CHILD_PROCESS_LOGGER_NAME));
+      .containsKey(SparkLauncher.CHILD_PROCESS_LOGGER_NAME));
   }
 
   @Test
