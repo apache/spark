@@ -70,7 +70,7 @@ private[yarn] final class ConfigurableCredentialManager (
               s"using ${providerEnabledConfig.format(p.serviceName)} instead")
             c.toBoolean
           }
-        }.getOrElse(defaultServices.find(_ == p.serviceName).isDefined)
+        }.getOrElse(defaultServices.contains(p.serviceName))
     }.map { p => (p.serviceName, p) }.toMap
   }
 

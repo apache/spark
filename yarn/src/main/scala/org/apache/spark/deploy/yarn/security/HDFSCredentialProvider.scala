@@ -61,7 +61,7 @@ private[yarn] class HDFSCredentialProvider extends ServiceCredentialProvider wit
 
     // Get the token renewal interval if it is not set. It will only be called once.
     if (tokenRenewalInterval == null) {
-      getTokenRenewalInterval(hadoopConf)
+      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf)
     }
 
     // Get the time of next renewal.
@@ -71,17 +71,16 @@ private[yarn] class HDFSCredentialProvider extends ServiceCredentialProvider wit
         .map { t =>
           val identifier = new DelegationTokenIdentifier()
           identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-          // TODO. This should be configurable
           (identifier.getIssueDate + interval * 0.75).toLong
       }.foldLeft(0L)(math.max)
     }
   }
 
-  private def getTokenRenewalInterval(hadoopConf: Configuration): Unit = {
+  private def getTokenRenewalInterval(hadoopConf: Configuration): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
-    tokenRenewalInterval = sparkConf.get(PRINCIPAL).map { renewer =>
+    sparkConf.get(PRINCIPAL).map { renewer =>
       val creds = new Credentials()
       unionNNsToAccess.foreach { dst =>
         val dstFs = dst.getFileSystem(hadoopConf)
