@@ -167,18 +167,33 @@ object JdbcUtils extends Logging {
 
     val conn = getConnection()
     var committed = false
-    val supportsTransactions = try {
-      isolationLevel != Connection.TRANSACTION_NONE && conn.getMetaData.supportsTransactions()
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Exception while detecting transaction support", e)
-        true
+
+    var finalIsolationLevel = Connection.TRANSACTION_NONE
+    if (isolationLevel != Connection.TRANSACTION_NONE) {
+      try {
+        val metadata = conn.getMetaData
+        if (metadata.supportsTransactions()) {
+          if (metadata.supportsTransactionIsolationLevel(isolationLevel))  {
+            finalIsolationLevel = isolationLevel
+          } else {
+            val defaultIsolation = metadata.getDefaultTransactionIsolation
+            logWarning(s"Requested isolation level $isolationLevel is not supported; " +
+                s"falling back to isolation level $defaultIsolation")
+            finalIsolationLevel = defaultIsolation
+          }
+        } else {
+          logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
+        }
+      } catch {
+        case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
+      }
     }
+    val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
 
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
-        conn.setTransactionIsolation(isolationLevel)
+        conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
       try {
