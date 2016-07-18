@@ -121,7 +121,7 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new ConfigurableCredentialManager(sparkConf)
+  private val credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
   credentialManager.initialize()
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
@@ -395,14 +395,13 @@ private[spark] class Client(
     val fs = destDir.getFileSystem(hadoopConf)
 
     // Merge credentials obtained from registered providers
-    var nearestTimeOfNextRenewal = Long.MaxValue
-    credentialManager.obtainCredentials(hadoopConf, credentials).foreach { t =>
-      if (t.isDefined && t.get < nearestTimeOfNextRenewal) {
-        nearestTimeOfNextRenewal = t.get
-      }
-    }
+    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
 
-    if (loginFromKeytab) {
+    // If we use principal and keytab to login, also credentials can be renewed some time
+    // after current time, we should pass the next renewal and updating time to delegation token
+    // renewer and updater.
+    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
+      nearestTimeOfNextRenewal != Long.MaxValue) {
       sparkConf.set(CREDENTIALS_RENEWAL_TIME, nearestTimeOfNextRenewal)
       val nearestTimeOfNextUpdate =
         (nearestTimeOfNextRenewal - System.currentTimeMillis()) * 1.1 + System.currentTimeMillis()

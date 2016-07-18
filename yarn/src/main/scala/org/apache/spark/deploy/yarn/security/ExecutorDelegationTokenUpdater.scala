@@ -53,8 +53,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
       override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
     }
 
-  @volatile private var timeOfNextUpdate =
-    sparkConf.get(CREDENTIALS_UPDATE_TIME).getOrElse(Long.MaxValue)
+  @volatile private var timeOfNextUpdate = sparkConf.get(CREDENTIALS_UPDATE_TIME)
 
   def updateCredentialsIfRequired(): Unit = {
     try {
@@ -80,16 +79,16 @@ private[spark] class ExecutorDelegationTokenUpdater(
           return
         }
       }
-      val timeLeft = timeOfNextUpdate - System.currentTimeMillis()
-      if (timeLeft <= 0) {
+      val remainingTime = timeOfNextUpdate - System.currentTimeMillis()
+      if (remainingTime <= 0) {
         // We just checked for new credentials but none were there, wait a minute and retry.
         // This handles the shutdown case where the staging directory may have been removed(see
         // SPARK-12316 for more details).
         delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.MINUTES)
       } else {
-        logInfo(s"Scheduling token refresh from HDFS in $timeLeft millis.")
+        logInfo(s"Scheduling token refresh from HDFS in $remainingTime millis.")
         delegationTokenRenewer.schedule(
-          executorUpdaterRunnable, timeLeft, TimeUnit.MILLISECONDS)
+          executorUpdaterRunnable, remainingTime, TimeUnit.MILLISECONDS)
       }
     } catch {
       // Since the file may get deleted while we are reading it, catch the Exception and come

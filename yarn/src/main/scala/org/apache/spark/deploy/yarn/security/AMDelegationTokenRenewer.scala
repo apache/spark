@@ -69,8 +69,7 @@ private[yarn] class AMDelegationTokenRenewer(
   private val freshHadoopConf =
     hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
-  @volatile private var timeOfNextRenewal =
-    sparkConf.get(CREDENTIALS_RENEWAL_TIME).getOrElse(Long.MaxValue)
+  @volatile private var timeOfNextRenewal = sparkConf.get(CREDENTIALS_RENEWAL_TIME)
 
   /**
    * Schedule a login from the keytab and principal set using the --principal and --keytab
@@ -89,13 +88,13 @@ private[yarn] class AMDelegationTokenRenewer(
      */
     def scheduleRenewal(runnable: Runnable): Unit = {
       // Run now!
-      val leftTime = timeOfNextRenewal - System.currentTimeMillis()
-      if (leftTime <= 0) {
+      val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
+      if (remainingTime <= 0) {
         logInfo("HDFS tokens have expired, creating new tokens now.")
         runnable.run()
       } else {
-        logInfo(s"Scheduling login from keytab in $leftTime millis.")
-        delegationTokenRenewer.schedule(runnable, leftTime, TimeUnit.MILLISECONDS)
+        logInfo(s"Scheduling login from keytab in $remainingTime millis.")
+        delegationTokenRenewer.schedule(runnable, remainingTime, TimeUnit.MILLISECONDS)
       }
     }
 
@@ -173,12 +172,9 @@ private[yarn] class AMDelegationTokenRenewer(
     keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
-        var nearestNextTime = Long.MaxValue
-        credentialManager.obtainCredentials(freshHadoopConf, tempCreds).foreach { nextTime =>
-           if (nextTime.isDefined && nextTime.get < nearestNextTime) {
-             nearestNextTime = nextTime.get
-           }
-        }
+        val nearestNextTime = credentialManager.obtainCredentials(freshHadoopConf, tempCreds)
+        require(nearestNextTime > System.currentTimeMillis(),
+          s"Time of next renewal $nearestNextTime is earlier than now")
         timeOfNextRenewal = nearestNextTime
         null
       }
@@ -198,16 +194,17 @@ private[yarn] class AMDelegationTokenRenewer(
       }
     }
     val nextSuffix = lastCredentialsFileSuffix + 1
-    // Time of next update should be late than renewal,
-    // which is around new token issue date + 0.8 * renew interval
+    // Time of next update should be later than renewal,
     val timeOfNextUpdate =
       (timeOfNextRenewal - System.currentTimeMillis()) * 1.1 + System.currentTimeMillis()
+
     val tokenPathStr =
       credentialsFile + SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM +
         timeOfNextUpdate.toLong.toString + SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM +
           nextSuffix
     val tokenPath = new Path(tokenPathStr)
     val tempTokenPath = new Path(tokenPathStr + SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)
+
     logInfo("Writing out delegation tokens to " + tempTokenPath.toString)
     val credentials = UserGroupInformation.getCurrentUser.getCredentials
     credentials.writeTokenStorageFile(tempTokenPath, freshHadoopConf)

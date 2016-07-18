@@ -113,7 +113,7 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  private val credentialManager = new ConfigurableCredentialManager(sparkConf)
+  private val credentialManager = new ConfigurableCredentialManager(sparkConf, yarnConf)
   credentialManager.initialize()
 
   // Load the list of localized files set by the client. This is used when launching executors,
@@ -239,7 +239,7 @@ private[spark] class ApplicationMaster(
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        credentialManager.delegationTokenRenewer(yarnConf).scheduleLoginFromKeytab()
+        credentialManager.delegationTokenRenewer.scheduleLoginFromKeytab()
       }
 
       if (isClusterMode) {

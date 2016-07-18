@@ -44,8 +44,8 @@ trait ServiceCredentialProvider {
    * Obtain credentials for this service and get the time of the next renewal.
    * @param hadoopConf Configuration of current Hadoop Compatible system.
    * @param creds Credentials to add tokens and security keys to.
-   * @return If this Credential is renewable, return the time of the next renewal,
-   *         otherwise None should be returned.
+   * @return If this Credential is renewable and can be renewed, return the time of the next
+   *         renewal, otherwise None should be returned.
    */
   def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long]
 }

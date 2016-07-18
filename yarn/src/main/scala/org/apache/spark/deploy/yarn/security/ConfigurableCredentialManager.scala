@@ -40,46 +40,40 @@ import org.apache.spark.util.Utils
  * Also the specific credential provider is controlled by
  * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
  */
-final class ConfigurableCredentialManager private[yarn] (sparkConf: SparkConf) extends Logging {
+final class ConfigurableCredentialManager private[yarn] (
+    sparkConf: SparkConf, hadoopConf: Configuration) extends Logging {
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
 
   // Maintain all the registered credential providers
-  private val credentialProviders = mutable.HashMap[String, ServiceCredentialProvider]()
+  private var credentialProviders: Map[String, ServiceCredentialProvider] = _
 
-  // Default crendetial providers that will be loaded automatically, unless specifically disabled.
-  private val defaultCredentialProviders = Map(
-    "hdfs" -> "org.apache.spark.deploy.yarn.security.HDFSCredentialProvider",
-    "hive" -> "org.apache.spark.deploy.yarn.security.HiveCredentialProvider",
-    "hbase" -> "org.apache.spark.deploy.yarn.security.HBaseCredentialProvider"
-  )
+  // AMDelegationTokenRenewer, this will lazily be create and started in the AM
+  private lazy val _delegationTokenRenewer =
+    new AMDelegationTokenRenewer(sparkConf, hadoopConf, this)
 
-  // AMDelegationTokenRenewer, this will only be create and started in the AM
-  private var _delegationTokenRenewer: AMDelegationTokenRenewer = null
-
-  // ExecutorDelegationTokenUpdater, this will only be created and started in the driver and
+  // ExecutorDelegationTokenUpdater, this will lazily be created and started in the driver and
   // executor side.
-  private var _delegationTokenUpdater: ExecutorDelegationTokenUpdater = null
+  private lazy val _delegationTokenUpdater =
+    new ExecutorDelegationTokenUpdater(sparkConf, hadoopConf, this)
 
   def initialize(): Unit = {
+    val defaultServices = Set("hdfs", "hive", "hbase")
+
     val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader).asScala
 
     // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
-    providers.filter { p =>
-      sparkConf.getOption(providerEnabledConfig.format(p.serviceName))
+    credentialProviders = providers.filter { p =>
+      sparkConf.getOption(providerEnabledConfig.format(p.serviceName)).map(_.toBoolean)
         .orElse {
           sparkConf.getOption(deprecatedProviderEnabledConfig.format(p.serviceName)).map { c =>
             logWarning(s"${deprecatedProviderEnabledConfig.format(p.serviceName)} is deprecated, " +
               s"using ${providerEnabledConfig.format(p.serviceName)} instead")
-            c
+            c.toBoolean
           }
-        }
-        .getOrElse(defaultCredentialProviders.keySet.find(_ == p.serviceName).isDefined.toString)
-        .toBoolean
-    }.foreach {
-      p => credentialProviders(p.serviceName) = p
-    }
+        }.getOrElse(defaultServices.find(_ == p.serviceName).isDefined)
+    }.map { p => (p.serviceName, p) }.toMap
   }
 
   /**
@@ -90,69 +84,32 @@ final class ConfigurableCredentialManager private[yarn] (sparkConf: SparkConf) e
   }
 
   /**
-   * Obtain credentials for specified service.
-   * @return time of next renewal if this service credential is renewable.
+   * Obtain credentials from all the registered providers.
+   * @return nearest time of next renewal, Long.MaxValue if all the credentials aren't renewable,
+   *         otherwise the nearest renewal time of any credentials will be returned.
    */
-  def obtainCredentialsFromService(
-      service: String,
-      hadoopConf: Configuration,
-      creds: Credentials): Option[Long] = {
-    getServiceCredentialProvider(service).flatMap { provider =>
+  def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Long = {
+    credentialProviders.values.flatMap { provider =>
       if (provider.isCredentialRequired(hadoopConf)) {
         provider.obtainCredentials(hadoopConf, creds)
       } else {
-        None
-      }
-    }
-  }
-
-  /**
-   * Obtain credentials from all the registered providers.
-   * @return Array of time of next renewal if credential can be renewed.
-   *         Otherwise will return None instead.
-   */
-  def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Array[Option[Long]] = {
-    val timeOfNextRenewals = mutable.ArrayBuffer[Option[Long]]()
-    credentialProviders.values.foreach { provider =>
-      if (provider.isCredentialRequired(hadoopConf)) {
-        timeOfNextRenewals += provider.obtainCredentials(hadoopConf, creds)
-      } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
+        None
       }
-    }
-
-    timeOfNextRenewals.toArray
+    }.foldLeft(Long.MaxValue)(math.min)
   }
 
-  def delegationTokenRenewer(hadoopConf: Configuration): AMDelegationTokenRenewer = synchronized {
-    if (_delegationTokenRenewer == null) {
-      _delegationTokenRenewer = new AMDelegationTokenRenewer(sparkConf, hadoopConf, this)
-      _delegationTokenRenewer
-    } else {
-      _delegationTokenRenewer
-    }
+  def delegationTokenRenewer: AMDelegationTokenRenewer = {
+    _delegationTokenRenewer
   }
 
-  def delegationTokenUpdater(hadoopConf: Configuration
-      ): ExecutorDelegationTokenUpdater = synchronized {
-    if (_delegationTokenUpdater == null) {
-      _delegationTokenUpdater = new ExecutorDelegationTokenUpdater(sparkConf, hadoopConf, this)
-      _delegationTokenUpdater
-    } else {
-      _delegationTokenUpdater
-    }
+  def delegationTokenUpdater: ExecutorDelegationTokenUpdater = {
+    _delegationTokenUpdater
   }
 
-  def stop(): Unit = synchronized {
-    if (_delegationTokenRenewer != null) {
-      _delegationTokenRenewer.stop()
-      _delegationTokenRenewer = null
-    }
-
-    if (_delegationTokenUpdater != null) {
-      _delegationTokenUpdater.stop()
-      _delegationTokenUpdater = null
-    }
+  def stop(): Unit = {
+    _delegationTokenRenewer.stop()
+    _delegationTokenUpdater.stop()
   }
 }
