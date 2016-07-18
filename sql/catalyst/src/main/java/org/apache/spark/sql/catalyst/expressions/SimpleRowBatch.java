@@ -41,6 +41,7 @@ import org.apache.spark.unsafe.Platform;
  */
 public final class SimpleRowBatch extends MemoryConsumer{
     private static final int DEFAULT_CAPACITY = 1 << 16;
+    private static final long DEFAULT_PAGE_SIZE = 64 * 1024 * 1024;
 
     private final StructType keySchema;
     private final StructType valueSchema;
@@ -84,7 +85,11 @@ public final class SimpleRowBatch extends MemoryConsumer{
     public int numRows() { return numRows; }
 
     public void close() {
-        // do nothing, pages should be freed already
+        if (dataPages.size() != 0) {
+            currentPage = dataPages.remove();
+            freePage(currentPage);
+            assert(dataPages.size() == 0);
+        }
     }
 
     private boolean acquireNewPage(long required) {
@@ -179,7 +184,17 @@ public final class SimpleRowBatch extends MemoryConsumer{
      * key row has just been accessed. This is always the case so far.
      * Returned value row is reused across calls.
      */
-    public UnsafeRow getValueFromKey(int rowId) {
+    public UnsafeRow getValueRow(int rowId) {
+        return getValueFromKey(rowId);
+    }
+
+    /**
+     * Returns the value row in this batch at `rowId`.
+     * It can be a faster path if `keyRowId` is equal to `rowId`, which means the preceding
+     * key row has just been accessed. This is always the case so far.
+     * Returned value row is reused across calls.
+     */
+    private UnsafeRow getValueFromKey(int rowId) {
         if (keyRowId != rowId) {
             getKeyRow(rowId);
         }
@@ -246,12 +261,13 @@ public final class SimpleRowBatch extends MemoryConsumer{
                     currentvlen = vlen;
                 } else {
                     totalLength = Platform.getInt(pageBaseObject, offsetInPage);
-                    klen = Platform.getInt(pageBaseObject, offsetInPage + 4);
+                    currentklen = Platform.getInt(pageBaseObject, offsetInPage + 4);
                     currentvlen = totalLength - currentklen - 4;
                 }
 
                 key.pointTo(pageBaseObject, offsetInPage + 8, currentklen);
                 value.pointTo(pageBaseObject, offsetInPage + 8 + currentklen, currentvlen + 4);
+
                 offsetInPage += 4 + totalLength + 8;
                 recordsInPage -= 1;
                 return true;
@@ -321,7 +337,7 @@ public final class SimpleRowBatch extends MemoryConsumer{
             this.keyOffsets = new long[maxRows];
         }
 
-        if (!acquireNewPage(64 * 1024 * 1024)) { //64MB
+        if (!acquireNewPage(DEFAULT_PAGE_SIZE)) {
             currentPage = null;
         } else {
             currentAndOnlyBase = currentPage.getBaseObject();

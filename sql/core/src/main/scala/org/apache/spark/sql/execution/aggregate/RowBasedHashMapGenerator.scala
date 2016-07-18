@@ -262,7 +262,7 @@ class RowBasedHashMapGenerator(
        |        return null;
        |      }
        |    } else if (equals(idx, ${groupingKeys.map(_.name).mkString(", ")})) {
-       |      return batch.getValueFromKey(buckets[idx]);
+       |      return batch.getValueRow(buckets[idx]);
        |    }
        |    idx = (idx + 1) & (numBuckets - 1);
        |    step++;
