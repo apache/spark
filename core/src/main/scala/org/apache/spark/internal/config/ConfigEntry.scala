@@ -171,14 +171,10 @@ private object ConfigEntry {
       val replacement = prefix match {
         case null =>
           require(!usedRefs.contains(name), s"Circular reference in $value: $name")
-          if (name.startsWith("spark.")) {
-            Option(findEntry(name))
-              .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + name))
-              .orElse(Option(conf.get(name)))
-              .orElse(defaultValueString(name))
-          } else {
-            None
-          }
+          Option(findEntry(name))
+            .flatMap(_.readAndExpand(conf, getenv, usedRefs = usedRefs + name))
+            .orElse(Option(conf.get(name)))
+            .orElse(defaultValueString(name))
         case "system" => sys.props.get(name)
         case "env" => Option(getenv(name))
         case _ => None
