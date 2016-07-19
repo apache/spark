@@ -191,10 +191,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         sql("REFRESH TABLE jsonTable")
 
-        // Check that the refresh worked
+        // After refresh, schema is not changed.
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
-          Row("a1", "b1", "c1"))
+          Row("a1", "b1"))
       }
     }
   }
@@ -704,7 +704,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             sparkSession = spark,
             tableIdent = TableIdentifier("wide_schema"),
             schema = schema,
-            isSchemaInferred = false,
             partitionColumns = Array.empty[String],
             bucketSpec = None,
             provider = "json",
@@ -990,7 +989,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sparkSession = spark,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
         schema = schema,
-        isSchemaInferred = false,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
@@ -1006,7 +1004,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sparkSession = spark,
         tableIdent = TableIdentifier("skip_hive_metadata"),
         schema = schema,
-        isSchemaInferred = false,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",

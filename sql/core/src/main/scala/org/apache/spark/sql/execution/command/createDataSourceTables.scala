@@ -127,7 +127,6 @@ case class CreateDataSourceTableCommand(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
       schema = dataSource.schema,
-      isSchemaInferred = userSpecifiedSchema.isEmpty,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
       provider = provider,
@@ -279,7 +278,6 @@ case class CreateDataSourceTableAsSelectCommand(
         sparkSession = sparkSession,
         tableIdent = tableIdent,
         schema = result.schema,
-        isSchemaInferred = false,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         provider = provider,
@@ -293,6 +291,7 @@ case class CreateDataSourceTableAsSelectCommand(
   }
 }
 
+
 object CreateDataSourceTableUtils extends Logging {
 
   val DATASOURCE_PREFIX = "spark.sql.sources."
@@ -301,7 +300,6 @@ object CreateDataSourceTableUtils extends Logging {
   val DATASOURCE_OUTPUTPATH = DATASOURCE_PREFIX + "output.path"
   val DATASOURCE_SCHEMA = DATASOURCE_PREFIX + "schema"
   val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_SCHEMA + "."
-  val DATASOURCE_SCHEMA_ISINFERRED = DATASOURCE_SCHEMA_PREFIX + "isInferred"
   val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
   val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
   val DATASOURCE_SCHEMA_NUMSORTCOLS = DATASOURCE_SCHEMA_PREFIX + "numSortCols"
@@ -326,18 +324,21 @@ object CreateDataSourceTableUtils extends Logging {
     matcher.matches()
   }
 
-  /**
-   * Saves the schema (including partition info) into the table properties.
-   * Overwrites the schema, if already existed.
-   */
-  def saveSchema(
+  def createDataSourceTable(
       sparkSession: SparkSession,
+      tableIdent: TableIdentifier,
       schema: StructType,
       partitionColumns: Array[String],
-      tableProperties: mutable.HashMap[String, String]): Unit = {
-    // Serialized JSON schema string may be too long to be stored into a single
-    // metastore SerDe property.  In this case, we split the JSON string and store each part as
-    // a separate table property.
+      bucketSpec: Option[BucketSpec],
+      provider: String,
+      options: Map[String, String],
+      isExternal: Boolean): Unit = {
+    val tableProperties = new mutable.HashMap[String, String]
+    tableProperties.put(DATASOURCE_PROVIDER, provider)
+
+    // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
+    // stored into a single metastore SerDe property.  In this case, we split the JSON string and
+    // store each part as a separate SerDe property.
     val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
     val schemaJsonString = schema.json
     // Split the JSON string.
@@ -353,23 +354,6 @@ object CreateDataSourceTableUtils extends Logging {
         tableProperties.put(s"$DATASOURCE_SCHEMA_PARTCOL_PREFIX$index", partCol)
       }
     }
-  }
-
-  def createDataSourceTable(
-      sparkSession: SparkSession,
-      tableIdent: TableIdentifier,
-      schema: StructType,
-      isSchemaInferred: Boolean,
-      partitionColumns: Array[String],
-      bucketSpec: Option[BucketSpec],
-      provider: String,
-      options: Map[String, String],
-      isExternal: Boolean): Unit = {
-    val tableProperties = new mutable.HashMap[String, String]
-    tableProperties.put(DATASOURCE_PROVIDER, provider)
-
-    tableProperties.put(DATASOURCE_SCHEMA_ISINFERRED, isSchemaInferred.toString.toUpperCase)
-    saveSchema(sparkSession, schema, partitionColumns, tableProperties)
 
     if (bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get

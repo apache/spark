@@ -487,10 +487,6 @@ object DDLUtils {
     isDatasourceTable(table.properties)
   }
 
-  def isSchemaInferred(table: CatalogTable): Boolean = {
-    table.properties.get(DATASOURCE_SCHEMA_ISINFERRED) == Option(true.toString.toUpperCase)
-  }
-
   /**
    * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
    * issue an exception [[AnalysisException]].

@@ -336,9 +336,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val newDF = sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
             .toDF("newCol1", "newCol2")
           newDF.write.format("json").partitionBy("newCol1").mode(SaveMode.Overwrite).save(path)
-          val newSchema = StructType(
-            StructField("newCol2", StringType, nullable = true) ::
-              StructField("newCol1", IntegerType, nullable = true) :: Nil)
 
           // No change on the schema
           val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
@@ -349,27 +346,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
           assert(partColsBeforeRefresh == partitionCols)
 
-          // Refresh
+          // Refresh does not affect the schema
           spark.catalog.refreshTable(tabName)
 
           val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
           val tableSchemaAfterRefresh =
             DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
-          assert(tableSchemaAfterRefresh == Option(newSchema))
+          assert(tableSchemaAfterRefresh == Option(schema))
           val partColsAfterRefresh =
             DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
-          assert(partColsAfterRefresh == Seq("newCol1"))
-
-          // Refresh after no change
-          spark.catalog.refreshTable(tabName)
-
-          val tableMetadataNoChangeAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
-          val tableSchemaNoChangeAfterRefresh =
-            DDLUtils.getSchemaFromTableProperties(tableMetadataNoChangeAfterRefresh)
-          assert(tableSchemaNoChangeAfterRefresh == Option(newSchema))
-          val partColsNoChangeAfterRefresh =
-            DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataNoChangeAfterRefresh)
-          assert(partColsNoChangeAfterRefresh == Seq("newCol1"))
+          assert(partColsAfterRefresh == partitionCols)
         }
       }
     }

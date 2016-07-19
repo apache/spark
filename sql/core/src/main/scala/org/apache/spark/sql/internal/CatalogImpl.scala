@@ -18,7 +18,6 @@
 package org.apache.spark.sql.internal
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
@@ -28,8 +27,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, TableIdentifie
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.execution.datasources.CreateTableUsing
 import org.apache.spark.sql.types.StructType
 
 
@@ -353,67 +351,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Refresh the inferred schema stored in the external catalog for data source tables.
-   */
-  private def refreshInferredSchema(tableIdent: TableIdentifier): Unit = {
-    val table = sessionCatalog.getTableMetadataOption(tableIdent)
-    table.foreach { tableDesc =>
-      if (DDLUtils.isDatasourceTable(tableDesc) && DDLUtils.isSchemaInferred(tableDesc)) {
-        val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(tableDesc)
-        val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(tableDesc)
-        val dataSource =
-          DataSource(
-            sparkSession,
-            userSpecifiedSchema = None,
-            partitionColumns = partitionColumns,
-            bucketSpec = bucketSpec,
-            className = tableDesc.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
-            options = tableDesc.storage.serdeProperties)
-            .resolveRelation().asInstanceOf[HadoopFsRelation]
-
-        val schemaProperties = new mutable.HashMap[String, String]
-        CreateDataSourceTableUtils.saveSchema(
-          sparkSession, dataSource.schema, dataSource.partitionSchema.fieldNames, schemaProperties)
-
-        def isPropertyForInferredSchema(key: String): Boolean = {
-          key match {
-            case CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS => true
-            case CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTCOLS => true
-            case _
-              if key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PART_PREFIX) ||
-                key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PARTCOL_PREFIX)
-              => true
-            case _ => false
-          }
-        }
-
-        // Keep the properties that are not for schema or partition columns
-        val tablePropertiesWithoutSchema = tableDesc.properties.filterKeys { k =>
-          !isPropertyForInferredSchema(k)
-        }
-
-        val newTable = tableDesc.copy(properties = tablePropertiesWithoutSchema ++ schemaProperties)
-
-        // Alter the schema-related table properties that are stored in external catalog.
-        sessionCatalog.alterTable(newTable)
-      }
-    }
-  }
-
-  /**
    * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
-   * is refreshed.
+   * is refreshed. For data source tables, the schema will not be inferred and refreshed.
    *
    * @group cachemgmt
    * @since 2.0.0
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    // Refresh the schema in external catalog, if it is a data source table whose schema is inferred
-    // at runtime. For user-specified schema, we do not infer and update the schema.
-    // TODO: Support column-related ALTER TABLE DDL commands, and then users can update
-    // the user-specified schema.
-    refreshInferredSchema(tableIdent)
     // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
     // Non-temp tables: refresh the metadata cache.
     sessionCatalog.refreshTable(tableIdent)
