@@ -35,7 +35,7 @@ import org.apache.spark.sql.Row;
 // $example off:basic_parquet_example$
 import org.apache.spark.sql.SparkSession;
 
-public class JavaSqlDataSourceExample {
+public class JavaSQLDataSourceExample {
 
   // $example on:schema_merging$
   public static class Square implements Serializable {

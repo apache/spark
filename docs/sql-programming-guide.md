@@ -65,14 +65,14 @@ Throughout this document, we will often refer to Scala/Java Datasets of `Row`s a
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
 
-{% include_example init_session scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example init_session scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/java/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
 
-{% include_example init_session java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example init_session java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -105,7 +105,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% include_example create_df scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example create_df scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -114,7 +114,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% include_example create_df java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example create_df java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -155,7 +155,7 @@ Here we include some basic examples of structured data processing using Datasets
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example untyped_ops scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example untyped_ops scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
 For a complete list of the types of operations that can be performed on a Dataset refer to the [API Documentation](api/scala/index.html#org.apache.spark.sql.Dataset).
 
@@ -164,7 +164,7 @@ In addition to simple column references and expressions, Datasets also have a ri
 
 <div data-lang="java" markdown="1">
 
-{% include_example untyped_ops java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example untyped_ops java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 
 For a complete list of the types of operations that can be performed on a Dataset refer to the [API Documentation](api/java/org/apache/spark/sql/Dataset.html).
 
@@ -249,13 +249,13 @@ In addition to simple column references and expressions, DataFrames also have a 
 <div data-lang="scala"  markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
-{% include_example run_sql scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example run_sql scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `Dataset<Row>`.
 
-{% include_example run_sql java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example run_sql java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -287,11 +287,11 @@ the bytes back into an object.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example create_ds scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example create_ds scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% include_example create_ds java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example create_ds java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 </div>
 
@@ -318,7 +318,7 @@ reflection and become the names of the columns. Case classes can also be nested 
 types such as `Seq`s or `Array`s. This RDD can be implicitly converted to a DataFrame and then be
 registered as a table. Tables can be used in subsequent SQL statements.
 
-{% include_example schema_inferring scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example schema_inferring scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -330,7 +330,7 @@ does not support JavaBeans that contain `Map` field(s). Nested JavaBeans and `Li
 fields are supported though. You can create a JavaBean by creating a class that implements
 Serializable and has getters and setters for all of its fields.
 
-{% include_example schema_inferring java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example schema_inferring java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -385,7 +385,7 @@ by `SparkSession`.
 
 For example:
 
-{% include_example programmatic_schema scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example programmatic_schema scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -403,7 +403,7 @@ by `SparkSession`.
 
 For example:
 
-{% include_example programmatic_schema java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example programmatic_schema java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -472,11 +472,11 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example generic_load_save_functions scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example generic_load_save_functions scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example generic_load_save_functions java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example generic_load_save_functions java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -507,11 +507,11 @@ using this syntax.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example manual_load_options scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example manual_load_options java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example manual_load_options java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -538,11 +538,11 @@ file directly with SQL.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example direct_sql scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example direct_sql scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example direct_sql java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example direct_sql java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -633,11 +633,11 @@ Using the data from the above example:
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
-{% include_example basic_parquet_example scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example basic_parquet_example scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example basic_parquet_example java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example basic_parquet_example java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -766,11 +766,11 @@ turned it off by default starting from 1.5.0. You may enable it by
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
-{% include_example schema_merging scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example schema_merging scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example schema_merging java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example schema_merging java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -973,7 +973,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% include_example json_dataset scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -985,7 +985,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% include_example json_dataset java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -1879,9 +1879,8 @@ Spark SQL and DataFrames support the following data types:
 
 All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
 You can access them by doing
-{% highlight scala %}
-import  org.apache.spark.sql.types._
-{% endhighlight %}
+
+{% include_example data_types scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
 <table class="table">
 <tr>

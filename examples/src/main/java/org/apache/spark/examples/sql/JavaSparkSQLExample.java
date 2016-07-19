@@ -60,7 +60,7 @@ import org.apache.spark.sql.types.StructType;
 import static org.apache.spark.sql.functions.col;
 // $example off:untyped_ops$
 
-public class JavaSparkSqlExample {
+public class JavaSparkSQLExample {
   // $example on:create_ds$
   public static class Person implements Serializable {
     private String name;
