@@ -170,6 +170,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
     }.getMessage
     assert(m.contains("Column \"seq\" not found"))
+    JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
   test("Incompatible INSERT to append") {
