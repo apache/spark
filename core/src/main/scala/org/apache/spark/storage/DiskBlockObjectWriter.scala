@@ -27,8 +27,10 @@ import org.apache.spark.util.Utils
 
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
- * to an existing block. Callers can write to the same file and commit these writes.
- * In case of faults, callers should atomically revert the uncommitted partial writes.
+ * to an existing block. For efficiency, it retains the underlying file channel across
+ * multiple commits. This channel is kept open until close() is called. In case of faults,
+ * callers should instead close with revertPartialWritesAndClose() to atomically revert the
+ * uncommitted partial writes.
  *
  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
  * reopened again.
