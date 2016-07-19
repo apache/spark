@@ -699,14 +699,18 @@ abstract class RDD[T: ClassTag](
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String): RDD[String] = withScope {
-    pipe(command)
+    // Similar to Runtime.exec(), if we are given a single string, split it into words
+    // using a standard StringTokenizer (i.e. by spaces)
+    pipe(PipedRDD.tokenize(command))
   }
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: String, env: Map[String, String]): RDD[String] = withScope {
-    pipe(command, env)
+    // Similar to Runtime.exec(), if we are given a single string, split it into words
+    // using a standard StringTokenizer (i.e. by spaces)
+    pipe(PipedRDD.tokenize(command), env)
   }
 
   /**
