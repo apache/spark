@@ -138,7 +138,10 @@ case class Invoke(
     val funcValIsNull = ctx.freshName("funcValIsNull")
     val callFunc = if (method.isDefined && method.get.getReturnType.isPrimitive) {
       s"""
-        $javaType $funcVal = ${obj.value}.$functionName($argString);
+        $javaType $funcVal = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          $funcVal = ${obj.value}.$functionName($argString);
+        }
         boolean $funcValIsNull = false;
       """
     } else {
