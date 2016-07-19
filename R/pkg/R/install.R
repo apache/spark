@@ -29,6 +29,8 @@
 #'        and 2.7 (default)
 #' @param url the base URL of the repositories to use
 #' @param local_dir local directory that Spark is installed to
+#' @return \code{install_spark} returns the local directory 
+#'         where Spark is found or installed
 #' @rdname install_spark
 #' @name install_spark
 #' @export
@@ -69,6 +71,7 @@ install_spark <- function(hadoop_version = NULL, url = NULL, local_dir = NULL) {
     untar(tarfile = packageLocalPath, exdir = local_dir)
     unlink(packageLocalPath)
   }
+  packageLocalDir
 }
 
 mirror_csv_url <- function() {

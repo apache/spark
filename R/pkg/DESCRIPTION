@@ -7,7 +7,9 @@ Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
 Depends:
     R (>= 3.0),
-    methods,
+    methods
+Imports:
+    rappdirs
 Suggests:
     testthat,
     e1071,
