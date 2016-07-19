@@ -54,19 +54,17 @@ private[sql] class JacksonParser(
   private def failedConversion(
       parser: JsonParser,
       dataType: DataType): Any = parser.getCurrentToken match {
-    case null | VALUE_NULL =>
-      null
-
     case _ if parser.getTextLength < 1 =>
-      // guard the non string type
+      // If conversion is failed, this produces `null` rather than
+      // returning empty string. This will protect the mismatch of types.
       null
 
     case token =>
-    // We cannot parse this token based on the given data type. So, we throw a
-    // SparkSQLJsonProcessingException and this exception will be caught by
-    // parseJson method.
-    throw new SparkSQLJsonProcessingException(
-      s"Failed to parse a value for data type $dataType (current token: $token).")
+      // We cannot parse this token based on the given data type. So, we throw a
+      // SparkSQLJsonProcessingException and this exception will be caught by
+      // parseJson method.
+      throw new SparkSQLJsonProcessingException(
+        s"Failed to parse a value for data type $dataType (current token: $token).")
   }
 
   private def failedRecord(record: String): Seq[InternalRow] = {
@@ -94,22 +92,34 @@ private[sql] class JacksonParser(
    */
   def makeRootConverter(dataType: DataType): ValueConverter = dataType match {
     case st: StructType =>
-      // SPARK-3308: support reading top level JSON arrays and take every element
-      // in such an array as a row
       val elementConverter = makeConverter(st)
       val fieldConverters = st.map(_.dataType).map(makeConverter)
       (parser: JsonParser) => parser.getCurrentToken match {
         case START_OBJECT => convertObject(parser, st, fieldConverters)
+          // SPARK-3308: support reading top level JSON arrays and take every element
+          // in such an array as a row
+          //
+          // For example, we support, the JSON data as below:
+          //
+          // [{"a":"str_a_1"}]
+          // [{"a":"str_a_2"}, {"b":"str_b_3"}]
+          //
+          // resulting in:
+          //
+          // List([str_a_1,null])
+          // List([str_a_2,null], [null,str_b_3])
+          //
         case START_ARRAY => convertArray(parser, elementConverter)
         case _ => failedConversion(parser, st)
       }
 
     case ArrayType(st: StructType, _) =>
-      // the business end of SPARK-3308:
-      // when an object is found but an array is requested just wrap it in a list
       val elementConverter = makeConverter(st)
       val fieldConverters = st.map(_.dataType).map(makeConverter)
       (parser: JsonParser) => parser.getCurrentToken match {
+        // the business end of SPARK-3308:
+        // when an object is found but an array is requested just wrap it in a list.
+        // This is being wrapped in `JacksonParser.parse`.
         case START_OBJECT => convertObject(parser, st, fieldConverters)
         case START_ARRAY => convertArray(parser, elementConverter)
         case _ => failedConversion(parser, st)
@@ -124,7 +134,7 @@ private[sql] class JacksonParser(
    */
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_TRUE => true
           case VALUE_FALSE => false
@@ -133,7 +143,7 @@ private[sql] class JacksonParser(
       }
 
     case ByteType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getByteValue
           case _ => failedConversion(parser, dataType)
@@ -141,7 +151,7 @@ private[sql] class JacksonParser(
       }
 
     case ShortType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getShortValue
           case _ => failedConversion(parser, dataType)
@@ -149,7 +159,7 @@ private[sql] class JacksonParser(
       }
 
     case IntegerType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getIntValue
           case _ => failedConversion(parser, dataType)
@@ -157,7 +167,7 @@ private[sql] class JacksonParser(
       }
 
     case LongType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getLongValue
           case _ => failedConversion(parser, dataType)
@@ -165,7 +175,7 @@ private[sql] class JacksonParser(
       }
 
     case FloatType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
             parser.getFloatValue
@@ -189,7 +199,7 @@ private[sql] class JacksonParser(
       }
 
     case DoubleType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
             parser.getDoubleValue
@@ -213,24 +223,22 @@ private[sql] class JacksonParser(
       }
 
     case StringType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
             UTF8String.fromString(parser.getText)
 
-          case token if token != VALUE_NULL =>
+          case _ =>
             val writer = new ByteArrayOutputStream()
             Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
               generator => generator.copyCurrentStructure(parser)
             }
             UTF8String.fromBytes(writer.toByteArray)
-
-          case _ => failedConversion(parser, dataType)
         }
       }
 
     case TimestampType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
             // This one will lose microseconds parts.
@@ -245,7 +253,7 @@ private[sql] class JacksonParser(
       }
 
     case DateType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
             val stringValue = parser.getText
@@ -263,7 +271,7 @@ private[sql] class JacksonParser(
       }
 
     case BinaryType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING => parser.getBinaryValue
           case _ => failedConversion(parser, dataType)
@@ -271,7 +279,7 @@ private[sql] class JacksonParser(
       }
 
     case dt: DecimalType =>
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
             Decimal(parser.getDecimalValue, dt.precision, dt.scale)
@@ -282,7 +290,7 @@ private[sql] class JacksonParser(
 
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case START_OBJECT => convertObject(parser, st, fieldConverters)
           case _ => failedConversion(parser, st)
@@ -291,7 +299,7 @@ private[sql] class JacksonParser(
 
     case at: ArrayType =>
       val elementConverter = makeConverter(at.elementType)
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case START_ARRAY => convertArray(parser, elementConverter)
           case _ => failedConversion(parser, at)
@@ -300,7 +308,7 @@ private[sql] class JacksonParser(
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
-      (parser: JsonParser) => skipFieldNameTokenIfExists(parser) {
+      (parser: JsonParser) => convertField(parser) {
         parser.getCurrentToken match {
           case START_OBJECT => convertMap(parser, valueConverter)
           case _ => failedConversion(parser, mt)
@@ -315,11 +323,32 @@ private[sql] class JacksonParser(
         failedConversion(parser, dataType)
   }
 
-  private def skipFieldNameTokenIfExists(parser: JsonParser)(f: => Any): Any = {
+  /**
+   * This converts a field. If this is called after `START_OBJECT`, then, the next token can be
+   * `FIELD_NAME`. Since the names are kept in `JacksonParser.convertObject`, this `FIELD_NAME`
+   * token can be skipped as below. When this is called after `START_ARRAY`, the tokens become
+   * ones about values until `END_ARRAY`. In this case, we don't have to skip.
+   */
+  private def convertField(parser: JsonParser)(f: => Any): Any = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
         parser.nextToken
-        f
+        convertValue(parser)(f)
+
+      case _ =>
+        convertValue(parser)(f)
+    }
+  }
+
+  /**
+   * This converts a value. The given function `f` is responsible for converting the actual values
+   * but before trying to convert it, here we check if the current value should be converted into
+   * null or not. This should be checked for all the data types.
+   */
+  private def convertValue(parser: JsonParser)(f: => Any): Any = {
+    parser.getCurrentToken match {
+      case null | VALUE_NULL => null
+
       case _ =>
         f
     }

@@ -74,8 +74,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions: JSONOptions =
-      new JSONOptions(options, sparkSession.sessionState.conf)
+    val parsedOptions: JSONOptions = new JSONOptions(options)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
