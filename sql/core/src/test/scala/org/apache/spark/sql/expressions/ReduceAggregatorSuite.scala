@@ -19,7 +19,6 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.expressions.ReduceAggregator
 
 class ReduceAggregatorSuite extends SparkFunSuite {
   test("zero value") {

@@ -178,8 +178,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
-    val encoder = encoderFor[V]
-    val aggregator: TypedColumn[V, V] = new ReduceAggregator(f, encoder).toColumn
+    val vEncoder = encoderFor[V]
+    val aggregator: TypedColumn[V, V] = new ReduceAggregator[V] {
+      override def func(a: V, b: V) = f(a, b)
+      override def encoder = vEncoder
+    }.toColumn
 
     agg(aggregator)
   }

@@ -23,17 +23,29 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
 /**
  * :: Experimental ::
- * A generic class for reduce aggregations, which accepts a reduce function that can be used to take
- * all of the elements of a group and reduce them to a single value.
+ * An aggregator that uses a single associative and commutative reduce function. This reduce
+ * function can be used to go through all input values and reduces them to a single value.
+ * If there is no input, a null value is returned.
  *
- * @tparam T The input and output type for the reduce function.
- * @param func The reduce aggregation function.
- * @param encoder The encoder for the input and output type of the reduce function.
  * @since 2.1.0
  */
 @Experimental
-private[sql] class ReduceAggregator[T](func: (T, T) => T, encoder: ExpressionEncoder[T])
-    extends Aggregator[T, (Boolean, T), T] {
+abstract class ReduceAggregator[T] extends Aggregator[T, (Boolean, T), T] {
+
+  // Question 1: Should func and encoder be parameters rather than abstract methods?
+  // Question 2: Should finish throw an exception if there is no input?
+
+  /**
+   * A associative and commutative reduce function.
+   * @since 2.1.0
+   */
+  def func(a: T, b: T): T
+
+  /**
+   * Encoder for type T.
+   * @since 2.1.0
+   */
+  def encoder: ExpressionEncoder[T]
 
   /**
    * A zero value for this aggregation. It is represented as a Tuple2. The first element of the
@@ -48,11 +60,6 @@ private[sql] class ReduceAggregator[T](func: (T, T) => T, encoder: ExpressionEnc
 
   override def outputEncoder: Encoder[T] = encoder
 
-  /**
-   * Combine two values to produce a new value. If the buffer `b` is not initialized, it simply
-   * takes the value of `a` and set the initialization flag to `true`.
-   * @since 2.1.0
-   */
   override def reduce(b: (Boolean, T), a: T): (Boolean, T) = {
     if (b._1) {
       (true, func(b._2, a))
@@ -61,12 +68,6 @@ private[sql] class ReduceAggregator[T](func: (T, T) => T, encoder: ExpressionEnc
     }
   }
 
-  /**
-   * Merge two intermediate values. As it is possibly that the buffer is just the `zero` value
-   * coming from empty partition, it checks if the buffers are initialized, and only performs
-   * merging when they are initialized both.
-   * @since 2.1.0
-   */
   override def merge(b1: (Boolean, T), b2: (Boolean, T)): (Boolean, T) = {
     if (!b1._1) {
       b2
@@ -77,11 +78,5 @@ private[sql] class ReduceAggregator[T](func: (T, T) => T, encoder: ExpressionEnc
     }
   }
 
-  /**
-   * Transform the output of the reduction. Simply output the value in the buffer.
-   * @since 2.1.0
-   */
-  override def finish(reduction: (Boolean, T)): T = {
-    reduction._2
-  }
+  override def finish(reduction: (Boolean, T)): T = reduction._2
 }
