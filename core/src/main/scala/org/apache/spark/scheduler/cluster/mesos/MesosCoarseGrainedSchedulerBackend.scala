@@ -553,6 +553,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       taskId: String,
       reason: String): Unit = {
     stateLock.synchronized {
+      // Do not call removeExecutor() after this scheduler backend was stopped because
+      // removeExecutor() internally will send a message to the driver endpoint but
+      // the driver endpoint is not available now, otherwise an exception will be thrown.
       if (!stopCalled) {
         removeExecutor(taskId, SlaveLost(reason))
       }
