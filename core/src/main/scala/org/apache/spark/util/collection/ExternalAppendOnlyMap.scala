@@ -214,7 +214,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush(): Unit = {
-      val segment = writer.commit()
+      val segment = writer.commitAndGet()
       batchSizes.append(segment.length)
       _diskBytesSpilled += segment.length
       objectsWritten = 0

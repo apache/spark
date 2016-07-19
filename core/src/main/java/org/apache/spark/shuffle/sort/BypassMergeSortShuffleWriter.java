@@ -154,7 +154,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
     for (int i = 0; i < numPartitions; i++) {
       final DiskBlockObjectWriter writer = partitionWriters[i];
-      partitionWriterSegments[i] = writer.commit();
+      partitionWriterSegments[i] = writer.commitAndGet();
       writer.close();
     }
 

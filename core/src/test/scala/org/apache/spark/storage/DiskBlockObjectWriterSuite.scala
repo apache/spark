@@ -60,7 +60,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
     assert(writeMetrics.bytesWritten > 0)
     assert(writeMetrics.recordsWritten === 16385)
-    writer.commit()
+    writer.commitAndGet()
     writer.close()
     assert(file.length() == writeMetrics.bytesWritten)
   }
@@ -108,7 +108,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
       file, new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
     writer.write(Long.box(20), Long.box(30))
-    val firstSegment = writer.commit()
+    val firstSegment = writer.commitAndGet()
     assert(firstSegment.length === file.length())
     assert(writeMetrics.shuffleBytesWritten === file.length())
 
@@ -126,7 +126,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
       file, new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
 
     writer.write(Long.box(20), Long.box(30))
-    val firstSegment = writer.commit()
+    val firstSegment = writer.commitAndGet()
     assert(firstSegment.length === file.length())
     assert(writeMetrics.shuffleBytesWritten === file.length())
 
@@ -143,7 +143,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     for (i <- 1 to 1000) {
       writer.write(i, i)
     }
-    writer.commit()
+    writer.commitAndGet()
     writer.close()
     val bytesWritten = writeMetrics.bytesWritten
     assert(writeMetrics.recordsWritten === 1000)
@@ -160,12 +160,12 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     for (i <- 1 to 1000) {
       writer.write(i, i)
     }
-    writer.commit()
+    writer.commitAndGet()
     writer.close()
     val bytesWritten = writeMetrics.bytesWritten
     val writeTime = writeMetrics.writeTime
     assert(writeMetrics.recordsWritten === 1000)
-    writer.commit()
+    writer.commitAndGet()
     writer.close()
     assert(writeMetrics.recordsWritten === 1000)
     assert(writeMetrics.bytesWritten === bytesWritten)
@@ -195,7 +195,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     val writeMetrics = new ShuffleWriteMetrics()
     val writer = new DiskBlockObjectWriter(
       file, new JavaSerializer(new SparkConf()).newInstance(), 1024, os => os, true, writeMetrics)
-    val segment = writer.commit()
+    val segment = writer.commitAndGet()
     writer.close()
     assert(segment.length === 0)
   }

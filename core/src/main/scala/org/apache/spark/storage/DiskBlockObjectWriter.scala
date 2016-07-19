@@ -27,8 +27,8 @@ import org.apache.spark.util.Utils
 
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
- * to an existing block and can guarantee atomicity in the case of faults as it allows the caller to
- * revert partial writes.
+ * to an existing block. Callers can write to the same file and commit these writes.
+ * In case of faults, callers should atomically revert the uncommitted partial writes.
  *
  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
  * reopened again.
@@ -49,6 +49,8 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Guards against close calls, e.g. from a wrapping stream.
    * Call manualClose to close the stream that was extended by this trait.
+   * Commit uses this trait to close object streams without paying the
+   * cost of closing and opening the underlying file.
    */
   private trait ManualCloseOutputStream extends OutputStream {
     abstract override def close(): Unit = {
@@ -74,15 +76,16 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Cursors used to represent positions in the file.
    *
-   * xxxxxxxx|--------|---|
-   *           ^          ^
-   *           |        committedPosition
-   *         reportedPosition
+   * xxxxxxxxxx|----------|-----|
+   *           ^          ^     ^
+   *           |          |    channel.position()
+   *           |        reportedPosition
+   *         committedPosition
    *
    * reportedPosition: Position at the time of the last update to the write metrics.
    * committedPosition: Offset after last committed write.
    * -----: Current writes to the underlying file.
-   * xxxxx: Existing contents of the file.
+   * xxxxx: Committed contents of the file.
    */
   private var committedPosition = file.length()
   private var reportedPosition = committedPosition
@@ -141,7 +144,7 @@ private[spark] class DiskBlockObjectWriter(
   override def close() {
     if (initialized) {
       Utils.tryWithSafeFinally {
-        commit()
+        commitAndGet()
       } {
         closeResources()
       }
@@ -154,7 +157,7 @@ private[spark] class DiskBlockObjectWriter(
    *
    * @return file segment with previous offset and length committed on this call.
    */
-  def commit(): FileSegment = {
+  def commitAndGet(): FileSegment = {
     if (streamOpen) {
       // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
       //       serializer stream and the lower level stream.

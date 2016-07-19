@@ -285,7 +285,7 @@ private[spark] class ExternalSorter[K, V, C](
     // Flush the disk writer's contents to disk, and update relevant variables.
     // The writer is committed at the end of this process.
     def flush(): Unit = {
-      val segment = writer.commit()
+      val segment = writer.commitAndGet()
       batchSizes.append(segment.length)
       _diskBytesSpilled += segment.length
       objectsWritten = 0
@@ -696,7 +696,7 @@ private[spark] class ExternalSorter[K, V, C](
         while (it.hasNext && it.nextPartition() == partitionId) {
           it.writeNext(writer)
         }
-        val segment = writer.commit()
+        val segment = writer.commitAndGet()
         lengths(partitionId) = segment.length
       }
     } else {
@@ -706,7 +706,7 @@ private[spark] class ExternalSorter[K, V, C](
           for (elem <- elements) {
             writer.write(elem._1, elem._2)
           }
-          val segment = writer.commit()
+          val segment = writer.commitAndGet()
           lengths(id) = segment.length
         }
       }

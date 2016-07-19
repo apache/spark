@@ -180,7 +180,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       if (partition != currentPartition) {
         // Switch to the new partition
         if (currentPartition != -1) {
-          final FileSegment fileSegment = writer.commit();
+          final FileSegment fileSegment = writer.commitAndGet();
           spillInfo.partitionLengths[currentPartition] = fileSegment.length();
         }
         currentPartition = partition;
@@ -202,7 +202,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       writer.recordWritten();
     }
 
-    final FileSegment committedSegment = writer.commit();
+    final FileSegment committedSegment = writer.commitAndGet();
     writer.close();
     // If `writeSortedFile()` was called from `closeAndGetSpills()` and no records were inserted,
     // then the file might be empty. Note that it might be better to avoid calling
