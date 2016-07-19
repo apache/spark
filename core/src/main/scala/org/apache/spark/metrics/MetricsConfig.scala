@@ -33,9 +33,16 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private val DEFAULT_PREFIX = "*"
   private val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
   private val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
+  // This is intetionally made to not fall the prefix (spark.metrics.conf) because it's not
+  // intended to be a _real_ metrics property, for example, its first part before the dot
+  // doesn't represent the instance (master, worker, etc.). Instead, it's used to configure the
+  // metrics systems. Where accessed, this should be namespace property should be directly accessed
+  // from SparkConf using its full name, represented here.
+  private val NAMESPACE_CONFIG_PROPERTY = "spark.metrics.namespace"
 
   private[metrics] val properties = new Properties()
-  private[metrics] var propertyCategories: mutable.HashMap[String, Properties] = null
+  private[metrics] var perInstanceSubProperties: mutable.HashMap[String, Properties] = null
+  private[metrics] var metricsNamespace: String = null
 
   private def setDefaultProperties(prop: Properties) {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
@@ -44,6 +51,10 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     prop.setProperty("applications.sink.servlet.path", "/metrics/applications/json")
   }
 
+  /**
+   * Load properties from various places, based on precedence
+   * If the same property is set again latter on in the method, it overwrites the previous value
+   */
   def initialize() {
     // Add default properties in case there's no properties file
     setDefaultProperties(properties)
@@ -58,16 +69,48 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
       case _ =>
     }
 
-    propertyCategories = subProperties(properties, INSTANCE_REGEX)
-    if (propertyCategories.contains(DEFAULT_PREFIX)) {
-      val defaultProperty = propertyCategories(DEFAULT_PREFIX).asScala
-      for((inst, prop) <- propertyCategories if (inst != DEFAULT_PREFIX);
-          (k, v) <- defaultProperty if (prop.get(k) == null)) {
+    // Now, let's populate a list of sub-properties per instance, instance being the prefix that
+    // appears before the first dot in the property name.
+    // Add to the sub-properties per instance, the default properties (those with prefix "*"), as
+    // as they don't have a more specific sub-property already defined.
+    //
+    // For example, if properties has ("*.class"->"default_class", "*.path"->"default_path,
+    // "driver.path"->"driver_path"), for driver specific sub-properties, we'd like the output to be
+    // ("driver"->Map("path"->"driver_path", "class"->"default_class")
+    // Note how class got added to based on the default property, but path remained the same
+    // since "driver.path" already existed and took precedence over "*.path"
+    //
+    perInstanceSubProperties = subProperties(properties, INSTANCE_REGEX)
+    if (perInstanceSubProperties.contains(DEFAULT_PREFIX)) {
+      val defaultSubProperties = perInstanceSubProperties(DEFAULT_PREFIX).asScala
+      for ((instance, prop) <- perInstanceSubProperties if (instance != DEFAULT_PREFIX);
+           (k, v) <- defaultSubProperties if (prop.get(k) == null)) {
         prop.put(k, v)
       }
     }
+    metricsNamespace = conf.getOption(NAMESPACE_CONFIG_PROPERTY).getOrElse("spark.app.id")
   }
 
+  /**
+   * Take a simple set of properties and a regex that the property names have to conform to.
+   * And, return a map of the first order prefix (before the first dot) to the subproperties under
+   * that prefix.
+   *
+   * For example, if the properties sent were Properties("*.sink.servlet.class"->"class1",
+   * "*.sink.servlet.path"->"path1"), the returned map would be
+   * Map("*" -> Properties("sink.servlet.class" -> "class1", "sink.servlet.path" -> "path1"))
+   * Note in the subProperties (value of the returned Map), only the suffixes are used as property
+   * keys.
+   * If, in the passed properties, there is only one property with a given prefix, it is still
+   * "unflattened". For example, if the input was Properties("*.sink.servlet.class" -> "class1"
+   * the returned Map would contain one key-value pair
+   * Map("*" -> Properties("sink.servlet.class" -> "class1"))
+   * Any passed in properties, not complying with the regex are ignored.
+   *
+   * @param prop the flat list of properties to "unflatten" based on prefixes
+   * @param regex the regex that the prefix has to comply with
+   * @return an unflatted map, mapping prefix with sub-properties under that prefix
+   */
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
     val subProperties = new mutable.HashMap[String, Properties]
     prop.asScala.foreach { kv =>
@@ -80,9 +123,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   }
 
   def getInstance(inst: String): Properties = {
-    propertyCategories.get(inst) match {
+    perInstanceSubProperties.get(inst) match {
       case Some(s) => s
-      case None => propertyCategories.getOrElse(DEFAULT_PREFIX, new Properties)
+      case None => perInstanceSubProperties.getOrElse(DEFAULT_PREFIX, new Properties)
     }
   }
 

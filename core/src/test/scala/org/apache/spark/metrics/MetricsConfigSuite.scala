@@ -37,6 +37,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(conf.properties.size() === 4)
     assert(conf.properties.getProperty("test-for-dummy") === null)
+    assert(conf.metricsNamespace === "spark.app.id")
 
     val property = conf.getInstance("random")
     assert(property.size() === 2)
@@ -70,6 +71,8 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.class") ===
       "org.apache.spark.metrics.sink.MetricsServlet")
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
+
+    assert(conf.metricsNamespace === "spark.app.id")
   }
 
   test("MetricsConfig with properties set from a Spark configuration") {
@@ -101,6 +104,8 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.class") ===
       "org.apache.spark.metrics.sink.MetricsServlet")
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
+
+    assert(conf.metricsNamespace === "spark.app.id")
   }
 
   test("MetricsConfig with properties set from a file and a Spark configuration") {
@@ -131,6 +136,8 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     assert(workerProp.getProperty("sink.servlet.class") ===
       "org.apache.spark.metrics.sink.MetricsServlet")
     assert(workerProp.getProperty("sink.servlet.path") === "/metrics/json")
+
+    assert(conf.metricsNamespace === "spark.app.id")
   }
 
   test("MetricsConfig with subProperties") {
@@ -139,7 +146,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
 
-    val propCategories = conf.propertyCategories
+    val propCategories = conf.perInstanceSubProperties
     assert(propCategories.size === 3)
 
     val masterProp = conf.getInstance("master")
@@ -157,6 +164,15 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
 
     val servletProps = sinkProps("servlet")
     assert(servletProps.size() === 2)
+  }
+
+  test("MetricsConfig with alternate namespace set") {
+    val sparkConf = new SparkConf(loadDefaults = false)
+    sparkConf.set("spark.metrics.conf", filePath)
+    sparkConf.set("spark.metrics.namespace", "spark.app.name")
+    val conf = new MetricsConfig(sparkConf)
+    conf.initialize()
+    assert(conf.metricsNamespace == "spark.app.name")
   }
 
   private def setMetricsProperty(conf: SparkConf, name: String, value: String): Unit = {
