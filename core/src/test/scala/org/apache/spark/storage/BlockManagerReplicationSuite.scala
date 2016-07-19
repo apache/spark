@@ -92,7 +92,8 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     conf.set("spark.storage.cachedPeersTtl", "10")
 
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
-      new BlockManagerMasterEndpoint(rpcEnv, true, conf, new LiveListenerBus)), conf, true)
+      new BlockManagerMasterEndpoint(rpcEnv, true, conf,
+        new LiveListenerBus(new SparkContext(conf)))), conf, true)
     allStores.clear()
   }
 

@@ -19,7 +19,7 @@ package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkFunSuite, Success}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -43,8 +43,9 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   private val bm1 = BlockManagerId("big", "dog", 1)
 
   before {
-    bus = new LiveListenerBus
-    storageStatusListener = new StorageStatusListener(new SparkConf())
+    val conf = new SparkConf()
+    bus = new LiveListenerBus(new SparkContext(conf))
+    storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
     bus.addListener(storageListener)
