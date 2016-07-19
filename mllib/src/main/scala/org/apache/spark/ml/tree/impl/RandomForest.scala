@@ -190,7 +190,7 @@ private[spark] object RandomForest extends Logging {
       // Choose node splits, and enqueue new nodes as needed.
       multiTimer("findBestSplits").start()
       RandomForest.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
-        treeToNodeToIndexInfo, splits, nodeQueue, multiTimer("chooseSplits"), nodeIdCache)
+        treeToNodeToIndexInfo, splits, nodeQueue, multiTimer, nodeIdCache)
       multiTimer("findBestSplits").stop()
     }
 
@@ -361,7 +361,7 @@ private[spark] object RandomForest extends Logging {
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       splits: Array[Array[Split]],
       nodeQueue: mutable.Queue[(Int, LearningNode)],
-      timer: Stopwatch = new LocalStopwatch("chooseSplits"),
+      multiTimer: MultiStopwatch,
       nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
     /*
@@ -493,7 +493,7 @@ private[spark] object RandomForest extends Logging {
     }
 
     // Calculate best splits for all nodes in the group
-    timer.start()
+    multiTimer("chooseSplits").start()
 
     // In each partition, iterate all instances and compute aggregate stats for each node,
     // yield a (nodeIndex, nodeAggregateStats) pair for each node.
@@ -554,7 +554,7 @@ private[spark] object RandomForest extends Logging {
         (nodeIndex, (split, stats))
     }.collectAsMap()
 
-    timer.stop()
+    multiTimer("chooseSplits").stop()
 
     val nodeIdUpdaters = if (nodeIdCache.nonEmpty) {
       Array.fill[mutable.Map[Int, NodeIndexUpdater]](
