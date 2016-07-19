@@ -42,7 +42,7 @@ install_spark <- function(hadoop_version = NULL, url = NULL, local_dir = NULL) {
   hadoop_version <- hadoop_version_default()
   packageName <- paste0(version, "-bin-hadoop", hadoop_version)
   if (is.null(local_dir)) {
-    local_dir <- getOption("spark.install.dir", 
+    local_dir <- getOption("spark.install.dir",
                            rappdirs::app_dir("spark"))$cache()
   }
   packageLocalDir <- file.path(local_dir, packageName)
@@ -61,7 +61,7 @@ install_spark <- function(hadoop_version = NULL, url = NULL, local_dir = NULL) {
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n %s",
                  "Installing to:\n %s", sep = "\n")
-    msg <- sprintf(fmt, version, hadoop_version, packageRemotePath, 
+    msg <- sprintf(fmt, version, hadoop_version, packageRemotePath,
                    packageLocalDir)
     message(msg)
     packageLocalPath <- paste0(packageLocalDir, ".tgz")
