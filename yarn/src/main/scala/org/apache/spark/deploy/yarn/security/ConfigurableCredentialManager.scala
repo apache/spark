@@ -20,7 +20,6 @@ package org.apache.spark.deploy.yarn.security
 import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
@@ -45,19 +44,8 @@ private[yarn] final class ConfigurableCredentialManager (
   private val deprecatedProviderEnabledConfig = "spark.yarn.security.tokens.%s.enabled"
   private val providerEnabledConfig = "spark.yarn.security.credentials.%s.enabled"
 
-  // AMDelegationTokenRenewer, this will lazily be create and started in the AM
-  private lazy val _delegationTokenRenewer =
-    new AMDelegationTokenRenewer(sparkConf, hadoopConf, this)
-
-  // ExecutorDelegationTokenUpdater, this will lazily be created and started in the driver and
-  // executor side.
-  private lazy val _delegationTokenUpdater =
-    new ExecutorDelegationTokenUpdater(sparkConf, hadoopConf, this)
-
   // Maintain all the registered credential providers
   private val credentialProviders = {
-    val defaultServices = Set("hdfs", "hive", "hbase")
-
     val providers = ServiceLoader.load(classOf[ServiceCredentialProvider],
       Utils.getContextOrSparkClassLoader).asScala
 
@@ -70,7 +58,7 @@ private[yarn] final class ConfigurableCredentialManager (
               s"using ${providerEnabledConfig.format(p.serviceName)} instead")
             c.toBoolean
           }
-        }.getOrElse(defaultServices.contains(p.serviceName))
+        }.getOrElse(true)
     }.map { p => (p.serviceName, p) }.toMap
   }
 
@@ -98,16 +86,11 @@ private[yarn] final class ConfigurableCredentialManager (
     }.foldLeft(Long.MaxValue)(math.min)
   }
 
-  def delegationTokenRenewer: AMDelegationTokenRenewer = {
-    _delegationTokenRenewer
+  def delegationTokenRenewer(): AMDelegationTokenRenewer = {
+    new AMDelegationTokenRenewer(sparkConf, hadoopConf, this)
   }
 
-  def delegationTokenUpdater: ExecutorDelegationTokenUpdater = {
-    _delegationTokenUpdater
-  }
-
-  def stop(): Unit = {
-    _delegationTokenRenewer.stop()
-    _delegationTokenUpdater.stop()
+  def delegationTokenUpdater(): ExecutorDelegationTokenUpdater = {
+    new ExecutorDelegationTokenUpdater(sparkConf, hadoopConf, this)
   }
 }

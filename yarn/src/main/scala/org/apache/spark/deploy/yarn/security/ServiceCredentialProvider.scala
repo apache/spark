@@ -20,10 +20,14 @@ package org.apache.spark.deploy.yarn.security
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * ::DeveloperApi::
  * A credential provider for this service, any service want to access by spark through security
  * way must implement this interface.
  */
+@DeveloperApi
 trait ServiceCredentialProvider {
 
   /**

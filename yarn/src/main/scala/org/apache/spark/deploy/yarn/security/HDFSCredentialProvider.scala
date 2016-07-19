@@ -93,7 +93,7 @@ private[yarn] class HDFSCredentialProvider extends ServiceCredentialProvider wit
       val identifier = new DelegationTokenIdentifier()
       identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
       val interval = newExpiration - identifier.getIssueDate
-      logInfo(s"Renewal Interval set to $interval")
+      logInfo(s"Renewal Interval is $interval")
       interval
     }
   }

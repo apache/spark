@@ -35,9 +35,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     super.beforeAll()
 
     sparkConf = new SparkConf()
-      .set(CREDENTIALS_FILE_PATH, "fake_path")
     hadoopConf = new Configuration()
-
     System.setProperty("SPARK_YARN_MODE", "true")
   }
 
@@ -45,13 +43,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     System.clearProperty("SPARK_YARN_MODE")
 
     super.afterAll()
-  }
-
-  after {
-    if (credentialManager != null) {
-      credentialManager.stop()
-      credentialManager = null
-    }
   }
 
   test("Correctly load default credential providers") {
@@ -78,19 +69,17 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     credentialManager.getServiceCredentialProvider("hdfs") should be (None)
     credentialManager.getServiceCredentialProvider("hive") should be (None)
-    credentialManager.getServiceCredentialProvider("test") should be (None)
+    credentialManager.getServiceCredentialProvider("test") should not be (None)
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
   }
 
   test("plug in customized credential provider") {
-    sparkConf.set("spark.yarn.security.credentials.test.enabled", "true")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
 
     credentialManager.getServiceCredentialProvider("test") should not be (None)
   }
 
   test("verify obtaining credentials from provider") {
-    sparkConf.set("spark.yarn.security.credentials.test.enabled", "true")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
     val creds = new Credentials()
 
@@ -103,7 +92,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
   }
 
   test("verify getting credential renewal info") {
-    sparkConf.set("spark.yarn.security.tokens.test.enabled", "true")
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
     val creds = new Credentials()
 
@@ -148,6 +136,11 @@ class TestCredentialProvider extends ServiceCredentialProvider {
   override def isCredentialRequired(conf: Configuration): Boolean = true
 
   override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long] = {
+    if (creds == null) {
+      // Guard out other unit test failures.
+      return None
+    }
+
     val emptyToken = new Token()
     emptyToken.setService(new Text("test"))
     creds.addToken(emptyToken.getService, emptyToken)

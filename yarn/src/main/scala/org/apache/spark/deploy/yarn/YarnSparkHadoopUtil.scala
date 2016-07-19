@@ -38,7 +38,8 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.yarn.security.{
+  ConfigurableCredentialManager, ExecutorDelegationTokenUpdater}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
@@ -48,7 +49,7 @@ import org.apache.spark.util.Utils
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
-  private var credentialManager: ConfigurableCredentialManager = _
+  private var delegationTokenUpdater: ExecutorDelegationTokenUpdater = _
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -90,16 +91,16 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
-    if (credentialManager == null) {
-      credentialManager = new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf))
-    }
-    credentialManager.delegationTokenUpdater.updateCredentialsIfRequired()
+      delegationTokenUpdater =
+        new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf))
+          .delegationTokenUpdater()
+    delegationTokenUpdater.updateCredentialsIfRequired()
   }
 
   private[spark] override def stopExecutorDelegationTokenRenewer(): Unit = {
-    if (credentialManager != null) {
-      credentialManager.stop()
-      credentialManager = null
+    if (delegationTokenUpdater != null) {
+      delegationTokenUpdater.stop()
+      delegationTokenUpdater = null
     }
   }
 

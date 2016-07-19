@@ -461,15 +461,28 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.security.tokens.${service}.enabled</code></td>
+  <td><code>spark.yarn.security.credentials.${service}.enabled</code></td>
   <td><code>true</code></td>
   <td>
-  Controls whether to retrieve delegation tokens for non-HDFS services when security is enabled.
-  By default, delegation tokens for all supported services are retrieved when those services are
+  Controls whether to obtain credentials for services when security is enabled.
+  By default, credentials for all supported services are retrieved when those services are
   configured, but it's possible to disable that behavior if it somehow conflicts with the
   application being run.
   <p/>
-  Currently supported services are: <code>hive</code>, <code>hbase</code>
+  Currently supported services are: <code>hdfs</code>, <code>hive</code>, <code>hbase</code>
+  <p/>
+  For other 3rd party services need to be communicate with Spark through security way should implement
+  ServiceCredentialProvider and place configuration file in the resource directory
+  META-INFO/services to let ServiceLoader to load in. Also 3rd party services can be controlled by
+  this configuratio with specific service name to decide whether to disable or not.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.security.tokens.${service}.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+  See <code>spark.yarn.security.credentials.${service}.enabled</code>. This configuration is
+  deprecated.
   </td>
 </tr>
 <tr>
