@@ -173,13 +173,16 @@ object JdbcUtils extends Logging {
       try {
         val metadata = conn.getMetaData
         if (metadata.supportsTransactions()) {
+          // Update to at least use the default isolation, if any transaction level
+          // has been chosen and transactions are supported
+          val defaultIsolation = metadata.getDefaultTransactionIsolation
+          finalIsolationLevel = defaultIsolation
           if (metadata.supportsTransactionIsolationLevel(isolationLevel))  {
+            // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            val defaultIsolation = metadata.getDefaultTransactionIsolation
             logWarning(s"Requested isolation level $isolationLevel is not supported; " +
-                s"falling back to isolation level $defaultIsolation")
-            finalIsolationLevel = defaultIsolation
+                s"falling back to default isolation level $defaultIsolation")
           }
         } else {
           logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
