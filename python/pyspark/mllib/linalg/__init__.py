@@ -75,6 +75,9 @@ class VectorUDT(newlinalg.VectorUDT):
     def scalaUDT(cls):
         return "org.apache.spark.mllib.linalg.VectorUDT"
 
+    def deserialize(self, datum):
+        return Vectors.fromML(super(VectorUDT, self).deserialize(datum))
+
 
 class MatrixUDT(newlinalg.MatrixUDT):
     """
@@ -88,6 +91,9 @@ class MatrixUDT(newlinalg.MatrixUDT):
     @classmethod
     def scalaUDT(cls):
         return "org.apache.spark.mllib.linalg.MatrixUDT"
+
+    def deserialize(self, datum):
+        return Matrices.fromML(super(MatrixUDT, self).deserialize(datum))
 
 
 class Vector(newlinalg.Vector):
