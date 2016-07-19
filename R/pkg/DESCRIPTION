@@ -31,6 +31,7 @@ Collate:
     'context.R'
     'deserialize.R'
     'functions.R'
+    'install.R'
     'mllib.R'
     'serialize.R'
     'sparkR.R'
