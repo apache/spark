@@ -83,21 +83,10 @@ class VectorUDT(newlinalg.VectorUDT):
         return "org.apache.spark.mllib.linalg.VectorUDT"
 
 
-class MatrixUDT(UserDefinedType):
+class MatrixUDT(newlinalg.MatrixUDT):
     """
     SQL user-defined type (UDT) for Matrix.
     """
-
-    @classmethod
-    def sqlType(cls):
-        return StructType([
-            StructField("type", ByteType(), False),
-            StructField("numRows", IntegerType(), False),
-            StructField("numCols", IntegerType(), False),
-            StructField("colPtrs", ArrayType(IntegerType(), False), True),
-            StructField("rowIndices", ArrayType(IntegerType(), False), True),
-            StructField("values", ArrayType(DoubleType(), False), True),
-            StructField("isTransposed", BooleanType(), False)])
 
     @classmethod
     def module(cls):
@@ -106,34 +95,6 @@ class MatrixUDT(UserDefinedType):
     @classmethod
     def scalaUDT(cls):
         return "org.apache.spark.mllib.linalg.MatrixUDT"
-
-    def serialize(self, obj):
-        if isinstance(obj, SparseMatrix):
-            colPtrs = [int(i) for i in obj.colPtrs]
-            rowIndices = [int(i) for i in obj.rowIndices]
-            values = [float(v) for v in obj.values]
-            return (0, obj.numRows, obj.numCols, colPtrs,
-                    rowIndices, values, bool(obj.isTransposed))
-        elif isinstance(obj, DenseMatrix):
-            values = [float(v) for v in obj.values]
-            return (1, obj.numRows, obj.numCols, None, None, values,
-                    bool(obj.isTransposed))
-        else:
-            raise TypeError("cannot serialize type %r" % (type(obj)))
-
-    def deserialize(self, datum):
-        assert len(datum) == 7, \
-            "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
-        tpe = datum[0]
-        if tpe == 0:
-            return SparseMatrix(*datum[1:])
-        elif tpe == 1:
-            return DenseMatrix(datum[1], datum[2], datum[5], datum[6])
-        else:
-            raise ValueError("do not recognize type %r" % tpe)
-
-    def simpleString(self):
-        return "matrix"
 
 
 class Vector(object):
