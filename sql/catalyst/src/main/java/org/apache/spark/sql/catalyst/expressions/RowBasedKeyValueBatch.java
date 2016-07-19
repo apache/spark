@@ -24,6 +24,9 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.Platform;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
  * RowBasedKeyValueBatch stores key value pairs in contiguous memory region.
@@ -32,14 +35,19 @@ import org.apache.spark.unsafe.Platform;
  * [4 bytes total size = (klen + vlen + 4)] [4 bytes key size = klen]
  * [UnsafeRow for key of length klen] [UnsafeRow for Value of length vlen]
  * [8 bytes pointer to next]
- * Thus, record length = 8 + klen + vlen + 8
+ * Thus, record length = 4 + 4 + klen + vlen + 8
  *
- * RowBasedKeyValueBatch will automatically acquire new pages (MemoryBlock) when the current page
- * is used up.
+ * RowBasedKeyValueBatch is backed by a single page / MemoryBlock (defaults to 64MB). If the page
+ * is full, the aggregate logic should fallback to a second level, larger hash map. We intentionally
+ * use the single-page design because it simplifies memory address encoding & decoding for each
+ * key-value pair. Because the maximum capacity for RowBasedKeyValueBatch is only 2^16, it is
+ * unlikely we need a second page anyway. Filling the page requires an average size for key value
+ * pairs to be larger than 1024 bytes.
  *
- * TODO: making each entry more compact, e.g., combine key and value into a single UnsafeRow
  */
-public final class RowBasedKeyValueBatch extends MemoryConsumer{
+public final class RowBasedKeyValueBatch extends MemoryConsumer {
+  private final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
+
   private static final int DEFAULT_CAPACITY = 1 << 16;
   private static final long DEFAULT_PAGE_SIZE = 64 * 1024 * 1024;
 
@@ -64,9 +72,9 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
   private int vlen;
   private int recordLength;
 
-  private MemoryBlock currentAndOnlyPage = null;
-  private Object currentAndOnlyBase = null;
-  private long recordStartOffset;
+  private MemoryBlock page = null;
+  private Object base = null;
+  private final long recordStartOffset;
   private long pageCursor = 0;
 
   public static RowBasedKeyValueBatch allocate(StructType keySchema, StructType valueSchema,
@@ -82,41 +90,42 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
   public int numRows() { return numRows; }
 
   public void close() {
-    if (currentAndOnlyPage != null) {
-      freePage(currentAndOnlyPage);
-      currentAndOnlyPage = null;
+    if (page != null) {
+      freePage(page);
+      page = null;
     }
   }
 
-  private boolean acquireNewPage(long required) {
+  private boolean acquirePage(long requiredSize) {
     try {
-      currentAndOnlyPage = allocatePage(required);
+      page = allocatePage(requiredSize);
     } catch (OutOfMemoryError e) {
+      logger.warn("Failed to allocate page ({} bytes).", requiredSize);
       return false;
     }
-    currentAndOnlyBase = currentAndOnlyPage.getBaseObject();
-    Platform.putInt(currentAndOnlyBase, currentAndOnlyPage.getBaseOffset(), 0);
-    pageCursor = 4;
-    recordStartOffset = pageCursor + currentAndOnlyPage.getBaseOffset();
-
+    base = page.getBaseObject();
+    pageCursor = 0;
     return true;
   }
 
   private long getKeyOffsetForFixedLengthRecords(int rowId) {
-    return recordStartOffset + rowId * recordLength + 8;
+    return recordStartOffset + rowId * (long) recordLength + 8;
   }
 
+  /**
+   * Append a key value pair.
+   * It copies data into the backing MemoryBlock.
+   * Returns an UnsafeRow pointing to the value if succeeds, otherwise returns null.
+   */
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     final long recordLength = 8 + klen + vlen + 8;
     // if run out of max supported rows or page size, return null
-    if (numRows >= capacity || currentAndOnlyPage == null
-            || currentAndOnlyPage.size() - pageCursor < recordLength) {
+    if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;
     }
 
-    final Object base = currentAndOnlyBase;
-    long offset = currentAndOnlyPage.getBaseOffset() + pageCursor;
+    long offset = page.getBaseOffset() + pageCursor;
     final long recordOffset = offset;
     if (!allFixedLength) { // we only put lengths info for variable length
       Platform.putInt(base, offset, klen + vlen + 4);
@@ -129,10 +138,7 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
     offset += vlen;
     Platform.putLong(base, offset, 0);
 
-    offset = currentAndOnlyPage.getBaseOffset();
-    Platform.putInt(base, offset, Platform.getInt(base, offset) + 1);
     pageCursor += recordLength;
-
 
     if (!allFixedLength) keyOffsets[numRows] = recordOffset + 8;
 
@@ -152,11 +158,11 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
     if (keyRowId != rowId) { // if keyRowId == rowId, desired keyRow is already cached
       if (allFixedLength) {
         long offset = getKeyOffsetForFixedLengthRecords(rowId);
-        keyRow.pointTo(currentAndOnlyBase, offset, klen);
+        keyRow.pointTo(base, offset, klen);
       } else {
         long offset = keyOffsets[rowId];
-        klen = Platform.getInt(currentAndOnlyBase, offset - 4);
-        keyRow.pointTo(currentAndOnlyBase, offset, klen);
+        klen = Platform.getInt(base, offset - 4);
+        keyRow.pointTo(base, offset, klen);
       }
       // set keyRowId so we can check if desired row is cached
       keyRowId = rowId;
@@ -186,13 +192,11 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
     }
     assert(rowId >= 0);
     if (allFixedLength) {
-      valueRow.pointTo(currentAndOnlyBase,
-              keyRow.getBaseOffset() + klen,
-              vlen + 4);
+      valueRow.pointTo(base, keyRow.getBaseOffset() + klen, vlen + 4);
     } else {
       long offset = keyOffsets[rowId];
-      vlen = Platform.getInt(currentAndOnlyBase, offset - 8) - klen - 4;
-      valueRow.pointTo(currentAndOnlyBase,
+      vlen = Platform.getInt(base, offset - 8) - klen - 4;
+      valueRow.pointTo(base,
               offset + klen,
               vlen + 4);
     }
@@ -200,6 +204,7 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
   }
 
   public long spill(long size, MemoryConsumer trigger) throws IOException {
+    logger.warn("RowBasedKeyValueBatch should never call spill().");
     throw new OutOfMemoryError("row batch should never spill");
   }
 
@@ -218,20 +223,19 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
       private int currentvlen;
       private int totalLength;
 
-      private boolean inited = false;
+      private boolean initialized = false;
 
       private void init() {
-        if (currentAndOnlyPage != null) {
-          offsetInPage = currentAndOnlyPage.getBaseOffset();
-          recordsInPage = Platform.getInt(currentAndOnlyBase, offsetInPage);
-          offsetInPage += 4;
+        if (page != null) {
+          offsetInPage = page.getBaseOffset();
+          recordsInPage = numRows;
         }
-        inited = true;
+        initialized = true;
       }
 
       @Override
       public boolean next() {
-        if (!inited) init();
+        if (!initialized) init();
         //searching for the next non empty page is records is now zero
         if (recordsInPage == 0) {
           freeCurrentPage();
@@ -239,19 +243,19 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
         }
 
         if (allFixedLength) {
-          totalLength = klen + vlen + 4;
+          totalLength = klen + vlen;
           currentklen = klen;
           currentvlen = vlen;
         } else {
-          totalLength = Platform.getInt(currentAndOnlyBase, offsetInPage);
-          currentklen = Platform.getInt(currentAndOnlyBase, offsetInPage + 4);
-          currentvlen = totalLength - currentklen - 4;
+          totalLength = Platform.getInt(base, offsetInPage) - 4;
+          currentklen = Platform.getInt(base, offsetInPage + 4);
+          currentvlen = totalLength - currentklen;
         }
 
-        key.pointTo(currentAndOnlyBase, offsetInPage + 8, currentklen);
-        value.pointTo(currentAndOnlyBase, offsetInPage + 8 + currentklen, currentvlen + 4);
+        key.pointTo(base, offsetInPage + 8, currentklen);
+        value.pointTo(base, offsetInPage + 8 + currentklen, currentvlen + 4);
 
-        offsetInPage += 4 + totalLength + 8;
+        offsetInPage += 8 + totalLength + 8;
         recordsInPage -= 1;
         return true;
       }
@@ -272,9 +276,9 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
       }
 
       private void freeCurrentPage() {
-        if (currentAndOnlyPage != null) {
-          freePage(currentAndOnlyPage);
-          currentAndOnlyPage = null;
+        if (page != null) {
+          freePage(page);
+          page = null;
         }
       }
     };
@@ -313,10 +317,12 @@ public final class RowBasedKeyValueBatch extends MemoryConsumer{
       this.keyOffsets = new long[maxRows];
     }
 
-    if (!acquireNewPage(DEFAULT_PAGE_SIZE)) {
-      currentAndOnlyPage = null;
+    if (!acquirePage(DEFAULT_PAGE_SIZE)) {
+      page = null;
+      recordStartOffset = 0;
     } else {
-      currentAndOnlyBase = currentAndOnlyPage.getBaseObject();
+      base = page.getBaseObject();
+      recordStartOffset = page.getBaseOffset();
     }
   }
 }
