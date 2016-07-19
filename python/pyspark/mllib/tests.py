@@ -492,6 +492,17 @@ class VectorTests(MLlibTestCase):
         mllibSMt2 = Matrices.fromML(mlSMt)
         self.assertEqual(mllibSMt1, mllibSMt2)
 
+    def test_scala_udt_types(self):
+        mllib_dv = DenseVector([1, 2, 3])
+        self.assertEqual(
+            mllib_dv.__UDT__.scalaUDT(),
+            'org.apache.spark.mllib.linalg.VectorUDT'
+        )
+        self.assertEqual(
+            mllib_dv.asML().__UDT__.scalaUDT(),
+            'org.apache.spark.ml.linalg.VectorUDT'
+        )
+
 
 class ListTests(MLlibTestCase):
 
