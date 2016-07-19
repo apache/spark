@@ -100,7 +100,7 @@ object TypeCoercion {
   }
 
   /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
-  private def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
+  def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
     findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
       case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
       case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
