@@ -613,15 +613,15 @@ class DataFrame(object):
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
-        The following performs a full outer join between ``df1`` and ``df2``.
-
         :param other: Right side of the join
-        :param on: a string for join column name, a list of column names,
-            , a join expression (Column) or a list of Columns.
-            If `on` is a string or a list of string indicating the name of the join column(s),
+        :param on: a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+
+        The following performs a full outer join between ``df1`` and ``df2``.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
