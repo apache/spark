@@ -104,28 +104,30 @@ case class CreateDataSourceTableCommand(
         options = optionsWithPath)
         .resolveRelation(checkPathExist = false).asInstanceOf[HadoopFsRelation]
 
+    if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionColumns.length > 0) {
+      // The table does not have a specified schema, which means that the schema will be inferred
+      // when we load the table. So, we are not expecting partition columns and we will discover
+      // partitions when we load the table. However, if there are specified partition columns,
+      // we simply ignore them and provide a warning message.
+      logWarning(
+        s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
+          s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
+          s"Schema: ${dataSource.schema.simpleString}; " +
+          s"Partition columns: ${dataSource.partitionSchema.fieldNames}")
+    }
+
     val partitionColumns =
-      if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionColumns.length > 0) {
-        // The table does not have a specified schema, which means that the schema will be inferred
-        // when we load the table. So, we are not expecting partition columns and we will discover
-        // partitions when we load the table. However, if there are specified partition columns,
-        // we simply ignore them and provide a warning message.
-        logWarning(
-          s"The schema and partitions of table $tableIdent will be inferred when it is loaded. " +
-            s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will " +
-            "be ignored.")
+      if (userSpecifiedSchema.isEmpty) {
         dataSource.partitionSchema.fieldNames
       } else {
         userSpecifiedPartitionColumns
       }
 
-    val schemaType = if (userSpecifiedSchema.isEmpty) SchemaType.INFERRED else SchemaType.USER
-
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
       schema = dataSource.schema,
-      schemaType = schemaType,
+      isSchemaInferred = userSpecifiedSchema.isEmpty,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
       provider = provider,
@@ -277,7 +279,7 @@ case class CreateDataSourceTableAsSelectCommand(
         sparkSession = sparkSession,
         tableIdent = tableIdent,
         schema = result.schema,
-        schemaType = SchemaType.USER,
+        isSchemaInferred = false,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         provider = provider,
@@ -291,12 +293,6 @@ case class CreateDataSourceTableAsSelectCommand(
   }
 }
 
-case class SchemaType private(name: String)
-object SchemaType {
-  val USER = new SchemaType("USER")
-  val INFERRED = new SchemaType("INFERRED")
-}
-
 object CreateDataSourceTableUtils extends Logging {
 
   val DATASOURCE_PREFIX = "spark.sql.sources."
@@ -305,7 +301,7 @@ object CreateDataSourceTableUtils extends Logging {
   val DATASOURCE_OUTPUTPATH = DATASOURCE_PREFIX + "output.path"
   val DATASOURCE_SCHEMA = DATASOURCE_PREFIX + "schema"
   val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_SCHEMA + "."
-  val DATASOURCE_SCHEMA_TYPE = DATASOURCE_SCHEMA_PREFIX + "type"
+  val DATASOURCE_SCHEMA_ISINFERRED = DATASOURCE_SCHEMA_PREFIX + "isInferred"
   val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
   val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
   val DATASOURCE_SCHEMA_NUMSORTCOLS = DATASOURCE_SCHEMA_PREFIX + "numSortCols"
@@ -363,7 +359,7 @@ object CreateDataSourceTableUtils extends Logging {
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
       schema: StructType,
-      schemaType: SchemaType,
+      isSchemaInferred: Boolean,
       partitionColumns: Array[String],
       bucketSpec: Option[BucketSpec],
       provider: String,
@@ -372,7 +368,7 @@ object CreateDataSourceTableUtils extends Logging {
     val tableProperties = new mutable.HashMap[String, String]
     tableProperties.put(DATASOURCE_PROVIDER, provider)
 
-    tableProperties.put(DATASOURCE_SCHEMA_TYPE, schemaType.name)
+    tableProperties.put(DATASOURCE_SCHEMA_ISINFERRED, isSchemaInferred.toString.toUpperCase)
     saveSchema(sparkSession, schema, partitionColumns, tableProperties)
 
     if (bucketSpec.isDefined) {

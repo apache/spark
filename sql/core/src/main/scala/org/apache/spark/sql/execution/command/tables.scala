@@ -413,15 +413,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     } else {
       val metadata = catalog.getTableMetadata(table)
 
-      if (DDLUtils.isDatasourceTable(metadata)) {
-        DDLUtils.getSchemaFromTableProperties(metadata) match {
-          case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, result)
-          case None => describeSchema(catalog.lookupRelation(table).schema, result)
-        }
-      } else {
-        describeSchema(metadata.schema, result)
-      }
-
+      describeSchema(metadata, result)
       if (isExtended) {
         describeExtended(metadata, result)
       } else if (isFormatted) {
@@ -515,6 +507,19 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
           metadata.numBuckets,
           metadata.bucketColumnNames,
           metadata.sortColumnNames)
+    }
+  }
+
+  private def describeSchema(
+      tableDesc: CatalogTable,
+      buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(tableDesc)) {
+      DDLUtils.getSchemaFromTableProperties(tableDesc) match {
+        case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, buffer)
+        case None => append(buffer, "# Schema of this table is inferred at runtime", "", "")
+      }
+    } else {
+      describeSchema(tableDesc.schema, buffer)
     }
   }
 

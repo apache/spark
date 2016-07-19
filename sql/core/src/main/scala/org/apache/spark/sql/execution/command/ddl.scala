@@ -488,7 +488,7 @@ object DDLUtils {
   }
 
   def isSchemaInferred(table: CatalogTable): Boolean = {
-    table.properties.get(DATASOURCE_SCHEMA_TYPE) == Option(SchemaType.INFERRED.name)
+    table.properties.get(DATASOURCE_SCHEMA_ISINFERRED) == Option(true.toString.toUpperCase)
   }
 
   /**

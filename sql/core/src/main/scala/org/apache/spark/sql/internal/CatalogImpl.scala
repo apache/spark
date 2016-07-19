@@ -375,12 +375,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         CreateDataSourceTableUtils.saveSchema(
           sparkSession, dataSource.schema, dataSource.partitionSchema.fieldNames, schemaProperties)
 
+        def isPropertyForInferredSchema(key: String): Boolean = {
+          key match {
+            case CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS => true
+            case CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTCOLS => true
+            case _
+              if key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PART_PREFIX) ||
+                key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PARTCOL_PREFIX)
+              => true
+            case _ => false
+          }
+        }
+
+        // Keep the properties that are not for schema or partition columns
         val tablePropertiesWithoutSchema = tableDesc.properties.filterKeys { k =>
-          // Keep the properties that are not for schema or partition columns
-          k != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS &&
-            !k.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PART_PREFIX) &&
-            k != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTCOLS &&
-            !k.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA_PARTCOL_PREFIX) }
+          !isPropertyForInferredSchema(k)
+        }
 
         val newTable = tableDesc.copy(properties = tablePropertiesWithoutSchema ++ schemaProperties)
 

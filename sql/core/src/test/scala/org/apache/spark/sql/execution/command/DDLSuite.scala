@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
@@ -247,6 +247,129 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           } finally {
             catalog.reset()
           }
+        }
+      }
+    }
+  }
+
+  test("Create data source table with partitioning columns but no schema") {
+    import testImplicits._
+
+    val tabName = "tab1"
+    withTempPath { dir =>
+      val pathToPartitionedTable = new File(dir, "partitioned")
+      val pathToNonPartitionedTable = new File(dir, "nonPartitioned")
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
+      df.write.format("parquet").partitionBy("num").save(pathToPartitionedTable.getCanonicalPath)
+
+      Seq(pathToPartitionedTable, pathToNonPartitionedTable).foreach { path =>
+        withTable(tabName) {
+          spark.sql(
+            s"""
+               |CREATE TABLE $tabName
+               |USING parquet
+               |OPTIONS (
+               |  path '$path'
+               |)
+               |PARTITIONED BY (inexistentColumns)
+             """.stripMargin)
+          val catalog = spark.sessionState.catalog
+          val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
+
+          val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+          assert(tableSchema.nonEmpty, "the schema of data source tables are always recorded")
+          val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+
+          if (tableMetadata.storage.serdeProperties.get("path") ==
+              Option(pathToPartitionedTable.getCanonicalPath)) {
+            assert(partCols == Seq("num"))
+            assert(tableSchema ==
+              Option(StructType(StructField("str", StringType, nullable = true) ::
+                StructField("num", IntegerType, nullable = true) :: Nil)))
+          } else {
+            assert(partCols.isEmpty)
+            assert(tableSchema ==
+              Option(StructType(StructField("num", IntegerType, nullable = true) ::
+                StructField("str", StringType, nullable = true) :: Nil)))
+          }
+        }
+      }
+    }
+  }
+
+  test("Refresh table after changing the data source table partitioning") {
+    import testImplicits._
+
+    val tabName = "tab1"
+    val catalog = spark.sessionState.catalog
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString, i, i))
+        .toDF("col1", "col2", "col3", "col4")
+      df.write.format("json").partitionBy("col1", "col3").save(path)
+      val schema = StructType(
+        StructField("col2", StringType, nullable = true) ::
+        StructField("col4", LongType, nullable = true) ::
+        StructField("col1", IntegerType, nullable = true) ::
+        StructField("col3", IntegerType, nullable = true) :: Nil)
+      val partitionCols = Seq("col1", "col3")
+
+      // Ensure the schema is split to multiple properties.
+      withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "500") {
+        withTable(tabName) {
+          spark.sql(
+            s"""
+               |CREATE TABLE $tabName
+               |USING json
+               |OPTIONS (
+               |  path '$path'
+               |)
+             """.stripMargin)
+          val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
+          val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+          assert(tableSchema == Option(schema))
+          val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+          assert(partCols == partitionCols)
+
+          // Change the schema
+          val newDF = sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+            .toDF("newCol1", "newCol2")
+          newDF.write.format("json").partitionBy("newCol1").mode(SaveMode.Overwrite).save(path)
+          val newSchema = StructType(
+            StructField("newCol2", StringType, nullable = true) ::
+              StructField("newCol1", IntegerType, nullable = true) :: Nil)
+
+          // No change on the schema
+          val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+          val tableSchemaBeforeRefresh =
+            DDLUtils.getSchemaFromTableProperties(tableMetadataBeforeRefresh)
+          assert(tableSchemaBeforeRefresh == Option(schema))
+          val partColsBeforeRefresh =
+            DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
+          assert(partColsBeforeRefresh == partitionCols)
+
+          // Refresh
+          spark.catalog.refreshTable(tabName)
+
+          val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+          val tableSchemaAfterRefresh =
+            DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
+          assert(tableSchemaAfterRefresh == Option(newSchema))
+          val partColsAfterRefresh =
+            DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
+          assert(partColsAfterRefresh == Seq("newCol1"))
+
+          // Refresh after no change
+          spark.catalog.refreshTable(tabName)
+
+          val tableMetadataNoChangeAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+          val tableSchemaNoChangeAfterRefresh =
+            DDLUtils.getSchemaFromTableProperties(tableMetadataNoChangeAfterRefresh)
+          assert(tableSchemaNoChangeAfterRefresh == Option(newSchema))
+          val partColsNoChangeAfterRefresh =
+            DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataNoChangeAfterRefresh)
+          assert(partColsNoChangeAfterRefresh == Seq("newCol1"))
         }
       }
     }
