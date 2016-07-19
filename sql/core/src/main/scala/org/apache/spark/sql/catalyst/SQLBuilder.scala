@@ -496,7 +496,7 @@ class SQLBuilder private (
           val hint = u.child.asInstanceOf[Hint]
           hint.copy(child = u.withNewChildren(Seq(hint.child)))
 
-        // Other binary operations are ignored.
+        // Other binary or higher operations are ignored.
       }
     }
 

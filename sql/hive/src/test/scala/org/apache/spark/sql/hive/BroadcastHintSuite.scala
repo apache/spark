@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -33,13 +33,23 @@ class BroadcastHintSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
       val plan = spark.sql("SELECT /*+ MAPJOIN(hive_t) */ * FROM hive_t, hive_u")
         .queryExecution.analyzed
-      assert(plan.children(0).children(0).isInstanceOf[BroadcastHint])
-      assert(!plan.children(0).children(1).isInstanceOf[BroadcastHint])
+
+      assert(plan.collectFirst {
+        case BroadcastHint(MetastoreRelation(_, "hive_t")) => true
+      }.isDefined)
+      assert(plan.collectFirst {
+        case Join(_, MetastoreRelation(_, "hive_u"), _, _) => true
+      }.isDefined)
 
       val plan2 = spark.sql("SELECT /*+ MAPJOIN(hive_u) */ a FROM hive_t, hive_u")
         .queryExecution.analyzed
-      assert(!plan2.children(0).children(0).isInstanceOf[BroadcastHint])
-      assert(plan2.children(0).children(1).isInstanceOf[BroadcastHint])
+
+      assert(plan2.collectFirst {
+        case BroadcastHint(MetastoreRelation(_, "hive_u")) => true
+      }.isDefined)
+      assert(plan2.collectFirst {
+        case Join(MetastoreRelation(_, "hive_t"), _, _, _) => true
+      }.isDefined)
     }
   }
 }

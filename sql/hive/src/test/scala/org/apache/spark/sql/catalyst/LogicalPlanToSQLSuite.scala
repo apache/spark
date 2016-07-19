@@ -1209,7 +1209,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |SELECT /*+ MAPJOIN(parquet_t1) */
         |       count(*) as cnt, key%5, grouping_id()
         |FROM parquet_t1
-        |GROUP BY key % 5 WITH ROLLUP""".stripMargin,
+        |GROUP BY key % 5 WITH ROLLUP
+      """.stripMargin,
       "broadcast_hint_rollup")
   }
 

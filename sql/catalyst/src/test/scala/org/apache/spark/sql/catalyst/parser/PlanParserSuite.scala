@@ -457,13 +457,9 @@ class PlanParserSuite extends PlanTest {
 
     // Hive compatibility: No database.
     val m2 = intercept[ParseException] {
-      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t;")
+      parsePlan("SELECT /*+ MAPJOIN(default.t) */ * from default.t")
     }.getMessage
     assert(m2.contains("no viable alternative at input"))
-
-    comparePlans(
-      parsePlan("SELECT /*+ HINT */ * FROM t"),
-      Hint("HINT", Seq.empty, table("t")).select(star()))
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
@@ -484,5 +480,9 @@ class PlanParserSuite extends PlanTest {
     comparePlans(
       parsePlan("SELECT /*+ INDEX(t emp_job_ix) */ * FROM t"),
       Hint("INDEX", Seq("t", "emp_job_ix"), table("t")).select(star()))
+
+    comparePlans(
+      parsePlan("SELECT /*+ MAPJOIN(`default.t`) */ * from `default.t`"),
+      Hint("MAPJOIN", Seq("default.t"), table("default.t")).select(star()))
   }
 }
