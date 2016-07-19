@@ -77,7 +77,7 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-16602 Nvl") {
+  test("SPARK-16602 Nvl should support numeric-string cases") {
     val intLit = Literal.create(1, IntegerType)
     val doubleLit = Literal.create(2.2, DoubleType)
     val stringLit = Literal.create("c", StringType)
