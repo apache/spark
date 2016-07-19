@@ -17,9 +17,12 @@
 
 package org.apache.spark.examples
 
+import org.apache.spark.SparkConf
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.internal.SQLConf
 
 
 object Benchmark_SPARK_16280 {
@@ -27,19 +30,14 @@ object Benchmark_SPARK_16280 {
   private def rnd = scala.util.Random
 
   def main(args: Array[String]) {
-    val sqlContext = SparkSession.builder().master("local[4]").appName("Spark-16280").getOrCreate()
+    val sqlContext = SparkSession.builder().master("local[4]")
+      .appName("Spark-16280").config("spark.executor.heartbeatInterval", "100000s")
+      .config("spark.network.timeout", "100000s").config("spark.shuffle.manager", "tungsten-sort")
+      .getOrCreate()
     val sc = sqlContext.sparkContext
     import sqlContext.implicits._
-//    val df1 = sc.makeRDD(Seq.tabulate(10)((i) => rnd.nextInt(10000))).
-//      toDF("value").cache()
-//    val elapseds1 = Seq.tabulate(1)((_) => {
-//      val start1 = java.lang.System.currentTimeMillis()
-//      df1.select(codegen_histogram_numeric("value", 3)).debugCodegen()
-//      df1.select(codegen_histogram_numeric("value", 3)).debug()
-//      df1.select(codegen_histogram_numeric("value", 3)).collect()
-//      java.lang.System.currentTimeMillis() - start1
-//    })
-    val statistics = Seq((10, 1),
+    val statistics = Seq(
+      (10, 1),
       (10, 10),
       (10, 100),
       (1000, 1),
@@ -47,36 +45,53 @@ object Benchmark_SPARK_16280 {
       (1000, 100),
       (100000, 1),
       (100000, 10),
-      (100000, 100)).map((pair) => {
+      (100000, 100)
+      ).map((pair) => {
       val rows = pair._1
       val bins = pair._2
       println(pair)
       val df1 = sc.makeRDD(Seq.tabulate(rows)((i) => rnd.nextInt(10000))).
         toDF("value").cache()
-      val elapseds1 = Seq.tabulate(4)((_) => {
+      df1.first()
+      val elapseds1 = Seq.tabulate(3)((_) => {
         val start1 = java.lang.System.currentTimeMillis()
-        df1.select(codegen_histogram_numeric("value", bins)).collect()
+        df1.select(codegen_histogram_numeric("value", bins))
+          .collect()
         java.lang.System.currentTimeMillis() - start1
       })
-      val elapseds2 = Seq.tabulate(4)((_) => {
+      val elapseds2 = Seq.tabulate(3)((_) => {
         val start2 = java.lang.System.currentTimeMillis()
-        df1.select(imperative_histogram_numeric("value", bins)).collect()
+        df1.select(imperative_histogram_numeric("value", bins))
+          .collect()
         java.lang.System.currentTimeMillis() - start2
       })
-      val elapseds3 = Seq.tabulate(4)((_) => {
+
+      val elapseds3 = Seq.tabulate(3)((_) => {
         val start3 = java.lang.System.currentTimeMillis()
-        df1.select(declarative_histogram_numeric("value", bins)).collect()
+        df1.select(declarative_histogram_numeric("value", bins))
+          .collect()
         java.lang.System.currentTimeMillis() - start3
       })
-      Seq(pair, elapseds1.sum / elapseds1.size,
-        elapseds2.sum / elapseds2.size,
-        elapseds3.sum / elapseds3.size)
+
+      val elapseds4 = Seq.tabulate(3)((_) => {
+        val start4 = java.lang.System.currentTimeMillis()
+        df1.select(codegen_with_array_agg_buffer_histogram_numeric("value", bins))
+          .collect()
+        java.lang.System.currentTimeMillis() - start4
+      })
+      Seq(pair, elapseds1.sum / elapseds1.size
+        , elapseds2.sum / elapseds2.size
+        , elapseds3.sum / elapseds3.size
+        , elapseds4.sum / elapseds4.size
+      )
     })
 
     println(Tabulator.format(Seq(
-      Seq("(rows, numOfBins)","codegen_histogram_numeric",
-        "imperative_histogram_numeric",
-        "declarative_histogram_numeric")) ++ statistics))
+      Seq("(rows, numOfBins)","codegen_histogram_numeric"
+        ,"imperative_histogram_numeric"
+        ,"declarative_histogram_numeric"
+        ,"codegen_with_array_agg_buffer_histogram_numeric"
+      )) ++ statistics))
   }
 }
 

@@ -636,6 +636,12 @@ object functions {
   def declarative_histogram_numeric(columnName: String, nb: Int): Column =
     declarative_histogram_numeric(Column(columnName), nb)
 
+  def codegen_with_array_agg_buffer_histogram_numeric(e: Column, nb: Int): Column =
+    withAggregateFunction { CodeGenWithArrayAggBufferNumericHistogram(e.expr, Literal(nb)) }
+
+  def codegen_with_array_agg_buffer_histogram_numeric(columnName: String, nb: Int): Column =
+    codegen_with_array_agg_buffer_histogram_numeric(Column(columnName), nb)
+
   /**
    * Aggregate function: returns the sum of all values in the expression.
    *
