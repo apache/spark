@@ -476,7 +476,7 @@ StructType userSchema = new StructType().add("name", "string").add("age", "integ
 Dataset[Row] csvDF = spark
     .readStream()
     .option("sep", ";")
-    .schema(userSchema)      // Specify schema of the parquet files
+    .schema(userSchema)      // Specify schema of the csv files
     .csv("/path/to/directory");    // Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
