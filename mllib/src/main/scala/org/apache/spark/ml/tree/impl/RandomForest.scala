@@ -177,6 +177,7 @@ private[spark] object RandomForest extends Logging {
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
     multiTimer.addLocal("findBestSplits")
     multiTimer.addLocal("chooseSplits")
+    multiTimer.addDistributed("binsToBestSplit")
 
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
@@ -549,8 +550,10 @@ private[spark] object RandomForest extends Logging {
         }
 
         // find best split for each node
+        multiTimer("binsToBestSplit").start()
         val (split: Split, stats: ImpurityStats) =
           binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
+        multiTimer("binsToBestSplit").stop()
         (nodeIndex, (split, stats))
     }.collectAsMap()
 
