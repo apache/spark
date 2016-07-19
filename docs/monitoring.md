@@ -225,9 +225,10 @@ for the history server, they would typically be accessible at `http://<server-ur
 for a running application, at `http://localhost:4040/api/v1`.
 
 In the API, an application is referenced by its application ID, `[app-id]`.
-When running on YARN, each application may have multiple attempts; each identified by their `[attempt-id]`.
-In the API listed below, `[app-id]` will actually be `[base-app-id]/[attempt-id]`,
-where `[base-app-id]` is the YARN application ID.
+When running on YARN, each application may have multiple attempts, but there are attempt IDs
+only for applications in cluster mode, not applications in client mode. Applications in YARN cluster mode
+can be identified by their `[attempt-id]`. In the API listed below, when running in YARN cluster mode,
+`[app-id]` will actually be `[base-app-id]/[attempt-id]`, where `[base-app-id]` is the YARN application ID.
 
 <table class="table">
   <tr><th>Endpoint</th><th>Meaning</th></tr>
