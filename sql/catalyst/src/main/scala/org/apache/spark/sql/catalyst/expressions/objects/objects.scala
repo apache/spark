@@ -136,19 +136,34 @@ case class Invoke(
 
     val funcVal = ctx.freshName("funcVal")
     val funcValIsNull = ctx.freshName("funcValIsNull")
+
+    def getFuncCall(funcCall: String): String = if (method.forall(_.getExceptionTypes.isEmpty)) {
+       funcCall
+    } else {
+      s"""
+        try {
+          $funcCall
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
+    }
+
     val callFunc = if (method.isDefined && method.get.getReturnType.isPrimitive) {
       s"""
         $javaType $funcVal = ${ctx.defaultValue(dataType)};
         if (!${ev.isNull}) {
-          $funcVal = ${obj.value}.$functionName($argString);
+          ${getFuncCall(s"$funcVal = ${obj.value}.$functionName($argString);")};
         }
         boolean $funcValIsNull = false;
       """
     } else {
+      val callStr =
+        s"$funcVal = (${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString);"
       s"""
         ${ctx.boxedType(javaType)} $funcVal = ${ctx.defaultValue(dataType)};
         if (!${ev.isNull}) {
-          $funcVal = (${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString);
+          ${getFuncCall(callStr)}
         }
         boolean $funcValIsNull = $funcVal == null;
       """
@@ -160,18 +175,8 @@ case class Invoke(
       s"boolean ${ev.isNull} = ${obj.isNull};"
     }
 
-    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
+    val evaluate =
       s"final $javaType ${ev.value} = $funcValIsNull ? ${ctx.defaultValue(dataType)} : $funcVal;"
-    } else {
-      s"""
-        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        try {
-          ${ev.value} = $funcValIsNull ? ${ctx.defaultValue(javaType)} : $funcVal;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """
-    }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
