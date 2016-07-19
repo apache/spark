@@ -97,6 +97,7 @@ private[spark] object HiveUtils extends Logging {
       .createWithDefault(false)
 
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
