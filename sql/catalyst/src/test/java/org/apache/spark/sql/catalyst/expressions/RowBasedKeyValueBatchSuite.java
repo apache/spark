@@ -168,6 +168,21 @@ public class RowBasedKeyValueBatchSuite {
   }
 
   @Test
+  public void batchType() throws Exception {
+    RowBasedKeyValueBatch batch1 = RowBasedKeyValueBatch.allocate(keySchema,
+            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
+    RowBasedKeyValueBatch batch2 = RowBasedKeyValueBatch.allocate(fixedKeySchema,
+            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
+    try {
+      Assert.assertEquals(batch1.getClass(), VariableLengthRowBasedKeyValueBatch.class);
+      Assert.assertEquals(batch2.getClass(), FixedLengthRowBasedKeyValueBatch.class);
+    } finally {
+      batch1.close();
+      batch2.close();
+    }
+  }
+
+  @Test
   public void setAndRetrieve() {
     RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
             valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
