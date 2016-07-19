@@ -97,21 +97,13 @@ class MatrixUDT(newlinalg.MatrixUDT):
         return "org.apache.spark.mllib.linalg.MatrixUDT"
 
 
-class Vector(object):
+class Vector(newlinalg.Vector):
 
     __UDT__ = VectorUDT()
 
     """
     Abstract class for DenseVector and SparseVector
     """
-    def toArray(self):
-        """
-        Convert the vector into an numpy.ndarray
-
-        :return: numpy.ndarray
-        """
-        raise NotImplementedError
-
     def asML(self):
         """
         Convert this vector to the new mllib-local representation.
