@@ -226,15 +226,6 @@ class SQLBuilder private (
   private def build(segments: String*): String =
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
-  /**
-   * Collect broadcasted tables.
-   */
-  private def collectBroadcastedTables(plan: LogicalPlan): Seq[String] = plan match {
-    case SubqueryAlias(name, _) => Seq(name)
-    case p: Project => Seq.empty[String]
-    case p => p.children.flatMap(collectBroadcastedTables)
-  }
-
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = plan match {
     case p @ Project(projectList, Hint("BROADCAST", tables, child)) =>
       build(
