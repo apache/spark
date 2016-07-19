@@ -34,40 +34,33 @@ class SimplifyCastsSuite extends PlanTest {
 
   test("non-nullable to non-nullable array cast") {
     val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
-    val array_intPrimitive = 'a.array(ArrayType(IntegerType, false))
-    val plan = input.select(array_intPrimitive
-      .cast(ArrayType(IntegerType, false)).as('a)).analyze
+    val plan = input.select('a.cast(ArrayType(IntegerType, false)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select(array_intPrimitive.as('a)).analyze
+    val expected = input.select('a.as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
   test("non-nullable to nullable array cast") {
     val input = LocalRelation('a.array(ArrayType(IntegerType, false)))
     val array_intPrimitive = 'a.array(ArrayType(IntegerType, false))
-    val plan = input.select(array_intPrimitive
-      .cast(ArrayType(IntegerType, true)).as('a)).analyze
+    val plan = input.select('a.cast(ArrayType(IntegerType, true)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select(array_intPrimitive.as('a)).analyze
+    val expected = input.select('a.as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
   test("nullable to non-nullable array cast") {
     val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
-    val array_intNull = 'a.array(ArrayType(IntegerType, true))
-    val plan = input.select(array_intNull
-      .cast(ArrayType(IntegerType, false)).as('a)).analyze
+    val plan = input.select('a.cast(ArrayType(IntegerType, false)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
     comparePlans(optimized, plan)
   }
 
   test("nullable to nullable array cast") {
     val input = LocalRelation('a.array(ArrayType(IntegerType, true)))
-    val array_intNull = 'a.array(ArrayType(IntegerType, true))
-    val plan = input.select(array_intNull
-      .cast(ArrayType(IntegerType, true)).as('a)).analyze
+    val plan = input.select('a.cast(ArrayType(IntegerType, true)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select(array_intNull.as('a)).analyze
+    val expected = input.select('a.as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
