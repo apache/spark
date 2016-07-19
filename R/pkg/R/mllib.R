@@ -39,13 +39,6 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @note NaiveBayesModel since 2.0.0
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
-#' S4 class that represents a MultilayerPerceptronClassificationModel
-#'
-#' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
-#' @export
-#' @note MultilayerPerceptronClassificationModel since 2.0.0
-setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
-
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
@@ -59,6 +52,13 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @export
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
+
+#' S4 class that represents a MultilayerPerceptronClassificationModel
+#'
+#' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
+#' @export
+#' @note MultilayerPerceptronClassificationModel since 2.0.0
+setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
 
 #' Saves the MLlib model to the input path
 #'
@@ -416,6 +416,91 @@ setMethod("predict", signature(object = "KMeansModel"),
 
 #' Naive Bayes Models
 #'
+#' \code{spark.monmlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Only categorical data is supported.
+#'
+#' @param data A \code{SparkDataFrame} of observations and labels for model fitting
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'               operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param blockSize BlockSize parameter
+#' @param initialWeights InitialWeights parameter
+#' @param layers Layers parameter
+#' @param solver Solver parameter
+#' @return \code{spark.monmlp} returns a fitted naive Bayes model
+#' @rdname spark.monmlp
+#' @aliases spark.monmlp,SparkDataFrame,formula-method
+#' @name spark.monmlp
+#' @seealso e1071: \url{https://cran.r-project.org/web/packages/monmlp/}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(infert)
+#'
+#' # fit a Bernoulli naive Bayes model
+#' model <- spark.monmlp(df, education ~ ., smoothing = 0)
+#'
+#' # get the summary of the model
+#' summary(model)
+#'
+#' # make predictions
+#' predictions <- predict(model, df)
+#'
+#' # save and load the model
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
+#' @note spark.monmlp since 2.0.0
+setMethod("spark.monmlp", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, smoothing = 1.0, ...) {
+            formula <- paste(deparse(formula), collapse = "")
+            jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper", "fit",
+            formula, data@sdf, smoothing)
+            return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
+          })
+
+# Makes predictions from a naive Bayes model or a model produced by spark.monmlp(),
+# similarly to R package e1071's predict.
+
+#' @param newData A SparkDataFrame for testing
+#' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
+#' "prediction"
+#' @rdname spark.monmlp
+#' @export
+#' @note predict(MultilayerPerceptronClassificationModel) since 2.0.0
+setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+          })
+
+# Returns the summary of a naive Bayes model produced by \code{spark.monmlp}
+
+#' @param object A naive Bayes model fitted by \code{spark.monmlp}
+#' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
+#'         \code{tables}, conditional probabilities given the target label
+#' @rdname spark.monmlp
+#' @export
+#' @note summary(MultilayerPerceptronClassificationModel) since 2.0.0
+setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
+          function(object, ...) {
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "features")
+            labels <- callJMethod(jobj, "labels")
+            apriori <- callJMethod(jobj, "apriori")
+            apriori <- t(as.matrix(unlist(apriori)))
+            colnames(apriori) <- unlist(labels)
+            tables <- callJMethod(jobj, "tables")
+            tables <- matrix(tables, nrow = length(labels))
+            rownames(tables) <- unlist(labels)
+            colnames(tables) <- unlist(features)
+            return(list(apriori = apriori, tables = tables))
+          })
+
+#' Naive Bayes Models
+#'
 #' \code{spark.naiveBayes} fits a Bernoulli naive Bayes model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
@@ -467,7 +552,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #'
 #' @rdname spark.naiveBayes
 #' @export
-#' @seealso \link{read.ml}
+#' @seealso \link{write.ml}
 #' @note write.ml(NaiveBayesModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
           function(object, path, overwrite = FALSE) {
@@ -533,6 +618,25 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
+# Saves the Multilayer Perceptron Classification Model to the input path.
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.monmlp
+#' @export
+#' @seealso \link{write.ml}
+#' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.0.0
+setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+                writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+        })
+
 #' Load a fitted MLlib model from the input path.
 #'
 #' @param path Path of the model to read.
@@ -558,6 +662,8 @@ read.ml <- function(path) {
       return(new("GeneralizedLinearRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
       return(new("KMeansModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper")) {
+      return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
   } else {
     stop(paste("Unsupported model: ", jobj))
   }
