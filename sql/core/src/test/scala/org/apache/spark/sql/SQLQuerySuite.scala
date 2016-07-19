@@ -2965,4 +2965,32 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-16602 Nvl/Coalesce") {
+    val twoRowTable = spark.range(2).map(x => if (x == 0) null else x)
+    twoRowTable.map(_.toInt).createOrReplaceTempView("t1")
+    twoRowTable.map(x => x.toDouble * 2.2).createOrReplaceTempView("t2")
+    twoRowTable.map("c" + _.toString).createOrReplaceTempView("t3")
+    checkAnswer(
+      sql(
+        """
+          |SELECT t1.value, t2.value, t3.value,           -- INT, DOUBLE, STRING
+          |       coalesce(t1.value, t2.value, t3.value), -- COALESCE(INT,DOUBLE,STRING) => STRING
+          |       nvl(t1.value, t2.value),                -- NVL(INT, DOUBLE) => DOUBLE
+          |       nvl(t2.value, t3.value),                -- NVL(DOUBLE, STRING) => STRING
+          |       nvl(t3.value, t1.value)                 -- NVL(STRING, INT) => STRING
+          |FROM t1, t2, t3
+          |ORDER BY t1.value, t2.value, t3.value
+        """.stripMargin),
+      Seq(
+        Row(null, null, null, null, null, null, null),
+        Row(null, null, "c1", "c1", null, "c1", "c1"),
+        Row(null, 2.2, null, "2.2", 2.2, "2.2", null),
+        Row(null, 2.2, "c1", "2.2", 2.2, "2.2", "c1"),
+        Row(1, null, null, "1", 1.0, null, "1"),
+        Row(1, null, "c1", "1", 1.0, "c1", "c1"),
+        Row(1, 2.2, null, "1", 1.0, "2.2", "1"),
+        Row(1, 2.2, "c1", "1", 1.0, "2.2", "c1")
+      ))
+  }
 }
