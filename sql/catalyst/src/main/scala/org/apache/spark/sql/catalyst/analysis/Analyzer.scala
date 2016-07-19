@@ -84,10 +84,10 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions),
+      EliminateUnions,
+      SubstituteHints),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
-      SubstituteHints ::
       ResolveReferences ::
       ResolveDeserializer ::
       ResolveNewInstance ::
@@ -1798,30 +1798,20 @@ class Analyzer(
             if Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN").contains(name.toUpperCase) =>
           var resolvedChild = child
 
-          for (param <- parameters) {
-            val names = param.split("\\.")
-            val tid = if (names.length > 1) {
-              TableIdentifier(names(1), Some(names(0)))
-            } else {
-              TableIdentifier(param, None)
-            }
-            try {
-              catalog.lookupRelation(tid)
-
-              var stop = false
-              resolvedChild = resolvedChild.transformDown {
-                case r @ BroadcastHint(SubqueryAlias(t, _))
-                  if !stop && resolver(t, tid.identifier) =>
-                  stop = true
-                  r
-                case r @ SubqueryAlias(t, _) if !stop && resolver(t, tid.identifier) =>
-                  stop = true
+          for (table <- parameters) {
+            var stop = false
+            resolvedChild = resolvedChild.transformDown {
+              case r @ BroadcastHint(UnresolvedRelation(t, _))
+                if !stop && resolver(t.table, table) =>
+                stop = true
+                r
+              case r @ UnresolvedRelation(t, alias) if !stop && resolver(t.table, table) =>
+                stop = true
+                if (alias.isDefined) {
+                  SubqueryAlias(alias.get, BroadcastHint(r.copy(alias = None)))
+                } else {
                   BroadcastHint(r)
-              }
-            } catch {
-              // Hints does not raise exceptions.
-              case _: NoSuchDatabaseException =>
-              case _: NoSuchTableException =>
+                }
             }
           }
           resolvedChild
