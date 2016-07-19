@@ -134,10 +134,21 @@ case class Invoke(
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
+    val funcVal = ctx.freshName("funcVal")
+    val funcValIsNull = ctx.freshName("funcValIsNull")
     val callFunc = if (method.isDefined && method.get.getReturnType.isPrimitive) {
-      s"${obj.value}.$functionName($argString)"
+      s"""
+        $javaType $funcVal = ${obj.value}.$functionName($argString);
+        boolean $funcValIsNull = false;
+      """
     } else {
-      s"(${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString)"
+      s"""
+        ${ctx.boxedType(javaType)} $funcVal = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          $funcVal = (${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString);
+        }
+        boolean $funcValIsNull = $funcVal == null;
+      """
     }
 
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
@@ -147,12 +158,12 @@ case class Invoke(
     }
 
     val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
-      s"final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;"
+      s"final $javaType ${ev.value} = $funcValIsNull ? ${ctx.defaultValue(dataType)} : $funcVal;"
     } else {
       s"""
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
         try {
-          ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $callFunc;
+          ${ev.value} = $funcValIsNull ? ${ctx.defaultValue(javaType)} : $funcVal;
         } catch (Exception e) {
           org.apache.spark.unsafe.Platform.throwException(e);
         }
@@ -166,11 +177,11 @@ case class Invoke(
     } else {
       ""
     }
-
     val code = s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
       $setIsNull
+      $callFunc
       $evaluate
       $postNullCheck
      """

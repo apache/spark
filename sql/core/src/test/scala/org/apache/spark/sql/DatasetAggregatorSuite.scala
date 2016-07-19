@@ -136,6 +136,35 @@ object NullResultAgg extends Aggregator[AggData, AggData, AggData] {
   override def outputEncoder: Encoder[AggData] = Encoders.product[AggData]
 }
 
+class ReduceAgg[T](func: (T, T) => T, encoder: ExpressionEncoder[T])
+    extends Aggregator[T, (Boolean, T), T] {
+
+  override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
+
+  override def bufferEncoder: Encoder[(Boolean, T)] =
+    ExpressionEncoder.tuple(ExpressionEncoder[Boolean](), encoder)
+
+  override def outputEncoder: Encoder[T] = encoder
+  override def reduce(b: (Boolean, T), a: T): (Boolean, T) = {
+    if (b._1) {
+      (true, func(b._2, a))
+    } else {
+      (true, a)
+    }
+  }
+  override def merge(b1: (Boolean, T), b2: (Boolean, T)): (Boolean, T) = {
+    if (!b1._1) {
+      b2
+    } else if (!b2._1) {
+      b1
+    } else {
+      (true, func(b1._2, b2._2))
+    }
+  }
+  override def finish(reduction: (Boolean, T)): T = {
+    reduction._2
+  }
+}
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -313,5 +342,15 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
     assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
+  }
+
+  test("Aggregator on empty dataset") {
+    val func: (Int, Int) => Int = (v1: Int, v2: Int) => v1 + v2
+    val intEncoder: ExpressionEncoder[Int] = ExpressionEncoder()
+    val aggregator: TypedColumn[Int, Int] = new ReduceAgg(func, intEncoder).toColumn
+
+    val ds = Seq[Int]().toDS()
+    val agged = ds.groupByKey(_ => 1).agg(aggregator)
+    assert(agged.collect === Seq())
   }
 }
