@@ -122,7 +122,7 @@ class Vector(object):
         raise NotImplementedError
 
 
-class DenseVector(Vector):
+class DenseVector(Vector, newlinalg.DenseVector):
     """
     A dense vector represented by a value array. We use numpy array for
     storage and arithmetics will be delegated to the underlying numpy
@@ -143,14 +143,8 @@ class DenseVector(Vector):
     >>> u % 2
     DenseVector([1.0, 0.0])
     """
-    def __init__(self, ar):
-        if isinstance(ar, bytes):
-            ar = np.frombuffer(ar, dtype=np.float64)
-        elif not isinstance(ar, np.ndarray):
-            ar = np.array(ar, dtype=np.float64)
-        if ar.dtype != np.float64:
-            ar = ar.astype(np.float64)
-        self.array = ar
+    def __reduce__(self):
+        return DenseVector, (self.array.tostring(),)
 
     @staticmethod
     def parse(s):
@@ -174,114 +168,6 @@ class DenseVector(Vector):
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
 
-    def __reduce__(self):
-        return DenseVector, (self.array.tostring(),)
-
-    def numNonzeros(self):
-        """
-        Number of nonzero elements. This scans all active values and count non zeros
-        """
-        return np.count_nonzero(self.array)
-
-    def norm(self, p):
-        """
-        Calculates the norm of a DenseVector.
-
-        >>> a = DenseVector([0, -1, 2, -3])
-        >>> a.norm(2)
-        3.7...
-        >>> a.norm(1)
-        6.0
-        """
-        return np.linalg.norm(self.array, p)
-
-    def dot(self, other):
-        """
-        Compute the dot product of two Vectors. We support
-        (Numpy array, list, SparseVector, or SciPy sparse)
-        and a target NumPy array that is either 1- or 2-dimensional.
-        Equivalent to calling numpy.dot of the two vectors.
-
-        >>> dense = DenseVector(array.array('d', [1., 2.]))
-        >>> dense.dot(dense)
-        5.0
-        >>> dense.dot(SparseVector(2, [0, 1], [2., 1.]))
-        4.0
-        >>> dense.dot(range(1, 3))
-        5.0
-        >>> dense.dot(np.array(range(1, 3)))
-        5.0
-        >>> dense.dot([1.,])
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        >>> dense.dot(np.reshape([1., 2., 3., 4.], (2, 2), order='F'))
-        array([  5.,  11.])
-        >>> dense.dot(np.reshape([1., 2., 3.], (3, 1), order='F'))
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        """
-        if type(other) == np.ndarray:
-            if other.ndim > 1:
-                assert len(self) == other.shape[0], "dimension mismatch"
-            return np.dot(self.array, other)
-        elif _have_scipy and scipy.sparse.issparse(other):
-            assert len(self) == other.shape[0], "dimension mismatch"
-            return other.transpose().dot(self.toArray())
-        else:
-            assert len(self) == _vector_size(other), "dimension mismatch"
-            if isinstance(other, SparseVector):
-                return other.dot(self)
-            elif isinstance(other, Vector):
-                return np.dot(self.toArray(), other.toArray())
-            else:
-                return np.dot(self.toArray(), other)
-
-    def squared_distance(self, other):
-        """
-        Squared distance of two Vectors.
-
-        >>> dense1 = DenseVector(array.array('d', [1., 2.]))
-        >>> dense1.squared_distance(dense1)
-        0.0
-        >>> dense2 = np.array([2., 1.])
-        >>> dense1.squared_distance(dense2)
-        2.0
-        >>> dense3 = [2., 1.]
-        >>> dense1.squared_distance(dense3)
-        2.0
-        >>> sparse1 = SparseVector(2, [0, 1], [2., 1.])
-        >>> dense1.squared_distance(sparse1)
-        2.0
-        >>> dense1.squared_distance([1.,])
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        >>> dense1.squared_distance(SparseVector(1, [0,], [1.,]))
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        """
-        assert len(self) == _vector_size(other), "dimension mismatch"
-        if isinstance(other, SparseVector):
-            return other.squared_distance(self)
-        elif _have_scipy and scipy.sparse.issparse(other):
-            return _convert_to_vector(other).squared_distance(self)
-
-        if isinstance(other, Vector):
-            other = other.toArray()
-        elif not isinstance(other, np.ndarray):
-            other = np.array(other)
-        diff = self.toArray() - other
-        return np.dot(diff, diff)
-
-    def toArray(self):
-        """
-        Returns an numpy.ndarray
-        """
-        return self.array
-
     def asML(self):
         """
         Convert this vector to the new mllib-local representation.
@@ -293,150 +179,12 @@ class DenseVector(Vector):
         """
         return newlinalg.DenseVector(self.array)
 
-    @property
-    def values(self):
-        """
-        Returns a list of values
-        """
-        return self.array
 
-    def __getitem__(self, item):
-        return self.array[item]
-
-    def __len__(self):
-        return len(self.array)
-
-    def __str__(self):
-        return "[" + ",".join([str(v) for v in self.array]) + "]"
-
-    def __repr__(self):
-        return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
-
-    def __eq__(self, other):
-        if isinstance(other, DenseVector):
-            return np.array_equal(self.array, other.array)
-        elif isinstance(other, SparseVector):
-            if len(self) != other.size:
-                return False
-            return Vectors._equals(list(xrange(len(self))), self.array, other.indices, other.values)
-        return False
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __hash__(self):
-        size = len(self)
-        result = 31 + size
-        nnz = 0
-        i = 0
-        while i < size and nnz < 128:
-            if self.array[i] != 0:
-                result = 31 * result + i
-                bits = _double_to_long_bits(self.array[i])
-                result = 31 * result + (bits ^ (bits >> 32))
-                nnz += 1
-            i += 1
-        return result
-
-    def __getattr__(self, item):
-        return getattr(self.array, item)
-
-    def _delegate(op):
-        def func(self, other):
-            if isinstance(other, DenseVector):
-                other = other.array
-            return DenseVector(getattr(self.array, op)(other))
-        return func
-
-    __neg__ = _delegate("__neg__")
-    __add__ = _delegate("__add__")
-    __sub__ = _delegate("__sub__")
-    __mul__ = _delegate("__mul__")
-    __div__ = _delegate("__div__")
-    __truediv__ = _delegate("__truediv__")
-    __mod__ = _delegate("__mod__")
-    __radd__ = _delegate("__radd__")
-    __rsub__ = _delegate("__rsub__")
-    __rmul__ = _delegate("__rmul__")
-    __rdiv__ = _delegate("__rdiv__")
-    __rtruediv__ = _delegate("__rtruediv__")
-    __rmod__ = _delegate("__rmod__")
-
-
-class SparseVector(Vector):
+class SparseVector(Vector, newlinalg.SparseVector):
     """
     A simple sparse vector class for passing data to MLlib. Users may
     alternatively pass SciPy's {scipy.sparse} data types.
     """
-    def __init__(self, size, *args):
-        """
-        Create a sparse vector, using either a dictionary, a list of
-        (index, value) pairs, or two separate arrays of indices and
-        values (sorted by index).
-
-        :param size: Size of the vector.
-        :param args: Active entries, as a dictionary {index: value, ...},
-          a list of tuples [(index, value), ...], or a list of strictly
-          increasing indices and a list of corresponding values [index, ...],
-          [value, ...]. Inactive entries are treated as zeros.
-
-        >>> SparseVector(4, {1: 1.0, 3: 5.5})
-        SparseVector(4, {1: 1.0, 3: 5.5})
-        >>> SparseVector(4, [(1, 1.0), (3, 5.5)])
-        SparseVector(4, {1: 1.0, 3: 5.5})
-        >>> SparseVector(4, [1, 3], [1.0, 5.5])
-        SparseVector(4, {1: 1.0, 3: 5.5})
-        """
-        self.size = int(size)
-        """ Size of the vector. """
-        assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
-        if len(args) == 1:
-            pairs = args[0]
-            if type(pairs) == dict:
-                pairs = pairs.items()
-            pairs = sorted(pairs)
-            self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
-            """ A list of indices corresponding to active entries. """
-            self.values = np.array([p[1] for p in pairs], dtype=np.float64)
-            """ A list of values corresponding to active entries. """
-        else:
-            if isinstance(args[0], bytes):
-                assert isinstance(args[1], bytes), "values should be string too"
-                if args[0]:
-                    self.indices = np.frombuffer(args[0], np.int32)
-                    self.values = np.frombuffer(args[1], np.float64)
-                else:
-                    # np.frombuffer() doesn't work well with empty string in older version
-                    self.indices = np.array([], dtype=np.int32)
-                    self.values = np.array([], dtype=np.float64)
-            else:
-                self.indices = np.array(args[0], dtype=np.int32)
-                self.values = np.array(args[1], dtype=np.float64)
-            assert len(self.indices) == len(self.values), "index and value arrays not same length"
-            for i in xrange(len(self.indices) - 1):
-                if self.indices[i] >= self.indices[i + 1]:
-                    raise TypeError(
-                        "Indices %s and %s are not strictly increasing"
-                        % (self.indices[i], self.indices[i + 1]))
-
-    def numNonzeros(self):
-        """
-        Number of nonzero elements. This scans all active values and count non zeros.
-        """
-        return np.count_nonzero(self.values)
-
-    def norm(self, p):
-        """
-        Calculates the norm of a SparseVector.
-
-        >>> a = SparseVector(4, [0, 1], [3., -4.])
-        >>> a.norm(1)
-        7.0
-        >>> a.norm(2)
-        5.0
-        """
-        return np.linalg.norm(self.values, p)
-
     def __reduce__(self):
         return (
             SparseVector,
@@ -491,137 +239,6 @@ class SparseVector(Vector):
             raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(size, indices, values)
 
-    def dot(self, other):
-        """
-        Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
-
-        >>> a = SparseVector(4, [1, 3], [3.0, 4.0])
-        >>> a.dot(a)
-        25.0
-        >>> a.dot(array.array('d', [1., 2., 3., 4.]))
-        22.0
-        >>> b = SparseVector(4, [2], [1.0])
-        >>> a.dot(b)
-        0.0
-        >>> a.dot(np.array([[1, 1], [2, 2], [3, 3], [4, 4]]))
-        array([ 22.,  22.])
-        >>> a.dot([1., 2., 3.])
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        >>> a.dot(np.array([1., 2.]))
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        >>> a.dot(DenseVector([1., 2.]))
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        >>> a.dot(np.zeros((3, 2)))
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        """
-
-        if isinstance(other, np.ndarray):
-            if other.ndim not in [2, 1]:
-                raise ValueError("Cannot call dot with %d-dimensional array" % other.ndim)
-            assert len(self) == other.shape[0], "dimension mismatch"
-            return np.dot(self.values, other[self.indices])
-
-        assert len(self) == _vector_size(other), "dimension mismatch"
-
-        if isinstance(other, DenseVector):
-            return np.dot(other.array[self.indices], self.values)
-
-        elif isinstance(other, SparseVector):
-            # Find out common indices.
-            self_cmind = np.in1d(self.indices, other.indices, assume_unique=True)
-            self_values = self.values[self_cmind]
-            if self_values.size == 0:
-                return 0.0
-            else:
-                other_cmind = np.in1d(other.indices, self.indices, assume_unique=True)
-                return np.dot(self_values, other.values[other_cmind])
-
-        else:
-            return self.dot(_convert_to_vector(other))
-
-    def squared_distance(self, other):
-        """
-        Squared distance from a SparseVector or 1-dimensional NumPy array.
-
-        >>> a = SparseVector(4, [1, 3], [3.0, 4.0])
-        >>> a.squared_distance(a)
-        0.0
-        >>> a.squared_distance(array.array('d', [1., 2., 3., 4.]))
-        11.0
-        >>> a.squared_distance(np.array([1., 2., 3., 4.]))
-        11.0
-        >>> b = SparseVector(4, [2], [1.0])
-        >>> a.squared_distance(b)
-        26.0
-        >>> b.squared_distance(a)
-        26.0
-        >>> b.squared_distance([1., 2.])
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        >>> b.squared_distance(SparseVector(3, [1,], [1.0,]))
-        Traceback (most recent call last):
-            ...
-        AssertionError: dimension mismatch
-        """
-        assert len(self) == _vector_size(other), "dimension mismatch"
-
-        if isinstance(other, np.ndarray) or isinstance(other, DenseVector):
-            if isinstance(other, np.ndarray) and other.ndim != 1:
-                raise Exception("Cannot call squared_distance with %d-dimensional array" %
-                                other.ndim)
-            if isinstance(other, DenseVector):
-                other = other.array
-            sparse_ind = np.zeros(other.size, dtype=bool)
-            sparse_ind[self.indices] = True
-            dist = other[sparse_ind] - self.values
-            result = np.dot(dist, dist)
-
-            other_ind = other[~sparse_ind]
-            result += np.dot(other_ind, other_ind)
-            return result
-
-        elif isinstance(other, SparseVector):
-            result = 0.0
-            i, j = 0, 0
-            while i < len(self.indices) and j < len(other.indices):
-                if self.indices[i] == other.indices[j]:
-                    diff = self.values[i] - other.values[j]
-                    result += diff * diff
-                    i += 1
-                    j += 1
-                elif self.indices[i] < other.indices[j]:
-                    result += self.values[i] * self.values[i]
-                    i += 1
-                else:
-                    result += other.values[j] * other.values[j]
-                    j += 1
-            while i < len(self.indices):
-                result += self.values[i] * self.values[i]
-                i += 1
-            while j < len(other.indices):
-                result += other.values[j] * other.values[j]
-                j += 1
-            return result
-        else:
-            return self.squared_distance(_convert_to_vector(other))
-
-    def toArray(self):
-        """
-        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
-        """
-        arr = np.zeros((self.size,), dtype=np.float64)
-        arr[self.indices] = self.values
-        return arr
-
     def asML(self):
         """
         Convert this vector to the new mllib-local representation.
@@ -632,68 +249,6 @@ class SparseVector(Vector):
         .. versionadded:: 2.0.0
         """
         return newlinalg.SparseVector(self.size, self.indices, self.values)
-
-    def __len__(self):
-        return self.size
-
-    def __str__(self):
-        inds = "[" + ",".join([str(i) for i in self.indices]) + "]"
-        vals = "[" + ",".join([str(v) for v in self.values]) + "]"
-        return "(" + ",".join((str(self.size), inds, vals)) + ")"
-
-    def __repr__(self):
-        inds = self.indices
-        vals = self.values
-        entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
-                             for i in xrange(len(inds))])
-        return "SparseVector({0}, {{{1}}})".format(self.size, entries)
-
-    def __eq__(self, other):
-        if isinstance(other, SparseVector):
-            return other.size == self.size and np.array_equal(other.indices, self.indices) \
-                and np.array_equal(other.values, self.values)
-        elif isinstance(other, DenseVector):
-            if self.size != len(other):
-                return False
-            return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
-        return False
-
-    def __getitem__(self, index):
-        inds = self.indices
-        vals = self.values
-        if not isinstance(index, int):
-            raise TypeError(
-                "Indices must be of type integer, got type %s" % type(index))
-
-        if index >= self.size or index < -self.size:
-            raise ValueError("Index %d out of bounds." % index)
-        if index < 0:
-            index += self.size
-
-        if (inds.size == 0) or (index > inds.item(-1)):
-            return 0.
-
-        insert_index = np.searchsorted(inds, index)
-        row_ind = inds[insert_index]
-        if row_ind == index:
-            return vals[insert_index]
-        return 0.
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        result = 31 + self.size
-        nnz = 0
-        i = 0
-        while i < len(self.values) and nnz < 128:
-            if self.values[i] != 0:
-                result = 31 * result + int(self.indices[i])
-                bits = _double_to_long_bits(self.values[i])
-                result = 31 * result + (bits ^ (bits >> 32))
-                nnz += 1
-            i += 1
-        return result
 
 
 class Vectors(object):
