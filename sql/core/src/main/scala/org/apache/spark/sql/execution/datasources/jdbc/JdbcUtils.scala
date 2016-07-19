@@ -110,6 +110,10 @@ object JdbcUtils extends Logging {
     }
   }
 
+  def isCascadingTruncateTable(url: String): Option[Boolean] = {
+    JdbcDialects.get(url).isCascadingTruncateTable()
+  }
+
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */

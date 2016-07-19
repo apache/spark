@@ -426,7 +426,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        if (extraOptions.getOrElse("truncate", "false").toBoolean) {
+        if (extraOptions.getOrElse("truncate", "false").toBoolean &&
+            JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
           JdbcUtils.truncateTable(conn, table)
         } else {
           JdbcUtils.dropTable(conn, table)

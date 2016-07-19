@@ -40,6 +40,14 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   properties.setProperty("password", "testPass")
   properties.setProperty("rowId", "false")
 
+  val testH2Dialect = new JdbcDialect {
+    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+      Some(StringType)
+    override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+  }
+
   before {
     Utils.classForName("org.h2.Driver")
     conn = DriverManager.getConnection(url)
@@ -146,6 +154,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   test("Truncate") {
+    JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
     val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
     val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
