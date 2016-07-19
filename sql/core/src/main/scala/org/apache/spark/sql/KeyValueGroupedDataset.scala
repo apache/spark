@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ou
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.expressions.ReduceAggregator
 
 /**
  * :: Experimental ::
@@ -177,10 +178,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
-    val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
+    val encoder = encoderFor[V]
+    val aggregator: TypedColumn[V, V] = new ReduceAggregator(f, encoder).toColumn
 
-    implicit val resultEncoder = ExpressionEncoder.tuple(kExprEnc, vExprEnc)
-    flatMapGroups(func)
+    agg(aggregator)
   }
 
   /**
