@@ -40,6 +40,8 @@ import numpy as np
 
 from pyspark import since
 from pyspark.ml import linalg as newlinalg
+from pyspark.ml.linalg import _convert_to_vector, _format_float, _have_scipy, _vector_size, \
+    _double_to_long_bits, _format_float_list
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
@@ -65,72 +67,6 @@ try:
 except:
     # No SciPy in environment, but that's okay
     _have_scipy = False
-
-
-def _convert_to_vector(l):
-    if isinstance(l, Vector):
-        return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
-        return DenseVector(l)
-    elif _have_scipy and scipy.sparse.issparse(l):
-        assert l.shape[1] == 1, "Expected column vector"
-        csc = l.tocsc()
-        return SparseVector(l.shape[0], csc.indices, csc.data)
-    else:
-        raise TypeError("Cannot convert type %s into Vector" % type(l))
-
-
-def _vector_size(v):
-    """
-    Returns the size of the vector.
-
-    >>> _vector_size([1., 2., 3.])
-    3
-    >>> _vector_size((1., 2., 3.))
-    3
-    >>> _vector_size(array.array('d', [1., 2., 3.]))
-    3
-    >>> _vector_size(np.zeros(3))
-    3
-    >>> _vector_size(np.zeros((3, 1)))
-    3
-    >>> _vector_size(np.zeros((1, 3)))
-    Traceback (most recent call last):
-        ...
-    ValueError: Cannot treat an ndarray of shape (1, 3) as a vector
-    """
-    if isinstance(v, Vector):
-        return len(v)
-    elif type(v) in (array.array, list, tuple, xrange):
-        return len(v)
-    elif type(v) == np.ndarray:
-        if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
-            return len(v)
-        else:
-            raise ValueError("Cannot treat an ndarray of shape %s as a vector" % str(v.shape))
-    elif _have_scipy and scipy.sparse.issparse(v):
-        assert v.shape[1] == 1, "Expected column vector"
-        return v.shape[0]
-    else:
-        raise TypeError("Cannot treat type %s as a vector" % type(v))
-
-
-def _format_float(f, digits=4):
-    s = str(round(f, digits))
-    if '.' in s:
-        s = s[:s.index('.') + 1 + digits]
-    return s
-
-
-def _format_float_list(l):
-    return [_format_float(x) for x in l]
-
-
-def _double_to_long_bits(value):
-    if np.isnan(value):
-        value = float('nan')
-    # pack double into 64 bits, then unpack as long int
-    return struct.unpack('Q', struct.pack('d', value))[0]
 
 
 class VectorUDT(UserDefinedType):
