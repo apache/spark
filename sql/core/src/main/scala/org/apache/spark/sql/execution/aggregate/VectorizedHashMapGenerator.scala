@@ -47,7 +47,6 @@ class VectorizedHashMapGenerator(
     bufferSchema: StructType)
   extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
     groupingKeySchema, bufferSchema) {
-  case class Buffer(dataType: DataType, name: String)
 
   def generate(): String = {
     s"""
