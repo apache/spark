@@ -34,7 +34,11 @@ import org.apache.spark.util.Utils
 
 private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
 
-private[sql] class JacksonParser(schema: StructType, options: JSONOptions) extends Logging {
+private[sql] class JacksonParser(
+    schema: StructType,
+    columnNameOfCorruptRecord: String,
+    options: JSONOptions) extends Logging {
+
   import com.fasterxml.jackson.core.JsonToken._
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
@@ -75,7 +79,7 @@ private[sql] class JacksonParser(schema: StructType, options: JSONOptions) exten
       Nil
     } else {
       val row = new GenericMutableRow(schema.length)
-      for (corruptIndex <- schema.getFieldIndex(options.columnNameOfCorruptRecord)) {
+      for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecord)) {
         require(schema(corruptIndex).dataType == StringType)
         row.update(corruptIndex, UTF8String.fromString(record))
       }

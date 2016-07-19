@@ -61,10 +61,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         generator.flush()
       }
 
-      val dummyOption =
-        new JSONOptions(Map.empty[String, String], new SQLConf())
+      val dummyOption = new JSONOptions(Map.empty[String, String])
       val dummySchema = StructType(Seq.empty)
-      val parser = new JacksonParser(dummySchema, dummyOption)
+      val parser = new JacksonParser(dummySchema, "", dummyOption)
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
@@ -1339,10 +1338,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val options = Map("columnNameOfCorruptRecord" -> "")
-    val parsedOptions =
-      new JSONOptions(options, new SQLConf())
-    val emptySchema = InferSchema.infer(empty, parsedOptions)
+    val parsedOptions = new JSONOptions(Map.empty[String, String])
+    val emptySchema = InferSchema.infer(empty, "", parsedOptions)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1366,10 +1363,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val options = Map("columnNameOfCorruptRecord" -> "")
-    val parsedOptions =
-      new JSONOptions(options, new SQLConf())
-    val emptySchema = InferSchema.infer(emptyRecords, parsedOptions)
+    val parsedOptions = new JSONOptions(Map.empty[String, String])
+    val emptySchema = InferSchema.infer(emptyRecords, "", parsedOptions)
     assert(StructType(Seq()) === emptySchema)
   }
 
