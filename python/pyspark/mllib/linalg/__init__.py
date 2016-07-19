@@ -251,7 +251,7 @@ class SparseVector(Vector, newlinalg.SparseVector):
         return newlinalg.SparseVector(self.size, self.indices, self.values)
 
 
-class Vectors(object):
+class Vectors(newlinalg.Vectors):
 
     """
     Factory methods for working with vectors. Note that dense vectors
@@ -328,28 +328,6 @@ class Vectors(object):
         return str(vector)
 
     @staticmethod
-    def squared_distance(v1, v2):
-        """
-        Squared distance between two vectors.
-        a and b can be of type SparseVector, DenseVector, np.ndarray
-        or array.array.
-
-        >>> a = Vectors.sparse(4, [(0, 1), (3, 4)])
-        >>> b = Vectors.dense([2, 5, 4, 1])
-        >>> a.squared_distance(b)
-        51.0
-        """
-        v1, v2 = _convert_to_vector(v1), _convert_to_vector(v2)
-        return v1.squared_distance(v2)
-
-    @staticmethod
-    def norm(vector, p):
-        """
-        Find norm of the given vector.
-        """
-        return _convert_to_vector(vector).norm(p)
-
-    @staticmethod
     def parse(s):
         """Parse a string representation back into the Vector.
 
@@ -369,31 +347,6 @@ class Vectors(object):
     @staticmethod
     def zeros(size):
         return DenseVector(np.zeros(size))
-
-    @staticmethod
-    def _equals(v1_indices, v1_values, v2_indices, v2_values):
-        """
-        Check equality between sparse/dense vectors,
-        v1_indices and v2_indices assume to be strictly increasing.
-        """
-        v1_size = len(v1_values)
-        v2_size = len(v2_values)
-        k1 = 0
-        k2 = 0
-        all_equal = True
-        while all_equal:
-            while k1 < v1_size and v1_values[k1] == 0:
-                k1 += 1
-            while k2 < v2_size and v2_values[k2] == 0:
-                k2 += 1
-
-            if k1 >= v1_size or k2 >= v2_size:
-                return k1 >= v1_size and k2 >= v2_size
-
-            all_equal = v1_indices[k1] == v2_indices[k2] and v1_values[k1] == v2_values[k2]
-            k1 += 1
-            k2 += 1
-        return all_equal
 
 
 class Matrix(newlinalg.Matrix):
