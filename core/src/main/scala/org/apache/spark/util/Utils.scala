@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -157,7 +158,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
-  def deserializeLongValue(bytes: Array[Byte]) : Long = {
+  def deserializeLongValue(bytes: Array[Byte]): Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
     var result = bytes(7) & 0xFFL
     result = result + ((bytes(6) & 0xFFL) << 8)
@@ -1138,6 +1139,50 @@ private[spark] object Utils extends Logging {
     bytesToString(megabytes * 1024L * 1024L)
   }
 
+
+  /**
+   * Create a jar file at the given path, containing a manifest with a classpath
+   * that references all specified entries.
+   */
+  def createShortClassPath(tempDir: File, classPath: String): String = {
+    if (isWindows) {
+      val env = new util.HashMap[String, String](System.getenv())
+      val javaCps = FileUtil
+        .createJarWithClassPath(classPath, new Path(tempDir.getAbsolutePath), env)
+      val javaCpStr = javaCps(0) + javaCps(1)
+      logInfo("Shorten the class path to: " + javaCpStr)
+      javaCpStr
+    } else {
+      classPath
+    }
+  }
+
+  def createShortClassPath(classPath: String): String = {
+    val tempDir = createTempDir("classpaths")
+    createShortClassPath(tempDir, classPath)
+  }
+
+  /**
+   * Create a jar file at the given path, containing a manifest with a classpath
+   * that references all specified entries.
+   */
+  def shortenClasspath(builder: ProcessBuilder): Unit = {
+    if (builder.command.asScala.mkString("\"", "\" \"", "\"").length > 8190) {
+      logWarning("Cmd too long, try to shorten the classpath")
+      // look for the class path
+      // note that environment set in teh ProcessBuilder is process-local. So it
+      // won't pollute the environment
+      val command = builder.command()
+      val idxCp = command.indexOf("-cp")
+      if (idxCp > 0 && idxCp + 1 < command.size()) {
+        val classPath = command.get(idxCp + 1)
+        val shortPath = createShortClassPath(classPath)
+        command.set(idxCp + 1, shortPath)
+      }
+    }
+  }
+
+
   /**
    * Execute a command and return the process running the command.
    */
@@ -1151,6 +1196,11 @@ private[spark] object Utils extends Logging {
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
     }
+
+    if (Utils.isWindows) {
+      Utils.shortenClasspath(builder)
+    }
+
     val process = builder.start()
     if (redirectStderr) {
       val threadName = "redirect stderr for command " + command(0)

@@ -17,15 +17,19 @@
 
 package org.apache.spark.launcher;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.commons.lang.SystemUtils;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 import static org.junit.Assert.*;
+
+import org.apache.spark.util.Utils;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.
@@ -99,15 +103,28 @@ public class SparkLauncherSuite {
         String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
         "-Dfoo=bar -Dtest.appender=childproc")
-      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
-    final Process app = launcher.launch();
 
-    new OutputRedirector(app.getInputStream(), TF);
-    new OutputRedirector(app.getErrorStream(), TF);
-    assertEquals(0, app.waitFor());
+    File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+    try {
+      if (SystemUtils.IS_OS_WINDOWS) {
+        launcher.setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH,
+            Utils.createShortClassPath(tempDir, System.getProperty("java.class.path")));
+      } else {
+        launcher.setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"));
+      }
+      final Process app = launcher.launch();
+
+      new OutputRedirector(app.getInputStream(), TF);
+      new OutputRedirector(app.getErrorStream(), TF);
+      assertEquals(0, app.waitFor());
+    } finally {
+      if(tempDir.exists()) {
+        Utils.deleteRecursively(tempDir);
+      }
+    }
   }
 
   public static class SparkLauncherTestApp {

@@ -23,6 +23,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.Attributes;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 
 import org.junit.AfterClass;
@@ -86,7 +89,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       parser.DRIVER_MEMORY,
       "42g",
       parser.DRIVER_CLASS_PATH,
-      "/driverCp",
+      CommandBuilderUtils.isWindows() ? "D:/driverCp" : "/driverCp",
       parser.DRIVER_JAVA_OPTIONS,
       "extraJavaOpt",
       parser.CONF,
@@ -99,7 +102,25 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     assertTrue(findInStringList(env.get(CommandBuilderUtils.getLibPathEnvName()),
         File.pathSeparator, "/driverLibPath"));
-    assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/driverCp"));
+    if (!CommandBuilderUtils.isWindows())
+    {
+      assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/driverCp"));
+    } else {
+      String[] cp = findArgValue(cmd, "-cp").split(File.pathSeparator);
+      JarFile jarFile = null;
+      try {
+        jarFile = new JarFile(cp[0]);
+        Manifest jarManifest = jarFile.getManifest();
+        Attributes attrs = jarManifest.getMainAttributes();
+        String classPath = attrs.getValue(Attributes.Name.CLASS_PATH);
+        assertTrue(contains("file:/D:/driverCp", classPath.split(" ")));
+      } finally {
+        if (jarFile != null) {
+          jarFile.close();
+        }
+
+      }
+    }
     assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
     assertTrue("Command should contain user-defined conf.",
       Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
@@ -214,7 +235,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     if (!useDefaultPropertyFile) {
       launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
       launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
-      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
+      launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, CommandBuilderUtils.isWindows() ? "D:/driver": "/driver");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver -XX:MaxPermSize=256m");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
     } else {
@@ -247,10 +268,30 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     }
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));
-    if (isDriver) {
-      assertTrue("Driver classpath should contain provided entry.", contains("/driver", cp));
+    if (!CommandBuilderUtils.isWindows()) {
+      if (isDriver) {
+        assertTrue("Driver classpath should contain provided entry.", contains("/driver", cp));
+      } else {
+        assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
+      }
     } else {
-      assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
+      JarFile jarFile = null;
+      try {
+        jarFile = new JarFile(cp[0]);
+        Manifest jarManifest = jarFile.getManifest();
+        Attributes attrs = jarManifest.getMainAttributes();
+        String classPath = attrs.getValue(Attributes.Name.CLASS_PATH);
+        if (isDriver) {
+          assertTrue(contains("file:/D:/driver", classPath.split(" ")));
+        } else {
+          assertFalse(contains("file:/D:/driver", classPath.split(" ")));
+        }
+      } finally {
+        if (jarFile != null) {
+          jarFile.close();
+        }
+
+      }
     }
 
     String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());
