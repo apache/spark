@@ -718,23 +718,18 @@ private[spark] object RandomForest extends Logging {
             splitIndex += 1
           }
           // Find best split.
-          if (numSplits == 0 && false) {
-            (new ContinuousSplit(featureIndex, Double.MinValue),
-              ImpurityStats.getInvalidImpurityStats(binAggregates.getParentImpurityCalculator()))
-          } else {
-            val (bestFeatureSplitIndex, bestFeatureGainStats) =
-              Range(0, numSplits).map { case splitIdx =>
-                val leftChildStats =
-                  binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
-                val rightChildStats =
-                  binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
-                rightChildStats.subtract(leftChildStats)
-                gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-                  leftChildStats, rightChildStats, binAggregates.metadata)
-                (splitIdx, gainAndImpurityStats)
-              }.maxBy(_._2.gain)
-            (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
-          }
+          val (bestFeatureSplitIndex, bestFeatureGainStats) =
+            Range(0, numSplits).map { case splitIdx =>
+              val leftChildStats =
+                binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
+              val rightChildStats =
+                binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
+              rightChildStats.subtract(leftChildStats)
+              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
+                leftChildStats, rightChildStats, binAggregates.metadata)
+              (splitIdx, gainAndImpurityStats)
+            }.maxBy(_._2.gain)
+          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
