@@ -489,21 +489,14 @@ class SQLBuilder private (
           h.copy(child = j.copy(left = hintChild))
         case j @ Join(_, h @ Hint("BROADCAST", _, hintChild), _, _) =>
           h.copy(child = j.copy(right = hintChild))
-        case s @ SubqueryAlias(_, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = s.copy(child = hintChild))
-        case gg @ GlobalLimit(_, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = gg.copy(child = hintChild))
-        case ll @ LocalLimit(_, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = ll.copy(child = hintChild))
-        case f @ Filter(_, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = f.copy(child = hintChild))
-        case a @ Aggregate(_, _, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = a.copy(child = hintChild))
-        case s @ Sort(_, _, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = s.copy(child = hintChild))
-        case g @ Generate(_, _, _, _, _, h @ Hint("BROADCAST", _, hintChild)) =>
-          h.copy(child = g.copy(child = hintChild))
-        // Set operation is not allowed to be across. UNION/INTERCEPT/EXCEPT
+
+        // Other UnaryNodes are bypassed.
+        case u: UnaryNode
+          if u.child.isInstanceOf[Hint] && u.child.asInstanceOf[Hint].name.equals("BROADCAST") =>
+          val hint = u.child.asInstanceOf[Hint]
+          hint.copy(child = u.withNewChildren(Seq(hint.child)))
+
+        // Other binary operations are ignored.
       }
     }
 
