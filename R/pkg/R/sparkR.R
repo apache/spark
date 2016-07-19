@@ -365,12 +365,17 @@ sparkR.session <- function(
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
-
-#  if (master_is_local(master) && (!nzchar(sparkHome) || !dir.exists(sparkHome))) {
-#    message("Spark is not found in local directory. It will be installed in a cache dir.")
-#    packageLocalDir <- install_spark()
-#    sparkHome <- packageLocalDir
-#  }
+  if (!nzchar(master) || master_is_local(master)) {
+    if (!nzchar(sparkHome) || !dir.exists(sparkHome)) {
+      message("Spark is not found in SPARK_HOME. Redirect to the cache directory.")
+      packageLocalDir <- install_spark()
+      sparkHome <- packageLocalDir
+    } else {
+      fmt <- "Make sure that Spark is installed in SPARK_HOME: %s"
+      msg <- sprintf(fmt, sparkHome)
+      message(msg)
+    }
+  }
   
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     sparkExecutorEnvMap <- new.env()
