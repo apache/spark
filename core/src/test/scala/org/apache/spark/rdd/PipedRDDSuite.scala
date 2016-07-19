@@ -51,6 +51,22 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("basic pipe with tokenization") {
+    if (testCommandAvailable("wc")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+
+      // verify that both RDD.pipe(command: String) and RDD.pipe(command: String, env) work good
+      for (piped <- Seq(nums.pipe("wc -l"), nums.pipe("wc -l", Map[String, String]()))) {
+        val c = piped.collect()
+        assert(c.size === 2)
+        assert(c(0).trim === "2")
+        assert(c(1).trim === "2")
+      }
+    } else {
+      assert(true)
+    }
+  }
+
   test("failure in iterating over pipe input") {
     if (testCommandAvailable("cat")) {
       val nums =
