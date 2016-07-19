@@ -33,10 +33,10 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private val DEFAULT_PREFIX = "*"
   private val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
   private val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
-  // This is intetionally made to not fall the prefix (spark.metrics.conf) because it's not
+  // This is intetionally made to not fall in the prefix (spark.metrics.conf) because it's not
   // intended to be a _real_ metrics property, for example, its first part before the dot
   // doesn't represent the instance (master, worker, etc.). Instead, it's used to configure the
-  // metrics systems. Where accessed, this should be namespace property should be directly accessed
+  // metrics systems. Where accessed, this namespace property should be directly accessed
   // from SparkConf using its full name, represented here.
   private val NAMESPACE_CONFIG_PROPERTY = "spark.metrics.namespace"
 
@@ -71,8 +71,8 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
 
     // Now, let's populate a list of sub-properties per instance, instance being the prefix that
     // appears before the first dot in the property name.
-    // Add to the sub-properties per instance, the default properties (those with prefix "*"), as
-    // as they don't have a more specific sub-property already defined.
+    // Add to the sub-properties per instance, the default properties (those with prefix "*"), if
+    // they don't have that exact same sub-property already defined.
     //
     // For example, if properties has ("*.class"->"default_class", "*.path"->"default_path,
     // "driver.path"->"driver_path"), for driver specific sub-properties, we'd like the output to be
@@ -92,9 +92,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   }
 
   /**
-   * Take a simple set of properties and a regex that the property names have to conform to.
-   * And, return a map of the first order prefix (before the first dot) to the subproperties under
-   * that prefix.
+   * Take a simple set of properties and a regex that the instance names (part before the first dot)
+   * have to conform to. And, return a map of the first order prefix (before the first dot) to the
+   * sub-properties under that prefix.
    *
    * For example, if the properties sent were Properties("*.sink.servlet.class"->"class1",
    * "*.sink.servlet.path"->"path1"), the returned map would be
