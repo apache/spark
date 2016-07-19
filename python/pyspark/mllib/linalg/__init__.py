@@ -40,8 +40,8 @@ import numpy as np
 
 from pyspark import since
 from pyspark.ml import linalg as newlinalg
-from pyspark.ml.linalg import _convert_to_vector, _format_float, _have_scipy, _vector_size, \
-    _double_to_long_bits, _format_float_list
+from pyspark.ml.linalg import _convert_to_vector as _new_convert_to_vector, \
+    _format_float, _have_scipy, _vector_size, _double_to_long_bits, _format_float_list
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
@@ -67,6 +67,10 @@ try:
 except:
     # No SciPy in environment, but that's okay
     _have_scipy = False
+
+
+def _convert_to_vector(l):
+    return Vectors.fromML(_new_convert_to_vector(l))
 
 
 class VectorUDT(newlinalg.VectorUDT):
