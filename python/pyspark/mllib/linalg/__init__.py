@@ -58,17 +58,6 @@ if sys.version_info[:2] == (2, 7):
     copy_reg.pickle(array.array, fast_pickle_array)
 
 
-# Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
-# such as _dot and _serialize_double_vector, start to support scipy.sparse matrices.
-
-try:
-    import scipy.sparse
-    _have_scipy = True
-except:
-    # No SciPy in environment, but that's okay
-    _have_scipy = False
-
-
 def _convert_to_vector(l):
     return Vectors.fromML(_new_convert_to_vector(l))
 
