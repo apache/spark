@@ -62,7 +62,7 @@ abstract class HashMapGenerator(
 
   def generate(): String
 
-  protected def initializeAggregateHashMap()
+  protected def initializeAggregateHashMap(): String
 
   /**
    * Generates a method that computes a hash by currently xor-ing all individual group-by keys. For
