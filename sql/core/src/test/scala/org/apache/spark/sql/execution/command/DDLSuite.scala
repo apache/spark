@@ -316,7 +316,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val partitionCols = Seq("col1", "col3")
 
       // Ensure the schema is split to multiple properties.
-      withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "500") {
+      withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "1") {
         withTable(tabName) {
           spark.sql(
             s"""
