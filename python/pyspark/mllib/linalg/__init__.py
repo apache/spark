@@ -69,18 +69,10 @@ except:
     _have_scipy = False
 
 
-class VectorUDT(UserDefinedType):
+class VectorUDT(newlinalg.VectorUDT):
     """
     SQL user-defined type (UDT) for Vector.
     """
-
-    @classmethod
-    def sqlType(cls):
-        return StructType([
-            StructField("type", ByteType(), False),
-            StructField("size", IntegerType(), True),
-            StructField("indices", ArrayType(IntegerType(), False), True),
-            StructField("values", ArrayType(DoubleType(), False), True)])
 
     @classmethod
     def module(cls):
@@ -89,31 +81,6 @@ class VectorUDT(UserDefinedType):
     @classmethod
     def scalaUDT(cls):
         return "org.apache.spark.mllib.linalg.VectorUDT"
-
-    def serialize(self, obj):
-        if isinstance(obj, SparseVector):
-            indices = [int(i) for i in obj.indices]
-            values = [float(v) for v in obj.values]
-            return (0, obj.size, indices, values)
-        elif isinstance(obj, DenseVector):
-            values = [float(v) for v in obj]
-            return (1, None, None, values)
-        else:
-            raise TypeError("cannot serialize %r of type %r" % (obj, type(obj)))
-
-    def deserialize(self, datum):
-        assert len(datum) == 4, \
-            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
-        tpe = datum[0]
-        if tpe == 0:
-            return SparseVector(datum[1], datum[2], datum[3])
-        elif tpe == 1:
-            return DenseVector(datum[3])
-        else:
-            raise ValueError("do not recognize type %r" % tpe)
-
-    def simpleString(self):
-        return "vector"
 
 
 class MatrixUDT(UserDefinedType):
