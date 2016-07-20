@@ -516,7 +516,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     if (DDLUtils.isDatasourceTable(tableDesc)) {
       DDLUtils.getSchemaFromTableProperties(tableDesc) match {
         case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, buffer)
-        case None => append(buffer, "# Schema of this table is inferred at runtime", "", "")
+        case None => append(buffer, "# Schema of this table is corrupted", "", "")
       }
     } else {
       describeSchema(tableDesc.schema, buffer)

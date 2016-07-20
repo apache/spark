@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.sources.InsertableRelation
+import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 import org.apache.spark.sql.types._
 
 /**
@@ -95,14 +95,25 @@ case class CreateDataSourceTableCommand(
       }
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
-    val dataSource: HadoopFsRelation =
+    val dataSource: BaseRelation =
       DataSource(
         sparkSession = sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         className = provider,
         bucketSpec = None,
         options = optionsWithPath)
-        .resolveRelation(checkPathExist = false).asInstanceOf[HadoopFsRelation]
+        .resolveRelation(checkPathExist = false)
+
+    val partitionColumns =
+      dataSource match {
+        case r: HadoopFsRelation =>
+          if (userSpecifiedSchema.isEmpty) {
+            r.partitionSchema.fieldNames
+          } else {
+            userSpecifiedPartitionColumns
+          }
+        case _ => Array.empty[String]
+      }
 
     if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionColumns.length > 0) {
       // The table does not have a specified schema, which means that the schema will be inferred
@@ -113,15 +124,8 @@ case class CreateDataSourceTableCommand(
         s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
           s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
           s"Schema: ${dataSource.schema.simpleString}; " +
-          s"Partition columns: ${dataSource.partitionSchema.fieldNames}")
+          s"Partition columns: $partitionColumns")
     }
-
-    val partitionColumns =
-      if (userSpecifiedSchema.isEmpty) {
-        dataSource.partitionSchema.fieldNames
-      } else {
-        userSpecifiedPartitionColumns
-      }
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
