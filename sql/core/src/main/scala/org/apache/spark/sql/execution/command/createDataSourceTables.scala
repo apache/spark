@@ -119,7 +119,7 @@ case class CreateDataSourceTableCommand(
           s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
             s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
             s"Schema: ${dataSource.schema.simpleString}; " +
-            s"Partition columns: $res")
+            s"Partition columns: ${res.mkString("(", ", ", ")")}")
       }
       res
     }

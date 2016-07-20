@@ -252,19 +252,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def createDataSourceTableWithoutSchema(
+  private def createDataSourceTable(
       path: File,
-      partitionCols: Option[Seq[String]]): (StructType, Seq[String]) = {
+      userSpecifiedSchema: Option[String],
+      userSpecifiedPartitionCols: Option[String]): (StructType, Seq[String]) = {
     var tableSchema = StructType(Nil)
     var partCols = Seq.empty[String]
 
     val tabName = "tab1"
     withTable(tabName) {
       val partitionClause =
-        partitionCols.map(p => s"PARTITIONED BY ${p.mkString("(", ", ", ")")}").getOrElse("")
-      spark.sql(
+        userSpecifiedPartitionCols.map(p => s"PARTITIONED BY ($p)").getOrElse("")
+      val schemaClause = userSpecifiedSchema.map(s => s"($s)").getOrElse("")
+      sql(
         s"""
-           |CREATE TABLE $tabName
+           |CREATE TABLE $tabName $schemaClause
            |USING parquet
            |OPTIONS (
            |  path '$path'
@@ -279,17 +281,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     (tableSchema, partCols)
   }
 
-  test("Create partitioned data source table without schema") {
+  test("Create partitioned data source table without user specified schema") {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns" :: Nil)
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns" :: Nil), None).foreach { partitionCols =>
+    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToPartitionedTable =>
-        df.write.format("parquet").partitionBy("num").save(pathToPartitionedTable.getCanonicalPath)
+        df.write.format("parquet").partitionBy("num")
+          .save(pathToPartitionedTable.getCanonicalPath)
         val (tableSchema, partCols) =
-          createDataSourceTableWithoutSchema(pathToPartitionedTable, partitionCols = partitionCols)
+          createDataSourceTable(
+            pathToPartitionedTable,
+            userSpecifiedSchema = None,
+            userSpecifiedPartitionCols = partitionCols)
         assert(tableSchema ==
           StructType(StructField("str", StringType, nullable = true) ::
             StructField("num", IntegerType, nullable = true) :: Nil))
@@ -298,22 +304,69 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("Create non-partitioned data source table without schema") {
+  test("Create partitioned data source table with user specified schema") {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns" :: Nil)
+    // Case 1: with partitioning columns but no schema: Option("num")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns" :: Nil), None).foreach { partitionCols =>
+    Seq(Option("num"), None).foreach { partitionCols =>
+      withTempPath { pathToPartitionedTable =>
+        df.write.format("parquet").partitionBy("num")
+          .save(pathToPartitionedTable.getCanonicalPath)
+        val (tableSchema, partCols) =
+          createDataSourceTable(
+            pathToPartitionedTable,
+            userSpecifiedSchema = Option("num int, str string"),
+            userSpecifiedPartitionCols = partitionCols)
+        assert(tableSchema ==
+          StructType(StructField("num", IntegerType, nullable = true) ::
+            StructField("str", StringType, nullable = true) :: Nil))
+        assert(partCols.mkString(", ") == partitionCols.getOrElse(""))
+      }
+    }
+  }
+
+  test("Create non-partitioned data source table without user specified schema") {
+    import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
         df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
         val (tableSchema, partCols) =
-          createDataSourceTableWithoutSchema(
-            pathToNonPartitionedTable, partitionCols = partitionCols)
+          createDataSourceTable(
+            pathToNonPartitionedTable,
+            userSpecifiedSchema = None,
+            userSpecifiedPartitionCols = partitionCols)
         assert(tableSchema ==
           StructType(StructField("num", IntegerType, nullable = true) ::
             StructField("str", StringType, nullable = true) :: Nil))
         assert(partCols.isEmpty)
+      }
+    }
+  }
+
+  test("Create non-partitioned data source table with user specified schema") {
+    import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("num"), None).foreach { partitionCols =>
+      withTempPath { pathToNonPartitionedTable =>
+        df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
+        val (tableSchema, partCols) =
+          createDataSourceTable(
+            pathToNonPartitionedTable,
+            userSpecifiedSchema = Option("num int, str string"),
+            userSpecifiedPartitionCols = partitionCols)
+        assert(tableSchema ==
+          StructType(StructField("num", IntegerType, nullable = true) ::
+            StructField("str", StringType, nullable = true) :: Nil))
+        assert(partCols.mkString(", ") == partitionCols.getOrElse(""))
       }
     }
   }
