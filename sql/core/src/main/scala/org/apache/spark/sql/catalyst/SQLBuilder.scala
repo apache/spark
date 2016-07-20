@@ -492,7 +492,7 @@ class SQLBuilder private (
 
         // Other UnaryNodes are bypassed.
         case u: UnaryNode
-          if u.child.isInstanceOf[Hint] && u.child.asInstanceOf[Hint].name.equals("BROADCAST") =>
+            if u.child.isInstanceOf[Hint] && u.child.asInstanceOf[Hint].name.equals("BROADCAST") =>
           val hint = u.child.asInstanceOf[Hint]
           hint.copy(child = u.withNewChildren(Seq(hint.child)))
 
