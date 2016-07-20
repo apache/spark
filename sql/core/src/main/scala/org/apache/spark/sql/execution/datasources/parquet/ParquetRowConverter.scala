@@ -447,9 +447,32 @@ private[parquet] class ParquetRowConverter(
       val elementType = catalystSchema.elementType
 
       // At this stage, we're not sure whether the repeated field maps to the element type or is
-      // just the syntactic repeated group of the 3-level standard LIST layout. Here we try to
-      // convert the repeated field into a Catalyst type to see whether the converted type matches
-      // the Catalyst array element type.
+      // just the syntactic repeated group of the 3-level standard LIST layout. Take the following
+      // Parquet LIST-annotated group type as an example:
+      //
+      //    optional group f (LIST) {
+      //      repeated group list {
+      //        optional group element {
+      //          optional int32 element;
+      //        }
+      //      }
+      //    }
+      //
+      // This type is ambiguous:
+      //
+      // 1. When interpreted as a standard 3-level layout, the `list` field is just the syntactic
+      //    group, and the entire type should be translated to:
+      //
+      //      ARRAY<STRUCT<element: INT>>
+      //
+      // 2. On the other hand, when interpreted as a non-standard 2-level layout, the `list` field
+      //    represents the element type, and the entire type should be translated to:
+      //
+      //      ARRAY<STRUCT<element: STRUCT<element: INT>>>
+      //
+      // Here we try to convert field `list` into a Catalyst type to see whether the converted type
+      // matches the Catalyst array element type. If it doesn't match, then it's case 1; otherwise,
+      // it's case 2.
       val guessedElementType = schemaConverter.convertField(repeatedType)
 
       if (DataType.equalsIgnoreCompatibleNullability(guessedElementType, elementType)) {
