@@ -438,7 +438,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // the tasksSets complete, so the tracker should be notified
     verify(blacklist, times(1)).taskSetSucceeded(stageToMockTsm(0).execToFailures, taskScheduler)
     verify(blacklist, times(1)).taskSetSucceeded(stageToMockTsm(1).execToFailures, taskScheduler)
-    verify(blacklist, times(1)).taskSetFailed(2)
   }
 
   test("scheduled tasks obey node and executor blacklists") {
@@ -484,7 +483,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // we should have aborted the existing stages, since they aren't schedulable
     (0 to 2).foreach { stageId =>
       assert(stageToTsm(stageId).isZombie)
-      verify(blacklist).taskSetFailed(stageId)
     }
   }
 

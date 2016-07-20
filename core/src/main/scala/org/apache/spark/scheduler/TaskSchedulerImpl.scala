@@ -162,7 +162,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   override def start() {
     backend.start()
-    blacklistTracker.foreach(_.start())
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
@@ -259,7 +258,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
         s" ${manager.parent.name}")
     } else {
-      blacklistTracker.foreach(_.taskSetFailed(manager.taskSet.stageId))
       logInfo(s"Removed TaskSet ${manager.taskSet.id}, since it failed, from pool" +
         s" ${manager.parent.name}")
     }
@@ -523,7 +521,6 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   override def stop() {
     speculationScheduler.shutdown()
-    blacklistTracker.foreach(_.stop())
     if (backend != null) {
       backend.stop()
     }

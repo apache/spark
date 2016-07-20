@@ -60,10 +60,6 @@ private[scheduler] class BlacklistTracker (
   private val _nodeBlacklist: AtomicReference[Set[String]] = new AtomicReference(Set())
   private var nextExpiryTime: Long = Long.MaxValue
 
-  def start(): Unit = {}
-
-  def stop(): Unit = {}
-
   def expireExecutorsInBlacklist(): Unit = {
     val now = clock.getTimeMillis()
     // quickly check if we've got anything to expire from blacklist -- if not, avoid doing any work
@@ -98,7 +94,7 @@ private[scheduler] class BlacklistTracker (
       val newTotal = prevFailures + newFailures.totalFailures
 
       if (newTotal >= MAX_FAILURES_PER_EXEC) {
-        logInfo(s"Blacklisting executor $exec because it has $newTotal" +
+        logInfo(s"Blacklisting executor id: $exec because it has $newTotal" +
           s" task failures in successful task sets")
         val now = clock.getTimeMillis()
         val expiryTime = now + EXECUTOR_RECOVERY_MILLIS
@@ -124,9 +120,6 @@ private[scheduler] class BlacklistTracker (
     }
   }
 
-  def taskSetFailed(stageId: Int): Unit = {
-  }
-
   def isExecutorBlacklisted(executorId: String): Boolean = {
     executorIdToBlacklistExpiryTime.contains(executorId)
   }
@@ -141,16 +134,6 @@ private[scheduler] class BlacklistTracker (
 
   def isNodeBlacklisted(node: String): Boolean = {
     nodeIdToBlacklistExpiryTime.contains(node)
-  }
-
-  def taskSucceeded(
-      stageId: Int,
-      indexInTaskSet: Int,
-      info: TaskInfo,
-      scheduler: TaskSchedulerImpl): Unit = {
-    // no-op intentionally, included just for symmetry.  success to failure ratio is irrelevant, we
-    // just blacklist based on failures.  Furthermore, one success does not clear previous
-    // failures, since the bad node / executor may not fail *every* time
   }
 
   def removeExecutor(executorId: String): Unit = {

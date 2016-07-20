@@ -34,7 +34,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   override def afterEach(): Unit = {
     if (blacklistTracker != null) {
-      blacklistTracker.stop()
       blacklistTracker = null
     }
     super.afterEach()
@@ -168,7 +167,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val taskSet = FakeTask.createTaskSet(1)
       val tsm = new TaskSetManager(scheduler, Some(tracker), taskSet, 4, clock)
       tsm.updateBlacklistForFailedTask("hostA", "1", 0)
-      tracker.taskSetFailed(stage)
     }
     assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
   }
@@ -194,7 +192,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       } else {
         // the task set failed, so we don't count these failures against the executor for other
         // stages
-        tracker.taskSetFailed(stageId)
         assertEquivalentToSet(tracker.isExecutorBlacklisted(_), Set())
       }
     }

@@ -709,8 +709,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-
-    blacklistTracker.foreach(_.taskSucceeded(stageId, index, info, sched))
     maybeFinishTaskSet()
   }
 
