@@ -382,7 +382,7 @@ abstract class OffsetWindowFunction
  *
  * @param input expression to evaluate 'offset' rows after the current row.
  * @param offset rows to jump ahead in the partition.
- * @param default to use when the input value is null or when the offset is larger than the window.
+ * @param default to use when the offset is larger than the window.
  */
 @ExpressionDescription(usage =
   """_FUNC_(input, offset, default) - LEAD returns the value of 'x' at 'offset' rows
@@ -409,7 +409,7 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
  *
  * @param input expression to evaluate 'offset' rows before the current row.
  * @param offset rows to jump back in the partition.
- * @param default to use when the input value is null or when the offset is smaller than the window.
+ * @param default to use when the offset is smaller than the window.
  */
 @ExpressionDescription(usage =
   """_FUNC_(input, offset, default) - LAG returns the value of 'x' at 'offset' rows
