@@ -484,4 +484,14 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
           Row(33.5, 2.0),
           Row(400.0, 1.0))) :: Nil)
   }
+
+  test("SPARK-16280: skip null when computing histogram_numeric.") {
+    val data = sqlContext.
+      createDataFrame(Tuple1(null) :: Tuple1("3") :: Tuple1("4") :: Tuple1("5") :: Nil)
+
+    checkAnswer(
+      data.select(histogram_numeric($"_1", 2)),
+      Row(Array(Row(3.5, 2.0),
+        Row(5.0, 1.0))) :: Nil)
+  }
 }

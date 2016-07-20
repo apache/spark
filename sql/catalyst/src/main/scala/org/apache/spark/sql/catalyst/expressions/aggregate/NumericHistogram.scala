@@ -60,8 +60,6 @@ case class NumericHistogram(
       StructField("y", DoubleType))))
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, IntegerType)
 
-  val numOfBins = nb.eval(InternalRow.empty).asInstanceOf[Int]
-
   val histogram = AttributeReference("histogram",
     ArrayType(
       StructType(Seq(
@@ -79,17 +77,12 @@ case class NumericHistogram(
 
 
   override val updateExpressions: Seq[Expression] = {
-    val sortedArray =
-      CombineHistograms(histogram,
-        CreateArray(Seq(CreateStruct(Seq(child, Literal(1d))))), nb)
-    Seq(sortedArray)
-
+    Seq(CombineHistograms(histogram,
+      CreateArray(Seq(CreateStruct(Seq(child, Literal(1d))))), nb))
   }
 
   override val mergeExpressions: Seq[Expression] = {
-    val sortedArray =
-      CombineHistograms(histogram.left, histogram.right, nb)
-    Seq(sortedArray)
+    Seq(CombineHistograms(histogram.left, histogram.right, nb))
   }
 
   override val evaluateExpression: Expression = {
@@ -122,7 +115,7 @@ case class CombineHistograms(left: Expression,
       elementType.asInstanceOf[StructType](1).dataType != DoubleType
     ) {
       TypeCheckResult.TypeCheckFailure(
-        "left must be an array of struct with one numeric field and one integer field")
+        "left must be an array of struct with one double field and one double field")
     } else if (!right.dataType.isInstanceOf[ArrayType]
       || !right.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[StructType]
       || right.dataType.asInstanceOf[ArrayType].
@@ -131,7 +124,7 @@ case class CombineHistograms(left: Expression,
       elementType.asInstanceOf[StructType](1).dataType != DoubleType
     ) {
       TypeCheckResult.TypeCheckFailure(
-        "right must be an array of struct with one numeric field and one integer field")
+        "right must be an array of struct with one double field and one double field")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -312,13 +305,19 @@ case class CombineHistograms(left: Expression,
       ${rightCode.code}
       ${numOfBins.code}
       final boolean ${ev.isNull} = false;
-      $values = new InternalRow[${leftCode.value}.numElements() + ${rightCode.value}.numElements()];
-      this.$mergeFunc(${leftCode.value},
-        ${rightCode.value},
-        $values);
-      $values = $trimFunc($values, ${numOfBins.value});
-      final ArrayData ${ev.value} = new $arrayClass($values);
-      this.$values = null;
+      final ArrayData ${ev.value} = null;
+      if (${rightCode.value}.numElements() > 0 &&
+        ${rightCode.value}.getStruct(0, 2).isNullAt(0)) {
+        ${ev.value} = ${leftCode.value};
+      } else {
+        $values = new InternalRow[${leftCode.value}.numElements() + ${rightCode.value}.numElements()];
+        this.$mergeFunc(${leftCode.value},
+          ${rightCode.value},
+          $values);
+        $values = $trimFunc($values, ${numOfBins.value});
+        ${ev.value} = new $arrayClass($values);
+        this.$values = null;
+      }
       """)
   }
 }
