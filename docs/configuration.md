@@ -1188,9 +1188,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.maxFailures</code></td>
   <td>4</td>
   <td>
-    Number of failures of any particular task before giving up on the job. The same
-    task has to fail this number of attempts, it isn't affected by the number of failures
-    across different tasks.
+    Number of failures of any particular task before giving up on the job.
+    The total number of failures spread across different tasks will not cause the job
+    to fail; a particular task has to fail this number of attempts.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
