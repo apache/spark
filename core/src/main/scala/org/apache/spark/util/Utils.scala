@@ -2115,8 +2115,8 @@ private[spark] object Utils extends Logging {
   /**
    * configure a new log4j level
    */
-  def setLogLevel(l: org.apache.log4j.Level) {
-    org.apache.log4j.Logger.getRootLogger().setLevel(l)
+  def setLogLevel(level: org.apache.log4j.Level) {
+    org.apache.log4j.Logger.getRootLogger().setLevel(level)
   }
 
   /**

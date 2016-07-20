@@ -66,7 +66,7 @@ case class RepeatedData(
     mapFieldNull: scala.collection.Map[Int, java.lang.Long],
     structField: PrimitiveData)
 
-case class SpecificCollection(l: List[Int])
+case class SpecificCollection(list: List[Int])
 
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {

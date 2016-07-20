@@ -188,8 +188,8 @@ case class BroadcastNestedLoopJoinExec(
       val joinedRow = new JoinedRow
 
       if (condition.isDefined) {
-        streamedIter.filter(l =>
-          buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists
+        streamedIter.filter(left =>
+          buildRows.exists(right => boundCondition(joinedRow(left, right))) == exists
         )
       } else if (buildRows.nonEmpty == exists) {
         streamedIter

@@ -203,10 +203,10 @@ object DataType {
           equalsIgnoreNullability(leftValueType, rightValueType)
       case (StructType(leftFields), StructType(rightFields)) =>
         leftFields.length == rightFields.length &&
-          leftFields.zip(rightFields).forall { case (l, r) =>
-            l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
+          leftFields.zip(rightFields).forall { case (le, ri) =>
+            le.name == ri.name && equalsIgnoreNullability(le.dataType, ri.dataType)
           }
-      case (l, r) => l == r
+      case (le, ri) => le == ri
     }
   }
 

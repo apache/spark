@@ -501,17 +501,17 @@ object TypeCoercion {
           case None => g
         }
 
-      case l @ Least(children) if !haveSameType(children) =>
+      case le @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findTightestCommonType(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
-          case None => l
+          case None => le
         }
 
-      case NaNvl(l, r) if l.dataType == DoubleType && r.dataType == FloatType =>
-        NaNvl(l, Cast(r, DoubleType))
-      case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
-        NaNvl(Cast(l, DoubleType), r)
+      case NaNvl(left, right) if left.dataType == DoubleType && right.dataType == FloatType =>
+        NaNvl(left, Cast(right, DoubleType))
+      case NaNvl(left, right) if left.dataType == FloatType && right.dataType == DoubleType =>
+        NaNvl(Cast(left, DoubleType), right)
 
       case e: RuntimeReplaceable => e.replaceForTypeCoercion()
     }
@@ -599,12 +599,12 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case Add(l @ CalendarIntervalType(), r) if acceptedTypes.contains(r.dataType) =>
-        Cast(TimeAdd(r, l), r.dataType)
-      case Add(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeAdd(l, r), l.dataType)
-      case Subtract(l, r @ CalendarIntervalType()) if acceptedTypes.contains(l.dataType) =>
-        Cast(TimeSub(l, r), l.dataType)
+      case Add(left @ CalendarIntervalType(), right) if acceptedTypes.contains(right.dataType) =>
+        Cast(TimeAdd(right, left), right.dataType)
+      case Add(left, right @ CalendarIntervalType()) if acceptedTypes.contains(left.dataType) =>
+        Cast(TimeAdd(left, right), left.dataType)
+      case Subtract(left, right @ CalendarIntervalType()) if acceptedTypes.contains(left.dataType)
+        => Cast(TimeSub(left, right), left.dataType)
     }
   }
 

@@ -37,8 +37,8 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
         s.copy(exprId = ExprId(0))
       case e: Exists =>
         e.copy(exprId = ExprId(0))
-      case l: ListQuery =>
-        l.copy(exprId = ExprId(0))
+      case list: ListQuery =>
+        list.copy(exprId = ExprId(0))
       case p: PredicateSubquery =>
         p.copy(exprId = ExprId(0))
       case a: AttributeReference =>

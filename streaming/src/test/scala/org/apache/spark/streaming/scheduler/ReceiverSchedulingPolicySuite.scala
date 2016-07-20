@@ -108,9 +108,9 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
     // There should be 1 receiver running on each executor and each receiver has two executors
     scheduledLocations.foreach { case (receiverId, locations) =>
       assert(locations.size == 2)
-      locations.foreach { l =>
-        assert(l.isInstanceOf[ExecutorCacheTaskLocation])
-        numReceiversOnExecutor(l) = numReceiversOnExecutor.getOrElse(l, 0) + 1
+      locations.foreach { location =>
+        assert(location.isInstanceOf[ExecutorCacheTaskLocation])
+        numReceiversOnExecutor(location) = numReceiversOnExecutor.getOrElse(location, 0) + 1
       }
     }
     assert(numReceiversOnExecutor === executors.map(_ -> 1).toMap)
@@ -128,9 +128,9 @@ class ReceiverSchedulingPolicySuite extends SparkFunSuite {
     // There should be 1 receiver running on each executor and each receiver has 1 executor
     scheduledLocations.foreach { case (receiverId, executors) =>
       assert(executors.size == 1)
-      executors.foreach { l =>
-        assert(l.isInstanceOf[ExecutorCacheTaskLocation])
-        numReceiversOnExecutor(l) = numReceiversOnExecutor.getOrElse(l, 0) + 1
+      executors.foreach { location =>
+        assert(location.isInstanceOf[ExecutorCacheTaskLocation])
+        numReceiversOnExecutor(location) = numReceiversOnExecutor.getOrElse(location, 0) + 1
       }
     }
     assert(numReceiversOnExecutor === executors.map(_ -> 1).toMap)

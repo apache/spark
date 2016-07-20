@@ -112,22 +112,22 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
       val joinKeys = predicates.flatMap {
-        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
-        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
+        case EqualTo(le, ri) if canEvaluate(le, left) && canEvaluate(ri, right) => Some((le, ri))
+        case EqualTo(le, ri) if canEvaluate(le, right) && canEvaluate(ri, left) => Some((ri, le))
         // Replace null with default value for joining key, then those rows with null in it could
         // be joined together
-        case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
-          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
-            Coalesce(Seq(r, Literal.default(r.dataType)))))
-        case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
-          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
-            Coalesce(Seq(l, Literal.default(l.dataType)))))
+        case EqualNullSafe(le, ri) if canEvaluate(le, left) && canEvaluate(ri, right) =>
+          Some((Coalesce(Seq(le, Literal.default(le.dataType))),
+            Coalesce(Seq(ri, Literal.default(ri.dataType)))))
+        case EqualNullSafe(le, ri) if canEvaluate(le, right) && canEvaluate(ri, left) =>
+          Some((Coalesce(Seq(ri, Literal.default(ri.dataType))),
+            Coalesce(Seq(le, Literal.default(le.dataType)))))
         case other => None
       }
       val otherPredicates = predicates.filterNot {
-        case EqualTo(l, r) =>
-          canEvaluate(l, left) && canEvaluate(r, right) ||
-            canEvaluate(l, right) && canEvaluate(r, left)
+        case EqualTo(le, ri) =>
+          canEvaluate(le, left) && canEvaluate(ri, right) ||
+            canEvaluate(le, right) && canEvaluate(ri, left)
         case other => false
       }
 

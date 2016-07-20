@@ -60,29 +60,31 @@ private[sql] case class InMemoryTableScanExec(
       if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
       buildFilter(lhs) || buildFilter(rhs)
 
-    case EqualTo(a: AttributeReference, l: Literal) =>
-      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
-    case EqualTo(l: Literal, a: AttributeReference) =>
-      statsFor(a).lowerBound <= l && l <= statsFor(a).upperBound
+    case EqualTo(a: AttributeReference, value: Literal) =>
+      statsFor(a).lowerBound <= value && value <= statsFor(a).upperBound
+    case EqualTo(value: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= value && value <= statsFor(a).upperBound
 
-    case LessThan(a: AttributeReference, l: Literal) => statsFor(a).lowerBound < l
-    case LessThan(l: Literal, a: AttributeReference) => l < statsFor(a).upperBound
+    case LessThan(a: AttributeReference, value: Literal) => statsFor(a).lowerBound < value
+    case LessThan(value: Literal, a: AttributeReference) => value < statsFor(a).upperBound
 
-    case LessThanOrEqual(a: AttributeReference, l: Literal) => statsFor(a).lowerBound <= l
-    case LessThanOrEqual(l: Literal, a: AttributeReference) => l <= statsFor(a).upperBound
+    case LessThanOrEqual(a: AttributeReference, value: Literal) => statsFor(a).lowerBound <= value
+    case LessThanOrEqual(value: Literal, a: AttributeReference) => value <= statsFor(a).upperBound
 
-    case GreaterThan(a: AttributeReference, l: Literal) => l < statsFor(a).upperBound
-    case GreaterThan(l: Literal, a: AttributeReference) => statsFor(a).lowerBound < l
+    case GreaterThan(a: AttributeReference, value: Literal) => value < statsFor(a).upperBound
+    case GreaterThan(value: Literal, a: AttributeReference) => statsFor(a).lowerBound < value
 
-    case GreaterThanOrEqual(a: AttributeReference, l: Literal) => l <= statsFor(a).upperBound
-    case GreaterThanOrEqual(l: Literal, a: AttributeReference) => statsFor(a).lowerBound <= l
+    case GreaterThanOrEqual(a: AttributeReference, value: Literal) =>
+      value <= statsFor(a).upperBound
+    case GreaterThanOrEqual(value: Literal, a: AttributeReference) =>
+      statsFor(a).lowerBound <= value
 
     case IsNull(a: Attribute) => statsFor(a).nullCount > 0
     case IsNotNull(a: Attribute) => statsFor(a).count - statsFor(a).nullCount > 0
 
     case In(a: AttributeReference, list: Seq[Expression]) if list.forall(_.isInstanceOf[Literal]) =>
-      list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
-        l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
+      list.map(value => statsFor(a).lowerBound <= value.asInstanceOf[Literal] &&
+        value.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
 
   val partitionFilters: Seq[Expression] = {

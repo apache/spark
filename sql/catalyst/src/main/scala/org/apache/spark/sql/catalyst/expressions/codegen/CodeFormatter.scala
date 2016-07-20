@@ -42,8 +42,8 @@ object CodeFormatter {
   def stripExtraNewLines(input: String): String = {
     val code = new StringBuilder
     var lastLine: String = "dummy"
-    input.split('\n').foreach { l =>
-      val line = l.trim()
+    input.split('\n').foreach { li =>
+      val line = li.trim()
       val skip = line == "" && (lastLine == "" || lastLine.endsWith("{") || lastLine.endsWith("*/"))
       if (!skip) {
         code.append(line)
@@ -67,8 +67,8 @@ object CodeFormatter {
     }
 
     var lastLine: String = "dummy"
-    codeAndComment.body.split('\n').foreach { l =>
-      val line = l.trim()
+    codeAndComment.body.split('\n').foreach { li =>
+      val line = li.trim()
 
       val skip = getComment(lastLine).zip(getComment(line)).exists {
         case (lastComment, currentComment) =>

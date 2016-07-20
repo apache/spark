@@ -1238,7 +1238,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Column, r: Column): Column = withExpr { Atan2(l.expr, r.expr) }
+  def atan2(left: Column, right: Column): Column = withExpr { Atan2(left.expr, right.expr) }
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
@@ -1247,7 +1247,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Column, rightName: String): Column = atan2(l, Column(rightName))
+  def atan2(left: Column, rightName: String): Column = atan2(left, Column(rightName))
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
@@ -1275,7 +1275,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Column, r: Double): Column = atan2(l, lit(r))
+  def atan2(left: Column, right: Double): Column = atan2(left, lit(right))
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
@@ -1293,7 +1293,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Double, r: Column): Column = atan2(lit(l), r)
+  def atan2(left: Double, right: Column): Column = atan2(lit(left), right)
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
@@ -1302,7 +1302,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
+  def atan2(left: Double, rightName: String): Column = atan2(left, Column(rightName))
 
   /**
    * An expression that returns the string representation of the binary value of the given long
@@ -1500,7 +1500,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def hypot(l: Column, r: Column): Column = withExpr { Hypot(l.expr, r.expr) }
+  def hypot(left: Column, right: Column): Column = withExpr { Hypot(left.expr, right.expr) }
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1508,7 +1508,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def hypot(l: Column, rightName: String): Column = hypot(l, Column(rightName))
+  def hypot(left: Column, rightName: String): Column = hypot(left, Column(rightName))
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1533,7 +1533,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def hypot(l: Column, r: Double): Column = hypot(l, lit(r))
+  def hypot(left: Column, right: Double): Column = hypot(left, lit(right))
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1541,7 +1541,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def hypot(leftName: String, r: Double): Column = hypot(Column(leftName), r)
+  def hypot(leftName: String, right: Double): Column = hypot(Column(leftName), right)
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1549,7 +1549,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def hypot(l: Double, r: Column): Column = hypot(lit(l), r)
+  def hypot(left: Double, right: Column): Column = hypot(lit(left), right)
 
   /**
    * Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.
@@ -1557,7 +1557,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
+  def hypot(left: Double, rightName: String): Column = hypot(left, Column(rightName))
 
   /**
    * Returns the least value of the list of values, skipping null values.
@@ -1670,7 +1670,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def pow(l: Column, r: Column): Column = withExpr { Pow(l.expr, r.expr) }
+  def pow(left: Column, right: Column): Column = withExpr { Pow(left.expr, right.expr) }
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
@@ -1678,7 +1678,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def pow(l: Column, rightName: String): Column = pow(l, Column(rightName))
+  def pow(left: Column, rightName: String): Column = pow(left, Column(rightName))
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
@@ -1702,7 +1702,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def pow(l: Column, r: Double): Column = pow(l, lit(r))
+  def pow(left: Column, right: Double): Column = pow(left, lit(right))
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
@@ -1718,7 +1718,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def pow(l: Double, r: Column): Column = pow(lit(l), r)
+  def pow(left: Double, right: Column): Column = pow(lit(left), right)
 
   /**
    * Returns the value of the first argument raised to the power of the second argument.
@@ -1726,7 +1726,7 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
+  def pow(left: Double, rightName: String): Column = pow(left, Column(rightName))
 
   /**
    * Returns the positive value of dividend mod divisor.
@@ -2129,7 +2129,9 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def levenshtein(l: Column, r: Column): Column = withExpr { Levenshtein(l.expr, r.expr) }
+  def levenshtein(left: Column, right: Column): Column = withExpr {
+    Levenshtein(left.expr, right.expr)
+  }
 
   /**
    * Locate the position of the first occurrence of substr.

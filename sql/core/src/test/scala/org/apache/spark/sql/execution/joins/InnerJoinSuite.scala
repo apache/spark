@@ -50,7 +50,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(3, "c"),
       Row(4, "d"),
       Row(null, "e")
-    )), new StructType().add("n", IntegerType).add("l", StringType))
+    )), new StructType().add("n", IntegerType).add("s", StringType))
 
   private lazy val myTestData1 = Seq(
     (1, 1),

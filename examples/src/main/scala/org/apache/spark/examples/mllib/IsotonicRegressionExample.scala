@@ -55,7 +55,9 @@ object IsotonicRegressionExample {
     }
 
     // Calculate mean squared error between predicted and real labels.
-    val meanSquaredError = predictionAndLabel.map { case (p, l) => math.pow((p - l), 2) }.mean()
+    val meanSquaredError = predictionAndLabel.map {
+      case (pred, label) => math.pow((pred - label), 2)
+    }.mean()
     println("Mean Squared Error = " + meanSquaredError)
 
     // Save and load model

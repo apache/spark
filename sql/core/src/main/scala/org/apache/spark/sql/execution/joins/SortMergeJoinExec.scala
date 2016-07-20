@@ -341,10 +341,10 @@ case class SortMergeJoinExec(
   }
 
   private def genComparision(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
-    val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
+    val comparisons = a.zip(b).zipWithIndex.map { case ((left, right), i) =>
       s"""
          |if (comp == 0) {
-         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
+         |  comp = ${ctx.genComp(leftKeys(i).dataType, left.value, right.value)};
          |}
        """.stripMargin.trim
     }

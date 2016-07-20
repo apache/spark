@@ -298,7 +298,7 @@ private[sql] object SQLTestData {
   case class DecimalData(a: BigDecimal, b: BigDecimal)
   case class BinaryData(a: Array[Byte], b: Int)
   case class UpperCaseData(N: Int, L: String)
-  case class LowerCaseData(n: Int, l: String)
+  case class LowerCaseData(n: Int, s: String)
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
   case class MapData(data: scala.collection.Map[Int, String])
   case class StringData(s: String)

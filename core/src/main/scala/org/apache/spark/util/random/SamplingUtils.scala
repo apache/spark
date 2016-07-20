@@ -52,17 +52,17 @@ private[spark] object SamplingUtils {
       (trimReservoir, i)
     } else {
       // If input size > k, continue the sampling process.
-      var l = i.toLong
+      var size = i.toLong
       val rand = new XORShiftRandom(seed)
       while (input.hasNext) {
         val item = input.next()
-        val replacementIndex = (rand.nextDouble() * l).toLong
+        val replacementIndex = (rand.nextDouble() * size).toLong
         if (replacementIndex < k) {
           reservoir(replacementIndex.toInt) = item
         }
-        l += 1
+        size += 1
       }
-      (reservoir, l)
+      (reservoir, size)
     }
   }
 

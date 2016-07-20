@@ -155,11 +155,11 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case i @ logical.InsertIntoTable(
-        l @ LogicalRelation(t: InsertableRelation, _, _),
+        lr @ LogicalRelation(t: InsertableRelation, _, _),
         partition, query, overwrite, ifNotExists) =>
         // Right now, we do not support insert into a data source table with partition specs.
         if (partition.nonEmpty) {
-          failAnalysis(s"Insert into a partition is not allowed because $l is not partitioned.")
+          failAnalysis(s"Insert into a partition is not allowed because $lr is not partitioned.")
         } else {
           // Get all input data source relations of the query.
           val srcRelations = query.collect {
@@ -202,9 +202,9 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           // OK
         }
 
-      case logical.InsertIntoTable(l: LogicalRelation, _, _, _, _) =>
+      case logical.InsertIntoTable(lr: LogicalRelation, _, _, _, _) =>
         // The relation in l is not an InsertableRelation.
-        failAnalysis(s"$l does not allow insertion.")
+        failAnalysis(s"$lr does not allow insertion.")
 
       case c: CreateTableUsingAsSelect =>
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
@@ -214,7 +214,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           EliminateSubqueryAliases(catalog.lookupRelation(c.tableIdent)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
-            case l @ LogicalRelation(dest: BaseRelation, _, _) =>
+            case LogicalRelation(dest: BaseRelation, _, _) =>
               // Get all input data source relations of the query.
               val srcRelations = c.child.collect {
                 case LogicalRelation(src: BaseRelation, _, _) => src

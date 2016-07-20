@@ -166,7 +166,7 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
 
 
     case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
+           LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
         if query.resolved && t.schema.asNullable == query.schema.asNullable =>
 
       // Sanity checks
@@ -245,35 +245,35 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
  */
 private[sql] object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
+    case PhysicalOperation(projects, filters, lr @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
-        l,
+        lr,
         projects,
         filters,
         (requestedColumns, allPredicates, _) =>
-          toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
+          toCatalystRDD(lr, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _, _)) =>
+    case PhysicalOperation(projects, filters, lr @ LogicalRelation(t: PrunedFilteredScan, _, _)) =>
       pruneFilterProject(
-        l,
+        lr,
         projects,
         filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
+        (a, f) => toCatalystRDD(lr, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _)) =>
+    case PhysicalOperation(projects, filters, lr @ LogicalRelation(t: PrunedScan, _, _)) =>
       pruneFilterProject(
-        l,
+        lr,
         projects,
         filters,
-        (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
+        (a, _) => toCatalystRDD(lr, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
-    case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
+    case lr @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.DataSourceScanExec.create(
-        l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
+        lr.output, toCatalystRDD(lr, baseRelation.buildScan()), baseRelation) :: Nil
 
-    case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
+    case i @ logical.InsertIntoTable(lr @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
-      ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
+      ExecutedCommandExec(InsertIntoDataSourceCommand(lr, query, overwrite)) :: Nil
 
     case _ => Nil
   }

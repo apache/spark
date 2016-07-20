@@ -196,9 +196,9 @@ case class CreateDataSourceTableAsSelectCommand(
 
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
-            case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+            case lr @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               // check if the file formats match
-              l.relation match {
+              lr.relation match {
                 case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
                   throw new AnalysisException(
                     s"The file format of the existing table $tableIdent is " +
@@ -206,12 +206,12 @@ case class CreateDataSourceTableAsSelectCommand(
                       s"format `$provider`")
                 case _ =>
               }
-              if (query.schema.size != l.schema.size) {
+              if (query.schema.size != lr.schema.size) {
                 throw new AnalysisException(
-                  s"The column number of the existing schema[${l.schema}] " +
+                  s"The column number of the existing schema[${lr.schema}] " +
                     s"doesn't match the data schema[${query.schema}]'s")
               }
-              existingSchema = Some(l.schema)
+              existingSchema = Some(lr.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
               existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
             case o =>

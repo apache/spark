@@ -415,7 +415,7 @@ object Decimal {
       case j: java.math.BigDecimal => apply(j)
       case d: BigDecimal => apply(d)
       case k: scala.math.BigInt => apply(k)
-      case l: java.math.BigInteger => apply(l)
+      case i: java.math.BigInteger => apply(i)
       case d: Decimal => d
     }
   }

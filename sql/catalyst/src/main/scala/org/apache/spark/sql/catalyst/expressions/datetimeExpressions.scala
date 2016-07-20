@@ -832,8 +832,8 @@ case class MonthsBetween(date1: Expression, date2: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (l, r) => {
-      s"""$dtu.monthsBetween($l, $r)"""
+    defineCodeGen(ctx, ev, (a, b) => {
+      s"""$dtu.monthsBetween($a, $b)"""
     })
   }
 

@@ -87,8 +87,8 @@ class ApproxQuantileSuite extends SparkFunSuite {
   } {
 
     val (data1, data2) = {
-      val l = data.size
-      data.take(l / 2) -> data.drop(l / 2)
+      val size = data.size
+      data.take(size / 2) -> data.drop(size / 2)
     }
 
     test(s"Merging ordered lists with epsi=$epsi and seq=$seq_name, compression=$compression") {

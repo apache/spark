@@ -110,7 +110,7 @@ package object util {
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
+      case (a, b) => (if (a == b) " " else "!") + a + (" " * ((maxLeftSize - a.length) + 3)) + b
     }
   }
 
