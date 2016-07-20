@@ -348,7 +348,7 @@ abstract class OffsetWindowFunction
    */
   override def foldable: Boolean = false
 
-  override def nullable: Boolean = default == null || default.nullable
+  override def nullable: Boolean = default == null || default.nullable || input.nullable
 
   override lazy val frame = {
     // This will be triggered by the Analyzer.
