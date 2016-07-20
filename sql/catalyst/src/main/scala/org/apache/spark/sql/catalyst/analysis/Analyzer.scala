@@ -1790,6 +1790,14 @@ class Analyzer(
   /**
    * Substitute Hints.
    * - BROADCAST/BROADCASTJOIN/MAPJOIN match the closest table with the given name parameters.
+   *
+   * This rule substitutes `UnresolvedRelation`s in `Substitute` batch before `ResolveRelations`
+   * rule is applied. Here are two reasons.
+   * - To support `MetastoreRelation` in Hive module.
+   * - To reduce the effect of `Hint` on the other rules.
+   *
+   * After this rule, it is guaranteed that there exists no unknown `Hint` in the plan.
+   * All new `Hint`s should be transformed into concrete Hint classes `BroadcastHint` here.
    */
   object SubstituteHints extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
