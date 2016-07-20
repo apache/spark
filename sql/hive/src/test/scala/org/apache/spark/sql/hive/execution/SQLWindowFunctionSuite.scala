@@ -372,37 +372,45 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
     checkAnswer(sql(
       """
         |SELECT
-        |  lag(123, 100, 321) OVER (ORDER BY id) as lag
+        |  lag(123, 100, 321) OVER (ORDER BY id) as lag,
+        |  lead(123, 100, 321) OVER (ORDER BY id) as lead
         |FROM (SELECT 1 as id) tmp
       """.stripMargin),
-      Row(321))
+      Row(321, 321))
 
     checkAnswer(sql(
       """
         |SELECT
-        |  lead(123, 100, 321) OVER (ORDER BY id) as lag
-        |FROM (SELECT 1 as id) tmp
+        |  lag(123, 100, a) OVER (ORDER BY id) as lag,
+        |  lead(123, 100, a) OVER (ORDER BY id) as lead
+        |FROM (SELECT 1 as id, 2 as a) tmp
       """.stripMargin),
-      Row(321))
+      Row(2, 2))
   }
 
   test("lead/lag should be able to handle null input value correctly") {
     checkAnswer(sql(
       """
         |SELECT
-        |  row_number() OVER (ORDER BY id) as row_number,
-        |  lag(id, 1, 321) OVER (ORDER BY id) as lag
-        |FROM (SELECT cast(null as int) as id UNION ALL select cast(null as int) as id) tmp
+        |  b,
+        |  lag(a, 1, 321) OVER (ORDER BY b) as lag,
+        |  lead(a, 1, 321) OVER (ORDER BY b) as lead
+        |FROM (SELECT cast(null as int) as a, 1 as b
+        |      UNION ALL
+        |      select cast(null as int) as id, 2 as b) tmp
       """.stripMargin),
-      Row(1, 321) :: Row(2, null) :: Nil)
+      Row(1, 321, null) :: Row(2, null, 321) :: Nil)
 
     checkAnswer(sql(
       """
         |SELECT
-        |  row_number() OVER (ORDER BY id) as row_number,
-        |  lead(id, 1, 321) OVER (ORDER BY id) as lead
-        |FROM (SELECT cast(null as int) as id UNION ALL select cast(null as int) as id) tmp
+        |  b,
+        |  lag(a, 1, c) OVER (ORDER BY b) as lag,
+        |  lead(a, 1, c) OVER (ORDER BY b) as lead
+        |FROM (SELECT cast(null as int) as a, 1 as b, 3 as c
+        |      UNION ALL
+        |      select cast(null as int) as id, 2 as b, 4 as c) tmp
       """.stripMargin),
-      Row(1, null) :: Row(2, 321) :: Nil)
+      Row(1, 3, null) :: Row(2, null, 4) :: Nil)
   }
 }
