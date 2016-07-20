@@ -80,7 +80,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
                 <li><strong>
                   {
                     if (parent.master.reverseProxy) {
-                      <a href={"/target/" + app.id + "/"}>Application Detail UI</a>
+                      <a href={"/proxy/" + app.id + "/"}>Application Detail UI</a>
                     } else {
                       <a href={app.desc.appUiUrl}>Application Detail UI</a>
                     }
@@ -109,7 +109,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   private def executorRow(executor: ExecutorDesc): Seq[Node] = {
     var workerUrlRef = executor.worker.webUiAddress
-    if (parent.master.reverseProxy) workerUrlRef = "/target/" + executor.worker.id + "/"
+    if (parent.master.reverseProxy) workerUrlRef = "/proxy/" + executor.worker.id + "/"
     <tr>
       <td>{executor.id}</td>
       <td>

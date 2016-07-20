@@ -178,7 +178,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>
         {
           if (parent.master.reverseProxy) {
-            <a href={"/target/" + worker.id + "/"}>{worker.id}</a>
+            <a href={"/proxy/" + worker.id + "/"}>{worker.id}</a>
           } else {
             <a href={worker.webUiAddress}>{worker.id}</a>
           }
@@ -217,7 +217,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             app.desc.name
           } else {
             if (parent.master.reverseProxy) {
-              <a href={"/target/" + app.id + "/"}>{app.desc.name}</a>
+              <a href={"/proxy/" + app.id + "/"}>{app.desc.name}</a>
             } else {
               <a href={app.desc.appUiUrl}>{app.desc.name}</a>
             }
@@ -256,7 +256,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{driver.submitDate}</td>
       <td>{driver.worker.map(w =>
         if (parent.master.reverseProxy) {
-          <a href={"/target/" + w.id.toString + "/"}>{w.id.toString}</a>
+          <a href={"/proxy/" + w.id.toString + "/"}>{w.id.toString}</a>
         } else {
           <a href={w.webUiAddress}>{w.id.toString}</a>
         }).getOrElse("None")}

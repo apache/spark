@@ -173,7 +173,7 @@ class MasterSuite extends SparkFunSuite
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
           val JString(workerId) = workerSummaryJson \ "id"
-          val url = s"http://localhost:${localCluster.masterWebUIPort}/target/${workerId}/json"
+          val url = s"http://localhost:${localCluster.masterWebUIPort}/proxy/${workerId}/json"
           val workerResponse = parse(Source.fromURL(url)
             .getLines().mkString("\n"))
           (workerResponse \ "cores").extract[Int] should be (2)
