@@ -37,6 +37,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   override def beforeAll(): Unit = {
     super.beforeAll()
     path = Utils.createTempDir()
+    path.delete()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     spark.read.json(rdd).createOrReplaceTempView("jt")
   }
@@ -44,18 +45,14 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   override def afterAll(): Unit = {
     try {
       spark.catalog.dropTempView("jt")
-      if (path.exists()) {
-        Utils.deleteRecursively(path)
-      }
+      Utils.deleteRecursively(path)
     } finally {
       super.afterAll()
     }
   }
 
   before {
-    if (path.exists()) {
-      Utils.deleteRecursively(path)
-    }
+    Utils.deleteRecursively(path)
   }
 
   test("CREATE TABLE USING AS SELECT") {
