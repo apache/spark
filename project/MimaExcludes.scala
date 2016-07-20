@@ -39,6 +39,10 @@ object MimaExcludes {
     Seq(
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
+    ) ++
+    Seq(
+      // [SPARK-16520] [WEBUI] Link executors to corresponding worker pages
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.ExecutorInfo.this")
     )
   }
 
