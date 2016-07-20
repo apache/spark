@@ -201,16 +201,12 @@ private[sql] trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
 /** Physical plan node for scanning data from a relation. */
 private[sql] case class RowDataSourceScanExec(
     output: Seq[Attribute],
-    @transient inputRDD: RDD[InternalRow],
+    rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String],
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
-
-  override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    inputRDD :: Nil
-  }
 
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -225,9 +221,9 @@ private[sql] case class RowDataSourceScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val unsafeRow = if (outputUnsafeRows) {
-      inputRDD
+      rdd
     } else {
-      inputRDD.mapPartitionsInternal { iter =>
+      rdd.mapPartitionsInternal { iter =>
         val proj = UnsafeProjection.create(schema)
         iter.map(proj)
       }
@@ -247,6 +243,10 @@ private[sql] case class RowDataSourceScanExec(
 
     s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
       s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    rdd :: Nil
   }
 
   override protected def doProduce(ctx: CodegenContext): String = {
