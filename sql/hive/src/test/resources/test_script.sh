@@ -19,5 +19,5 @@
 
 while read line
 do
-  echo "$line" | sed 's/\t/_/'
+  echo "$line" | awk '{sub(/\t/,"_");print $0}'
 done < /dev/stdin
