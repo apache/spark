@@ -94,13 +94,13 @@ private[spark] object RandomForest extends Logging {
       instr: Option[Instrumentation[_]],
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
-    val multiTimer = new MultiStopwatch(input.sparkContext)
+    val timers = new MultiStopwatch(input.sparkContext)
 
-    multiTimer.addLocal("total")
-    multiTimer("total").start()
+    timers.addLocal("total")
+    timers("total").start()
 
-    multiTimer.addLocal("init")
-    multiTimer("init").start()
+    timers.addLocal("init")
+    timers("init").start()
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
@@ -116,10 +116,10 @@ private[spark] object RandomForest extends Logging {
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
-    multiTimer.addLocal("findSplitsBins")
-    multiTimer("findSplitsBins").start()
+    timers.addLocal("findSplitsBins")
+    timers("findSplitsBins").start()
     val splits = findSplits(retaggedInput, metadata, seed)
-    multiTimer("findSplitsBins").stop()
+    timers("findSplitsBins").stop()
 
     logDebug("numBins: feature: number of bins")
     logDebug(Range(0, metadata.numFeatures).map { featureIndex =>
@@ -146,7 +146,7 @@ private[spark] object RandomForest extends Logging {
     val maxMemoryUsage: Long = strategy.maxMemoryInMB * 1024L * 1024L
     logDebug("max memory usage for aggregates = " + maxMemoryUsage + " bytes.")
 
-    multiTimer("init").stop()
+    timers("init").stop()
     /*
      * The main idea here is to perform group-wise training of the decision tree nodes thus
      * reducing the passes over the data from (# nodes) to (# nodes / maxNumberOfNodesPerGroup).
@@ -175,9 +175,9 @@ private[spark] object RandomForest extends Logging {
     // Allocate and queue root nodes.
     val topNodes = Array.fill[LearningNode](numTrees)(LearningNode.emptyNode(nodeIndex = 1))
     Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
-    multiTimer.addLocal("findBestSplits")
-    multiTimer.addLocal("chooseSplits")
-    multiTimer.addDistributed("binsToBestSplit")
+    timers.addLocal("findBestSplits")
+    timers.addLocal("chooseSplits")
+    timers.addDistributed("binsToBestSplit")
 
     while (nodeQueue.nonEmpty) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
@@ -189,18 +189,18 @@ private[spark] object RandomForest extends Logging {
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
 
       // Choose node splits, and enqueue new nodes as needed.
-      multiTimer("findBestSplits").start()
+      timers("findBestSplits").start()
       RandomForest.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
-        treeToNodeToIndexInfo, splits, nodeQueue, multiTimer, nodeIdCache)
-      multiTimer("findBestSplits").stop()
+        treeToNodeToIndexInfo, splits, nodeQueue, Option(timers), nodeIdCache)
+      timers("findBestSplits").stop()
     }
 
     baggedInput.unpersist()
 
-    multiTimer("total").stop()
+    timers("total").stop()
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$multiTimer")
+    logInfo(s"$timers")
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
@@ -362,7 +362,7 @@ private[spark] object RandomForest extends Logging {
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       splits: Array[Array[Split]],
       nodeQueue: mutable.Queue[(Int, LearningNode)],
-      multiTimer: MultiStopwatch,
+      multiStopwatch: Option[MultiStopwatch] = None,
       nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
     /*
@@ -485,6 +485,13 @@ private[spark] object RandomForest extends Logging {
       }
     }
 
+    val timers = multiStopwatch match {
+      case Some(timers) => timers
+      case None => new MultiStopwatch(input.sparkContext)
+                     .addLocal("chooseSplits")
+                     .addLocal("binsToBestSplit")
+    }
+
     // array of nodes to train indexed by node index in group
     val nodes = new Array[LearningNode](numNodes)
     nodesForGroup.foreach { case (treeIndex, nodesForTree) =>
@@ -494,7 +501,7 @@ private[spark] object RandomForest extends Logging {
     }
 
     // Calculate best splits for all nodes in the group
-    multiTimer("chooseSplits").start()
+    timers("chooseSplits").start()
 
     // In each partition, iterate all instances and compute aggregate stats for each node,
     // yield a (nodeIndex, nodeAggregateStats) pair for each node.
@@ -550,14 +557,14 @@ private[spark] object RandomForest extends Logging {
         }
 
         // find best split for each node
-        multiTimer("binsToBestSplit").start()
+        timers("binsToBestSplit").start()
         val (split: Split, stats: ImpurityStats) =
           binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
-        multiTimer("binsToBestSplit").stop()
+        timers("binsToBestSplit").stop()
         (nodeIndex, (split, stats))
     }.collectAsMap()
 
-    multiTimer("chooseSplits").stop()
+    timers("chooseSplits").stop()
 
     val nodeIdUpdaters = if (nodeIdCache.nonEmpty) {
       Array.fill[mutable.Map[Int, NodeIndexUpdater]](
