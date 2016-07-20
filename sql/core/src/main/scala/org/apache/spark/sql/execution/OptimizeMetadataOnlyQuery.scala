@@ -98,12 +98,16 @@ case class OptimizeMetadataOnlyQuery(
 
     case relation: CatalogRelation =>
       val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
-      val partitionData = catalog.listPartitionsByFilter(relation.catalogTable.identifier, filters)
-        .map { p =>
-          InternalRow.fromSeq(partAttrs.map { attr =>
-            Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
-          })
-        }
+      val rawPartitions = if (conf.metastorePartitionPruning) {
+        catalog.listPartitionsByFilter(relation.catalogTable.identifier, filters)
+      } else {
+        catalog.listPartitions(relation.catalogTable.identifier)
+      }
+      val partitionData = rawPartitions.map { p =>
+        InternalRow.fromSeq(partAttrs.map { attr =>
+          Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
+        })
+      }
       LocalRelation(partAttrs, partitionData)
 
     case _ =>
