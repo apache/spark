@@ -39,14 +39,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
@@ -184,7 +183,8 @@ class Dataset[T] private[sql](
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
-      case Union(children) if children.forall(hasSideEffects) =>
+      case Union(children) if children.forall(x =>
+          x.isInstanceOf[InsertIntoTable] || x.isInstanceOf[InsertIntoHadoopFsRelationCommand]) =>
         LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
       case _ =>
         queryExecution.analyzed
