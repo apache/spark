@@ -96,7 +96,8 @@ private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with 
 
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
-      ParquetReadSupport.expandUDT(catalystRequestedSchema))
+      ParquetReadSupport.expandUDT(catalystRequestedSchema),
+      new ParquetSchemaConverter(conf))
   }
 }
 
