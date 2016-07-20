@@ -23,16 +23,13 @@ from pyspark.ml.clustering import LDA
 # $example off$
 from pyspark.sql import SparkSession
 
-
 """
 An example demonstrating LDA.
 Run with:
   bin/spark-submit examples/src/main/python/ml/lda_example.py
 """
 
-
 if __name__ == "__main__":
-    # Creates a SparkSession
     spark = SparkSession \
         .builder \
         .appName("LDAExample") \

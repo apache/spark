@@ -175,11 +175,12 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val CRC32 = "java.util.zip.CRC32"
+    val checksum = ctx.freshName("checksum")
     nullSafeCodeGen(ctx, ev, value => {
       s"""
-        $CRC32 checksum = new $CRC32();
-        checksum.update($value, 0, $value.length);
-        ${ev.value} = checksum.getValue();
+        $CRC32 $checksum = new $CRC32();
+        $checksum.update($value, 0, $value.length);
+        ${ev.value} = $checksum.getValue();
       """
     })
   }
