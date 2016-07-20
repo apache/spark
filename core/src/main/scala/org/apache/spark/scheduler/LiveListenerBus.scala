@@ -21,8 +21,9 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.DynamicVariable
-import org.apache.spark.internal.config._
+
 import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**

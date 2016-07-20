@@ -18,8 +18,8 @@
 package org.apache.spark.ui.storage
 
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 
