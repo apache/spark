@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.DynamicVariable
 
+import org.apache.spark.internal.config._
 import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
 
@@ -40,8 +41,7 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
 
   // Cap the capacity of the event queue so we get an explicit error (rather than
   // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
-  private lazy val EVENT_QUEUE_CAPACITY = sparkContext.conf.
-    getInt("spark.scheduler.listenerbus.eventqueue.size", 10000)
+  private lazy val EVENT_QUEUE_CAPACITY = sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_SIZE)
   private lazy val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
 
   // Indicate if `start()` is called

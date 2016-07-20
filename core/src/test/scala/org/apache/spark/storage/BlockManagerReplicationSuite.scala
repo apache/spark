@@ -93,7 +93,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
 
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(new SparkContext(conf)))), conf, true)
+        new LiveListenerBus(new SparkContext("local", "test", conf)))), conf, true)
     allStores.clear()
   }
 

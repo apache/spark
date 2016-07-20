@@ -37,7 +37,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   val jobCompletionTime = 1421191296660L
 
   test("don't call sc.stop in listener") {
-    sc = new SparkContext("local", "SparkListenerSuite")
+    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
     val listener = new SparkContextStoppingListener(sc)
     val bus = new LiveListenerBus(sc)
     bus.addListener(listener)

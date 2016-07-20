@@ -79,7 +79,7 @@ class ReceivedBlockHandlerSuite
 
     blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(new SparkContext(conf)))), conf, true)
+        new LiveListenerBus(new SparkContext("local", "test", conf)))), conf, true)
 
     storageLevel = StorageLevel.MEMORY_ONLY_SER
     blockManager = createBlockManager(blockManagerSize, conf)

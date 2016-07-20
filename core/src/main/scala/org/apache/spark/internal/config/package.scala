@@ -19,6 +19,7 @@ package org.apache.spark.internal
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.SparkException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 
@@ -103,4 +104,16 @@ package object config {
     .stringConf
     .checkValues(Set("hive", "in-memory"))
     .createWithDefault("in-memory")
+
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
+      .intConf
+      .transform((x: Int) => {
+        if (x <= 0) {
+          throw new SparkException("spark.scheduler.listenerbus.eventqueue.size must be > 0!")
+        } else {
+          x
+        }
+      })
+      .createWithDefault(10000)
 }

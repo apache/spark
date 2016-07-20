@@ -44,7 +44,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     val conf = new SparkConf()
-    bus = new LiveListenerBus(new SparkContext(conf))
+    bus = new LiveListenerBus(new SparkContext("local", "test", conf))
     storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
