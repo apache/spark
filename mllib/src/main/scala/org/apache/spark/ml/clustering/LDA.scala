@@ -21,14 +21,15 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Matrix, Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
-import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel, EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel, LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel, OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVector, Vectors => OldVectors}
@@ -44,7 +45,7 @@ import org.apache.spark.sql.types.StructType
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
 
-  /**
+   /*
     * Param for the number of topics (clusters) to infer. Must be > 1. Default: 10.
     *
     * @group param
@@ -57,7 +58,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getK: Int = $(k)
 
-  /**
+   /*
     * Concentration parameter (commonly named "alpha") for the prior placed on documents'
     * distributions over topics ("theta").
     *
@@ -101,7 +102,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     }
   }
 
-  /**
+   /*
     * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
     * distributions over terms.
     *
@@ -147,7 +148,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val supportedOptimizers: Array[String] = Array("online", "em")
 
-  /**
+   /*
     * Optimizer or inference algorithm used to estimate the LDA model.
     * Currently supported (case-insensitive):
     * - "online": Online Variational Bayes (default)
@@ -174,7 +175,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getOptimizer: String = $(optimizer)
 
-  /**
+   /*
     * Output column with estimates of the topic mixture distribution for each document (often called
     * "theta" in the literature).  Returns a vector of zeros for an empty document.
     *
@@ -195,7 +196,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getTopicDistributionCol: String = $(topicDistributionCol)
 
-  /**
+   /*
     * For Online optimizer only: [[optimizer]] = "online".
     *
     * A (positive) learning parameter that downweights early iterations. Larger values make early
@@ -215,7 +216,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getLearningOffset: Double = $(learningOffset)
 
-  /**
+   /*
     * For Online optimizer only: [[optimizer]] = "online".
     *
     * Learning rate, set as an exponential decay rate.
@@ -234,7 +235,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getLearningDecay: Double = $(learningDecay)
 
-  /**
+   /*
     * For Online optimizer only: [[optimizer]] = "online".
     *
     * Fraction of the corpus to be sampled and used in each iteration of mini-batch
@@ -261,7 +262,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getSubsamplingRate: Double = $(subsamplingRate)
 
-  /**
+   /*
     * For Online optimizer only (currently): [[optimizer]] = "online".
     *
     * Indicates whether the docConcentration (Dirichlet parameter for
@@ -280,7 +281,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
 
-  /**
+   /*
     * For EM optimizer only: [[optimizer]] = "em".
     *
     * If using checkpointing, this indicates whether to keep the last
@@ -305,7 +306,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("2.0.0")
   def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
 
-  /**
+   /*
     * Validates and transforms the input schema.
     *
     * @param schema input schema
