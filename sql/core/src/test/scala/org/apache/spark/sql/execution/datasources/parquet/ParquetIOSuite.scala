@@ -169,6 +169,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-16562 Do not allow downcast in INT32 based types for normal Parquet reader") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withTempPath { file =>
+        (1 to 4).toDF("a").write.parquet(file.getAbsolutePath)
+        val schema = StructType(StructField("a", ShortType, true) :: Nil)
+        val errorMessage = intercept[SparkException] {
+          spark.read.schema(schema).parquet(file.getAbsolutePath).collect()
+        }.toString
+        assert(errorMessage.contains("Unable to create Parquet converter for data type"))
+      }
+    }
+  }
+
   testStandardAndLegacyModes("map") {
     val data = (1 to 4).map(i => Tuple1(Map(i -> s"val_$i")))
     checkParquetFile(data)

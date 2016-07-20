@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, MessageType, PrimitiveType, Type}
-import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
+import org.apache.parquet.schema.OriginalType.{INT_16, INT_32, INT_8, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64}
 
 import org.apache.spark.internal.Logging
@@ -215,13 +215,13 @@ private[parquet] class ParquetRowConverter(
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
-      case ByteType =>
+      case ByteType if parquetType.asPrimitiveType.getOriginalType == INT_8 =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
             updater.setByte(value.asInstanceOf[ByteType#InternalType])
         }
 
-      case ShortType =>
+      case ShortType if parquetType.asPrimitiveType.getOriginalType == INT_16 =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
             updater.setShort(value.asInstanceOf[ShortType#InternalType])
