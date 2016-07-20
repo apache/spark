@@ -497,8 +497,8 @@ class ALSSuite
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
         } { (ex, act, _) =>
-          ex.transform(_: DataFrame).select("prediction").first.getFloat(0) ~==
-            act.transform(_: DataFrame).select("prediction").first.getFloat(0) absTol 1e-6
+          ex.transform(_: DataFrame).select("prediction").first.getDouble(0) ~==
+            act.transform(_: DataFrame).select("prediction").first.getDouble(0) absTol 1e-6
         }
     }
     // check user/item ids falling outside of Int range
@@ -541,8 +541,8 @@ class ALSSuite
   }
 
   test("ALS unknown user/item prediction strategy") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     import org.apache.spark.sql.functions._
 
     val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
