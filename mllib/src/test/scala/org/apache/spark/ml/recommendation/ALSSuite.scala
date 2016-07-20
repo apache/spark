@@ -540,7 +540,7 @@ class ALSSuite
     }
   }
 
-  test("ALS unknown user/item prediction strategy") {
+  test("ALS cold start user/item prediction strategy") {
     val spark = this.spark
     import spark.implicits._
     import org.apache.spark.sql.functions._
@@ -573,6 +573,17 @@ class ALSSuite
       .select("prediction").as[Float].collect()
     assert(dropPredictions.length == 1)
     assert(!dropPredictions.head.isNaN)
+  }
+
+  test("case insensitive cold start param value") {
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS().fit(data)
+    Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
+      model.setColdStartStrategy(s).transform(data)
+    }
   }
 }
 

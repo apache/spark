@@ -106,10 +106,10 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
     "useful in cross-validation or production scenarios, for handling user/item ids the model " +
     "has not seen in the training data. Supported values: " +
     s"${ALSModel.supportedColdStartStrategies.mkString(",")}.",
-    ParamValidators.inArray(ALSModel.supportedColdStartStrategies))
+    (s: String) => ALSModel.supportedColdStartStrategies.contains(s.toLowerCase))
 
   /** @group expertGetParam */
-  def getColdStartStrategy: String = $(coldStartStrategy)
+  def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase
 }
 
 /**
@@ -270,7 +270,7 @@ class ALSModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group expertSetParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
   @Since("2.0.0")
@@ -292,7 +292,7 @@ class ALSModel private[ml] (
         checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
-    $(coldStartStrategy) match {
+    getColdStartStrategy match {
       case ALSModel.Drop =>
         predictions.na.drop("all", Seq($(predictionCol)))
       case ALSModel.NaN =>
@@ -468,7 +468,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
 
   /** @group expertSetParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
   /**
