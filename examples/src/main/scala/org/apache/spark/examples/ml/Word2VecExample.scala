@@ -45,6 +45,7 @@ object Word2VecExample {
       .setVectorSize(3)
       .setMinCount(0)
     val model = word2Vec.fit(documentDF)
+
     val result = model.transform(documentDF)
     result.select("result").take(3).foreach(println)
     // $example off$

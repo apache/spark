@@ -51,7 +51,7 @@ setGeneric("collectPartition",
              standardGeneric("collectPartition")
            })
 
-# @rdname count
+# @rdname nrow
 # @export
 setGeneric("count", function(x) { standardGeneric("count") })
 
@@ -395,7 +395,7 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 
 ####################  SparkDataFrame Methods ########################
 
-#' @rdname agg
+#' @rdname summarize
 #' @export
 setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 
@@ -654,7 +654,7 @@ setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 # @export
 setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
-#' @rdname agg
+#' @rdname summarize
 #' @export
 setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 
@@ -779,13 +779,13 @@ setGeneric("rowsBetween", function(x, start, end) { standardGeneric("rowsBetween
 #' @export
 setGeneric("rangeBetween", function(x, start, end) { standardGeneric("rangeBetween") })
 
-#' @rdname window.partitionBy
+#' @rdname windowPartitionBy
 #' @export
-setGeneric("window.partitionBy", function(col, ...) { standardGeneric("window.partitionBy") })
+setGeneric("windowPartitionBy", function(col, ...) { standardGeneric("windowPartitionBy") })
 
-#' @rdname window.orderBy
+#' @rdname windowOrderBy
 #' @export
-setGeneric("window.orderBy", function(col, ...) { standardGeneric("window.orderBy") })
+setGeneric("windowOrderBy", function(col, ...) { standardGeneric("windowOrderBy") })
 
 ###################### Expression Function Methods ##########################
 
@@ -1022,7 +1022,7 @@ setGeneric("month", function(x) { standardGeneric("month") })
 #' @export
 setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
 
-#' @rdname count
+#' @rdname nrow
 #' @export
 setGeneric("n", function(x) { standardGeneric("n") })
 

@@ -352,7 +352,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }.getMessage
     assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
 
-    catalog.dropTable(tableIdent1, ignoreIfNotExists = false)
+    catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 
     assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName RESTRICT")

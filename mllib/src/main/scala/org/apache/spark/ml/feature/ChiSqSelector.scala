@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -42,8 +42,8 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   /**
    * Number of features that selector will select (ordered by statistic value descending). If the
-   * number of features is < numTopFeatures, then this will select all features. The default value
-   * of numTopFeatures is 50.
+   * number of features is less than numTopFeatures, then this will select all features.
+   * The default value of numTopFeatures is 50.
    * @group param
    */
   final val numTopFeatures = new IntParam(this, "numTopFeatures",
@@ -57,11 +57,9 @@ private[feature] trait ChiSqSelectorParams extends Params
 }
 
 /**
- * :: Experimental ::
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
  * categorical label.
  */
-@Experimental
 @Since("1.6.0")
 final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams with DefaultParamsWritable {
@@ -116,10 +114,8 @@ object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[ChiSqSelector]].
  */
-@Experimental
 @Since("1.6.0")
 final class ChiSqSelectorModel private[ml] (
     @Since("1.6.0") override val uid: String,

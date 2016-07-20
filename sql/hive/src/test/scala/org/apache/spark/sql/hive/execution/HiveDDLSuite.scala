@@ -612,15 +612,17 @@ class HiveDDLSuite
   }
 
   test("desc table for data source table - no user-defined schema") {
-    withTable("t1") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(1).write.parquet(path)
-        sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
+    Seq("parquet", "json", "orc").foreach { fileFormat =>
+      withTable("t1") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(1).write.format(fileFormat).save(path)
+          sql(s"CREATE TABLE t1 USING $fileFormat OPTIONS (PATH '$path')")
 
-        val desc = sql("DESC FORMATTED t1").collect().toSeq
+          val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-        assert(desc.contains(Row("# Schema of this table is inferred at runtime", "", "")))
+          assert(desc.contains(Row("id", "bigint", "")))
+        }
       }
     }
   }

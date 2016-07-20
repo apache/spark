@@ -20,7 +20,7 @@ package org.apache.spark.ml.linalg;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.apache.spark.ml.linalg.sqlDataTypes.*;
+import static org.apache.spark.ml.linalg.SQLDataTypes.*;
 
 public class JavaSQLDataTypesSuite {
   @Test

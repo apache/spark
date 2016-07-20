@@ -35,7 +35,12 @@ import com.typesafe.tools.mima.core.ProblemFilters._
 object MimaExcludes {
 
   // Exclude rules for 2.1.x
-  lazy val v21excludes = v20excludes
+  lazy val v21excludes = v20excludes ++ {
+    Seq(
+      // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
+    )
+  }
 
   // Exclude rules for 2.0.x
   lazy val v20excludes = {

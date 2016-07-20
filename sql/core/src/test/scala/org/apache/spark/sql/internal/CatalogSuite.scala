@@ -62,7 +62,7 @@ class CatalogSuite
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
-    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false)
+    sessionCatalog.dropTable(TableIdentifier(name, db), ignoreIfNotExists = false, purge = false)
   }
 
   private def createFunction(name: String, db: Option[String] = None): Unit = {
