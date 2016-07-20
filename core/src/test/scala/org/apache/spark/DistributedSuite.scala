@@ -21,6 +21,7 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.internal.config.BLACKLIST_ENABLED
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -109,7 +110,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("repeatedly failing task") {
     val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
-      .set("spark.scheduler.blacklist.enabled", "false")
+      .set(BLACKLIST_ENABLED, false)
     sc = new SparkContext(conf)
     val thrown = intercept[SparkException] {
       // scalastyle:off println
@@ -125,7 +126,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     // than hanging due to retrying the failed task infinitely many times (eventually the
     // standalone scheduler will remove the application, causing the job to hang waiting to
     // reconnect to the master).
-    sc = new SparkContext(clusterUrl, "test")
+    val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
+      .set(BLACKLIST_ENABLED, false)
+    sc = new SparkContext(conf)
     failAfter(Span(100000, Millis)) {
       val thrown = intercept[SparkException] {
         // One of the tasks always fails.
