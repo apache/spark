@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
-
+import org.apache.spark.sql.test.SharedSQLContext
 
 case class WindowData(month: Int, area: String, product: Int)
 
@@ -28,8 +26,9 @@ case class WindowData(month: Int, area: String, product: Int)
 /**
  * Test suite for SQL window functions.
  */
-class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import spark.implicits._
+class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
+
+  import testImplicits._
 
   test("window function: udaf with aggregate expression") {
     val data = Seq(
@@ -357,15 +356,14 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {
-    sql("SELECT * FROM src") // Force loading of src table.
-
     checkAnswer(sql(
       """
         |with
-        | v1 as (select key, count(value) over (partition by key) cnt_val from src),
+        | v0 as (select 0 as key, 1 as value),
+        | v1 as (select key, count(value) over (partition by key) cnt_val from v0),
         | v2 as (select v1.key, v1_lag.cnt_val from v1, v1 v1_lag where v1.key = v1_lag.key)
-        | select * from v2 order by key limit 1
-      """.stripMargin), Row(0, 3))
+        | select key, cnt_val from v2 order by key limit 1
+      """.stripMargin), Row(0, 1))
   }
 
   test("lead/lag should return the default value if the offset row does not exist") {
