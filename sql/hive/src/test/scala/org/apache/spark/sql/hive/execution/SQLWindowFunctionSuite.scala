@@ -367,4 +367,42 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
         | select * from v2 order by key limit 1
       """.stripMargin), Row(0, 3))
   }
+
+  test("lead/lag should return the default value if the offset row does not exist") {
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  lag(123, 100, 321) OVER (ORDER BY id) as lag
+        |FROM (SELECT 1 as id) tmp
+      """.stripMargin),
+      Row(321))
+
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  lead(123, 100, 321) OVER (ORDER BY id) as lag
+        |FROM (SELECT 1 as id) tmp
+      """.stripMargin),
+      Row(321))
+  }
+
+  test("lead/lag should be able to handle null input value correctly") {
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  row_number() OVER (ORDER BY id) as row_number,
+        |  lag(id, 1, 321) OVER (ORDER BY id) as lag
+        |FROM (SELECT cast(null as int) as id UNION ALL select cast(null as int) as id) tmp
+      """.stripMargin),
+      Row(1, 321) :: Row(2, null) :: Nil)
+
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  row_number() OVER (ORDER BY id) as row_number,
+        |  lead(id, 1, 321) OVER (ORDER BY id) as lead
+        |FROM (SELECT cast(null as int) as id UNION ALL select cast(null as int) as id) tmp
+      """.stripMargin),
+      Row(1, null) :: Row(2, 321) :: Nil)
+  }
 }
