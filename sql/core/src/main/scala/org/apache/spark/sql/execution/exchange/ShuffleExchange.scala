@@ -23,6 +23,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
@@ -83,7 +84,7 @@ case class ShuffleExchange(
    */
   private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
     ShuffleExchange.prepareShuffleDependency(
-      child.execute(), child.output, newPartitioning, serializer)
+      child.execute(), child.output, newPartitioning, serializer, sqlContext)
   }
 
   /**
@@ -198,7 +199,8 @@ object ShuffleExchange {
       rdd: RDD[InternalRow],
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
-      serializer: Serializer): ShuffleDependency[Int, InternalRow, InternalRow] = {
+      serializer: Serializer,
+      sqlContext: SQLContext): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
@@ -263,6 +265,11 @@ object ShuffleExchange {
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
         serializer)
+
+    // Register shuffle ids to clean up just after jobs finished
+    if (sqlContext.conf.shuffleCleanupEnabled) {
+      sqlContext.sessionState.shuffleIdsToCleanup.add(dependency.shuffleId)
+    }
 
     dependency
   }

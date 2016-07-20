@@ -18,10 +18,15 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
@@ -62,6 +67,36 @@ private[sql] class SessionState(sparkSession: SparkSession) {
       }
     }
     hadoopConf
+  }
+
+  /**
+   * Shuffle IDs to clean up in running SQL queries. Although shuffle files are garbage-collected by
+   * [[org.apache.spark.ContextCleaner]] at some time, bigger shuffle files consume much disk space.
+   * So, we remove all the files just after jobs finished because they could not be reused between
+   * different jobs.
+   */
+  lazy val shuffleIdsToCleanup =
+    Collections.newSetFromMap(new ConcurrentHashMap[Int, java.lang.Boolean]())
+  lazy val jobIdToShuffleIds = new mutable.HashMap[Int, Seq[Int]]
+
+  if (conf.shuffleCleanupEnabled) {
+    sparkSession.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
+        jobIdToShuffleIds(jobStart.jobId) = jobStart.stageInfos.flatMap(
+          sparkSession.sparkContext.dagScheduler.stageIdToShuffleId)
+      }
+
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
+        val jobId = jobEnd.jobId
+        jobIdToShuffleIds(jobId).map { shuffleId =>
+          if (shuffleIdsToCleanup.contains(shuffleId)) {
+            sparkSession.sparkContext.env.blockManager.master.removeShuffle(shuffleId, false)
+            shuffleIdsToCleanup.remove(shuffleId)
+          }
+        }
+        jobIdToShuffleIds -= jobId
+      }
+    })
   }
 
   lazy val experimentalMethods = new ExperimentalMethods
