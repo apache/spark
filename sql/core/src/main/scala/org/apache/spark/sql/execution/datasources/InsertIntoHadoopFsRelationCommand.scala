@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.spark._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
@@ -66,7 +67,7 @@ private[sql] case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode)
   extends RunnableCommand {
 
-  override def children: Seq[LogicalPlan] = query :: Nil
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
