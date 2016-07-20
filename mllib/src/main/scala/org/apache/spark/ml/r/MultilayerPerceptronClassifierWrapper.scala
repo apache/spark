@@ -21,13 +21,29 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.ml.PipelineModel
+import org.apache.spark.ml.{Pipeline, PipelineModel}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, MultilayerPerceptronClassifierModel}
+import org.apache.spark.ml.feature.{IndexToString, RFormula}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class MultilayerPerceptronClassifierWrapper private (
     val pipeline: PipelineModel,
     val labels: Array[String],
     val features: Array[String]) extends MLWritable {
+
+  import MultilayerPerceptronClassifierWrapper._
+
+  private val multilayerPerceptronClassifierModel: MultilayerPerceptronClassifierModel =
+    pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassifierModel]
+
+  def transform(dataset: Dataset[_]): DataFrame = {
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+//      .drop(MultilayerPerceptronClassifierModel.getFeaturesCol)
+  }
 
   /**
    * Returns an [[MLWriter]] instance for this ML instance.
@@ -38,6 +54,54 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 
 private[r] object MultilayerPerceptronClassifierWrapper
   extends MLReadable[MultilayerPerceptronClassifierWrapper] {
+
+  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
+  val PREDICTED_LABEL_COL = "prediction"
+
+  def fit(
+      formula: String,
+      data: DataFrame,
+      blockSize: Int,
+      layers: Array[Int],
+      initialWeights: Vector,
+      solver: String,
+      seed: Long,
+      maxIter: Int,
+      tol: Double,
+      stepSize: Double
+     ): MultilayerPerceptronClassifierWrapper = {
+    val rFormula = new RFormula()
+      .setFormula(formula)
+      .fit(data)
+    // get labels and feature names from output schema
+    val schema = rFormula.transform(data).schema
+    val labelAttr = Attribute.fromStructField(schema(rFormula.getLabelCol))
+      .asInstanceOf[NominalAttribute]
+    val labels = labelAttr.values.get
+    val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
+      .attributes.get
+    val features = featureAttrs.map(_.name.get)
+    // assemble and fit the pipeline
+    val mlp = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(blockSize)
+      .setSolver(solver)
+      .setMaxIter(maxIter)
+      .setTol(tol)
+      .setSeed(seed)
+      .setInitialWeights(initialWeights)
+      .setStepSize(stepSize)
+      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
+    val idxToStr = new IndexToString()
+      .setInputCol(PREDICTED_LABEL_INDEX_COL)
+      .setOutputCol(PREDICTED_LABEL_COL)
+      .setLabels(labels)
+    val pipeline = new Pipeline()
+      .setStages(Array(rFormula, mlp, idxToStr))
+      .fit(data)
+    new MultilayerPerceptronClassifierWrapper(pipeline, labels, features)
+  }
+
   /**
     * Returns an [[MLReader]] instance for this class.
     */
@@ -46,6 +110,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
   class MultilayerPerceptronClassifierWrapperReader
     extends MLReader[MultilayerPerceptronClassifierWrapper]{
+
     override def load(path: String): NaiveBayesWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString

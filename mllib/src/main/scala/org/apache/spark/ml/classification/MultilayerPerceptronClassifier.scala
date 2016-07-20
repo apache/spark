@@ -380,3 +380,14 @@ object MultilayerPerceptronClassificationModel
     }
   }
 }
+
+abstract private[ml] class MultilayerPerceptronClassifierModel [
+    FeaturesType,
+    M <: ProbabilisticClassificationModel[FeaturesType, M]]
+  extends ClassificationModel[FeaturesType, M] {
+  // @todo:implement model part
+}
+
+private[ml] object MultilayerPerceptronClassifierModel {
+  // @todo:implement model part
+}

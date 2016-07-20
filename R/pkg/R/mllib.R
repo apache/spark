@@ -414,7 +414,7 @@ setMethod("predict", signature(object = "KMeansModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Naive Bayes Models
+#' Multilayer Perceptron Classifier Model
 #'
 #' \code{spark.monmlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
@@ -455,10 +455,12 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.monmlp since 2.0.0
 setMethod("spark.monmlp", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, smoothing = 1.0, ...) {
+          function(data, formula, blockSize, initialWeights, layers,
+                   solver, seed, maxIter, tol, stepSize, ...) {
             formula <- paste(deparse(formula), collapse = "")
-            jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper", "fit",
-            formula, data@sdf, smoothing)
+            jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
+                                "fit", formula, data@sdf, blockSize, initialWeights, layers,
+                                solver, seed, maxIter, tol, stepSize)
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
 
