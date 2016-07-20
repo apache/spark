@@ -253,12 +253,14 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
 
     val summarizer2 = new MultivariateOnlineSummarizer()
     summarizer2.add(Vectors.dense(10.0, -10.0), 1e10)
-    for (i <- 1 to 100)
+    for (i <- 1 to 100) {
       summarizer2.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
 
     val summarizer3 = new MultivariateOnlineSummarizer()
-    for (i <- 1 to 100)
+    for (i <- 1 to 100) {
       summarizer3.add(Vectors.dense(0.0, 0.0), 1e-7)
+    }
     summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
 
     assert(summarizer1.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
