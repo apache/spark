@@ -289,9 +289,6 @@ private[sql] case class FileSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
-  /**
-   * Whether to perform a vectorized scan.
-   */
   private val supportsBatch = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
