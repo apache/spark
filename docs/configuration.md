@@ -1149,17 +1149,63 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.blacklist.enabled</code></td>
-  <td>true</td>
+  <td><code>spark.blacklist.enabled</code></td>
   <td>
-    If set to "true", prevent Spark from scheduling tasks on executors that have been blacklisted due to too many task failures. The blacklisting algorithm can be further controlled by the other "spark.scheduler.blacklist" configuration options.
+    <code>true</code> in cluster mode; <br/>
+    <code>false</code> in local mode
+  </td>
+  <td>
+    If set to "true", prevent Spark from scheduling tasks on executors that have been blacklisted
+    due to too many task failures. The blacklisting algorithm can be further controlled by the
+    other "spark.blacklist" configuration options.
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.blacklist.MORE</code></td>
-  <td>TODO</td>
+  <td><code>spark.blacklist.recoveryTime</code></td>
+  <td>1h</td>
   <td>
-    TODO
+    How long a node or executor is blacklisted for the entire application, before it is
+    unconditionally removed from the blacklist to attempt running new tasks.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.maxTaskAttemptsPerNode</code></td>
+  <td>2</td>
+  <td>
+    For a given task, how many executors the task can fail on, before the entire node is blacklisted
+    for the given task
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.maxFailedTasksPerExecutorStage</code>
+  <td>2</td>
+  <td>
+    How many different tasks must fail on one executor, within one stage, before the executor is
+    blacklisted for that stage.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.maxFailedExecutorsPerNodeStage</code></td>
+  <td>2</td>
+  <td>
+    How many different executors are marked as failed for a given stage, before the entire node
+    is marked as failed for the stage.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.maxFailedTasksPerExecutor</code></td>
+  <td>2</td>
+  <td>
+    How many different tasks must fail on one executor, in successful task sets, before the executor
+    is blacklisted for the entire application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.maxFailedExecutorsPerNode</code></td>
+  <td>2</td>
+  <td>
+    How many different executors must be blacklisted for the entire application, before the node is
+    blacklisted for the entire application.
   </td>
 </tr>
 <tr>

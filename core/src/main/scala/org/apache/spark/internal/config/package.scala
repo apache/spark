@@ -99,7 +99,7 @@ package object config {
 
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
-    ConfigBuilder("spark.scheduler.blacklist.enabled")
+    ConfigBuilder("spark.blacklist.enabled")
     .booleanConf
     .createOptional
 
