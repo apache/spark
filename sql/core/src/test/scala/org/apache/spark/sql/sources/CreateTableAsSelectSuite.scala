@@ -200,7 +200,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
     }
   }
 
-  test("create table using as select - with non-zero bucket") {
+  test("create table using as select - with non-zero buckets") {
     val catalog = spark.sessionState.catalog
     withTable("t") {
       sql(
@@ -217,7 +217,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
     }
   }
 
-  test("create table using as select - with zero bucket") {
+  test("create table using as select - with zero buckets") {
     withTable("t") {
       val e = intercept[AnalysisException] {
         sql(

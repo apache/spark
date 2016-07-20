@@ -1265,11 +1265,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("create table using cluster by without schema specification") {
+  test("create table using CLUSTERED BY without schema specification") {
     import testImplicits._
     withTempPath { tempDir =>
       withTable("jsonTable") {
-        (("a", "b") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
         val e = intercept[ParseException] {
         sql(
