@@ -986,7 +986,7 @@ private class LeastSquaresCostFun(
               // perform this reverse standardization by penalizing each component
               // differently to get effectively the same objective function when
               // the training dataset is not standardized.
-              val temp = value / (featuresStd(index) * featuresStd(index))
+              val temp = value * (featuresStd(index) * featuresStd(index))
               totalGradientArray(index) += effectiveL2regParam * temp
               value * temp
             } else {
