@@ -49,6 +49,7 @@ object GaussianMixtureExample {
 
     // output parameters of mixture model model
     for (i <- 0 until model.getK) {
+      println(s"Gaussian $i")
       println("weight=%f\nmu=%s\nsigma=\n%s\n" format
         (model.weights(i), model.gaussians(i).mean, model.gaussians(i).cov))
     }
