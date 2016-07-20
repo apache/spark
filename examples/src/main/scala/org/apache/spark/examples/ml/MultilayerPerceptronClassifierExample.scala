@@ -66,7 +66,7 @@ object MultilayerPerceptronClassifierExample {
     val evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("accuracy")
 
-    println("Accuracy: " + evaluator.evaluate(predictionAndLabels))
+    println("Model accuracy on test set: " + evaluator.evaluate(predictionAndLabels))
     // $example off$
 
     spark.stop()
