@@ -24,7 +24,7 @@
 
  and then run the example
     `$ bin/spark-submit --jars \
-      external/kafka-0-8-assembly/target/scala-*/spark-streaming-kafka-assembly-*.jar \
+      external/kafka-0-10-assembly/target/scala-*/spark-streaming-kafka-assembly-*.jar \
       examples/src/main/python/streaming/direct_kafka_wordcount.py \
       localhost:9092 test`
 """
@@ -34,19 +34,22 @@ import sys
 
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
-from pyspark.streaming.kafka import KafkaUtils
+from pyspark.streaming.kafka010 import KafkaUtils, PreferBrokers, Subscribe
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: direct_kafka_wordcount.py <broker_list> <topic>", file=sys.stderr)
+        print("Usage: direct_kafka010_wordcount.py <broker_list> <topic>", file=sys.stderr)
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingDirectKafkaWordCount")
     ssc = StreamingContext(sc, 2)
 
     brokers, topic = sys.argv[1:]
-    kvs = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": brokers})
-    lines = kvs.map(lambda x: x[1])
+    kafkaParams = {"bootstrap.servers": brokers, "group.id": "test"}
+    subscribe = Subscribe([topic], kafkaParams)
+    preferBrokers = PreferBrokers()
+
+    lines = KafkaUtils.createDirectStream(ssc, preferBrokers, subscribe).map(lambda c: c.value)
     counts = lines.flatMap(lambda line: line.split(" ")) \
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a+b)
