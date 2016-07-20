@@ -109,9 +109,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val scan =
         new FileSourceScanExec(
+          fsRelation,
           outputAttributes,
           outputSchema,
-          fsRelation,
           partitionKeyFilters.toSeq,
           pushedDownFilters,
           table)

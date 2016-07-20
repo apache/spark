@@ -281,11 +281,11 @@ private[sql] case class RowDataSourceScanExec(
 
 /** Physical plan node for scanning data from files. */
 private[sql] case class FileSourceScanExec(
+    @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
     outputSchema: StructType,
-    @transient relation: HadoopFsRelation,
-    @transient partitionFilters: Seq[Expression],
-    @transient dataFilters: Seq[Filter],
+    partitionFilters: Seq[Expression],
+    dataFilters: Seq[Filter],
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
@@ -294,6 +294,14 @@ private[sql] case class FileSourceScanExec(
    */
   private val supportsBatch = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
+
+  // TODO(ekl) why is this not equivalent to !supportsBatch?
+  private val outputUnsafeRows = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+    !SparkSession.getActiveSession.get.sessionState.conf.getConf(
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+  } else {
+    true
+  }
 
   override val outputPartitioning = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
@@ -359,7 +367,20 @@ private[sql] case class FileSourceScanExec(
       // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
       WholeStageCodegenExec(this).execute()
     } else {
-      buildScan()
+      val unsafeRow = if (outputUnsafeRows) {
+        buildScan()
+      } else {
+        buildScan().mapPartitionsInternal { iter =>
+          val proj = UnsafeProjection.create(schema)
+          iter.map(proj)
+        }
+      }
+
+      val numOutputRows = longMetric("numOutputRows")
+      unsafeRow.map { r =>
+        numOutputRows += 1
+        r
+      }
     }
   }
 
@@ -369,24 +390,6 @@ private[sql] case class FileSourceScanExec(
     }
     val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
     s"File$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
-  }
-
-  private def genCodeColumnVector(ctx: CodegenContext, columnVar: String, ordinal: String,
-    dataType: DataType, nullable: Boolean): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(columnVar, dataType, ordinal)
-    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
-    val valueVar = ctx.freshName("value")
-    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
-      s"""
-        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
-        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
-      """
-    } else {
-      s"$javaType ${valueVar} = $value;"
-    }).trim
-    ExprCode(code, isNullVar, valueVar)
   }
 
   override protected def doProduce(ctx: CodegenContext): String = {
@@ -404,11 +407,12 @@ private[sql] case class FileSourceScanExec(
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columnsRowInput = exprRows.map(_.genCode(ctx))
+    val inputRow = if (outputUnsafeRows) row else null
     s"""
        |while ($input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();
        |  $numOutputRows.add(1);
-       |  ${consume(ctx, columnsRowInput, row).trim}
+       |  ${consume(ctx, columnsRowInput, inputRow).trim}
        |  if (shouldStop()) return;
        |}
      """.stripMargin
@@ -476,6 +480,24 @@ private[sql] case class FileSourceScanExec(
        |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
        |$scanTimeTotalNs = 0;
      """.stripMargin
+  }
+
+  private def genCodeColumnVector(ctx: CodegenContext, columnVar: String, ordinal: String,
+    dataType: DataType, nullable: Boolean): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val value = ctx.getValue(columnVar, dataType, ordinal)
+    val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
+    val valueVar = ctx.freshName("value")
+    val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
+      s"""
+        boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
+        $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      s"$javaType ${valueVar} = $value;"
+    }).trim
+    ExprCode(code, isNullVar, valueVar)
   }
 
   /**
