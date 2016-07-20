@@ -632,6 +632,23 @@ class SessionCatalog(
   }
 
   /**
+   * Returns partitions filtered by predicates for the given table, It just work for Hive.
+   *
+   * The filters Expressions may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then the filters (a='1') will return the first two only.
+   */
+  def listPartitionsByFilter(
+    tableName: TableIdentifier,
+    filters: Seq[Expression]): Seq[CatalogTablePartition] = {
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
+    externalCatalog.listPartitionsByFilter(db, table, filters)
+  }
+
+  /**
    * Verify if the input partition spec exactly matches the existing defined partition spec
    * The columns must be the same but the orders could be different.
    */

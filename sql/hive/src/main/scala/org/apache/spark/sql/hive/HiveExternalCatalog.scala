@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.hive.client.HiveClient
 
 
@@ -332,6 +333,17 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     client.getPartitions(db, table, partialSpec)
+  }
+
+  /**
+   * Returns the partition names filtered by filters from hive metastore for a given table in a
+   * database.
+   */
+  override def listPartitionsByFilter(
+    db: String,
+    table: String,
+    filters: Seq[Expression]): Seq[CatalogTablePartition] = withClient {
+    client.getPartitionsByFilter(db, table, filters)
   }
 
   // --------------------------------------------------------------------------

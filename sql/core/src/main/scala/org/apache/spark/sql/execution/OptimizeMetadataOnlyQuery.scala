@@ -86,6 +86,32 @@ case class OptimizeMetadataOnlyQuery(
   }
 
   /**
+   * Convert the table scan node to LocalRelation with its corresponding partition values.
+   */
+  private def convertToLocalRelation(
+      relation: LogicalPlan,
+      filters: Seq[Expression]): LogicalPlan = relation match {
+    case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
+      val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
+      val partitionData = fsRelation.location.listFiles(filters)
+      LocalRelation(partAttrs, partitionData.map(_.values))
+
+    case relation: CatalogRelation =>
+      val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
+      val partitionData = catalog.listPartitionsByFilter(relation.catalogTable.identifier, filters)
+        .map { p =>
+          InternalRow.fromSeq(partAttrs.map { attr =>
+            Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
+          })
+        }
+      LocalRelation(partAttrs, partitionData)
+
+    case _ =>
+      throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
+        s"please turn off ${SQLConf.OPTIMIZER_METADATA_ONLY.key} and try again.")
+  }
+
+  /**
    * Transform the given plan, find its table scan nodes that matches the given relation, and then
    * replace the table scan node with its corresponding partition values.
    */
@@ -93,26 +119,11 @@ case class OptimizeMetadataOnlyQuery(
       child: LogicalPlan,
       relation: LogicalPlan): LogicalPlan = {
     child transform {
+      case f @ Filter(condition, child) if child eq relation =>
+        f.withNewChildren(Seq(convertToLocalRelation(relation, Seq(condition))))
+
       case plan if plan eq relation =>
-        relation match {
-          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
-            val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-            val partitionData = fsRelation.location.listFiles(filters = Nil)
-            LocalRelation(partAttrs, partitionData.map(_.values))
-
-          case relation: CatalogRelation =>
-            val partAttrs = getPartitionAttrs(relation.catalogTable.partitionColumnNames, relation)
-            val partitionData = catalog.listPartitions(relation.catalogTable.identifier).map { p =>
-              InternalRow.fromSeq(partAttrs.map { attr =>
-                Cast(Literal(p.spec(attr.name)), attr.dataType).eval()
-              })
-            }
-            LocalRelation(partAttrs, partitionData)
-
-          case _ =>
-            throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
-              s"please turn off ${SQLConf.OPTIMIZER_METADATA_ONLY.key} and try again.")
-        }
+        convertToLocalRelation(relation, Nil)
     }
   }
 

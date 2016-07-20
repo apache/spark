@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
@@ -458,6 +459,14 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       throw new UnsupportedOperationException(
         "listPartition with partial partition spec is not implemented")
     }
+    catalog(db).tables(table).partitions.values.toSeq
+  }
+
+  override def listPartitionsByFilter(
+    db: String,
+    table: String,
+    filters: Seq[Expression]): Seq[CatalogTablePartition] = synchronized {
+    requireTableExists(db, table)
     catalog(db).tables(table).partitions.values.toSeq
   }
 

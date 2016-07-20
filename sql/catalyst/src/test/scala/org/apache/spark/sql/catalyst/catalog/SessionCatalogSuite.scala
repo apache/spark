@@ -841,6 +841,15 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(catalog.listPartitions(TableIdentifier("tbl2")).toSet == Set(part1, part2))
   }
 
+  test("list partitions by filter") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    assert(catalog.listPartitionsByFilter(
+      TableIdentifier("tbl2", Some("db2")), Nil).toSet == Set(part1, part2))
+    // List partitions without explicitly specifying database
+    catalog.setCurrentDatabase("db2")
+    assert(catalog.listPartitionsByFilter(TableIdentifier("tbl2"), Nil).toSet == Set(part1, part2))
+  }
+
   test("list partitions when database/table does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[NoSuchDatabaseException] {
