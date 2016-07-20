@@ -126,10 +126,6 @@ function activeTasksStyle(activeTasks, maxTasks) {
     return activeTasks > 0 ? ("hsla(240, 100%, 50%, " + activeTasksAlpha(activeTasks, maxTasks) + ")") : "";
 }
 
-function activeTasksColor(activeTasks, maxTasks) {
-    return activeTasks > 0 ? ("hsla(240, 100%, 50%, " + activeTasksAlpha(activeTasks, maxTasks) + ")") : "";
-}
-
 // failedTasks range max at 10% failure, alpha max = 1
 function failedTasksAlpha(failedTasks, totalTasks) {
     return totalTasks > 0 ?
@@ -139,10 +135,6 @@ function failedTasksAlpha(failedTasks, totalTasks) {
 function failedTasksStyle(failedTasks, totalTasks) {
     return failedTasks > 0 ?
         ("hsla(0, 100%, 50%, " + failedTasksAlpha(failedTasks, totalTasks) + ")") : "";
-}
-
-function failedTasksColor(failedTasks, totalTasks) {
-    return failedTasks > 0 ? "white" : "black";
 }
 
 // totalDuration range from 0 to 50% GC time, alpha max = 1
