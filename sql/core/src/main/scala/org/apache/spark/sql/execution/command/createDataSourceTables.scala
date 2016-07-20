@@ -103,27 +103,25 @@ case class CreateDataSourceTableCommand(
         bucketSpec = None,
         options = optionsWithPath).resolveRelation(checkPathExist = false)
 
-    val partitionColumns =
-      dataSource match {
-        case r: HadoopFsRelation =>
-          if (userSpecifiedSchema.isEmpty) {
-            r.partitionSchema.fieldNames
-          } else {
-            userSpecifiedPartitionColumns
-          }
+    val partitionColumns = if (userSpecifiedSchema.nonEmpty) {
+      userSpecifiedPartitionColumns
+    } else {
+      val res = dataSource match {
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames
         case _ => Array.empty[String]
       }
-
-    if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionColumns.length > 0) {
-      // The table does not have a specified schema, which means that the schema will be inferred
-      // when we load the table. So, we are not expecting partition columns and we will discover
-      // partitions when we load the table. However, if there are specified partition columns,
-      // we simply ignore them and provide a warning message.
-      logWarning(
-        s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
-          s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
-          s"Schema: ${dataSource.schema.simpleString}; " +
-          s"Partition columns: $partitionColumns")
+      if (userSpecifiedPartitionColumns.length > 0) {
+        // The table does not have a specified schema, which means that the schema will be inferred
+        // when we load the table. So, we are not expecting partition columns and we will discover
+        // partitions when we load the table. However, if there are specified partition columns,
+        // we simply ignore them and provide a warning message.
+        logWarning(
+          s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
+            s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
+            s"Schema: ${dataSource.schema.simpleString}; " +
+            s"Partition columns: $res")
+      }
+      res
     }
 
     CreateDataSourceTableUtils.createDataSourceTable(
@@ -339,9 +337,9 @@ object CreateDataSourceTableUtils extends Logging {
     val tableProperties = new mutable.HashMap[String, String]
     tableProperties.put(DATASOURCE_PROVIDER, provider)
 
-    // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
-    // stored into a single metastore table property.  In this case, we split the JSON string and
-    // store each part as a separate table property.
+    // Serialized JSON schema string may be too long to be stored into a single metastore table
+    // property. In this case, we split the JSON string and store each part as a separate table
+    // property.
     val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
     val schemaJsonString = schema.json
     // Split the JSON string.

@@ -527,26 +527,24 @@ object DDLUtils {
     require(isDatasourceTable(metadata))
     val msgSchemaCorrupted = "Could not read schema from the metastore because it is corrupted."
     val props = metadata.properties
-    if (props.isDefinedAt(DATASOURCE_SCHEMA)) {
+    props.get(DATASOURCE_SCHEMA).map { schema =>
       // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using spark.sql.sources.schema any more, we need to still support.
-      val schema = props.get(DATASOURCE_SCHEMA).get
       DataType.fromJson(schema).asInstanceOf[StructType]
-    } else if (props.isDefinedAt(DATASOURCE_SCHEMA_NUMPARTS)) {
-      val numParts = props.get(DATASOURCE_SCHEMA_NUMPARTS).get
-      val parts = (0 until numParts.toInt).map { index =>
-        val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
-        if (part == null) {
-          throw new AnalysisException(msgSchemaCorrupted +
-            s" (missing part $index of the schema, $numParts parts are expected).")
+    } getOrElse {
+      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
+          if (part == null) {
+            throw new AnalysisException(msgSchemaCorrupted +
+              s" (missing part $index of the schema, $numParts parts are expected).")
+          }
+          part
         }
-        part
-      }
-      // Stick all parts back to a single schema string.
-      DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-    } else {
-      throw new AnalysisException(msgSchemaCorrupted)
+        // Stick all parts back to a single schema string.
+        DataType.fromJson(parts.mkString).asInstanceOf[StructType]
+      } getOrElse(throw new AnalysisException(msgSchemaCorrupted))
     }
   }
 

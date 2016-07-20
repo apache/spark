@@ -252,63 +252,67 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("Create partitioned data source table with partitioning columns but no schema") {
+  private def createDataSourceTableWithoutSchema(
+      path: File,
+      partitionCols: Option[Seq[String]]): (StructType, Seq[String]) = {
+    var tableSchema = StructType(Nil)
+    var partCols = Seq.empty[String]
+
+    val tabName = "tab1"
+    withTable(tabName) {
+      val partitionClause =
+        partitionCols.map(p => s"PARTITIONED BY ${p.mkString("(", ", ", ")")}").getOrElse("")
+      spark.sql(
+        s"""
+           |CREATE TABLE $tabName
+           |USING parquet
+           |OPTIONS (
+           |  path '$path'
+           |)
+           |$partitionClause
+         """.stripMargin)
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+
+      tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+      partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+    }
+    (tableSchema, partCols)
+  }
+
+  test("Create partitioned data source table without schema") {
     import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    withTempPath { dir =>
-      val pathToPartitionedTable = new File(dir, "partitioned")
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df.write.format("parquet").partitionBy("num").save(pathToPartitionedTable.getCanonicalPath)
-      val tabName = "tab1"
-      withTable(tabName) {
-        spark.sql(
-          s"""
-             |CREATE TABLE $tabName
-             |USING parquet
-             |OPTIONS (
-             |  path '$pathToPartitionedTable'
-             |)
-             |PARTITIONED BY (inexistentColumns)
-           """.stripMargin)
-        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
-
-        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns" :: Nil)
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("inexistentColumns" :: Nil), None).foreach { partitionCols =>
+      withTempPath { pathToPartitionedTable =>
+        df.write.format("parquet").partitionBy("num").save(pathToPartitionedTable.getCanonicalPath)
+        val (tableSchema, partCols) =
+          createDataSourceTableWithoutSchema(pathToPartitionedTable, partitionCols = partitionCols)
         assert(tableSchema ==
           StructType(StructField("str", StringType, nullable = true) ::
             StructField("num", IntegerType, nullable = true) :: Nil))
-
-        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
         assert(partCols == Seq("num"))
       }
     }
   }
 
-  test("Create non-partitioned data source table with partitioning columns but no schema") {
+  test("Create non-partitioned data source table without schema") {
     import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    withTempPath { dir =>
-      val pathToNonPartitionedTable = new File(dir, "nonPartitioned")
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
-      val tabName = "tab1"
-      withTable(tabName) {
-        spark.sql(
-          s"""
-             |CREATE TABLE $tabName
-             |USING parquet
-             |OPTIONS (
-             |  path '$pathToNonPartitionedTable'
-             |)
-             |PARTITIONED BY (inexistentColumns)
-           """.stripMargin)
-        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
-
-        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns" :: Nil)
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("inexistentColumns" :: Nil), None).foreach { partitionCols =>
+      withTempPath { pathToNonPartitionedTable =>
+        df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
+        val (tableSchema, partCols) =
+          createDataSourceTableWithoutSchema(
+            pathToNonPartitionedTable, partitionCols = partitionCols)
         assert(tableSchema ==
           StructType(StructField("num", IntegerType, nullable = true) ::
             StructField("str", StringType, nullable = true) :: Nil))
-
-        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
         assert(partCols.isEmpty)
       }
     }
