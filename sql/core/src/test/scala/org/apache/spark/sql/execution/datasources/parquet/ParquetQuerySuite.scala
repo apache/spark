@@ -680,6 +680,21 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       )
     }
   }
+
+  test("SPARK-16632: read Parquet int32 as ByteType and ShortType") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq(1).toDF("f").write.parquet(path)
+
+        val withByteField = new StructType().add("f", ByteType)
+        checkAnswer(spark.read.schema(withByteField).parquet(path), Row(1: Byte))
+
+        val withShortField = new StructType().add("f", ShortType)
+        checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
+      }
+    }
+  }
 }
 
 object TestingUDT {
