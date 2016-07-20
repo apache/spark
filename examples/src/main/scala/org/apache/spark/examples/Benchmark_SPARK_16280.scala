@@ -17,13 +17,8 @@
 
 package org.apache.spark.examples
 
-import org.apache.spark.SparkConf
-import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.execution.debug._
-import org.apache.spark.sql.internal.SQLConf
-
 
 object Benchmark_SPARK_16280 {
 
@@ -54,30 +49,28 @@ object Benchmark_SPARK_16280 {
         toDF("value").cache()
       df1.first()
       val elapseds1 = Seq.tabulate(3)((_) => {
-        val start1 = java.lang.System.currentTimeMillis()
-        df1.select(codegen_histogram_numeric("value", bins))
+        val start = java.lang.System.currentTimeMillis()
+        df1.select(histogram_numeric("value", bins))
           .collect()
-        java.lang.System.currentTimeMillis() - start1
+        java.lang.System.currentTimeMillis() - start
       })
       val elapseds2 = Seq.tabulate(3)((_) => {
-        val start2 = java.lang.System.currentTimeMillis()
-        df1.select(imperative_histogram_numeric("value", bins))
+        val start = java.lang.System.currentTimeMillis()
+        df1.select(codegen_histogram_numeric("value", bins))
           .collect()
-        java.lang.System.currentTimeMillis() - start2
+        java.lang.System.currentTimeMillis() - start
       })
-
       val elapseds3 = Seq.tabulate(3)((_) => {
-        val start3 = java.lang.System.currentTimeMillis()
+        val start = java.lang.System.currentTimeMillis()
         df1.select(declarative_histogram_numeric("value", bins))
           .collect()
-        java.lang.System.currentTimeMillis() - start3
+        java.lang.System.currentTimeMillis() - start
       })
-
       val elapseds4 = Seq.tabulate(3)((_) => {
-        val start4 = java.lang.System.currentTimeMillis()
-        df1.select(codegen_with_array_agg_buffer_histogram_numeric("value", bins))
+        val start = java.lang.System.currentTimeMillis()
+        df1.select(imperative_histogram_numeric("value", bins))
           .collect()
-        java.lang.System.currentTimeMillis() - start4
+        java.lang.System.currentTimeMillis() - start
       })
       Seq(pair, elapseds1.sum / elapseds1.size
         , elapseds2.sum / elapseds2.size
@@ -87,10 +80,10 @@ object Benchmark_SPARK_16280 {
     })
 
     println(Tabulator.format(Seq(
-      Seq("(rows, numOfBins)","codegen_histogram_numeric"
-        ,"imperative_histogram_numeric"
+      Seq("(rows, numOfBins)","codegen_with_array_agg_buffer_histogram_numeric"
+        ,"codegen_histogram_numeric"
         ,"declarative_histogram_numeric"
-        ,"codegen_with_array_agg_buffer_histogram_numeric"
+        ,"imperative_histogram_numeric"
       )) ++ statistics))
   }
 }

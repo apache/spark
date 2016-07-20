@@ -671,29 +671,40 @@ case class SortHistograms(left: Seq[Expression],
 @ExpressionDescription(
   usage = "_FUNC_(expr, nb) - " +
     "Returns the histogram of a numerical column using a user-specified number of bins.")
-case class CodeGenWithArrayAggBufferNumericHistogram(
-  child: Expression, nb: Expression) extends DeclarativeAggregate
+case class NumericHistogram(
+                             child: Expression, nb: Expression) extends DeclarativeAggregate
 {
 
   override def children: Seq[Expression] = Seq(child)
   override def nullable: Boolean = false
-  override def dataType: DataType = ArrayType(DoubleType)
+  override def dataType: DataType = ArrayType(
+    StructType(Seq(
+      StructField("x", DoubleType),
+      StructField("y", DoubleType))))
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, IntegerType)
 
   val numOfBins = nb.eval(InternalRow.empty).asInstanceOf[Int]
 
-  val histogram = AttributeReference("histogram", ArrayType(DoubleType))()
+  val histogram = AttributeReference("histogram",
+    ArrayType(
+      StructType(Seq(
+        StructField("x", DoubleType),
+        StructField("y", DoubleType)))))()
 
   override val aggBufferAttributes = Seq(histogram)
 
 
   override val initialValues: Seq[Expression] = Seq(
-    CreateArray(Array.fill(0)(Literal(0d))))
+    CreateArray(Array.fill(0)(
+      CreateStructUnsafe(Seq(
+        Literal(0d),
+        Literal(0d))))))
 
 
   override val updateExpressions: Seq[Expression] = {
     val sortedArray =
-      CombineHistograms(histogram, CreateArray(Seq(child, Literal(1d))), nb)
+      CombineHistograms(histogram,
+        CreateArray(Seq(CreateStruct(Seq(child, Literal(1d))))), nb)
     Seq(sortedArray)
 
   }
@@ -715,16 +726,38 @@ case class CodeGenWithArrayAggBufferNumericHistogram(
 @ExpressionDescription(
   usage = "_FUNC_(histogram1, histogram2, nb) - Returns an merged histogram with nb bins.")
 case class CombineHistograms(left: Expression,
-                          right: Expression,
-                          nb: Expression) extends Expression
+                             right: Expression,
+                             nb: Expression) extends Expression
 {
 
-  override def children: Seq[Expression] = left :: right :: Nil
+  override def children: Seq[Expression] = left :: right :: nb :: Nil
 
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    TypeCheckResult.TypeCheckSuccess
+    if (nb.dataType != IntegerType) {
+      TypeCheckResult.TypeCheckFailure("nb must be a integer")
+    } else if (!left.dataType.isInstanceOf[ArrayType]
+      || !left.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[StructType]
+      || left.dataType.asInstanceOf[ArrayType].
+      elementType.asInstanceOf[StructType](0).dataType != DoubleType
+      || left.dataType.asInstanceOf[ArrayType].
+      elementType.asInstanceOf[StructType](1).dataType != DoubleType
+    ) {
+      TypeCheckResult.TypeCheckFailure(
+        "left must be an array of struct with one numeric field and one integer field")
+    } else if (!right.dataType.isInstanceOf[ArrayType]
+      || !right.dataType.asInstanceOf[ArrayType].elementType.isInstanceOf[StructType]
+      || right.dataType.asInstanceOf[ArrayType].
+      elementType.asInstanceOf[StructType](0).dataType != DoubleType
+      || right.dataType.asInstanceOf[ArrayType].
+      elementType.asInstanceOf[StructType](1).dataType != DoubleType
+    ) {
+      TypeCheckResult.TypeCheckFailure(
+        "right must be an array of struct with one numeric field and one integer field")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override def dataType: DataType = {
@@ -791,100 +824,95 @@ case class CombineHistograms(left: Expression,
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
     val mergeFunc = ctx.freshName("merge")
-    val tmpArray = ctx.freshName("tmpArray")
     val trimFunc = ctx.freshName("trim")
     val min = ctx.freshName("min")
     val minIndex = ctx.freshName("minIndex")
     val iterationIndex = ctx.freshName("i")
     val localArray = ctx.freshName("localArray")
-    val localTempArray = ctx.freshName("localTempArray")
-    val leftStart = ctx.freshName("leftStart")
-    val leftCount = ctx.freshName("leftCount")
-    val leftBound = ctx.freshName("leftBound")
-    val rightStart = ctx.freshName("rightStart")
-    val rightCount = ctx.freshName("rightCount")
-    val rightBound = ctx.freshName("rightBound")
-    val pointerI = ctx.freshName("pointerI")
-    val pointerJ = ctx.freshName("pointerJ")
-    val index = ctx.freshName("index")
+    val localLeft = ctx.freshName("localLeft")
+    val localRight = ctx.freshName("localRight")
+    val localResult = ctx.freshName("localResult")
     val q1 = ctx.freshName("q1")
     val k1 = ctx.freshName("k1")
     val q2 = ctx.freshName("q2")
     val k2 = ctx.freshName("k2")
+    val tmpRow = ctx.freshName("row")
     ctx.addNewFunction(mergeFunc,
       s"""
-         |private static void $mergeFunc(double[] $localArray,
-         | double[] $localTempArray,
-         | int $leftStart,
-         | int $leftCount,
-         | int $rightStart,
-         | int $rightCount)
+         |private static void $mergeFunc(ArrayData $localLeft,
+         | ArrayData $localRight,
+         | InternalRow[] $localResult)
          |{
-         |  int $pointerI = $leftStart;
-         |  int $pointerJ = $rightStart;
-         |  int $leftBound = $leftStart + $leftCount;
-         |  int $rightBound = $rightStart + $rightCount;
-         |  int $index = $leftStart;
-         |  while ($pointerI < $leftBound || $pointerJ < $rightBound)
+         |  int iFirst = 0;
+         |  int iSecond = 0;
+         |  int iMerged = 0;
+         |
+         |  while (iFirst < $localLeft.numElements() && iSecond < $localRight.numElements())
          |  {
-         |    if ($pointerI < $leftBound && $pointerJ < $rightBound)
+         |    if ($localLeft.getStruct(iFirst, 2).getDouble(0) <
+         |      $localRight.getStruct(iSecond, 2).getDouble(0))
          |    {
-         |      if ($localArray[$pointerJ * 2] < $localArray[$pointerI * 2]) {
-         |        $localTempArray[$index * 2] = $localArray[$pointerJ * 2];
-         |        $localTempArray[$index * 2 + 1] = $localArray[$pointerJ * 2 + 1];
-         |        $pointerJ++;
-         |      } else {
-         |        $localTempArray[$index * 2] = $localArray[$pointerI * 2];
-         |        $localTempArray[$index * 2 + 1] = $localArray[$pointerI * 2 + 1];
-         |        $pointerI++;
-         |      }
+         |       $localResult[iMerged] = $localLeft.getStruct(iFirst, 2);
+         |       iFirst++;
          |    }
-         |    else if ($pointerI < $leftBound) {
-         |      $localTempArray[$index * 2] = $localArray[$pointerI * 2];
-         |      $localTempArray[$index * 2 + 1] = $localArray[$pointerI * 2 + 1];
-         |      $pointerI++;
-         |    } else {
-         |      $localTempArray[$index * 2] = $localArray[$pointerJ * 2];
-         |      $localTempArray[$index * 2 + 1] = $localArray[$pointerJ * 2 + 1];
-         |      $pointerJ++;
+         |    else
+         |    {
+         |       $localResult[iMerged] = $localRight.getStruct(iSecond, 2);
+         |       iSecond++;
          |    }
-         |    $index++;
+         |    iMerged++;
          |  }
-         |  for (int $iterationIndex = $leftStart; $iterationIndex < $index * 2; $iterationIndex++)
-         |    $localArray[$iterationIndex] = $localTempArray[$iterationIndex];
+         |  for(int $iterationIndex = iFirst;
+         |    $iterationIndex < $localLeft.numElements();
+         |    $iterationIndex++) {
+         |    $localResult[iMerged + $iterationIndex - iFirst] =
+         |      $localLeft.getStruct($iterationIndex, 2);
+         |  }
+         |  for(int $iterationIndex = iSecond;
+         |    $iterationIndex < $localRight.numElements();
+         |    $iterationIndex++) {
+         |    $localResult[iMerged + $iterationIndex - iSecond] =
+         |      $localRight.getStruct($iterationIndex, 2);
+         |  }
          |}
       """.stripMargin.trim
     )
     ctx.addNewFunction(trimFunc,
       s"""
-         | double[] $trimFunc(double[] $localArray, int limit) {
+         | InternalRow[] $trimFunc(InternalRow[] $localArray, int limit) {
          |
-        |     if($localArray.length > limit) {
-         |       double[] result = new double[$localArray.length - 2];
+         |     if($localArray.length > limit) {
+         |       InternalRow[] result = new InternalRow[$localArray.length - 1];
          |       double $min = Double.MAX_VALUE;
-         |       int $minIndex = -1;
-         |       for (int $iterationIndex = 0; $iterationIndex < ($localArray.length / 2 - 1); $iterationIndex++) {
-         |         if($localArray[($iterationIndex + 1) * 2] - $localArray[($iterationIndex) * 2] < $min) {
-         |           $min = $localArray[($iterationIndex + 1) * 2] - $localArray[$iterationIndex * 2];
+         |       int $minIndex = 0;
+         |       for (int $iterationIndex = 0;
+         |         $iterationIndex < ($localArray.length - 1);
+         |         $iterationIndex++) {
+         |         if($localArray[$iterationIndex + 1].getDouble(0) -
+         |           $localArray[$iterationIndex].getDouble(0) < $min) {
+         |           $min = $localArray[$iterationIndex + 1].getDouble(0) -
+         |             $localArray[$iterationIndex].getDouble(0);
          |           $minIndex = $iterationIndex;
          |         }
          |       }
-         |       for(int $iterationIndex = 0; $iterationIndex < $localArray.length / 2; $iterationIndex++) {
+         |       for(int $iterationIndex = 0;
+         |         $iterationIndex < $localArray.length;
+         |         $iterationIndex++) {
          |         if($iterationIndex == $minIndex) {
-         |           double $q1 = $localArray[$iterationIndex * 2];
-         |           double $k1 = $localArray[$iterationIndex * 2 + 1];
-         |           double $q2 = $localArray[($iterationIndex + 1) * 2];
-         |           double $k2 = $localArray[($iterationIndex + 1) * 2 + 1];
-         |           result[$iterationIndex * 2] = ($q1 * $k1 + $q2 * $k2) / ($k1 + $k2);
-         |           result[$iterationIndex * 2 + 1] = $k1 + $k2;
+         |           double $q1 = $localArray[$iterationIndex].getDouble(0);
+         |           double $k1 = $localArray[$iterationIndex].getDouble(1);
+         |           double $q2 = $localArray[$iterationIndex + 1].getDouble(0);
+         |           double $k2 = $localArray[$iterationIndex + 1].getDouble(1);
+         |           InternalRow $tmpRow =
+         |            new GenericInternalRow(
+         |              new Object[]{($q1 * $k1 + $q2 * $k2) / ($k1 + $k2), $k1 + $k2});
+         |           result[$iterationIndex] = $tmpRow;
          |         } else if($iterationIndex == $minIndex + 1) {
          |           continue;
          |         } else if($iterationIndex < $minIndex) {
-         |           result[$iterationIndex * 2] = $localArray[$iterationIndex * 2];
-         |           result[$iterationIndex * 2 + 1] = $localArray[$iterationIndex * 2 + 1];
-         |         } else if( $iterationIndex > $minIndex) {
-         |           result[($iterationIndex - 1) * 2] = $localArray[$iterationIndex * 2];
-         |           result[($iterationIndex - 1) * 2 + 1] = $localArray[$iterationIndex * 2 + 1];
+         |           result[$iterationIndex] = $localArray[$iterationIndex];
+         |         } else if($iterationIndex > $minIndex) {
+         |           result[$iterationIndex - 1] = $localArray[$iterationIndex];
          |         }
          |     }
          |       return $trimFunc(result, limit);
@@ -892,30 +920,25 @@ case class CombineHistograms(left: Expression,
          |       return $localArray;
          |     }
          |
-        | }
+         | }
       """.stripMargin)
-    ctx.addMutableState(s"double[]", values, s"this.$values = null;")
-    ctx.addMutableState(s"double[]", tmpArray, s"this.$tmpArray = null;")
+    ctx.addMutableState(s"InternalRow[]", values, s"this.$values = null;")
     val leftCode = left.genCode(ctx)
     val rightCode = right.genCode(ctx)
-    val leftArray = ctx.freshName("leftArray")
-    val rightArray = ctx.freshName("rightArray")
+    val numOfBins = nb.genCode(ctx)
+
     ev.copy(code = s"""
       ${leftCode.code}
       ${rightCode.code}
-      double[] $leftArray = ${leftCode.value}.toDoubleArray();
-      double[] $rightArray = ${rightCode.value}.toDoubleArray();
+      ${numOfBins.code}
       final boolean ${ev.isNull} = false;
-      this.$values = new double[${leftArray}.length + ${rightArray}.length];
-      this.$tmpArray = new double[${leftArray}.length + ${rightArray}.length];
-      for(int $iterationIndex = 0; $iterationIndex < this.$values.length; $iterationIndex ++) {
-        this.$values[$iterationIndex] = $iterationIndex < $leftArray.length ? $leftArray[$iterationIndex] : $rightArray[$iterationIndex - $leftArray.length];
-      }
-      this.$mergeFunc($values, $tmpArray, 0, ${leftArray}.length / 2, ${leftArray}.length / 2, ${rightArray}.length / 2);
-      $values = $trimFunc($values, $numOfBins);
+      $values = new InternalRow[${leftCode.value}.numElements() + ${rightCode.value}.numElements()];
+      this.$mergeFunc(${leftCode.value},
+        ${rightCode.value},
+        $values);
+      $values = $trimFunc($values, ${numOfBins.value});
       final ArrayData ${ev.value} = new $arrayClass($values);
       this.$values = null;
-      this.$tmpArray = null;
       """)
   }
 }
