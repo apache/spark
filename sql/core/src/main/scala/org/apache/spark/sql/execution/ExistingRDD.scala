@@ -211,7 +211,7 @@ private[sql] case class RowDataSourceScanExec(
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private val outputUnsafeRows = relation match {
+  val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
       !SparkSession.getActiveSession.get.sessionState.conf.getConf(
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
@@ -289,15 +289,13 @@ private[sql] case class FileSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
-  private val supportsBatch = relation.fileFormat.supportBatch(
+  val supportsBatch = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
-  // TODO(ekl) why is this not equivalent to !supportsBatch?
-  private val outputUnsafeRows = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-    !SparkSession.getActiveSession.get.sessionState.conf.getConf(
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+  val needsUnsafeRowConversion = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+    SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
   } else {
-    true
+    false
   }
 
   override val outputPartitioning = {
@@ -324,7 +322,6 @@ private[sql] case class FileSourceScanExec(
   override val metadata: Map[String, String] = Map(
     "Format" -> relation.fileFormat.toString,
     "ReadSchema" -> outputSchema.simpleString,
-    "Vectorized" -> supportsBatch.toString,
     DataSourceScanExec.PUSHED_FILTERS -> dataFilters.mkString("[", ", ", "]"),
     DataSourceScanExec.INPUT_PATHS -> relation.location.paths.mkString(", "))
 
@@ -364,17 +361,19 @@ private[sql] case class FileSourceScanExec(
       // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
       WholeStageCodegenExec(this).execute()
     } else {
-      val unsafeRow = if (outputUnsafeRows) {
-        buildScan()
-      } else {
-        buildScan().mapPartitionsInternal { iter =>
-          val proj = UnsafeProjection.create(schema)
-          iter.map(proj)
+      val unsafeRows = {
+        val scan = buildScan()
+        if (needsUnsafeRowConversion) {
+          scan.mapPartitionsInternal { iter =>
+            val proj = UnsafeProjection.create(schema)
+            iter.map(proj)
+          }
+        } else {
+          scan
         }
       }
-
       val numOutputRows = longMetric("numOutputRows")
-      unsafeRow.map { r =>
+      unsafeRows.map { r =>
         numOutputRows += 1
         r
       }
@@ -404,7 +403,7 @@ private[sql] case class FileSourceScanExec(
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columnsRowInput = exprRows.map(_.genCode(ctx))
-    val inputRow = if (outputUnsafeRows) row else null
+    val inputRow = if (needsUnsafeRowConversion) null else row
     s"""
        |while ($input.hasNext()) {
        |  InternalRow $row = (InternalRow) $input.next();

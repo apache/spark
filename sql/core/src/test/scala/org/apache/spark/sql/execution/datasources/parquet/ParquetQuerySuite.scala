@@ -625,14 +625,14 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
-        assert(fileScan2.simpleString.contains("Vectorized: false"))
+        assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df2, df)
 
         // return batch
         val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
-        assert(fileScan3.simpleString.contains("Vectorized: true"))
+        assert(fileScan3.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df3, df.selectExpr(columns : _*))
       }
     }
