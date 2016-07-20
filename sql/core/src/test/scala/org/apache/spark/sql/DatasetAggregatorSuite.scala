@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator}
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -313,5 +313,43 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     assert(ds2.select(SeqAgg.toColumn).schema.head.nullable === true)
     val ds3 = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
     assert(ds3.select(NameAgg.toColumn).schema.head.nullable === true)
+  }
+
+  test("ReduceAggregator: zero value") {
+    val encoder: ExpressionEncoder[Int] = ExpressionEncoder()
+    val func = (v1: Int, v2: Int) => v1 + v2
+    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func, encoder)
+    assert(aggregator.zero == (false, null))
+  }
+
+  test("ReduceAggregator: reduce, merge and finish") {
+    val encoder: ExpressionEncoder[Int] = ExpressionEncoder()
+    val func = (v1: Int, v2: Int) => v1 + v2
+    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func, encoder)
+
+    val firstReduce = aggregator.reduce(aggregator.zero, 1)
+    assert(firstReduce == (true, 1))
+
+    val secondReduce = aggregator.reduce(firstReduce, 2)
+    assert(secondReduce == (true, 3))
+
+    val thirdReduce = aggregator.reduce(secondReduce, 3)
+    assert(thirdReduce == (true, 6))
+
+    val mergeWithZero1 = aggregator.merge(aggregator.zero, firstReduce)
+    assert(mergeWithZero1 == (true, 1))
+
+    val mergeWithZero2 = aggregator.merge(secondReduce, aggregator.zero)
+    assert(mergeWithZero2 == (true, 3))
+
+    val mergeTwoReduced = aggregator.merge(firstReduce, secondReduce)
+    assert(mergeTwoReduced == (true, 4))
+
+    assert(aggregator.finish(firstReduce)== 1)
+    assert(aggregator.finish(secondReduce) == 3)
+    assert(aggregator.finish(thirdReduce) == 6)
+    assert(aggregator.finish(mergeWithZero1) == 1)
+    assert(aggregator.finish(mergeWithZero2) == 3)
+    assert(aggregator.finish(mergeTwoReduced) == 4)
   }
 }
