@@ -82,16 +82,6 @@ public class VectorizedColumnReader {
   private SpecificParquetRecordReaderBase.IntIterator definitionLevelColumn;
   private ValuesReader dataColumn;
 
-  /**
-   * Repetition level values. Only poplulated when reading a repeated column.
-   */
-  private int[] repLevelValues;
-
-  /**
-   * The offset used to access `repLevelValues`.
-   */
-  private int repLevelOffset;
-
   // Only set if vectorized decoding is true. This is used instead of the row by row decoding
   // with `definitionLevelColumn`.
   private VectorizedRleValuesReader defColumn;
@@ -136,15 +126,24 @@ public class VectorizedColumnReader {
       throw new IOException("totalValueCount == 0");
     }
   }
+  /**
+   * Whether this column is the element of a complex column.
+   */
+  boolean asComplexColElement;
+
+  /**
+   * The flag used in constructing nested records. When it is true, the previous status
+   * will be reset.
+   */
+  boolean resetNestedRecord = true;
 
   /**
    * Reads `total` values from this columnReader into column.
    */
   public void readBatch(int total, ColumnVector column) throws IOException {
-    boolean isComplexColumn = column.getParentColumn() != null;
+    asComplexColElement = column.getParentColumn() != null;
     boolean isRepeatedColumn = maxRepLevel > 0;
     int rowId = 0;
-    int valuesReadInPreviousRun = 0;
     int repeatedRowId = 0;
     int remaining = total;
 
@@ -158,21 +157,9 @@ public class VectorizedColumnReader {
     // Keeps repetition levels and corresponding repetition counts.
     int[] repetitions = new int[maxRepLevel + 2];
 
-    // The flag used in constructing nested records. When it is true, the previous status
-    // will be reset.
-    boolean resetNestedRecord = true;
-
     while (true) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
-
-      // Constructs nested/repeated records if needed.
-      if (isComplexColumn) {
-        boolean endOfPage = leftInPage == 0;
-        resetNestedRecord = constructNestedRecords(column, repetitions, rowIds, offsets,
-          valuesReadInPreviousRun, total, resetNestedRecord, endOfPage);
-        repeatedRowId = rowIds[1];
-      }
 
       // Stop condition:
       // If we are going to read data in repeated column, the stop condition is that we
@@ -188,30 +175,29 @@ public class VectorizedColumnReader {
       // Reaching the end of current page.
       if (leftInPage == 0) {
         boolean pageExists = readPage();
-        if (isRepeatedColumn) {
-          // Repetition level encoding will be split across two pages.
-          // We need to check if it is happen.
-          if (this.repLevelValues[0] == 0 || !pageExists) {
-            // No split of repetition level encoding, going to insert last array if any that we skip
-            // during the end of last page.
-            if (!resetNestedRecord) {
-              insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
-              resetNestedRecord = true;
-              repeatedRowId = rowIds[1];
-              if (repeatedRowId == total) break;
-            }
-          }
-        }
         if (!pageExists) {
+          if (!resetNestedRecord) {
+            insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
+            resetNestedRecord = true;
+            repeatedRowId = rowIds[1];
+            if (repeatedRowId == total) break;
+          }
           // Should not reach here.
           throw new IOException("Failed to read page. No page exists anymore!");
         }
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
 
-      if (isRepeatedColumn) {
-        num = getValueCountToReadForRepeatedRowNums(total - repeatedRowId);
+      // Determine the number of values to read for this column in the current page.
+      if (asComplexColElement) {
+        // Using repetition and definition level encodings to construct nested/repeated records.
+        // When constructing nested/repeated records, we returns the number of values to read in
+        // this page for this column.
+        num = constructComplexRecords(column, repetitions, rowIds, offsets, leftInPage, total);
+        repeatedRowId = rowIds[1];
       } else {
+        // If this column is not a repeated/nested column, just read minimum of remaining values
+        // and all values left in the current page.
         num = Math.min(remaining, leftInPage);
       }
 
@@ -274,7 +260,6 @@ public class VectorizedColumnReader {
             throw new IOException("Unsupported type: " + descriptor.getType());
         }
       }
-      valuesReadInPreviousRun = num;
       valuesRead += num;
       rowId += num;
       remaining -= num;
@@ -708,67 +693,25 @@ public class VectorizedColumnReader {
   }
 
   /**
-   * Returns the number of repeated rows in the current page.
-   */
-  private int getRepeatedRowNumsForCurrentPage() {
-    if (this.repLevelValues != null) {
-      int rowNums = 0;
-      for (int i = 0; i < this.repLevelValues.length; i++) {
-        if (repLevelValues[i] == 0) rowNums++;
-      }
-      return rowNums;
-    } else {
-      return 0;
-    }
-  }
-
-  /**
-   * Returns the number of values needed to read in order to have the number of repeated rows.
-   * @param num the number of repeated rows.
-   */
-  private int getValueCountToReadForRepeatedRowNums(int num) {
-    int rowNum = 0;
-    if (this.repLevelValues[this.repLevelOffset] != 0) rowNum++;
-    for (int i = this.repLevelOffset; i < this.repLevelValues.length; i++) {
-      if (repLevelValues[i] == 0) {
-        rowNum++;
-        if (rowNum > num) {
-          return i - this.repLevelOffset;
-        }
-      }
-    }
-    return this.repLevelValues.length - this.repLevelOffset;
-  }
-
-  /**
    * Iterates the values of definition and repetition levels for the values read in the page,
-   * and constructs nested records accordingly.
+   * and constructs complex records accordingly.
    * @param column The ColumnVector which the data in the page are read into.
    @ @param repetitions Mapping between repetition levels and their counts.
    * @param rowIds Mapping between repetition levels and their current row ids for constructing.
    * @param offsets The beginning offsets in columns which we use to construct nested records.
-   * @param num The number of values read.
+   * @param leftInPage The number of values can be read in the current page.
    * @param total The total number of rows to construct.
-   * @param resetNestedRecord When it is true, the previous status will be reset.
-   * @param endOfPage Whether reaching the end of current page.
-   * @return the updated resetNestedRecord flag.
+   * @return the number of values needed to read in the current page.
    */
-  private boolean constructNestedRecords(
+  private int constructComplexRecords(
       ColumnVector column,
       int[] repetitions,
       int[] rowIds,
       int[] offsets,
-      int num,
-      int total,
-      boolean resetNestedRecord,
-      boolean endOfPage) throws IOException {
-    for (int i = 0; i < num; i++) {
-      int repLevel;
-      if (repLevelValues != null) {
-        repLevel = repLevelValues[repLevelOffset++];
-      } else {
-        repLevel = maxRepLevel;
-      }
+      int leftInPage,
+      int total) throws IOException {
+    for (int i = 0; i < leftInPage; i++) {
+      int repLevel = repetitionLevelColumn.nextInt();
       int defLevel = definitionLevelColumn.nextInt();
 
       // If there are previous values and counts needed to be consider.
@@ -878,14 +821,11 @@ public class VectorizedColumnReader {
           repetitions[maxRepLevel]++;
         }
       }
-      if (rowIds[1] == total) return resetNestedRecord;
+      // If we have constructed `total` records, return the number of values to read.
+      if (rowIds[1] == total) return i + 1;
     }
-    // Insert the last repeated record if any.
-    if (!endOfPage && !resetNestedRecord) {
-      insertRepeatedArray(column, rowIds, offsets, repetitions, total, 0);
-      resetNestedRecord = true;
-    }
-    return resetNestedRecord;
+    // All `leftInPage` values in the current page are needed to read.
+    return leftInPage;
   }
 
   private void readPageV1(DataPageV1 page) throws IOException {
@@ -907,17 +847,12 @@ public class VectorizedColumnReader {
       int next = rlReader.getNextOffset();
       dlReader.initFromPage(pageValueCount, bytes, next);
 
-      ValuesReader dlReaderCopy;
-      this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
-      dlReaderCopy = this.defColumnCopy;
-      this.definitionLevelColumn = new ValuesReaderIntIterator(dlReaderCopy);
-      dlReaderCopy.initFromPage(pageValueCount, bytes, next);
-
-      // If this is a repeated column, read repetition level values for this page.
-      if (maxRepLevel > 0) {
-        this.repLevelValues = getRepetitionLevels();
-        int numOfRepeatedRow = getRepeatedRowNumsForCurrentPage();
-        this.repLevelOffset = 0;
+      if (asComplexColElement) {
+        ValuesReader dlReaderCopy;
+        this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+        dlReaderCopy = this.defColumnCopy;
+        this.definitionLevelColumn = new ValuesReaderIntIterator(dlReaderCopy);
+        dlReaderCopy.initFromPage(pageValueCount, bytes, next);
       }
 
       next = dlReader.getNextOffset();
@@ -937,16 +872,11 @@ public class VectorizedColumnReader {
     this.defColumn.initFromBuffer(
         this.pageValueCount, page.getDefinitionLevels().toByteArray());
 
-    this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
-    this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumnCopy);
-    this.defColumnCopy.initFromBuffer(
-      this.pageValueCount, page.getDefinitionLevels().toByteArray());
-
-    // If this is a repeated column, read repetition level values for this page.
-    if (maxRepLevel > 0) {
-      this.repLevelValues = getRepetitionLevels();
-      int numOfRepeatedRow = getRepeatedRowNumsForCurrentPage();
-      this.repLevelOffset = 0;
+    if (asComplexColElement) {
+      this.defColumnCopy = new VectorizedRleValuesReader(bitWidth);
+      this.definitionLevelColumn = new ValuesReaderIntIterator(this.defColumnCopy);
+      this.defColumnCopy.initFromBuffer(
+        this.pageValueCount, page.getDefinitionLevels().toByteArray());
     }
 
     try {
