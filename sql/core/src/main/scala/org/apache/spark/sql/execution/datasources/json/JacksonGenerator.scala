@@ -26,7 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
-private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
+private[sql] class JacksonGenerator(
+    schema: StructType,
+    writer: Writer,
+    options: JSONOptions = new JSONOptions(Map.empty[String, String])) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -74,13 +77,27 @@ private[sql] class JacksonGenerator(schema: StructType, writer: Writer) {
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getUTF8String(ordinal).toString)
 
+    case TimestampType if options.dateFormat != null =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val timestampString =
+          options.dateFormat.format(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)))
+        gen.writeString(timestampString)
+
     case TimestampType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeString(DateTimeUtils.toJavaTimestamp(row.getLong(ordinal)).toString)
+        val timestamp = DateTimeUtils.toJavaTimestamp(row.getLong(ordinal))
+        gen.writeString(DateTimeUtils.iso8601TimeFormat.format(timestamp))
+
+    case DateType if options.dateFormat != null =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val dateString =
+          options.dateFormat.format(DateTimeUtils.toJavaDate(row.getInt(ordinal)))
+        gen.writeString(dateString)
 
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
-        gen.writeString(DateTimeUtils.toJavaDate(row.getInt(ordinal)).toString)
+        val date = DateTimeUtils.toJavaDate(row.getInt(ordinal))
+        gen.writeString(DateTimeUtils.iso8601DateFormat.format(date))
 
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>

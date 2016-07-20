@@ -338,7 +338,7 @@ class DataStreamReader(OptionUtils):
     def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
-             mode=None, columnNameOfCorruptRecord=None):
+             mode=None, columnNameOfCorruptRecord=None, dateFormat=None):
         """
         Loads a JSON file stream (one object per line) and returns a :class`DataFrame`.
 
@@ -381,6 +381,12 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           applies to both date type and timestamp type. By default, it is None
+                           which means trying to read times and date by
+                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()`` or
+                           ISO 8601 format.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -393,7 +399,7 @@ class DataStreamReader(OptionUtils):
             allowComments=allowComments, allowUnquotedFieldNames=allowUnquotedFieldNames,
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
-            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord)
+            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:
@@ -451,7 +457,7 @@ class DataStreamReader(OptionUtils):
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None,
-            maxMalformedLogPerPartition=None, mode=None):
+            maxMalformedLogPerPartition=None, mode=None, dateFormat=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -495,8 +501,9 @@ class DataStreamReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to both date type and timestamp type. By default, it is None
-                           which means trying to parse times and date by
-                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
+                           which means trying to read times and date by
+                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()`` or
+                           ISO 8601 format.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.text.SimpleDateFormat
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
 import org.apache.spark.internal.Logging
@@ -52,6 +54,12 @@ private[sql] class JSONOptions(
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+
+  // Share date format object as it is expensive to parse date pattern.
+  val dateFormat: SimpleDateFormat = {
+    val dateFormat = parameters.get("dateFormat")
+    dateFormat.map(new SimpleDateFormat(_)).orNull
+  }
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {

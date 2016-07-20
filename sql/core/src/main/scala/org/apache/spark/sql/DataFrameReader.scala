@@ -280,7 +280,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
+   * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
+   * and timestamp type. By default, it is `null` which means trying to read times and date by
+   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()` or ISO 8601 format.</li>
    * </ul>
+
    * @since 2.0.0
    */
   @scala.annotation.varargs
@@ -376,8 +381,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * value.</li>
    * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
    * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
-   * and timestamp type. By default, it is `null` which means trying to parse times and date by
-   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()`.</li>
+   * and timestamp type. By default, it is `null` which means trying to read times and date by
+   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()` or ISO 8601 format.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed

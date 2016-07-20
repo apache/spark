@@ -156,7 +156,7 @@ class DataFrameReader(OptionUtils):
     def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
-             mode=None, columnNameOfCorruptRecord=None):
+             mode=None, columnNameOfCorruptRecord=None, dateFormat=None):
         """
         Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
         (one object per record) and returns the result as a :class`DataFrame`.
@@ -198,6 +198,12 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           applies to both date type and timestamp type. By default, it is None
+                           which means trying to read times and date by
+                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()`` or
+                           ISO 8601 format.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -213,7 +219,7 @@ class DataFrameReader(OptionUtils):
             allowComments=allowComments, allowUnquotedFieldNames=allowUnquotedFieldNames,
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
-            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord)
+            mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -328,8 +334,9 @@ class DataFrameReader(OptionUtils):
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to both date type and timestamp type. By default, it is None
-                           which means trying to parse times and date by
-                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
+                           which means trying to read times and date by
+                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()`` or
+                           ISO 8601 format.
         :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
@@ -571,7 +578,7 @@ class DataFrameWriter(OptionUtils):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode=None, compression=None):
+    def json(self, path, mode=None, compression=None, dateFormat=None):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -584,11 +591,15 @@ class DataFrameWriter(OptionUtils):
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           applies to both date type and timestamp type. By default, it is None
+                           which means trying to write times and date by ISO 8601 format.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
-        self._set_opts(compression=compression)
+        self._set_opts(compression=compression, dateFormat=dateFormat)
         self._jwrite.json(path)
 
     @since(1.4)
@@ -634,7 +645,7 @@ class DataFrameWriter(OptionUtils):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None, escapeQuotes=None, quoteAll=None):
+            header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None):
         """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -666,12 +677,17 @@ class DataFrameWriter(OptionUtils):
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           applies to both date type and timestamp type. By default, it is None
+                           which means trying to write times and date by ISO 8601 format.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(compression=compression, sep=sep, quote=quote, escape=escape, header=header,
-                       nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll)
+                       nullValue=nullValue, escapeQuotes=escapeQuotes, quoteAll=quoteAll,
+                       dateFormat= dateFormat)
         self._jwrite.csv(path)
 
     @since(1.5)

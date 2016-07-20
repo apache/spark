@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.ByteArrayOutputStream
+import java.text.ParseException
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import com.fasterxml.jackson.core._
 
@@ -199,6 +201,17 @@ class JacksonParser(
           UTF8String.fromBytes(writer.toByteArray)
       }
 
+    case TimestampType if options.dateFormat != null =>
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_STRING =>
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          options.dateFormat.parse(parser.getText).getTime * 1000L
+
+        case VALUE_NUMBER_INT =>
+          parser.getLongValue * 1000000L
+      }
+
     case TimestampType =>
       (parser: JsonParser) => parseJsonToken(parser, dataType) {
         case VALUE_STRING =>
@@ -208,6 +221,20 @@ class JacksonParser(
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
+      }
+
+    case DateType if options.dateFormat != null =>
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_STRING =>
+          val stringValue = parser.getText
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          Try(DateTimeUtils.millisToDays(options.dateFormat.parse(parser.getText).getTime))
+            .getOrElse {
+              // In Spark 1.5.0, we store the data as number of days since epoch in string.
+              // So, we just convert it to Int.
+              stringValue.toInt
+            }
       }
 
     case DateType =>

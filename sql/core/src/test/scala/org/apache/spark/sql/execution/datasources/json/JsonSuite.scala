@@ -1664,4 +1664,61 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(df.schema.size === 2)
     df.collect()
   }
+
+  test("Write dates correctly with dateFormat option") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    withTempDir { dir =>
+      // With dateFormat option.
+      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.json"
+      val datesWithFormat = spark.read
+        .schema(customSchema)
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .json(datesRecord)
+
+      datesWithFormat.write
+        .format("json")
+        .option("dateFormat", "yyyy/MM/dd")
+        .save(datesWithFormatPath)
+
+      // This will load back the dates as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+      val stringDatesWithFormat = spark.read
+        .schema(stringSchema)
+        .json(datesWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26"),
+        Row("2014/10/27"),
+        Row("2016/01/28"))
+
+      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+    }
+  }
+
+  test("Write timestamps correctly with dateFormat option") {
+    val customSchema = new StructType(Array(StructField("date", TimestampType, true)))
+    withTempDir { dir =>
+      // With dateFormat option.
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.json"
+      val timestampsWithFormat = spark.read
+        .schema(customSchema)
+        .option("dateFormat", "dd/MM/yyyy HH:mm")
+        .json(datesRecord)
+      timestampsWithFormat.write
+        .format("json")
+        .option("dateFormat", "yyyy/MM/dd HH:mm")
+        .save(timestampsWithFormatPath)
+
+      // This will load back the timestamps as string.
+      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+      val stringTimestampsWithFormat = spark.read
+        .schema(stringSchema)
+        .json(timestampsWithFormatPath)
+      val expectedStringDatesWithFormat = Seq(
+        Row("2015/08/26 18:00"),
+        Row("2014/10/27 18:30"),
+        Row("2016/01/28 20:00"))
+
+      checkAnswer(stringTimestampsWithFormat, expectedStringDatesWithFormat)
+    }
+  }
 }
