@@ -101,8 +101,7 @@ case class CreateDataSourceTableCommand(
         userSpecifiedSchema = userSpecifiedSchema,
         className = provider,
         bucketSpec = None,
-        options = optionsWithPath)
-        .resolveRelation(checkPathExist = false)
+        options = optionsWithPath).resolveRelation(checkPathExist = false)
 
     val partitionColumns =
       dataSource match {
@@ -341,8 +340,8 @@ object CreateDataSourceTableUtils extends Logging {
     tableProperties.put(DATASOURCE_PROVIDER, provider)
 
     // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
-    // stored into a single metastore SerDe property.  In this case, we split the JSON string and
-    // store each part as a separate SerDe property.
+    // stored into a single metastore table property.  In this case, we split the JSON string and
+    // store each part as a separate table property.
     val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
     val schemaJsonString = schema.json
     // Split the JSON string.
