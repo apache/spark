@@ -254,7 +254,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     }
     manager.parent.removeSchedulable(manager)
     if (success) {
-      blacklistTracker.foreach(_.taskSetSucceeded(manager.execToFailures, this))
+      blacklistTracker.foreach(_.taskSetSucceeded(manager.execToFailures))
       logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
         s" ${manager.parent.name}")
     } else {

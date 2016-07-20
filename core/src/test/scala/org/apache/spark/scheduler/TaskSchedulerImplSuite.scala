@@ -98,7 +98,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
           stageToMockTsm(taskSet.stageId) = tsmSpy
           // intentionally bogus, just lets us easily verify
           val execToFailures = new HashMap[String, FailureStatus]()
-          execToFailures(taskSet.stageId.toString) = new FailureStatus()
+          execToFailures(taskSet.stageId.toString) = new FailureStatus("dummy")
           when(tsmSpy.execToFailures).thenReturn(execToFailures)
           tsmSpy
         }
@@ -436,8 +436,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     // the tasksSets complete, so the tracker should be notified
-    verify(blacklist, times(1)).taskSetSucceeded(stageToMockTsm(0).execToFailures, taskScheduler)
-    verify(blacklist, times(1)).taskSetSucceeded(stageToMockTsm(1).execToFailures, taskScheduler)
+    verify(blacklist, times(1)).taskSetSucceeded(stageToMockTsm(0).execToFailures)
+    verify(blacklist, times(1)).taskSetSucceeded(stageToMockTsm(1).execToFailures)
   }
 
   test("scheduled tasks obey node and executor blacklists") {

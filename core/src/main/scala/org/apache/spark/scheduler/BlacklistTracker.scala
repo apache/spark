@@ -54,23 +54,34 @@ private[scheduler] class BlacklistTracker (
 
   // a count of failed tasks for each executor.  Only counts failures after tasksets complete
   // successfully
-  private val executorIdToFailureCount: HashMap[String, Int] = HashMap()
-  private val executorIdToBlacklistExpiryTime: HashMap[String, Long] = new HashMap()
+  private val executorIdToFailureCount: HashMap[String, Int] = new HashMap()
+  private val executorIdToBlacklistStatus: HashMap[String, BlacklistedExecutor] = new HashMap()
   private val nodeIdToBlacklistExpiryTime: HashMap[String, Long] = new HashMap()
   private val _nodeBlacklist: AtomicReference[Set[String]] = new AtomicReference(Set())
   private var nextExpiryTime: Long = Long.MaxValue
+  // for blacklisted executors, the node it is on.  We do *not* remove from this when executors are
+  // removed from spark, so we can track when we get multiple successive blacklisted executors on
+  // one node.
+  val nodeToFailedExecs: HashMap[String, HashSet[String]] = new HashMap()
 
   def expireExecutorsInBlacklist(): Unit = {
     val now = clock.getTimeMillis()
     // quickly check if we've got anything to expire from blacklist -- if not, avoid doing any work
     if (now > nextExpiryTime) {
-      val execsToClear = executorIdToBlacklistExpiryTime.filter(_._2 < now).keys
+      val execsToClear = executorIdToBlacklistStatus.filter(_._2.expiryTime < now).keys
       if (execsToClear.nonEmpty) {
         logInfo(s"Removing executors $execsToClear from blacklist during periodic recovery")
-        execsToClear.foreach { exec => executorIdToBlacklistExpiryTime.remove(exec) }
+        execsToClear.foreach { exec =>
+          val status = executorIdToBlacklistStatus.remove(exec).get
+          val failedExecsOnNode = nodeToFailedExecs(status.node)
+          failedExecsOnNode.remove(exec)
+          if (failedExecsOnNode.isEmpty) {
+            nodeToFailedExecs.remove(status.node)
+          }
+        }
       }
-      if (executorIdToBlacklistExpiryTime.nonEmpty) {
-        nextExpiryTime = executorIdToBlacklistExpiryTime.map{_._2}.min
+      if (executorIdToBlacklistStatus.nonEmpty) {
+        nextExpiryTime = executorIdToBlacklistStatus.map{_._2.expiryTime}.min
       } else {
         nextExpiryTime = Long.MaxValue
       }
@@ -84,32 +95,30 @@ private[scheduler] class BlacklistTracker (
     }
  }
 
-  def taskSetSucceeded(
-      failuresByExec: HashMap[String, FailureStatus],
-      scheduler: TaskSchedulerImpl): Unit = {
+  def taskSetSucceeded(failuresByExec: HashMap[String, FailureStatus]): Unit = {
     // if any tasks failed, we count them towards the overall failure count for the executor at
     // this point.
     failuresByExec.foreach { case (exec, newFailures) =>
       val prevFailures = executorIdToFailureCount.getOrElse(exec, 0)
       val newTotal = prevFailures + newFailures.totalFailures
+      val node = newFailures.node
 
       if (newTotal >= MAX_FAILURES_PER_EXEC) {
         logInfo(s"Blacklisting executor id: $exec because it has $newTotal" +
           s" task failures in successful task sets")
         val now = clock.getTimeMillis()
         val expiryTime = now + EXECUTOR_RECOVERY_MILLIS
-        executorIdToBlacklistExpiryTime.put(exec, expiryTime)
+        executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTime))
+        val blacklistedExecsOnNode = nodeToFailedExecs.getOrElseUpdate(node, HashSet[String]())
+        blacklistedExecsOnNode += exec
         executorIdToFailureCount.remove(exec)
         if (expiryTime < nextExpiryTime) {
           nextExpiryTime = expiryTime
         }
 
-        val node = scheduler.getHostForExecutor(exec)
-        val execs = scheduler.getExecutorsAliveOnHost(node).getOrElse(Set())
-        val blacklistedExecs = execs.filter(executorIdToBlacklistExpiryTime.contains(_))
-        if (blacklistedExecs.size >= MAX_FAILED_EXEC_PER_NODE) {
-          logInfo(s"Blacklisting node $node because it has ${blacklistedExecs.size} executors " +
-            s"blacklisted: ${blacklistedExecs}")
+        if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE) {
+          logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
+            s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTime)
           // make a copy of the blacklisted nodes so nodeBlacklist() is threadsafe
           _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
@@ -121,7 +130,7 @@ private[scheduler] class BlacklistTracker (
   }
 
   def isExecutorBlacklisted(executorId: String): Boolean = {
-    executorIdToBlacklistExpiryTime.contains(executorId)
+    executorIdToBlacklistStatus.contains(executorId)
   }
 
   /**
@@ -137,7 +146,8 @@ private[scheduler] class BlacklistTracker (
   }
 
   def removeExecutor(executorId: String): Unit = {
-    executorIdToBlacklistExpiryTime -= executorId
+    // we intentionally do not clean up executors that are already blacklisted, so that if another
+    // executor on the same node gets blacklisted, we can blacklist the entire node.
     executorIdToFailureCount -= executorId
   }
 }
@@ -193,7 +203,7 @@ private[scheduler] object BlacklistTracker extends Logging {
 }
 
 /** Failures for one executor, within one taskset */
-private[scheduler] final class FailureStatus {
+private[scheduler] final class FailureStatus(val node: String) {
   /** index of the tasks in the taskset that have failed on this executor. */
   val tasksWithFailures = HashSet[Int]()
   var totalFailures = 0
@@ -202,3 +212,5 @@ private[scheduler] final class FailureStatus {
     s"totalFailures = $totalFailures; tasksFailed = $tasksWithFailures"
   }
 }
+
+private final case class BlacklistedExecutor(node: String, expiryTime: Long)

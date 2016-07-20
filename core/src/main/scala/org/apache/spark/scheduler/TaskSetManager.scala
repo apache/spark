@@ -86,8 +86,13 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
   val execToFailures: HashMap[String, FailureStatus] = new HashMap()
-  val nodeBlacklistedTasks: HashMap[String, HashSet[Int]] = new HashMap()
-  val blacklistedNodes: HashSet[String] = new HashSet()
+  /**
+   * Map from node to all executors on it with failures.  Needed because we want to know about
+   * executors on a node even after they have died.
+   */
+  private val nodesToExecsWithFailures: HashMap[String, HashSet[String]] = new HashMap()
+  private val nodeBlacklistedTasks: HashMap[String, HashSet[Int]] = new HashMap()
+  private val blacklistedNodes: HashSet[String] = new HashSet()
 
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
@@ -830,14 +835,16 @@ private[spark] class TaskSetManager(
       host: String,
       exec: String,
       index: Int): Unit = {
-    val failureStatus = execToFailures.getOrElseUpdate(exec, new FailureStatus())
+    val failureStatus = execToFailures.getOrElseUpdate(exec, new FailureStatus(host))
     failureStatus.totalFailures += 1
     failureStatus.tasksWithFailures += index
 
     // check if this task has also failed on other executors on the same host, and if so, blacklist
     // this task from the host
+    val execsWithFailuresOnNode = nodesToExecsWithFailures.getOrElseUpdate(host, new HashSet())
+    execsWithFailuresOnNode += exec
     val failuresOnHost = (for {
-      exec <- sched.getExecutorsAliveOnHost(host).getOrElse(Set()).toSeq
+      exec <- execsWithFailuresOnNode.toIterator
       failures <- execToFailures.get(exec)
     } yield {
       if (failures.tasksWithFailures.contains(index)) 1 else 0
