@@ -67,7 +67,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import spark.implicits._
 
   test("script") {
-    if (testCommandAvailable("bash") && testCommandAvailable("echo | awk '{print $0}'")) {
+    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
       val query1 = sql(
