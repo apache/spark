@@ -177,14 +177,14 @@ private[sql] object InferSchema {
    * Convert NullType to StringType and remove StructTypes with no fields
    */
   private def canonicalizeType(tpe: DataType): Option[DataType] = tpe match {
-    case at @ ArrayType(elementType, _) =>
+    case at @ ArrayType(elementType, _, _) =>
       for {
         canonicalType <- canonicalizeType(elementType)
       } yield {
         at.copy(canonicalType)
       }
 
-    case StructType(fields) =>
+    case StructType(fields, _) =>
       val canonicalFields: Array[StructField] = for {
         field <- fields
         if field.name.length > 0
@@ -229,9 +229,9 @@ private[sql] object InferSchema {
       shouldHandleCorruptRecord: Boolean): (DataType, DataType) => DataType = {
     // Since we support array of json objects at the top level,
     // we need to check the element type and find the root level data type.
-    case (ArrayType(ty1, _), ty2) =>
+    case (ArrayType(ty1, _, _), ty2) =>
       compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord)(ty1, ty2)
-    case (ty1, ArrayType(ty2, _)) =>
+    case (ty1, ArrayType(ty2, _, _)) =>
       compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord)(ty1, ty2)
     // If we see any other data type at the root level, we get records that cannot be
     // parsed. So, we use the struct as the data type and add the corrupt field to the schema.
@@ -270,7 +270,7 @@ private[sql] object InferSchema {
             DecimalType(range + scale, scale)
           }
 
-        case (StructType(fields1), StructType(fields2)) =>
+        case (StructType(fields1, _), StructType(fields2, _)) =>
           // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
@@ -309,8 +309,8 @@ private[sql] object InferSchema {
           }
           StructType(newFields.toArray(emptyStructFieldArray))
 
-        case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
+        case (ArrayType(eltType1, containsNull1, _), ArrayType(eltType2, containsNull2, _)) =>
+          ArrayType(compatibleType(eltType1, eltType2), containsNull1 || containsNull2)
 
         // The case that given `DecimalType` is capable of given `IntegralType` is handled in
         // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when

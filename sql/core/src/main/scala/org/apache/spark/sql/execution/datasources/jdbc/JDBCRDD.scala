@@ -358,7 +358,7 @@ private[sql] class JDBCRDD(
     case StringType => StringConversion
     case TimestampType => TimestampConversion
     case BinaryType => BinaryConversion
-    case ArrayType(et, _) => ArrayConversion(getConversions(et, metadata))
+    case ArrayType(et, _, _) => ArrayConversion(getConversions(et, metadata))
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
   }
 

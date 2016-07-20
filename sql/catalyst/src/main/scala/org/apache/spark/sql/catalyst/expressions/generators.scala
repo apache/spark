@@ -165,7 +165,7 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(et, containsNull) =>
+    case ArrayType(et, containsNull, _) =>
       if (position) {
         new StructType()
           .add("pos", IntegerType, false)
@@ -189,7 +189,7 @@ abstract class ExplodeBase(child: Expression, position: Boolean)
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
     child.dataType match {
-      case ArrayType(et, _) =>
+      case ArrayType(et, _, _) =>
         val inputArray = child.eval(input).asInstanceOf[ArrayData]
         if (inputArray == null) {
           Nil
@@ -260,7 +260,7 @@ case class Inline(child: Expression) extends UnaryExpression with Generator with
   override def children: Seq[Expression] = child :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case ArrayType(et, _) if et.isInstanceOf[StructType] =>
+    case ArrayType(et, _, _) if et.isInstanceOf[StructType] =>
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
@@ -268,7 +268,7 @@ case class Inline(child: Expression) extends UnaryExpression with Generator with
   }
 
   override def elementSchema: StructType = child.dataType match {
-    case ArrayType(et : StructType, _) => et
+    case ArrayType(et : StructType, _, _) => et
   }
 
   private lazy val numFields = elementSchema.fields.length

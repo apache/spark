@@ -64,7 +64,7 @@ object JacksonParser extends Logging {
         // in such an array as a row
         convertArray(factory, parser, st)
 
-      case (START_OBJECT, ArrayType(st, _)) =>
+      case (START_OBJECT, ArrayType(st, _, _)) =>
         // the business end of SPARK-3308:
         // when an object is found but an array is requested just wrap it in a list
         convertField(factory, parser, st) :: Nil
@@ -181,7 +181,7 @@ object JacksonParser extends Logging {
       case (START_OBJECT, st: StructType) =>
         convertObject(factory, parser, st)
 
-      case (START_ARRAY, ArrayType(st, _)) =>
+      case (START_ARRAY, ArrayType(st, _, _)) =>
         convertArray(factory, parser, st)
 
       case (START_OBJECT, MapType(StringType, kt, _)) =>

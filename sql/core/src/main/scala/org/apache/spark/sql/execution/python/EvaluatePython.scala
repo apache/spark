@@ -49,7 +49,7 @@ object EvaluatePython {
     case DateType | TimestampType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
-    case ArrayType(elementType, _) => needConversionInPython(elementType)
+    case ArrayType(elementType, _, _) => needConversionInPython(elementType)
     case MapType(keyType, valueType, _) =>
       needConversionInPython(keyType) || needConversionInPython(valueType)
     case _ => false
@@ -129,10 +129,10 @@ object EvaluatePython {
     case (c: String, BinaryType) => c.getBytes(StandardCharsets.UTF_8)
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
 
-    case (c: java.util.List[_], ArrayType(elementType, _)) =>
+    case (c: java.util.List[_], ArrayType(elementType, _, _)) =>
       new GenericArrayData(c.asScala.map { e => fromJava(e, elementType)}.toArray)
 
-    case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
+    case (c, ArrayType(elementType, _, _)) if c.getClass.isArray =>
       new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
     case (c: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
@@ -141,7 +141,7 @@ object EvaluatePython {
       val values = keyValues.map(kv => fromJava(kv._2, valueType)).toArray
       ArrayBasedMapData(keys, values)
 
-    case (c, StructType(fields)) if c.getClass.isArray =>
+    case (c, StructType(fields, _)) if c.getClass.isArray =>
       val array = c.asInstanceOf[Array[_]]
       if (array.length != fields.length) {
         throw new IllegalStateException(

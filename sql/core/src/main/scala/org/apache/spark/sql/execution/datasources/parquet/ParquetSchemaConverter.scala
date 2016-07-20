@@ -71,35 +71,60 @@ private[parquet] class ParquetSchemaConverter(
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
    */
-  def convert(parquetSchema: MessageType): StructType = convert(parquetSchema.asGroupType())
+  def convert(parquetSchema: MessageType): StructType = {
+    convert(parquetSchema.asGroupType(), parquetSchema, Seq.empty[String])
+  }
 
-  private def convert(parquetSchema: GroupType): StructType = {
+  private def convert(
+      parquetSchema: GroupType,
+      messageType: MessageType,
+      path: Seq[String]): StructType = {
     val fields = parquetSchema.getFields.asScala.map { field =>
       field.getRepetition match {
         case OPTIONAL =>
-          StructField(field.getName, convertField(field), nullable = true)
+          StructField(field.getName, convertField(field, messageType, path), nullable = true)
 
         case REQUIRED =>
-          StructField(field.getName, convertField(field), nullable = false)
+          StructField(field.getName, convertField(field, messageType, path), nullable = false)
 
         case REPEATED =>
+          val builder = new MetadataBuilder()
+          val curPath = path ++ Seq(field.getName)
+          val defLevel = messageType.getMaxDefinitionLevel(curPath: _*)
+          val repLevel = messageType.getMaxRepetitionLevel(curPath: _*)
+          val metadata = builder.putLong("defLevel", defLevel).putLong("repLevel", repLevel).build()
+
           // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
           // annotated by `LIST` or `MAP` should be interpreted as a required list of required
           // elements where the element type is the type of the field.
-          val arrayType = ArrayType(convertField(field), containsNull = false)
-          StructField(field.getName, arrayType, nullable = false)
+          val arrayType = ArrayType(convertField(field, messageType, path), containsNull = false,
+            metadata = metadata)
+          StructField(field.getName, arrayType, nullable = false, metadata = metadata)
       }
     }
 
-    StructType(fields)
+    if (path.isEmpty) {
+      StructType(fields)
+    } else {
+      val builder = new MetadataBuilder()
+      val defLevel = messageType.getMaxDefinitionLevel(path: _*)
+      val repLevel = messageType.getMaxRepetitionLevel(path: _*)
+      val metadata = builder.putLong("defLevel", defLevel).putLong("repLevel", repLevel).build()
+      StructType(fields.toArray, metadata)
+    }
   }
 
   /**
    * Converts a Parquet [[Type]] to a Spark SQL [[DataType]].
    */
-  def convertField(parquetType: Type): DataType = parquetType match {
+  def convertField(
+      parquetType: Type,
+      messageType: MessageType = null,
+      path: Seq[String] = Seq.empty[String]): DataType = parquetType match {
     case t: PrimitiveType => convertPrimitiveField(t)
-    case t: GroupType => convertGroupField(t.asGroupType())
+    case t: GroupType =>
+      val curPath = path ++ Seq(t.getName())
+      convertGroupField(t.asGroupType(), messageType, curPath)
   }
 
   private def convertPrimitiveField(field: PrimitiveType): DataType = {
@@ -190,8 +215,11 @@ private[parquet] class ParquetSchemaConverter(
     }
   }
 
-  private def convertGroupField(field: GroupType): DataType = {
-    Option(field.getOriginalType).fold(convert(field): DataType) {
+  private def convertGroupField(
+      field: GroupType,
+      messageType: MessageType,
+      path: Seq[String]): DataType = {
+    Option(field.getOriginalType).fold(convert(field, messageType, path): DataType) {
       // A Parquet list is represented as a 3-level structure:
       //
       //   <list-repetition> group <name> (LIST) {
@@ -212,13 +240,22 @@ private[parquet] class ParquetSchemaConverter(
         val repeatedType = field.getType(0)
         ParquetSchemaConverter.checkConversionRequirement(
           repeatedType.isRepetition(REPEATED), s"Invalid list type $field")
-
+        val builder = new MetadataBuilder()
         if (isElementType(repeatedType, field.getName)) {
-          ArrayType(convertField(repeatedType), containsNull = false)
+          val defLevel = messageType.getMaxDefinitionLevel(path: _*)
+          val repLevel = messageType.getMaxRepetitionLevel(path: _*)
+          val metadata = builder.putLong("defLevel", defLevel).putLong("repLevel", repLevel).build()
+          ArrayType(convertField(repeatedType, messageType, path), containsNull = false,
+            metadata = metadata)
         } else {
           val elementType = repeatedType.asGroupType().getType(0)
           val optional = elementType.isRepetition(OPTIONAL)
-          ArrayType(convertField(elementType), containsNull = optional)
+          val curPath = path ++ Seq(repeatedType.getName)
+          val defLevel = messageType.getMaxDefinitionLevel(curPath: _*)
+          val repLevel = messageType.getMaxRepetitionLevel(path: _*)
+          val metadata = builder.putLong("defLevel", defLevel).putLong("repLevel", repLevel).build()
+          ArrayType(convertField(elementType, messageType, curPath), containsNull = optional,
+            metadata = metadata)
         }
 
       // scalastyle:off
@@ -242,9 +279,11 @@ private[parquet] class ParquetSchemaConverter(
 
         val valueType = keyValueType.getType(1)
         val valueOptional = valueType.isRepetition(OPTIONAL)
+        val keyPath = path ++ Seq(keyValueType.getName)
+        val valuePath = path ++ Seq(keyValueType.getName)
         MapType(
-          convertField(keyType),
-          convertField(valueType),
+          convertField(keyType, messageType, keyPath),
+          convertField(valueType, messageType, valuePath),
           valueContainsNull = valueOptional)
 
       case _ =>
@@ -439,7 +478,7 @@ private[parquet] class ParquetSchemaConverter(
       // `LIST` structure.  This behavior is somewhat a hybrid of parquet-hive and parquet-avro
       // (1.6.0rc3): the 3-level structure is similar to parquet-hive while the 3rd level element
       // field name "array" is borrowed from parquet-avro.
-      case ArrayType(elementType, nullable @ true) if writeLegacyParquetFormat =>
+      case ArrayType(elementType, nullable @ true, _) if writeLegacyParquetFormat =>
         // <list-repetition> group <name> (LIST) {
         //   optional group bag {
         //     repeated <element-type> array;
@@ -457,7 +496,7 @@ private[parquet] class ParquetSchemaConverter(
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
       // covered by the backwards-compatibility rules implemented in `isElementType()`.
-      case ArrayType(elementType, nullable @ false) if writeLegacyParquetFormat =>
+      case ArrayType(elementType, nullable @ false, _) if writeLegacyParquetFormat =>
         // <list-repetition> group <name> (LIST) {
         //   repeated <element-type> element;
         // }
@@ -486,7 +525,7 @@ private[parquet] class ParquetSchemaConverter(
       // ArrayType and MapType (standard mode)
       // =====================================
 
-      case ArrayType(elementType, containsNull) if !writeLegacyParquetFormat =>
+      case ArrayType(elementType, containsNull, _) if !writeLegacyParquetFormat =>
         // <list-repetition> group <name> (LIST) {
         //   repeated group list {
         //     <element-repetition> <element-type> element;
@@ -521,7 +560,7 @@ private[parquet] class ParquetSchemaConverter(
       // Other types
       // ===========
 
-      case StructType(fields) =>
+      case StructType(fields, _) =>
         fields.foldLeft(Types.buildGroup(repetition)) { (builder, field) =>
           builder.addField(convertField(field))
         }.named(field.name)

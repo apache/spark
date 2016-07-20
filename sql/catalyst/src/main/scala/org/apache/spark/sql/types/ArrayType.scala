@@ -51,9 +51,16 @@ object ArrayType extends AbstractDataType {
  *
  * @param elementType The data type of values.
  * @param containsNull Indicates if values have `null` values
+ * @param metadata The metadata of this array type.
  */
 @DeveloperApi
-case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
+case class ArrayType(
+    elementType: DataType,
+    containsNull: Boolean,
+    metadata: Metadata = Metadata.empty) extends DataType {
+
+  protected def this(elementType: DataType, containsNull: Boolean) =
+    this(elementType, containsNull, Metadata.empty)
 
   /** No-arg constructor for kryo. */
   protected def this() = this(null, false)

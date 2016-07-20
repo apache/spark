@@ -104,7 +104,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   val dataTypes = data.map(_.dataType)
 
   def toWritableInspector(dataType: DataType): ObjectInspector = dataType match {
-    case ArrayType(tpe, _) =>
+    case ArrayType(tpe, _, _) =>
       ObjectInspectorFactory.getStandardListObjectInspector(toWritableInspector(tpe))
     case MapType(keyType, valueType, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
@@ -122,7 +122,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     case DateType => PrimitiveObjectInspectorFactory.writableDateObjectInspector
     case TimestampType => PrimitiveObjectInspectorFactory.writableTimestampObjectInspector
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
-    case StructType(fields) =>
+    case StructType(fields, _) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
         java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) : _*))

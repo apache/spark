@@ -117,7 +117,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
-          case a @ ArrayType(et, _) =>
+          case a @ ArrayType(et, _, _) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
@@ -202,7 +202,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
         """
 
-      case a @ ArrayType(et, _) =>
+      case a @ ArrayType(et, _, _) =>
         s"""
           $arrayWriter.setOffset($index);
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}

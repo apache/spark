@@ -154,7 +154,7 @@ private[sql] object ParquetFilters {
    * Here we filter out such fields.
    */
   private def getFieldMap(dataType: DataType): Map[String, DataType] = dataType match {
-    case StructType(fields) =>
+    case StructType(fields, _) =>
       // Here we don't flatten the fields in the nested schema but just look up through
       // root fields. Currently, accessing to nested fields does not push down filters
       // and it does not support to create filters for them.

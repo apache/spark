@@ -488,7 +488,7 @@ private[parquet] class ParquetRowConverter(
         case (t: GroupType, _) if t.getFieldCount > 1 => true
         case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == "array" => true
         case (t: GroupType, _) if t.getFieldCount == 1 && t.getName == parentName + "_tuple" => true
-        case (t: GroupType, StructType(Array(f))) if f.name == t.getFieldName(0) => true
+        case (t: GroupType, StructType(Array(f), _)) if f.name == t.getFieldName(0) => true
         case _ => false
       }
     }

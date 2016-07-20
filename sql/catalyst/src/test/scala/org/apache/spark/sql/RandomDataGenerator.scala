@@ -196,7 +196,7 @@ object RandomDataGenerator {
       case ShortType => randomNumeric[Short](
         rand, _.nextInt().toShort, Seq(Short.MinValue, Short.MaxValue, 0.toShort))
       case NullType => Some(() => null)
-      case ArrayType(elementType, containsNull) =>
+      case ArrayType(elementType, containsNull, _) =>
         forType(elementType, nullable = containsNull, rand).map {
           elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
         }
@@ -220,7 +220,7 @@ object RandomDataGenerator {
             keys.zip(values).toMap
           }
         }
-      case StructType(fields) =>
+      case StructType(fields, _) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
           forType(field.dataType, nullable = field.nullable, rand)
         }
@@ -269,7 +269,7 @@ object RandomDataGenerator {
     val fields = mutable.ArrayBuffer.empty[Any]
     schema.fields.foreach { f =>
       f.dataType match {
-        case ArrayType(childType, nullable) =>
+        case ArrayType(childType, nullable, _) =>
           val data = if (f.nullable && rand.nextFloat() <= PROBABILITY_OF_NULL) {
             null
           } else {
@@ -286,7 +286,7 @@ object RandomDataGenerator {
             arr
           }
           fields += data
-        case StructType(children) =>
+        case StructType(children, _) =>
           fields += randomRow(rand, StructType(children))
         case _ =>
           val generator = RandomDataGenerator.forType(f.dataType, f.nullable, rand)

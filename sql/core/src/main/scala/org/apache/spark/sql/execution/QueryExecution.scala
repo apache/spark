@@ -167,11 +167,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
     /** Hive outputs fields of structs slightly differently than top level attributes. */
     def toHiveStructString(a: (Any, DataType)): String = a match {
-      case (struct: Row, StructType(fields)) =>
+      case (struct: Row, StructType(fields, _)) =>
         struct.toSeq.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
+      case (seq: Seq[_], ArrayType(typ, _, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_, _], MapType(kType, vType, _)) =>
         map.map {
@@ -185,11 +185,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
 
     a match {
-      case (struct: Row, StructType(fields)) =>
+      case (struct: Row, StructType(fields, _)) =>
         struct.toSeq.zip(fields).map {
           case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
+      case (seq: Seq[_], ArrayType(typ, _, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_, _], MapType(kType, vType, _)) =>
         map.map {

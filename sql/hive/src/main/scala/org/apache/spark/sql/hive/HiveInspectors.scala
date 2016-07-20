@@ -782,7 +782,7 @@ private[hive] trait HiveInspectors {
    * We can easily map to the Hive built-in object inspector according to the data type.
    */
   def toInspector(dataType: DataType): ObjectInspector = dataType match {
-    case ArrayType(tpe, _) =>
+    case ArrayType(tpe, _, _) =>
       ObjectInspectorFactory.getStandardListObjectInspector(toInspector(tpe))
     case MapType(keyType, valueType, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
@@ -801,7 +801,7 @@ private[hive] trait HiveInspectors {
     case TimestampType => PrimitiveObjectInspectorFactory.javaTimestampObjectInspector
     // TODO decimal precision?
     case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
-    case StructType(fields) =>
+    case StructType(fields, _) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
         java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) : _*))
@@ -841,7 +841,7 @@ private[hive] trait HiveInspectors {
       getDecimalWritableConstantObjectInspector(value)
     case Literal(_, NullType) =>
       getPrimitiveNullWritableConstantObjectInspector
-    case Literal(value, ArrayType(dt, _)) =>
+    case Literal(value, ArrayType(dt, _, _)) =>
       val listObjectInspector = toInspector(dt)
       if (value == null) {
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, null)
@@ -1045,9 +1045,9 @@ private[hive] trait HiveInspectors {
     }
 
     def toTypeInfo: TypeInfo = dt match {
-      case ArrayType(elemType, _) =>
+      case ArrayType(elemType, _, _) =>
         getListTypeInfo(elemType.toTypeInfo)
-      case StructType(fields) =>
+      case StructType(fields, _) =>
         getStructTypeInfo(
           java.util.Arrays.asList(fields.map(_.name) : _*),
           java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) : _*))
