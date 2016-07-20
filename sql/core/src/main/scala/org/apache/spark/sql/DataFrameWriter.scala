@@ -392,7 +392,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
    * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
-   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, DerbyDialect supports this option
+   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
    * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
    * the user option `truncate` is ignored.
    *
