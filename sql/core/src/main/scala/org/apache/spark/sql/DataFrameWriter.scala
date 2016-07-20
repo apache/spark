@@ -390,6 +390,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * You can set the following JDBC-specific option(s) for storing JDBC:
    * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
    *
+   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
+   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
+   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, DerbyDialect supports this option
+   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
+   * the user option `truncate` is ignored.
+   *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
