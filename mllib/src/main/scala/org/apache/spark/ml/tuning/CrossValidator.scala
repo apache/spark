@@ -55,7 +55,6 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 }
 
 /**
- * :: Experimental ::
  * K-fold cross validation performs model selection by splitting the dataset into a set of
  * non-overlapping randomly partitioned folds which are used as separate training and test datasets
  * e.g., with k=3 folds, K-fold cross validation will generate 3 (training, test) dataset pairs,
@@ -193,7 +192,6 @@ object CrossValidator extends MLReadable[CrossValidator] {
 }
 
 /**
- * :: Experimental ::
  * CrossValidatorModel contains the model with the highest average cross-validation
  * metric across folds and uses this model to transform input data. CrossValidatorModel
  * also tracks the metrics for each param map evaluated.
