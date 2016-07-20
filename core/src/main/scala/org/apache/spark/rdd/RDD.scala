@@ -718,9 +718,8 @@ abstract class RDD[T: ClassTag](
    * is computed by executing the given process once per partition. All elements
    * of each input partition are written to a process's stdin as lines of input separated
    * by a newline. The resulting partition consists of the process's stdout output, with
-   * each line of stdout resulting in one element of the output partition. Note that an empty
-   * partition results in an empty output partition, and no process is invoked for an empty
-   * partition.
+   * each line of stdout resulting in one element of the output partition. A process is invoked
+   * even for empty partitions.
    *
    * The print behavior can be customized by providing two functions.
    *
