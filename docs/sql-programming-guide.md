@@ -869,8 +869,8 @@ spark.catalog().refreshTable("my_table");
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-# spark is an existing HiveContext
-spark.refreshTable("my_table")
+# spark is an existing SparkSession
+spark.catalog.refreshTable("my_table")
 {% endhighlight %}
 
 </div>
