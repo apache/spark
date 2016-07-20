@@ -2966,7 +2966,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("Aggregate should not propagate constraints containing aggregate expressions") {
+  test("SPARK-16644: Aggregate should not put aggregate expressions to constraints") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
       checkAnswer(sql(
