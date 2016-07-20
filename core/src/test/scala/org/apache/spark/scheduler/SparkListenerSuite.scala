@@ -52,6 +52,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("basic creation and shutdown of LiveListenerBus") {
+    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
     val counter = new BasicJobCounter
     val bus = new LiveListenerBus(sc)
     bus.addListener(counter)
@@ -106,7 +107,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         drained = true
       }
     }
-
+    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
     val bus = new LiveListenerBus(sc)
     val blockingListener = new BlockingListener
 
@@ -353,6 +354,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val badListener = new BadListener
     val jobCounter1 = new BasicJobCounter
     val jobCounter2 = new BasicJobCounter
+    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
     val bus = new LiveListenerBus(sc)
 
     // Propagate events to bad listener first
