@@ -1388,6 +1388,7 @@ class DataFrame(object):
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain existingName.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
