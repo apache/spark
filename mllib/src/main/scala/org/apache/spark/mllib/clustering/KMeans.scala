@@ -309,7 +309,7 @@ class KMeans private (
         contribs.iterator
       }.reduceByKey(mergeContribs).collectAsMap()
 
-      bcActiveCenters.unpersist(blocking = false)
+      bcActiveCenters.destroy(blocking = false)
 
       // Update the cluster centers and costs for each active run
       for ((run, i) <- activeRuns.zipWithIndex) {
@@ -464,7 +464,7 @@ class KMeans private (
       }
     }.reduceByKey(_ + _).collectAsMap()
 
-    bcCenters.unpersist(blocking = false)
+    bcCenters.destroy(blocking = false)
 
     val finalCenters = (0 until runs).par.map { r =>
       val myCenters = centers(r).toArray
