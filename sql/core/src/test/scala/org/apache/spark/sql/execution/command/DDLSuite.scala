@@ -252,48 +252,98 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("Create data source table with partitioning columns but no schema") {
+  test("Create partitioned data source table with partitioning columns but no schema") {
+    import testImplicits._
+
+    withTempPath { dir =>
+      val pathToPartitionedTable = new File(dir, "partitioned")
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      df.write.format("parquet").partitionBy("num").save(pathToPartitionedTable.getCanonicalPath)
+      val tabName = "tab1"
+      withTable(tabName) {
+        spark.sql(
+          s"""
+             |CREATE TABLE $tabName
+             |USING parquet
+             |OPTIONS (
+             |  path '$pathToPartitionedTable'
+             |)
+             |PARTITIONED BY (inexistentColumns)
+           """.stripMargin)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+
+        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+        assert(tableSchema ==
+          StructType(StructField("str", StringType, nullable = true) ::
+            StructField("num", IntegerType, nullable = true) :: Nil))
+
+        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+        assert(partCols == Seq("num"))
+      }
+    }
+  }
+
+  test("Create non-partitioned data source table with partitioning columns but no schema") {
+    import testImplicits._
+
+    withTempPath { dir =>
+      val pathToNonPartitionedTable = new File(dir, "nonPartitioned")
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
+      val tabName = "tab1"
+      withTable(tabName) {
+        spark.sql(
+          s"""
+             |CREATE TABLE $tabName
+             |USING parquet
+             |OPTIONS (
+             |  path '$pathToNonPartitionedTable'
+             |)
+             |PARTITIONED BY (inexistentColumns)
+           """.stripMargin)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+
+        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+        assert(tableSchema ==
+          StructType(StructField("num", IntegerType, nullable = true) ::
+            StructField("str", StringType, nullable = true) :: Nil))
+
+        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+        assert(partCols.isEmpty)
+      }
+    }
+  }
+
+  test("Describe Table with Corrupted Schema") {
     import testImplicits._
 
     val tabName = "tab1"
     withTempPath { dir =>
-      val pathToPartitionedTable = new File(dir, "partitioned")
-      val pathToNonPartitionedTable = new File(dir, "nonPartitioned")
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
-      df.write.format("parquet").partitionBy("num").save(pathToPartitionedTable.getCanonicalPath)
+      val path = dir.getCanonicalPath
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("col1", "col2")
+      df.write.format("json").save(path)
 
-      Seq(pathToPartitionedTable, pathToNonPartitionedTable).foreach { path =>
-        withTable(tabName) {
-          spark.sql(
-            s"""
-               |CREATE TABLE $tabName
-               |USING parquet
-               |OPTIONS (
-               |  path '$path'
-               |)
-               |PARTITIONED BY (inexistentColumns)
-             """.stripMargin)
-          val catalog = spark.sessionState.catalog
-          val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
+      withTable(tabName) {
+        sql(
+          s"""
+             |CREATE TABLE $tabName
+             |USING json
+             |OPTIONS (
+             |  path '$path'
+             |)
+           """.stripMargin)
 
-          val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
-          assert(tableSchema.nonEmpty, "the schema of data source tables are always recorded")
-          val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+        val catalog = spark.sessionState.catalog
+        val table = catalog.getTableMetadata(TableIdentifier(tabName))
+        val newProperties = table.properties.filterKeys(key =>
+          key != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS)
+        val newTable = table.copy(properties = newProperties)
+        catalog.alterTable(newTable)
 
-          if (tableMetadata.storage.serdeProperties.get("path") ==
-              Option(pathToPartitionedTable.getCanonicalPath)) {
-            assert(partCols == Seq("num"))
-            assert(tableSchema ==
-              Option(StructType(StructField("str", StringType, nullable = true) ::
-                StructField("num", IntegerType, nullable = true) :: Nil)))
-          } else {
-            assert(partCols.isEmpty)
-            assert(tableSchema ==
-              Option(StructType(StructField("num", IntegerType, nullable = true) ::
-                StructField("str", StringType, nullable = true) :: Nil)))
-          }
-        }
+        val e = intercept[AnalysisException] {
+          sql(s"DESC $tabName")
+        }.getMessage
+        assert(e.contains(s"Could not read schema from the metastore because it is corrupted"))
       }
     }
   }
@@ -328,7 +378,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              """.stripMargin)
           val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
           val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
-          assert(tableSchema == Option(schema))
+          assert(tableSchema == schema)
           val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
           assert(partCols == partitionCols)
 
@@ -341,7 +391,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
           val tableSchemaBeforeRefresh =
             DDLUtils.getSchemaFromTableProperties(tableMetadataBeforeRefresh)
-          assert(tableSchemaBeforeRefresh == Option(schema))
+          assert(tableSchemaBeforeRefresh == schema)
           val partColsBeforeRefresh =
             DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
           assert(partColsBeforeRefresh == partitionCols)
@@ -352,7 +402,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
           val tableSchemaAfterRefresh =
             DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
-          assert(tableSchemaAfterRefresh == Option(schema))
+          assert(tableSchemaAfterRefresh == schema)
           val partColsAfterRefresh =
             DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
           assert(partColsAfterRefresh == partitionCols)
@@ -522,7 +572,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
       assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
-        Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
+        new StructType().add("a", IntegerType).add("b", IntegerType))
       assert(DDLUtils.getPartitionColumnsFromTableProperties(table) ==
         Seq("a"))
     }
@@ -538,7 +588,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
       assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
-        Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
+        new StructType().add("a", IntegerType).add("b", IntegerType))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
         Some(BucketSpec(5, Seq("a"), Seq("b"))))
     }

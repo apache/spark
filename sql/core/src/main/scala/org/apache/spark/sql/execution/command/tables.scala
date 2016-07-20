@@ -514,10 +514,8 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
       tableDesc: CatalogTable,
       buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(tableDesc)) {
-      DDLUtils.getSchemaFromTableProperties(tableDesc) match {
-        case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, buffer)
-        case None => append(buffer, "# Schema of this table is corrupted", "", "")
-      }
+      val schema = DDLUtils.getSchemaFromTableProperties(tableDesc)
+      describeSchema(schema, buffer)
     } else {
       describeSchema(tableDesc.schema, buffer)
     }
@@ -884,12 +882,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    DDLUtils.getSchemaFromTableProperties(metadata).foreach { schema =>
-      val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
-      builder ++= columns.mkString("(", ", ", ")")
-    }
-
-    builder ++= "\n"
+    val schema = DDLUtils.getSchemaFromTableProperties(metadata)
+    val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+    builder ++= columns.mkString("(", ", ", ")\n")
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {

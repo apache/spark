@@ -238,7 +238,7 @@ case class CreateDataSourceTableAsSelectCommand(
               }
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
+              existingSchema = Some(DDLUtils.getSchemaFromTableProperties(s.metadata))
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
