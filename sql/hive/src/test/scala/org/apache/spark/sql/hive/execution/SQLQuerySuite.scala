@@ -77,9 +77,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
       checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
     }
-    else {
-      assert(true)
-    }
+    // else skip this test
   }
 
   test("UDTF") {
