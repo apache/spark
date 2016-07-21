@@ -165,9 +165,14 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
    */
   protected abstract UnsafeRow getValueFromKey(int rowId);
 
+  /**
+   * Sometimes the TaskMemoryManager may call spill() on its associated MemoryConsumers to make
+   * space for new consumers. For RowBasedKeyValueBatch, we do not actually spill and return 0.
+   * We should not throw OutOfMemory exception here because other associated consumers might spill
+   */
   public final long spill(long size, MemoryConsumer trigger) throws IOException {
-    logger.warn("RowBasedKeyValueBatch should never call spill().");
-    throw new OutOfMemoryError("row batch should never spill");
+    logger.warn("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
+    return 0;
   }
 
   /**

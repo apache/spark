@@ -43,26 +43,6 @@ class RowBasedHashMapGenerator(
   extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
     groupingKeySchema, bufferSchema) {
 
-  def generate(): String = {
-    s"""
-       |public class $generatedClassName extends org.apache.spark.memory.MemoryConsumer{
-       |${initializeAggregateHashMap()}
-       |
-       |${generateFindOrInsert()}
-       |
-       |${generateEquals()}
-       |
-       |${generateHashFunction()}
-       |
-       |${generateRowIterator()}
-       |
-       |${generateClose()}
-       |
-       |${generateSpill()}
-       |}
-     """.stripMargin
-  }
-
   protected def initializeAggregateHashMap(): String = {
     val generatedKeySchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
@@ -107,9 +87,6 @@ class RowBasedHashMapGenerator(
        |  public $generatedClassName(
        |    org.apache.spark.memory.TaskMemoryManager taskMemoryManager,
        |    InternalRow emptyAggregationBuffer) {
-       |    super(taskMemoryManager,
-       |      taskMemoryManager.pageSizeBytes(),
-       |      taskMemoryManager.getTungstenMemoryMode());
        |    batch = org.apache.spark.sql.catalyst.expressions.RowBasedKeyValueBatch
        |      .allocate(keySchema, valueSchema, taskMemoryManager, capacity);
        |
@@ -222,15 +199,6 @@ class RowBasedHashMapGenerator(
     s"""
        |public org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
        |  return batch.rowIterator();
-       |}
-     """.stripMargin
-  }
-
-  private def generateSpill(): String = {
-    s"""
-       |public long spill(long size, org.apache.spark.memory.MemoryConsumer trigger)
-       |  throws java.io.IOException {
-       |  return batch.spill(0, this);
        |}
      """.stripMargin
   }

@@ -48,24 +48,6 @@ class VectorizedHashMapGenerator(
   extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
     groupingKeySchema, bufferSchema) {
 
-  def generate(): String = {
-    s"""
-       |public class $generatedClassName {
-       |${initializeAggregateHashMap()}
-       |
-       |${generateFindOrInsert()}
-       |
-       |${generateEquals()}
-       |
-       |${generateHashFunction()}
-       |
-       |${generateRowIterator()}
-       |
-       |${generateClose()}
-       |}
-     """.stripMargin
-  }
-
   protected def initializeAggregateHashMap(): String = {
     val generatedSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
