@@ -488,7 +488,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
 
 @inherit_doc
-class LDAModel(JavaModel):
+class LDAModel(JavaModel, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval):
     """
     .. note:: Experimental
 
@@ -673,6 +673,14 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     ...      [2, SparseVector(2, {0: 1.0})],], ["id", "features"])
     >>> lda = LDA(k=2, seed=1, optimizer="em")
     >>> model = lda.fit(df)
+    >>> emap = lda.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(lda, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['checkpointInterval', 'featuresCol', 'maxIter', 'seed']
     >>> model.isDistributed()
     True
     >>> localModel = model.toLocal()

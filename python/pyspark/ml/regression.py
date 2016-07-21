@@ -72,7 +72,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> [param.name for param in model.params] # doctest: +NORMALIZE_WHITESPACE
     ['elasticNetParam', 'featuresCol', 'fitIntercept', 'labelCol', 'maxIter',
     'predictionCol', 'regParam', 'solver', 'standardization', 'tol']
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
@@ -439,7 +439,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     True
     >>> [param.name for param in model.params]
     ['featuresCol', 'labelCol', 'predictionCol', 'weightCol']
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
     >>> model.boundaries
@@ -1371,7 +1371,6 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     >>> [param.name for param in model.params] # doctest: +NORMALIZE_WHITESPACE
     ['featuresCol', 'fitIntercept', 'labelCol', 'maxIter', 'predictionCol',
      'regParam', 'solver', 'tol', 'weightCol']
-    >>> abs(model.transform(df).head().prediction - 1.5) < 0.001
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True

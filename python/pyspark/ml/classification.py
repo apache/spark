@@ -1253,9 +1253,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         """
         return self._set(stepSize=value)
 
-
-class MultilayerPerceptronClassificationModel(JavaModel, HasFeaturesCol, HasLabelCol,
-                                              HasPredictionCol, JavaMLWritable, JavaMLReadable):
     @since("2.0.0")
     def getStepSize(self):
         """
