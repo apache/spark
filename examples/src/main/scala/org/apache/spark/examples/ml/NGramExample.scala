@@ -37,9 +37,10 @@ object NGramExample {
       (2, Array("Logistic", "regression", "models", "are", "neat"))
     )).toDF("label", "words")
 
-    val ngram = new NGram().setInputCol("words").setOutputCol("ngrams")
+    val ngram = new NGram().setN(2).setInputCol("words").setOutputCol("bigrams")
+
     val ngramDataFrame = ngram.transform(wordDataFrame)
-    ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(println)
+    ngramDataFrame.select("bigrams").show(false)
     // $example off$
 
     spark.stop()

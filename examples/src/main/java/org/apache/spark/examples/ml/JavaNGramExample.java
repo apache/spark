@@ -55,16 +55,12 @@ public class JavaNGramExample {
 
     Dataset<Row> wordDataFrame = spark.createDataFrame(data, schema);
 
-    NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
+    NGram ngramTransformer = new NGram().setN(2).setInputCol("words").setOutputCol("bigrams");
 
     Dataset<Row> ngramDataFrame = ngramTransformer.transform(wordDataFrame);
-
-    for (Row r : ngramDataFrame.select("ngrams", "label").takeAsList(3)) {
-      java.util.List<String> ngrams = r.getList(0);
-      for (String ngram : ngrams) System.out.print(ngram + " --- ");
-      System.out.println();
-    }
+    ngramDataFrame.select("bigrams").show(false);
     // $example off$
+
     spark.stop();
   }
 }

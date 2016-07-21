@@ -35,11 +35,10 @@ if __name__ == "__main__":
         (2, ["Logistic", "regression", "models", "are", "neat"])
     ], ["label", "words"])
 
-    ngram = NGram(inputCol="words", outputCol="ngrams")
-    ngramDataFrame = ngram.transform(wordDataFrame)
+    ngram = NGram(n=2, inputCol="words", outputCol="bigrams")
 
-    for ngrams_label in ngramDataFrame.select("ngrams", "label").take(3):
-        print(ngrams_label)
+    ngramDataFrame = ngram.transform(wordDataFrame)
+    ngramDataFrame.select("bigrams").show(truncate=False)
     # $example off$
 
     spark.stop()
