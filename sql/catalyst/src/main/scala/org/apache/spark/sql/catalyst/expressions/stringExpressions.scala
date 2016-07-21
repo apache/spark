@@ -206,21 +206,24 @@ case class Elt(children: Seq[Expression])
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val index = children.head.map(_.genCode(ctx))(0)
-    val strings = children.tail.map(_.genCode(ctx))
-    val stringValues = strings.map { eval =>
-      s"${eval.isNull} ? null : ${eval.value}"
-    }.mkString(", ")
+    val index = indexExpr.genCode(ctx)
+    val strings = stringExprs.map(_.genCode(ctx))
+    val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
+      s"""
+        case ${index + 1}:
+          ${ev.value} = ${eval.isNull} ? null : ${eval.value};
+           break;
+      """
+    }.mkString("\n")
     val indexVal = ctx.freshName("index")
     val stringArray = ctx.freshName("strings");
 
     ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
-      int $indexVal = ${index.value} - 1;
-      UTF8String[] $stringArray = {$stringValues};
+      int $indexVal = ${index.value};
       boolean ${ev.isNull} = false;
       UTF8String ${ev.value} = null;
-      if ($indexVal >= 0 && $indexVal < $stringArray.length) {
-        ${ev.value} = $stringArray[$indexVal];
+      switch ($indexVal) {
+        $assignStringValue
       }
       if (${ev.value} == null) {
         ${ev.isNull} = true;
