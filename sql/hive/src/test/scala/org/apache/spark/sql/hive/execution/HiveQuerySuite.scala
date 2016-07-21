@@ -798,12 +798,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // Describe a table
     assertResult(
       Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
+        Row("key", "int", ""),
+        Row("value", "string", ""),
+        Row("dt", "string", ""),
         Row("# Partition Information", "", ""),
         Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
+        Row("dt", "string", ""))
     ) {
       sql("DESCRIBE test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
@@ -813,12 +813,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // Describe a table with a fully qualified table name
     assertResult(
       Array(
-        Row("key", "int", null),
-        Row("value", "string", null),
-        Row("dt", "string", null),
+        Row("key", "int", ""),
+        Row("value", "string", ""),
+        Row("dt", "string", ""),
         Row("# Partition Information", "", ""),
         Row("# col_name", "data_type", "comment"),
-        Row("dt", "string", null))
+        Row("dt", "string", ""))
     ) {
       sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)

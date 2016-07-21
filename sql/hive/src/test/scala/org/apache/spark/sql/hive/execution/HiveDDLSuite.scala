@@ -431,6 +431,22 @@ class HiveDDLSuite
     }
   }
 
+  test("desc table for Hive table - partitioned table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b int)")
+
+      assert(sql("DESC tbl").collect().containsSlice(
+        Seq(
+          Row("a", "int", ""),
+          Row("b", "int", ""),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("b", "int", "")
+        )
+      ))
+    }
+  }
+
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"
@@ -643,8 +659,8 @@ class HiveDDLSuite
           Row("c", "bigint", ""),
           Row("d", "bigint", ""),
           Row("# Partition Information", "", ""),
-          Row("# col_name", "", ""),
-          Row("d", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("d", "bigint", ""),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Database:", "default", "")
