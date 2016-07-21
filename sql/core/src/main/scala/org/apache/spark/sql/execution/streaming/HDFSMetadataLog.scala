@@ -97,13 +97,13 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
    * metadata has already been stored, this method will return `false`.
    *
    * Note that this method must be called on a [[org.apache.spark.util.UninterruptibleThread]]
-   * so that interrupt can be disabled while writing the batch. This is because there is a
-   * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If thread
-   * running Shell.runCommand is interrupted, then the thread can get hit the deadlock. In this
+   * so that interrupts can be disabled while writing the batch file. This is because there is a
+   * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread
+   * running "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our
    * case, `writeBatch` creates a file using HDFS API and calls "Shell.runCommand" to set the
-   * file permission, and can get deadlock is the stream execution thread is stopped by interrupt.
-   * Hence, we make sure that this method UninterruptibleThread, which allows interrupts to be
-   * disabled. See SPARK-14131.
+   * file permissions, and can get deadlocked is the stream execution thread is stopped by
+   * interrupt. Hence, we make sure that this method is called on UninterruptibleThread which
+   * allows use disable interrupts. Also see SPARK-14131.
    */
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
