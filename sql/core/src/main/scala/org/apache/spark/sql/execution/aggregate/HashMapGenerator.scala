@@ -60,7 +60,23 @@ abstract class HashMapGenerator(
     }
   }
 
-  def generate(): String
+  def generate(): String = {
+    s"""
+       |public class $generatedClassName {
+       |${initializeAggregateHashMap()}
+       |
+       |${generateFindOrInsert()}
+       |
+       |${generateEquals()}
+       |
+       |${generateHashFunction()}
+       |
+       |${generateRowIterator()}
+       |
+       |${generateClose()}
+       |}
+     """.stripMargin
+  }
 
   protected def initializeAggregateHashMap(): String
 
