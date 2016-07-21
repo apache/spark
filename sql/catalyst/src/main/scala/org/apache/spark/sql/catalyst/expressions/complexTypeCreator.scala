@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -404,7 +403,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
     "Default delimiters are ',' for pairDelim and ':' for keyValueDelim.",
   extended = """ > SELECT _FUNC_('a:1,b:2,c:3',',',':');\n map("a":"1","b":"2","c":"3") """)
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
-  extends TernaryExpression with CodegenFallback{
+  extends TernaryExpression with CodegenFallback with ExpectsInputTypes {
 
   def this(child: Expression, pairDelim: Expression) = {
     this(child, pairDelim, Literal(":"))
@@ -416,18 +415,15 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def children: Seq[Expression] = Seq(text, pairDelim, keyValueDelim)
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, StringType)
+
   override def dataType: DataType = MapType(StringType, StringType, valueContainsNull = false)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.map(_.dataType).forall(_ == StringType)) {
-      if (Seq(pairDelim, keyValueDelim).forall(_.foldable)) {
-        TypeCheckResult.TypeCheckSuccess
-      } else {
-        TypeCheckResult.TypeCheckFailure(
-          s"$prettyName's delimiters must be foldable.")
-      }
+    if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName's delimiters must be foldable.")
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName's all arguments must be of type string.")
+      super.checkInputDataTypes()
     }
   }
 
