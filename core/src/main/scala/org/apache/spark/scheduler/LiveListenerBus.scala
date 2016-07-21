@@ -44,7 +44,6 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
   private lazy val EVENT_QUEUE_CAPACITY = validateAndGetQueueSize()
   private lazy val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
 
-
   private def validateAndGetQueueSize(): Int = {
     val queueSize = sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_SIZE)
     if (queueSize <= 0) {
