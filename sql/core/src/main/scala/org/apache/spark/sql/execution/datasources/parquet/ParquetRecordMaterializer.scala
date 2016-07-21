@@ -28,12 +28,14 @@ import org.apache.spark.sql.types.StructType
  *
  * @param parquetSchema Parquet schema of the records to be read
  * @param catalystSchema Catalyst schema of the rows to be constructed
+ * @param schemaConverter A Parquet-Catalyst schema converter that helps initializing row converters
  */
 private[parquet] class ParquetRecordMaterializer(
-    parquetSchema: MessageType, catalystSchema: StructType)
+    parquetSchema: MessageType, catalystSchema: StructType, schemaConverter: ParquetSchemaConverter)
   extends RecordMaterializer[InternalRow] {
 
-  private val rootConverter = new ParquetRowConverter(parquetSchema, catalystSchema, NoopUpdater)
+  private val rootConverter =
+    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, NoopUpdater)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 

@@ -34,6 +34,7 @@ setOldClass("jobj")
 #'
 #' @rdname crosstab
 #' @name crosstab
+#' @aliases crosstab,SparkDataFrame,character,character-method
 #' @family stat functions
 #' @export
 #' @examples
@@ -59,6 +60,7 @@ setMethod("crosstab",
 #'
 #' @rdname cov
 #' @name cov
+#' @aliases cov,SparkDataFrame-method
 #' @family stat functions
 #' @export
 #' @examples
@@ -88,6 +90,7 @@ setMethod("cov",
 #'
 #' @rdname corr
 #' @name corr
+#' @aliases corr,SparkDataFrame-method
 #' @family stat functions
 #' @export
 #' @examples
@@ -120,6 +123,7 @@ setMethod("corr",
 #'
 #' @rdname freqItems
 #' @name freqItems
+#' @aliases freqItems,SparkDataFrame,character-method
 #' @family stat functions
 #' @export
 #' @examples
@@ -158,6 +162,7 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #'
 #' @rdname approxQuantile
 #' @name approxQuantile
+#' @aliases approxQuantile,SparkDataFrame,character,numeric,numeric-method
 #' @family stat functions
 #' @export
 #' @examples
@@ -188,6 +193,7 @@ setMethod("approxQuantile",
 #' @return A new SparkDataFrame that represents the stratified sample
 #'
 #' @rdname sampleBy
+#' @aliases sampleBy,SparkDataFrame,character,list,numeric-method
 #' @name sampleBy
 #' @family stat functions
 #' @export

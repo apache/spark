@@ -28,6 +28,7 @@
 #'
 #' @rdname windowPartitionBy
 #' @name windowPartitionBy
+#' @aliases windowPartitionBy,character-method
 #' @export
 #' @examples
 #' \dontrun{
@@ -50,6 +51,7 @@ setMethod("windowPartitionBy",
 
 #' @rdname windowPartitionBy
 #' @name windowPartitionBy
+#' @aliases windowPartitionBy,Column-method
 #' @export
 #' @note windowPartitionBy(Column) since 2.0.0
 setMethod("windowPartitionBy",
@@ -75,6 +77,7 @@ setMethod("windowPartitionBy",
 #'
 #' @rdname windowOrderBy
 #' @name windowOrderBy
+#' @aliases windowOrderBy,character-method
 #' @export
 #' @examples
 #' \dontrun{
@@ -97,6 +100,7 @@ setMethod("windowOrderBy",
 
 #' @rdname windowOrderBy
 #' @name windowOrderBy
+#' @aliases windowOrderBy,Column-method
 #' @export
 #' @note windowOrderBy(Column) since 2.0.0
 setMethod("windowOrderBy",

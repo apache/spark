@@ -33,7 +33,7 @@ numPairs <- list(list(1, 1), list(1, 2), list(2, 2), list(2, 3))
 strPairs <- list(list(strList, strList), list(strList, strList))
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 jsc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Tests
@@ -108,3 +108,5 @@ test_that("parallelize() and collect() work for lists of pairs (pairwise data)",
   expect_equal(collect(strPairsRDDD1), strPairs)
   expect_equal(collect(strPairsRDDD2), strPairs)
 })
+
+sparkR.session.stop()

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation - spark.mllib
-displayTitle: Feature Extraction and Transformation - spark.mllib
+title: Feature Extraction and Transformation - RDD-based API
+displayTitle: Feature Extraction and Transformation - RDD-based API
 ---
 
 * Table of contents

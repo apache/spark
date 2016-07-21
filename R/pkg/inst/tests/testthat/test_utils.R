@@ -18,7 +18,7 @@
 context("functions in utils.R")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("convertJListToRList() gives back (deserializes) the original JLists
@@ -182,3 +182,5 @@ test_that("overrideEnvs", {
   expect_equal(config[["param_only"]], "blah")
   expect_equal(config[["config_only"]], "ok")
 })
+
+sparkR.session.stop()

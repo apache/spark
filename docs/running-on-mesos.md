@@ -429,6 +429,16 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    This only affects drivers submitted in cluster mode.  Add the
+    environment variable specified by EnvironmentVariableName to the
+    driver process. The user can specify multiple of these to set
+    multiple environment variables.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.dispatcher.webui.url</code></td>
   <td><code>(none)</code></td>
   <td>

@@ -2424,6 +2424,13 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   before <- suppressWarnings(createDataFrame(sqlContext, iris))
   after <- suppressWarnings(createDataFrame(iris))
   expect_equal(collect(before), collect(after))
+
+  # more tests for SPARK-16538
+  createOrReplaceTempView(df, "table")
+  SparkR::tables()
+  SparkR::sql("SELECT 1")
+  suppressWarnings(SparkR::sql(sqlContext, "SELECT * FROM table"))
+  suppressWarnings(SparkR::dropTempTable(sqlContext, "table"))
 })
 
 test_that("randomSplit", {
@@ -2482,3 +2489,5 @@ unlink(parquetPath)
 unlink(orcPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
+
+sparkR.session.stop()
