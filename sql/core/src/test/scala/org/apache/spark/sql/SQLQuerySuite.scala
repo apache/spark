@@ -46,6 +46,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row("one", 6) :: Row("three", 3) :: Nil)
   }
 
+  test("having condition contains grouping column") {
+    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
+      .createOrReplaceTempView("hav")
+    checkAnswer(
+      sql("SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2"),
+      Row(1) :: Nil)
+  }
+
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.createOrReplaceTempView("src")

@@ -246,7 +246,7 @@ class Analyzer(
       }.isDefined
     }
 
-    private def hasGroupingFunction(e: Expression): Boolean = {
+    private[sql] def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
         case g: Grouping => g
         case g: GroupingID => g
@@ -1182,7 +1182,8 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
-          if aggregate.resolved =>
+          if aggregate.resolved && (containsAggregate(havingCondition) || !filter.resolved) &&
+            !ResolveGroupingAnalytics.hasGroupingFunction(havingCondition) =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         try {
@@ -1202,9 +1203,14 @@ class Analyzer(
           if (resolvedOperator.resolved) {
             // Try to replace all aggregate expressions in the filter by an alias.
             val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
-            val transformedAggregateFilter = resolvedAggregateFilter.transform {
+            val transformedAggregateFilter = resolvedAggregateFilter.transformDown {
               case ae: AggregateExpression =>
                 val alias = Alias(ae, ae.toString)()
+                aggregateExpressions += alias
+                alias.toAttribute
+              case ne: NamedExpression => ne
+              case e: Expression =>
+                val alias = Alias(e, e.toString)()
                 aggregateExpressions += alias
                 alias.toAttribute
             }
