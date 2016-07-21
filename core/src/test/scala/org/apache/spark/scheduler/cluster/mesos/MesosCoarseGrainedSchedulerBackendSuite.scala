@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.Scalar
+import org.apache.mesos.Protos.Value.Text
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -252,6 +253,36 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.start()
   }
 
+  test("can accept offers meeting attribute requirements") {
+    setBackend(Map("spark.mesos.constraints" -> "zone:us-central1-a"))
+
+    val minMem = backend.executorMemory(sc)
+    val minCpu = 4
+
+    val mesosOffers = new java.util.ArrayList[Offer]
+    val offer = createOffer("o1", "s1", minMem, minCpu,
+      Map("zone" -> "us-central1-a"))
+    mesosOffers.add(offer)
+    backend.resourceOffers(driver, mesosOffers)
+
+    verifyTaskLaunched("o1")
+  }
+
+  test("cannot accept offers not meeting attribute requirements") {
+    setBackend(Map("spark.mesos.constraints" -> "zone:us-central1-a"))
+
+    val minMem = backend.executorMemory(sc)
+    val minCpu = 4
+
+    val mesosOffers = new java.util.ArrayList[Offer]
+    val offer = createOffer("o1", "s1", minMem, minCpu,
+      Map("zone" -> "us-central1-b"))
+    mesosOffers.add(offer)
+    backend.resourceOffers(driver, mesosOffers)
+
+    verifyDeclinedOffer(driver, createOfferId("o1"), true)
+  }
+
   private def verifyDeclinedOffer(driver: SchedulerDriver,
       offerId: OfferID,
       filter: Boolean = false): Unit = {
@@ -302,7 +333,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     TaskID.newBuilder().setValue(taskId).build()
   }
 
-  private def createOffer(offerId: String, slaveId: String, mem: Int, cpu: Int): Offer = {
+  private def createOffer(offerId: String, slaveId: String, mem: Int, cpu: Int,
+                          attributes: Map[String, String] = null): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -317,7 +349,15 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
         .setValue("f1"))
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId))
       .setHostname(s"host${slaveId}")
-      .build()
+    if (attributes != null) {
+      for (attr <- attributes) {
+        builder.addAttributesBuilder()
+          .setName(attr._1)
+          .setType(Value.Type.TEXT)
+          .setText(Text.newBuilder().setValue(attr._2))
+      }
+    }
+    builder.build()
   }
 
   private def createSchedulerBackend(
