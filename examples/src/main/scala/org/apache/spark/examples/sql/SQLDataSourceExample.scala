@@ -18,7 +18,7 @@ package org.apache.spark.examples.sql
 
 import org.apache.spark.sql.SparkSession
 
-object SqlDataSourceExample {
+object SQLDataSourceExample {
 
   case class Person(name: String, age: Long)
 

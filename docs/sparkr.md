@@ -54,7 +54,7 @@ if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
   Sys.setenv(SPARK_HOME = "/home/spark")
 }
 library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
-sc <- sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory="2g"))
+sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g"))
 {% endhighlight %}
 </div>
 
@@ -115,7 +115,7 @@ specifying `--packages` with `spark-submit` or `sparkR` commands, or if initiali
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
 {% endhighlight %}
 </div>
 

@@ -424,11 +424,6 @@ class LogisticRegression @Since("1.2.0") (
           throw new SparkException(msg)
         }
 
-        if (!state.actuallyConverged) {
-          logWarning("LogisticRegression training finished but the result " +
-            s"is not converged because: ${state.convergedReason.get.reason}")
-        }
-
         /*
            The coefficients are trained in the scaled space; we're converting them back to
            the original space.
