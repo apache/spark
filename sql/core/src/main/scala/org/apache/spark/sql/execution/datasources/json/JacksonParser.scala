@@ -348,9 +348,7 @@ private[sql] class JacksonParser(
   private def convertValue(parser: JsonParser)(f: => Any): Any = {
     parser.getCurrentToken match {
       case null | VALUE_NULL => null
-
-      case _ =>
-        f
+      case _ => f
     }
   }
 

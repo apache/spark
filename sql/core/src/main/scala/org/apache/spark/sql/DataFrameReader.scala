@@ -314,16 +314,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       parsedOptions.columnNameOfCorruptRecord
         .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
-      InferSchema.infer(
-        jsonRDD,
-        columnNameOfCorruptRecord,
-        parsedOptions)
+      InferSchema.infer(jsonRDD, columnNameOfCorruptRecord, parsedOptions)
     }
     val parsed = jsonRDD.mapPartitions { iter =>
       val parser = new JacksonParser(schema, columnNameOfCorruptRecord, parsedOptions)
-      iter.flatMap { record =>
-        parser.parse(record)
-      }
+      iter.flatMap(parser.parse)
     }
 
     Dataset.ofRows(
