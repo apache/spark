@@ -40,7 +40,7 @@ private[r] class ALSWrapper private (
   lazy val rUserFactors: DataFrame = alsModel.userFactors
 
   lazy val rItemFactors: DataFrame = alsModel.itemFactors
-//
+
   override def write: MLWriter =
     new ALSWrapper.ALSWrapperWriter(this)
 }
@@ -60,12 +60,6 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
     val als = new ALS()
       .setRank(rank)
       .setMaxIter(maxIter)
-
-    //      .setFamily(family)
-    //      .setLink(link)
-    //      .setFitIntercept(rFormula.hasIntercept)
-    //      .setTol(tol)
-    //      .setMaxIter(maxIter)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, als))
