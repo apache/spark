@@ -79,7 +79,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/java
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
 
-{% include_example init_session python/sql/SparkSqlExample.py %}
+{% include_example init_session python/sql/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -123,7 +123,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% include_example create_df python/sql/SparkSqlExample.py %}
+{% include_example create_df python/sql/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -171,7 +171,7 @@ interactive data exploration, users are highly encouraged to use the
 latter form, which is future proof and won't break with column names that
 are also attributes on the DataFrame class.
 
-{% include_example untyped_ops python/sql/SparkSqlExample.py %}
+{% include_example untyped_ops python/sql/SparkSQLExample.py %}
 For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
 
 In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/pyspark.sql.html#module-pyspark.sql.functions).
@@ -208,7 +208,7 @@ The `sql` function on a `SparkSession` enables applications to run SQL queries p
 <div data-lang="python"  markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
-{% include_example run_sql python/sql/SparkSqlExample.py %}
+{% include_example run_sql python/sql/SparkSQLExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -283,7 +283,7 @@ Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the dataty
 key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
 and the types are inferred by sampling the whole datase, similar to the inference that is performed on JSON files.
 
-{% include_example schema_inferring python/sql/SparkSqlExample.py %}
+{% include_example schema_inferring python/sql/SparkSQLExample.py %}
 </div>
 
 </div>
@@ -342,7 +342,7 @@ tuples or lists in the RDD created in the step 1.
 
 For example:
 
-{% include_example programmatic_schema python/sql/SparkSqlExample.py %}
+{% include_example programmatic_schema python/sql/SparkSQLExample.py %}
 </div>
 
 </div>
@@ -372,7 +372,7 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 
 <div data-lang="python"  markdown="1">
 
-{% include_example generic_load_save_functions python/sql/SqlDataSourceExample.py %}
+{% include_example generic_load_save_functions python/sql/SQLDataSourceExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -401,7 +401,7 @@ using this syntax.
 
 <div data-lang="python"  markdown="1">
 
-{% include_example manual_load_options python/sql/SqlDataSourceExample.py %}
+{% include_example manual_load_options python/sql/SQLDataSourceExample.py %}
 </div>
 <div data-lang="r"  markdown="1">
 
@@ -426,7 +426,7 @@ file directly with SQL.
 
 <div data-lang="python"  markdown="1">
 
-{% include_example direct_sql python/sql/SqlDataSourceExample.py %}
+{% include_example direct_sql python/sql/SQLDataSourceExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -518,7 +518,7 @@ Using the data from the above example:
 
 <div data-lang="python"  markdown="1">
 
-{% include_example basic_parquet_example python/sql/SqlDataSourceExample.py %}
+{% include_example basic_parquet_example python/sql/SQLDataSourceExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -632,7 +632,7 @@ turned it off by default starting from 1.5.0. You may enable it by
 
 <div data-lang="python"  markdown="1">
 
-{% include_example schema_merging python/sql/SqlDataSourceExample.py %}
+{% include_example schema_merging python/sql/SQLDataSourceExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -827,7 +827,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% include_example json_dataset python/sql/SqlDataSourceExample.py %}
+{% include_example json_dataset python/sql/SQLDataSourceExample.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
