@@ -211,7 +211,7 @@ class BisectingKMeans private (
       }
       level += 1
     }
-    indices.unpersist()
+    if(indices != null) indices.unpersist()
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters)
     new BisectingKMeansModel(root)
