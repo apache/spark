@@ -247,4 +247,8 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |from part
         """.stripMargin))
   }
+
+  test("SPARK-16646: LAST_VALUE(FALSE) OVER ()") {
+    checkAnswer(sql("SELECT LAST_VALUE(FALSE) OVER ()"), Row(false))
+  }
 }

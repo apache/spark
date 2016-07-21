@@ -42,6 +42,17 @@ case class Last(child: Expression, ignoreNullsExpr: Expression) extends Declarat
 
   override def children: Seq[Expression] = child :: Nil
 
+  // SPARK-16648: Default `TreeNode.withNewChildren` implementation doesn't work for `Last` when
+  // both constructor arguments are the same, e.g.:
+  //
+  //   LAST_VALUE(FALSE) // The 2nd argument defaults to FALSE
+  //   LAST_VALUE(FALSE, FALSE)
+  //   LAST_VALUE(TRUE, TRUE)
+  override def withNewChildren(newChildren: Seq[Expression]): Expression = {
+    val Seq(newChild) = newChildren
+    copy(child = newChild)
+  }
+
   override def nullable: Boolean = true
 
   // Last is not a deterministic function.
