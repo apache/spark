@@ -20,6 +20,8 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.{RegexTokenizer, Tokenizer}
+import org.apache.spark.sql.functions._
+
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -43,11 +45,15 @@ object TokenizerExample {
       .setOutputCol("words")
       .setPattern("\\W") // alternatively .setPattern("\\w+").setGaps(false)
 
+    val countTokens = udf { (words: Seq[String]) => words.length }
+
     val tokenized = tokenizer.transform(sentenceDataFrame)
-    tokenized.select("words", "label").take(3).foreach(println)
+    tokenized.select("sentence", "words")
+        .withColumn("tokens", countTokens(col("words"))).show(false)
 
     val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
-    regexTokenized.select("words", "label").take(3).foreach(println)
+    regexTokenized.select("sentence", "words")
+        .withColumn("tokens", countTokens(col("words"))).show(false)
     // $example off$
 
     spark.stop()

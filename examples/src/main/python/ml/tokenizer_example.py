@@ -19,6 +19,8 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml.feature import Tokenizer, RegexTokenizer
+from pyspark.sql.functions import col, udf
+from pyspark.sql.types import IntegerType
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -40,13 +42,15 @@ if __name__ == "__main__":
     regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
     # alternatively, pattern="\\w+", gaps(False)
 
+    countTokens = udf(lambda words: len(words), IntegerType())
+
     tokenized = tokenizer.transform(sentenceDataFrame)
-    for words_label in tokenized.select("words", "label").take(3):
-        print(words_label)
+    tokenized.select("sentence", "words")\
+        .withColumn("tokens", countTokens(col("words"))).show(truncate=False)
 
     regexTokenized = regexTokenizer.transform(sentenceDataFrame)
-    for words_label in regexTokenized.select("words", "label").take(3):
-        print(words_label)
+    regexTokenized.select("sentence", "words") \
+        .withColumn("tokens", countTokens(col("words"))).show(truncate=False)
     # $example off$
 
     spark.stop()
