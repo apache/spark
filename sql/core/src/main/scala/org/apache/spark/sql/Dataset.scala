@@ -2421,12 +2421,15 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    val tableDesc = CatalogTable(
-      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      tableType = CatalogTableType.VIEW,
-      schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.empty)
-    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
+    CreateViewCommand(
+      name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = None,
+      child = logicalPlan,
+      allowExisting = false,
+      replace = false,
       isTemporary = true)
   }
 
@@ -2438,12 +2441,15 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    val tableDesc = CatalogTable(
-      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      tableType = CatalogTableType.VIEW,
-      schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.empty)
-    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
+    CreateViewCommand(
+      name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = None,
+      child = logicalPlan,
+      allowExisting = false,
+      replace = true,
       isTemporary = true)
   }
 

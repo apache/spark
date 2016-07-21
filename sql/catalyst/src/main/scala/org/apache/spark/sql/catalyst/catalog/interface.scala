@@ -81,9 +81,9 @@ object CatalogStorageFormat {
  */
 case class CatalogColumn(
     name: String,
-    // This may be null when used to create views. TODO: make this type-safe; this is left
-    // as a string due to issues in converting Hive varchars to and from SparkSQL strings.
-    @Nullable dataType: String,
+    // TODO: make this type-safe; this is left as a string due to issues in converting Hive
+    // varchars to and from SparkSQL strings.
+    dataType: String,
     nullable: Boolean = true,
     comment: Option[String] = None) {
 
