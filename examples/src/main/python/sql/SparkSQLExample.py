@@ -33,7 +33,7 @@ from pyspark.sql.types import *
 """
 A simple example demonstrating Spark SQL.
 Run with:
-  ./bin/spark-submit examples/src/main/python/SparkSQLExample.py
+  ./bin/spark-submit examples/src/main/python/sql/SparkSQLExample.py
 """
 
 
