@@ -159,7 +159,7 @@ private[sql] object PartitioningUtils {
    *     Seq(
    *       Literal.create(42, IntegerType),
    *       Literal.create("hello", StringType),
-   *       Literal.create(3.14, FloatType)))
+   *       Literal.create(3.14, DoubleType)))
    * }}}
    * and the path when we stop the discovery is:
    * {{{
@@ -351,7 +351,7 @@ private[sql] object PartitioningUtils {
       }
     }
 
-    if (partitionColumns.size == schema.fields.size) {
+    if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
       throw new AnalysisException(s"Cannot use all columns for partition columns")
     }
   }

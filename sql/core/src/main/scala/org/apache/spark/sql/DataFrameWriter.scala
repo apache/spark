@@ -21,8 +21,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
@@ -243,25 +241,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
-    val partitions = normalizedParCols.map(_.map(col => col -> (Option.empty[String])).toMap)
-    val overwrite = mode == SaveMode.Overwrite
 
-    // A partitioned relation's schema can be different from the input logicalPlan, since
-    // partition columns are all moved after data columns. We Project to adjust the ordering.
-    // TODO: this belongs to the analyzer.
-    val input = normalizedParCols.map { parCols =>
-      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
-        parCols.contains(attr.name)
-      }
-      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
-    }.getOrElse(df.logicalPlan)
+    if (partitioningColumns.isDefined) {
+      throw new AnalysisException(
+        "insertInto() can't be used together with partitionBy(). " +
+          "Partition columns have already be defined for the table. " +
+          "It is not necessary to use partitionBy()."
+      )
+    }
 
     df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
-        UnresolvedRelation(tableIdent),
-        partitions.getOrElse(Map.empty[String, Option[String]]),
-        input,
-        overwrite,
+        table = UnresolvedRelation(tableIdent),
+        partition = Map.empty[String, Option[String]],
+        child = df.logicalPlan,
+        overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false)).toRdd
   }
 
@@ -397,7 +391,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "batchsize" can be used to control the
+   *                             number of rows per insert.
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
@@ -542,6 +537,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
+   * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
+   * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be

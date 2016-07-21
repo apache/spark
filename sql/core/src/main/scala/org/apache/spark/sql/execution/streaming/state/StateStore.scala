@@ -115,7 +115,7 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
  */
 private[sql] object StateStore extends Logging {
 
-  val MAINTENANCE_INTERVAL_CONFIG = "spark.streaming.stateStore.maintenanceInterval"
+  val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()

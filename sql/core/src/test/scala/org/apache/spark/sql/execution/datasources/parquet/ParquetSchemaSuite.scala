@@ -54,7 +54,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -78,7 +78,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       writeLegacyParquetFormat: Boolean): Unit = {
-    val converter = new CatalystSchemaConverter(
+    val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       writeLegacyParquetFormat = writeLegacyParquetFormat)
@@ -1062,7 +1062,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       catalystSchema: StructType,
       expectedSchema: MessageType): Unit = {
     test(s"Clipping - $testName") {
-      val actual = CatalystReadSupport.clipParquetSchema(
+      val actual = ParquetReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
 
       try {
@@ -1424,7 +1424,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = CatalystSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = ParquetSchemaConverter.EMPTY_MESSAGE)
 
   testSchemaClipping(
     "disjoint field sets",
@@ -1581,4 +1581,43 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |  }
         |}
       """.stripMargin)
+
+  testSchemaClipping(
+    "int32 parquet field with byte schema field",
+
+    parquetSchema =
+      """message root {
+        |  optional int32 value;
+        |}
+      """.stripMargin,
+
+    catalystSchema =
+      new StructType()
+        .add("value", ByteType, nullable = true),
+
+    expectedSchema =
+      """message root {
+        |  optional int32 value (INT_8);
+        |}
+      """.stripMargin)
+
+  testSchemaClipping(
+    "int32 parquet field with short schema field",
+
+    parquetSchema =
+      """message root {
+        |  optional int32 value;
+        |}
+      """.stripMargin,
+
+    catalystSchema =
+      new StructType()
+        .add("value", ShortType, nullable = true),
+
+    expectedSchema =
+      """message root {
+        |  optional int32 value (INT_16);
+        |}
+      """.stripMargin)
+
 }

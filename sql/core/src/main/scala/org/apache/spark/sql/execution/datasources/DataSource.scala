@@ -203,6 +203,18 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+
+        // Check whether the path exists if it is not a glob pattern.
+        // For glob pattern, we do not check it because the glob pattern might only make sense
+        // once the streaming job starts and some upstream source starts dropping data.
+        val hdfsPath = new Path(path)
+        if (!SparkHadoopUtil.get.isGlobPath(hdfsPath)) {
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+          if (!fs.exists(hdfsPath)) {
+            throw new AnalysisException(s"Path does not exist: $path")
+          }
+        }
+
         val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         // If the schema inference is disabled, only text sources require schema to be specified
@@ -364,7 +376,8 @@ case class DataSource(
         }
 
         val fileCatalog =
-          new ListingFileCatalog(sparkSession, globbedPaths, options, partitionSchema)
+          new ListingFileCatalog(
+            sparkSession, globbedPaths, options, partitionSchema, !checkPathExist)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality =
@@ -386,9 +399,6 @@ case class DataSource(
               "It must be specified manually")
         }
 
-        val enrichedOptions =
-          format.prepareRead(sparkSession, caseInsensitiveOptions, fileCatalog.allFiles())
-
         HadoopFsRelation(
           sparkSession,
           fileCatalog,
@@ -396,7 +406,7 @@ case class DataSource(
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          enrichedOptions)
+          caseInsensitiveOptions)
 
       case _ =>
         throw new AnalysisException(
@@ -438,26 +448,26 @@ case class DataSource(
         // If we are appending to a table that already exists, make sure the partitioning matches
         // up.  If we fail to load the table for whatever reason, ignore the check.
         if (mode == SaveMode.Append) {
-          val existingPartitionColumnSet = try {
-            Some(
-              resolveRelation()
-                .asInstanceOf[HadoopFsRelation]
-                .location
-                .partitionSpec()
-                .partitionColumns
-                .fieldNames
-                .toSet)
-          } catch {
-            case e: Exception =>
-              None
-          }
-
-          existingPartitionColumnSet.foreach { ex =>
-            if (ex.map(_.toLowerCase) != partitionColumns.map(_.toLowerCase()).toSet) {
-              throw new AnalysisException(
-                s"Requested partitioning does not equal existing partitioning: " +
-                s"$ex != ${partitionColumns.toSet}.")
-            }
+          val existingPartitionColumns = Try {
+            resolveRelation()
+              .asInstanceOf[HadoopFsRelation]
+              .location
+              .partitionSpec()
+              .partitionColumns
+              .fieldNames
+              .toSeq
+          }.getOrElse(Seq.empty[String])
+          // TODO: Case sensitivity.
+          val sameColumns =
+            existingPartitionColumns.map(_.toLowerCase()) == partitionColumns.map(_.toLowerCase())
+          if (existingPartitionColumns.size > 0 && !sameColumns) {
+            throw new AnalysisException(
+              s"""Requested partitioning does not match existing partitioning.
+                 |Existing partitioning columns:
+                 |  ${existingPartitionColumns.mkString(", ")}
+                 |Requested partitioning columns:
+                 |  ${partitionColumns.mkString(", ")}
+                 |""".stripMargin)
           }
         }
 
@@ -475,12 +485,11 @@ case class DataSource(
             data.logicalPlan,
             mode)
         sparkSession.sessionState.executePlan(plan).toRdd
+        // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
+        copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
-
-    // We replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
-    copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
   }
 }

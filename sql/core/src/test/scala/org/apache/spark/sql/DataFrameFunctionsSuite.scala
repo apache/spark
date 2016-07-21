@@ -352,6 +352,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("map_keys/map_values function") {
+    val df = Seq(
+      (Map[Int, Int](1 -> 100, 2 -> 200), "x"),
+      (Map[Int, Int](), "y"),
+      (Map[Int, Int](1 -> 100, 2 -> 200, 3 -> 300), "z")
+    ).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("map_keys(a)"),
+      Seq(Row(Seq(1, 2)), Row(Seq.empty), Row(Seq(1, 2, 3)))
+    )
+    checkAnswer(
+      df.selectExpr("map_values(a)"),
+      Seq(Row(Seq(100, 200)), Row(Seq.empty), Row(Seq(100, 200, 300)))
+    )
+  }
+
   test("array contains function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),

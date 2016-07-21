@@ -172,7 +172,7 @@ case class AlterTableRenameCommand(
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
-      catalog.invalidateTable(oldName)
+      catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       if (wasCached) {
         sparkSession.catalog.cacheTable(newName.unquotedString)
@@ -348,7 +348,9 @@ case class TruncateTableCommand(
         s"for tables that are not partitioned: '$tableName'")
     }
     val locations =
-      if (isDatasourceTable || table.partitionColumnNames.isEmpty) {
+      if (isDatasourceTable) {
+        Seq(table.storage.serdeProperties.get("path"))
+      } else if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
@@ -371,7 +373,7 @@ case class TruncateTableCommand(
     }
     // After deleting the data, invalidate the table to make sure we don't keep around a stale
     // file relation in the metastore cache.
-    spark.sessionState.invalidateTable(tableName.unquotedString)
+    spark.sessionState.refreshTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
       spark.sharedState.cacheManager.uncacheQuery(spark.table(tableName.quotedString))
@@ -411,29 +413,29 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     } else {
       val metadata = catalog.getTableMetadata(table)
 
+      if (DDLUtils.isDatasourceTable(metadata)) {
+        DDLUtils.getSchemaFromTableProperties(metadata) match {
+          case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, result)
+          case None => describeSchema(catalog.lookupRelation(table).schema, result)
+        }
+      } else {
+        describeSchema(metadata.schema, result)
+      }
+
       if (isExtended) {
         describeExtended(metadata, result)
       } else if (isFormatted) {
         describeFormatted(metadata, result)
       } else {
-        describe(metadata, result)
+        describePartitionInfo(metadata, result)
       }
     }
 
     result
   }
 
-  // Shows data columns and partitioned columns (if any)
-  private def describe(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+  private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(table)) {
-      val schema = DDLUtils.getSchemaFromTableProperties(table)
-
-      if (schema.isEmpty) {
-        append(buffer, "# Schema of this table is inferred at runtime", "", "")
-      } else {
-        schema.foreach(describeSchema(_, buffer))
-      }
-
       val partCols = DDLUtils.getPartitionColumnsFromTableProperties(table)
       if (partCols.nonEmpty) {
         append(buffer, "# Partition Information", "", "")
@@ -441,8 +443,6 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
         partCols.foreach(col => append(buffer, col, "", ""))
       }
     } else {
-      describeSchema(table.schema, buffer)
-
       if (table.partitionColumns.nonEmpty) {
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
@@ -452,14 +452,14 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   }
 
   private def describeExtended(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describe(table, buffer)
+    describePartitionInfo(table, buffer)
 
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", table.toString, "")
   }
 
   private def describeFormatted(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describe(table, buffer)
+    describePartitionInfo(table, buffer)
 
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
@@ -526,8 +526,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      val comment =
-        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+      val comment = column.getComment().getOrElse("")
       append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }
@@ -623,9 +622,8 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
  * }}}
  */
 case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
-  // The result of SHOW COLUMNS has one column called 'result'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("col_name", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -653,9 +651,8 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
 case class ShowPartitionsCommand(
     table: TableIdentifier,
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
-  // The result of SHOW PARTITIONS has one column called 'result'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
 
   private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
@@ -828,7 +825,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (", ",\n  ", "\n)\n")
+      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -862,7 +859,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       }
 
       if (props.nonEmpty) {
-        builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
+        builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
       }
     }
   }

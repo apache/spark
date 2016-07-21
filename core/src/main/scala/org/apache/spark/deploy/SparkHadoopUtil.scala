@@ -232,6 +232,10 @@ class SparkHadoopUtil extends Logging {
     recurse(baseStatus)
   }
 
+  def isGlobPath(pattern: Path): Boolean = {
+    pattern.toString.exists("{}[]*?\\".toSet.contains)
+  }
+
   def globPath(pattern: Path): Seq[Path] = {
     val fs = pattern.getFileSystem(conf)
     Option(fs.globStatus(pattern)).map { statuses =>
@@ -240,11 +244,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
-    if (pattern.toString.exists("{}[]*?\\".toSet.contains)) {
-      globPath(pattern)
-    } else {
-      Seq(pattern)
-    }
+    if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
   }
 
   /**

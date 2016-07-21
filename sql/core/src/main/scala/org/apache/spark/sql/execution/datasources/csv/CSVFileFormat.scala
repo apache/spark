@@ -56,7 +56,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
     val rdd = baseRdd(sparkSession, csvOptions, paths)
     val firstLine = findFirstLine(csvOptions, rdd)
-    val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
+    val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
 
     val header = if (csvOptions.headerFlag) {
       firstRow.zipWithIndex.map { case (value, index) =>
@@ -103,6 +103,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val csvOptions = new CSVOptions(options)
+    val commentPrefix = csvOptions.comment.toString
     val headers = requiredSchema.fields.map(_.name)
 
     val broadcastedHadoopConf =
@@ -118,9 +119,21 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
+      val csvParser = new CsvReader(csvOptions)
+      val tokenizedIterator = lineIterator.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(commentPrefix)
+      }.map { line =>
+        csvParser.parseLine(line)
+      }
       val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-      tokenizedIterator.flatMap(parser(_).toSeq)
+      var numMalformedRecords = 0
+      tokenizedIterator.flatMap { recordTokens =>
+        val row = parser(recordTokens, numMalformedRecords)
+        if (row.isEmpty) {
+          numMalformedRecords += 1
+        }
+        row
+      }
     }
   }
 
@@ -139,7 +152,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val rdd = baseRdd(sparkSession, options, inputPaths)
     // Make sure firstLine is materialized before sending to executors
     val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
+    CSVRelation.univocityTokenizer(rdd, firstLine, options)
   }
 
   /**
