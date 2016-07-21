@@ -478,7 +478,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       _ += _, _ += _)
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
       stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
-    stats.unpersist(false)
+    stats.unpersist()
     expElogbetaBc.destroy(false)
     val batchResult = statsSum :* expElogbeta.t
 
