@@ -172,6 +172,9 @@ class SQLBuilder private (
         toSQL(p.right),
         p.condition.map(" ON " + _.sql).getOrElse(""))
 
+    case h @ Hint(_, _, s @ SubqueryAlias(alias, p @ Project(_, _: SQLTable))) =>
+      build("(" + toSQL(p.copy(child = h.copy(child = p.child))) + ")", "AS", s.alias)
+
     case SQLTable(database, table, _, sample) =>
       val qualifiedName = s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
       sample.map { case (lowerBound, upperBound) =>
@@ -209,9 +212,6 @@ class SQLBuilder private (
       ""
 
     case Hint(_, _, child) =>
-      toSQL(child)
-
-    case BroadcastHint(child) =>
       toSQL(child)
 
     case _ =>
@@ -387,14 +387,8 @@ class SQLBuilder private (
       }
     }
 
-    val broadcastHint = project match {
-      case p @ Project(projectList, Hint("BROADCAST", tables, child)) =>
-        if (tables.nonEmpty) s"/*+ MAPJOIN(${tables.mkString(", ")}) */" else ""
-      case _ => ""
-    }
     build(
       "SELECT",
-      broadcastHint,
       aggExprs.map(_.sql).mkString(", "),
       if (agg.child == OneRowRelation) "" else "FROM",
       toSQL(project.child),
@@ -496,7 +490,9 @@ class SQLBuilder private (
           val hint = u.child.asInstanceOf[Hint]
           hint.copy(child = u.withNewChildren(Seq(hint.child)))
 
-        // Other binary or higher operations are ignored.
+        // Other binary(CoGroup/Intersect/Except) and Union are ignored.
+        // - CoGroup is not used in SQL.
+        // - Intersect/Except/Union have Project nodes inside.
       }
     }
 
