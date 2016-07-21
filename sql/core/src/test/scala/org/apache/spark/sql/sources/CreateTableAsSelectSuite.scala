@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -29,15 +29,16 @@ import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class CreateTableAsSelectSuite
+  extends DataSourceTest
+  with SharedSQLContext
+  with BeforeAndAfterEach {
 
   protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    path = Utils.createTempDir()
-    path.delete()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     spark.read.json(rdd).createOrReplaceTempView("jt")
   }
@@ -51,8 +52,15 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
     }
   }
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    path = Utils.createTempDir()
+    path.delete()
+  }
+
+  override def afterEach(): Unit = {
     Utils.deleteRecursively(path)
+    super.afterEach()
   }
 
   test("CREATE TABLE USING AS SELECT") {
