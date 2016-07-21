@@ -59,7 +59,7 @@ public class JavaDCTExample {
 
     Dataset<Row> dctDf = dct.transform(df);
 
-    dctDf.select("featuresDCT").show(3, false);
+    dctDf.select("featuresDCT").show(false);
     // $example off$
 
     spark.stop();

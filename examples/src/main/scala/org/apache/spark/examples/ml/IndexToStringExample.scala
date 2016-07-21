@@ -19,7 +19,6 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-
 import org.apache.spark.ml.attribute.Attribute
 import org.apache.spark.ml.feature.{IndexToString, StringIndexer}
 // $example off$
