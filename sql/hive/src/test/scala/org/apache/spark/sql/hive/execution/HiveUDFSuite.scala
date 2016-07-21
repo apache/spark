@@ -144,9 +144,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("SPARK-16228 Percentile needs explicit cast to double") {
     sql("select percentile(value, cast(0.5 as double)) from values 1,2,3 T(value)")
-    sql("select percentile_approx(value, cast(0.5 as double)) from values 1.0,2.0,3.0 T(value)")
     sql("select percentile(value, 0.5) from values 1,2,3 T(value)")
-    sql("select percentile_approx(value, 0.5) from values 1.0,2.0,3.0 T(value)")
   }
 
   test("Generic UDAF aggregates") {

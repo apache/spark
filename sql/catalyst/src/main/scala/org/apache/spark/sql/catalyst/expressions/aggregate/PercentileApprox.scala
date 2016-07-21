@@ -19,7 +19,200 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.QuantileSummaries.Stats
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.types._
+
+/**
+ * Computes an approximate percentile (quantile) using the G-K algorithm (see below), for very
+ * large numbers of rows where the regular percentile() UDAF might run out of memory.
+ *
+ * The input is a single double value or an array of double values representing the percentiles
+ * requested. The output, corresponding to the input, is either an single double value or an
+ * array of doubles that are the percentile values.
+ */
+@ExpressionDescription(
+  usage = """_FUNC_(col, p [, B]) - Returns an approximate pth percentile of a numeric column in the
+     group. The B parameter, which defaults to 1000, controls approximation accuracy at the cost of
+     memory; higher values yield better approximations.
+    _FUNC_(col, array(p1 [, p2]...) [, B]) - Same as above, but accepts and returns an array of
+     percentile values instead of a single one.
+    """)
+case class PercentileApprox(
+    child: Expression,
+    percentilesExpr: Expression,
+    bExpr: Option[Expression],
+    percentiles: Seq[Double],  // the extracted percentiles
+    B: Int,                    // the extracted B
+    resultAsArray: Boolean,    // whether to return the result as an array
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+
+  private def this(child: Expression, percentilesExpr: Expression, bExpr: Option[Expression]) = {
+    this(
+      child = child,
+      percentilesExpr = percentilesExpr,
+      bExpr = bExpr,
+      // validate and extract percentiles
+      percentiles = PercentileApprox.validatePercentilesLiteral(percentilesExpr)._1,
+      // validate and extract B
+      B = bExpr.map(PercentileApprox.validateBLiteral(_)).getOrElse(PercentileApprox.B_DEFAULT),
+      // validate and mark whether we should return results as array of double or not
+      resultAsArray = PercentileApprox.validatePercentilesLiteral(percentilesExpr)._2)
+  }
+
+  // Constructor for the "_FUNC_(col, p) / _FUNC_(col, array(p1, ...))" form
+  def this(child: Expression, percentilesExpr: Expression) = {
+    this(child, percentilesExpr, None)
+  }
+
+  // Constructor for the "_FUNC_(col, p, B) / _FUNC_(col, array(p1, ...), B)" form
+  def this(child: Expression, percentilesExpr: Expression, bExpr: Expression) = {
+    this(child, percentilesExpr, Some(bExpr))
+  }
+
+  override def prettyName: String = "percentile_approx"
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def children: Seq[Expression] =
+    bExpr.map(child :: percentilesExpr :: _ :: Nil).getOrElse(child :: percentilesExpr :: Nil)
+
+  // we would return null for empty inputs
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = if (resultAsArray) ArrayType(DoubleType) else DoubleType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, AnyDataType, IntegralType)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function percentile_approx")
+
+  // The number of intermediate outputs is highly relative to the actual data-set (an upper bound is
+  // (11/2e)log(2en), where e is the relativeError parameter, n is the number of items in the
+  // dataset) -- thus it's hard to allocate agg buffer in advance without knowing the size of
+  // inputs. Due to this reason, currently we don't support partial mode.
+  override def supportsPartial: Boolean = false
+
+  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq()
+
+  override val inputAggBufferAttributes: Seq[AttributeReference] = Seq()
+
+  private var summary: QuantileSummaries = null
+
+  override def initialize(buffer: MutableRow): Unit = {
+    // Our `PercentileApprox` function takes a `B` parameter, but the underlying GK algorithm takes
+    // a `relativeError` parameter, so we need to convert `B` to `relativeError`.
+    // Please refer to SPARK-16283 for details.
+    val relativeError = PercentileApprox.bToRelativeError(B)
+    summary = new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val value = child.eval(input) match {
+      case o: Byte => o.toDouble
+      case o: Short => o.toDouble
+      case o: Int => o.toDouble
+      case o: Long => o.toDouble
+      case o: Float => o.toDouble
+      case o: Decimal => o.toDouble
+      case o: Double => o
+    }
+
+    summary.insert(value)
+  }
+
+  override def merge(buffer: MutableRow, inputBuffer: InternalRow): Unit = {
+    sys.error("PercentileApprox does not support partial aggregation.")
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    // summary must be compressed before being queried
+    summary = summary.compress()
+
+    if (resultAsArray) {
+      // return the result as an array of doubles, or return null for empty inputs
+      if (summary.count > 0) new GenericArrayData(percentiles.map { summary.query(_) }) else null
+    }
+    else {
+      // return the result as a double, or return null for empty inputs
+      if (summary.count > 0) summary.query(percentiles.head) else null
+    }
+  }
+
+  private def childrenSQL: String =
+    if (bExpr.isDefined) {
+      s"${child.sql}, ${percentilesExpr.toString}, ${bExpr.get.toString}"
+    }
+    else {
+      s"${child.sql}, ${percentilesExpr.toString}"
+    }
+
+  override def sql: String = s"$prettyName($childrenSQL)"
+
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$prettyName($distinct$childrenSQL)"
+  }
+}
+
+object PercentileApprox {
+
+  // Using 1000 as a default achieves a relativeError of 0.001
+  private[sql] val B_DEFAULT = 1000
+
+  // Our `PercentileApprox` function takes a `B` parameter, but the underlying GK algorithm takes
+  // a `relativeError` parameter, so we need to convert `B` to `relativeError`.
+  // Please refer to SPARK-16283 for details.
+  private[sql] def bToRelativeError(B: Int): Double = Math.max(1.0d / B, 0.001)
+
+  /**
+   * Validates the percentile(s) expression and extract the percentile(s).
+   * Returns the extracted percentile(s) and an indicator of whether it's an array.
+   */
+  private def validatePercentilesLiteral(exp: Expression): (Seq[Double], Boolean) = {
+    def withinRange(v: Double): Boolean = 0.0 <= v && v <= 1.0
+    exp match {
+      case Literal(f: Float, FloatType) if withinRange(f) => (Seq(f.toDouble), false)
+      case Literal(d: Double, DoubleType) if withinRange(d) => (Seq(d), false)
+      case Literal(dec: Decimal, _) if withinRange(dec.toDouble) => (Seq(dec.toDouble), false)
+
+      case CreateArray(children: Seq[Expression]) if (children.length > 0) =>
+        (children.map(_ match {
+          case Literal(f: Float, FloatType) if withinRange(f) => f.toDouble
+          case Literal(d: Double, DoubleType) if withinRange(d) => d
+          case Literal(dec: Decimal, _) if withinRange(dec.toDouble) => dec.toDouble
+          case _ =>
+            throw new AnalysisException(
+              "The second argument should be a double literal or an array of doubles, and should " +
+                "be within range [0.0, 1.0]")
+        }), true)
+
+      case _ =>
+        throw new AnalysisException(
+          "The second argument should be a double literal or an array of doubles, and should " +
+            "be within range [0.0, 1.0]")
+    }
+  }
+
+  /** Validates the B expression and extract its value. */
+  private def validateBLiteral(exp: Expression): Int = exp match {
+    case Literal(i: Int, IntegerType) if i > 0 => i
+
+    case _ =>
+      throw new AnalysisException("The third argument should be a positive integer literal")
+  }
+}
 
 /**
  * Helper class to compute approximate quantile summary.

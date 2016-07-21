@@ -467,6 +467,71 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(error.message.contains("collect_set() cannot have map type data"))
   }
 
+  test("approxPercentile functions") {
+    val df = (1 to 100).toDF("num")
+
+    // with B specified
+    checkAnswer(
+      df.select(
+        approxPercentile($"num", 0.1d, B = 10),
+        approxPercentile("num", 0.2d, B = 10),
+        approxPercentile($"num", Seq(0.3d, 0.4d, 0.5d), B = 10),
+        approxPercentile("num", Seq(0.6d, 0.7d, 0.8d), B = 10)
+      ),
+      Seq(Row(1.0, 12.0, Seq(26.0, 38.0, 48.0), Seq(56.0, 63.0, 74.0))) // results are stable
+    )
+
+    // with default B
+    checkAnswer(
+      df.select(
+        approxPercentile($"num", 0.1d),
+        approxPercentile("num", 0.2d),
+        approxPercentile($"num", Seq(0.3d, 0.4d, 0.5d)),
+        approxPercentile("num", Seq(0.6d, 0.7d, 0.8d))
+      ),
+      Seq(Row(10.0, 20.0, Seq(30.0, 40.0, 50.0), Seq(60.0, 70.0, 80.0))) // results are stable
+    )
+  }
+
+  test("approxPercentile functions with empty inputs") {
+    val df = (1 to 100).toDF("num").where($"num" > 200)
+
+    checkAnswer(
+      df.select(approxPercentile($"num", Seq(0.5d))),
+      Seq(Row(null))
+    )
+
+    checkAnswer(
+      df.select(approxPercentile($"num", 0.5d)),
+      Seq(Row(null))
+    )
+  }
+
+  test("approxPercentile functions with malformed params") {
+    val df = (1 to 100).toDF("num")
+
+    var e = intercept[AnalysisException] {
+      df.select(approxPercentile($"num", Seq()))
+    }
+    assert(e.getMessage().contains(
+      "The second argument should be a double literal or an array of doubles"))
+
+    e = intercept[AnalysisException] {
+      df.select(approxPercentile($"num", Seq(-1.0, 0.0, 0.5)))
+    }
+    assert(e.getMessage().contains("should be within range [0.0, 1.0]"))
+
+    e = intercept[AnalysisException] {
+      df.select(approxPercentile($"num", -1.0))
+    }
+    assert(e.getMessage().contains("should be within range [0.0, 1.0]"))
+
+    e = intercept[AnalysisException] {
+      df.select(approxPercentile($"num", 1.0, -100))
+    }
+    assert(e.getMessage().contains("The third argument should be a positive integer literal"))
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),

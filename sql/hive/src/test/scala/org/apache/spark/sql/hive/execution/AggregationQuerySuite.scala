@@ -728,6 +728,87 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(0, null, 1, 1, null, 0) :: Nil)
   }
 
+  test("percentile_approx") {
+    val table = "percentile_approx_nums"
+    (1 to 1000).toDF("num").createOrReplaceTempView(table)
+
+    // with default B
+    checkAnswer(
+      spark.sql(
+        s"""
+           |SELECT
+           |  PERCENTILE_APPROX(num, 0.1),
+           |  PERCENTILE_APPROX(num, 0.2d),
+           |  PERCENTILE_APPROX(num, array(0.3)),
+           |  PERCENTILE_APPROX(num, array(0.4d)),
+           |  PERCENTILE_APPROX(num, array(0.5, 0.6, 0.7)),
+           |  PERCENTILE_APPROX(num, array(0.8d, 0.9d, 1.0d))
+           |FROM $table
+        """.stripMargin),
+      Row(100.0, 200.0, Seq(300.0), Seq(400.0),
+        Seq(500.0, 600.0, 700.0),
+        Seq(800.0, 900.0, 1000.0)) :: Nil)    // results are stable
+
+    // with B specified
+    checkAnswer(
+      spark.sql(
+        s"""
+           |SELECT
+           |  PERCENTILE_APPROX(num, 0.1, 10),
+           |  PERCENTILE_APPROX(num, 0.2d, 10),
+           |  PERCENTILE_APPROX(num, array(0.3), 10),
+           |  PERCENTILE_APPROX(num, array(0.4d), 10),
+           |  PERCENTILE_APPROX(num, array(0.5, 0.6, 0.7), 10),
+           |  PERCENTILE_APPROX(num, array(0.8d, 0.9d, 1.0d), 10)
+           |FROM $table
+        """.stripMargin),
+      Row(1.0, 156.0, Seq(296.0), Seq(413.0),
+        Seq(413.0, 510.0, 659.0),
+        Seq(715.0, 1000.0, 1000.0)) :: Nil)    // results are stable
+  }
+
+  test("percentile_approx with empty inputs") {
+    val table = "percentile_approx_nums"
+    (1 to 1000).toDF("num").createOrReplaceTempView(table)
+
+    checkAnswer(
+      spark.sql(
+        s"""
+           |SELECT
+           |  PERCENTILE_APPROX(num, 0.5),
+           |  PERCENTILE_APPROX(num, array(0.5d))
+           |FROM $table
+           |WHERE num > 2000
+        """.stripMargin),
+      Row(null, null) :: Nil)
+  }
+
+  test("percentile_approx with malformed params") {
+    val table = "percentile_approx_nums"
+    (1 to 1000).toDF("num").createOrReplaceTempView(table)
+
+    var e = intercept[AnalysisException] {
+      sql(s"SELECT PERCENTILE_APPROX(num, array()) FROM $table")
+    }
+    assert(e.getMessage().contains(
+      "The second argument should be a double literal or an array of doubles"))
+
+    e = intercept[AnalysisException] {
+      sql(s"SELECT PERCENTILE_APPROX(num, array(-0.5, 0.0, 0.5)) FROM $table")
+    }
+    assert(e.getMessage().contains("should be within range [0.0, 1.0]"))
+
+    e = intercept[AnalysisException] {
+      sql(s"SELECT PERCENTILE_APPROX(num, -1.0) FROM $table")
+    }
+    assert(e.getMessage().contains("should be within range [0.0, 1.0]"))
+
+    e = intercept[AnalysisException] {
+      sql(s"SELECT PERCENTILE_APPROX(num, 0.9d, -100) FROM $table")
+    }
+    assert(e.getMessage().contains("The third argument should be a positive integer literal"))
+  }
+
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
