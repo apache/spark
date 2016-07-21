@@ -296,9 +296,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             pathToPartitionedTable,
             userSpecifiedSchema = None,
             userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema ==
-          StructType(StructField("str", StringType, nullable = true) ::
-            StructField("num", IntegerType, nullable = true) :: Nil))
+        assert(tableSchema == new StructType().add("str", StringType).add("num", IntegerType))
         assert(partCols == Seq("num"))
       }
     }
@@ -319,9 +317,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             pathToPartitionedTable,
             userSpecifiedSchema = Option("num int, str string"),
             userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema ==
-          StructType(StructField("num", IntegerType, nullable = true) ::
-            StructField("str", StringType, nullable = true) :: Nil))
+        assert(tableSchema == new StructType().add("num", IntegerType).add("str", StringType))
         assert(partCols.mkString(", ") == partitionCols.getOrElse(""))
       }
     }
@@ -341,9 +337,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             pathToNonPartitionedTable,
             userSpecifiedSchema = None,
             userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema ==
-          StructType(StructField("num", IntegerType, nullable = true) ::
-            StructField("str", StringType, nullable = true) :: Nil))
+        assert(tableSchema == new StructType().add("num", IntegerType).add("str", StringType))
         assert(partCols.isEmpty)
       }
     }
@@ -363,9 +357,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             pathToNonPartitionedTable,
             userSpecifiedSchema = Option("num int, str string"),
             userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema ==
-          StructType(StructField("num", IntegerType, nullable = true) ::
-            StructField("str", StringType, nullable = true) :: Nil))
+        assert(tableSchema == new StructType().add("num", IntegerType).add("str", StringType))
         assert(partCols.mkString(", ") == partitionCols.getOrElse(""))
       }
     }
@@ -415,55 +407,50 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString, i, i))
         .toDF("col1", "col2", "col3", "col4")
       df.write.format("json").partitionBy("col1", "col3").save(path)
-      val schema = StructType(
-        StructField("col2", StringType, nullable = true) ::
-        StructField("col4", LongType, nullable = true) ::
-        StructField("col1", IntegerType, nullable = true) ::
-        StructField("col3", IntegerType, nullable = true) :: Nil)
+      val schema = new StructType()
+        .add("col2", StringType).add("col4", LongType)
+        .add("col1", IntegerType).add("col3", IntegerType)
       val partitionCols = Seq("col1", "col3")
 
-      // Ensure the schema is split to multiple properties.
-      withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "1") {
-        withTable(tabName) {
-          spark.sql(
-            s"""
-               |CREATE TABLE $tabName
-               |USING json
-               |OPTIONS (
-               |  path '$path'
-               |)
-             """.stripMargin)
-          val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
-          val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
-          assert(tableSchema == schema)
-          val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
-          assert(partCols == partitionCols)
+      withTable(tabName) {
+        spark.sql(
+          s"""
+             |CREATE TABLE $tabName
+             |USING json
+             |OPTIONS (
+             |  path '$path'
+             |)
+           """.stripMargin)
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
+        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+        assert(tableSchema == schema)
+        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+        assert(partCols == partitionCols)
 
-          // Change the schema
-          val newDF = sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
-            .toDF("newCol1", "newCol2")
-          newDF.write.format("json").partitionBy("newCol1").mode(SaveMode.Overwrite).save(path)
+        // Change the schema
+        val newDF = sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+          .toDF("newCol1", "newCol2")
+        newDF.write.format("json").partitionBy("newCol1").mode(SaveMode.Overwrite).save(path)
 
-          // No change on the schema
-          val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
-          val tableSchemaBeforeRefresh =
-            DDLUtils.getSchemaFromTableProperties(tableMetadataBeforeRefresh)
-          assert(tableSchemaBeforeRefresh == schema)
-          val partColsBeforeRefresh =
-            DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
-          assert(partColsBeforeRefresh == partitionCols)
+        // No change on the schema
+        val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+        val tableSchemaBeforeRefresh =
+          DDLUtils.getSchemaFromTableProperties(tableMetadataBeforeRefresh)
+        assert(tableSchemaBeforeRefresh == schema)
+        val partColsBeforeRefresh =
+          DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
+        assert(partColsBeforeRefresh == partitionCols)
 
-          // Refresh does not affect the schema
-          spark.catalog.refreshTable(tabName)
+        // Refresh does not affect the schema
+        spark.catalog.refreshTable(tabName)
 
-          val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
-          val tableSchemaAfterRefresh =
-            DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
-          assert(tableSchemaAfterRefresh == schema)
-          val partColsAfterRefresh =
-            DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
-          assert(partColsAfterRefresh == partitionCols)
-        }
+        val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+        val tableSchemaAfterRefresh =
+          DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
+        assert(tableSchemaAfterRefresh == schema)
+        val partColsAfterRefresh =
+          DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
+        assert(partColsAfterRefresh == partitionCols)
       }
     }
   }
