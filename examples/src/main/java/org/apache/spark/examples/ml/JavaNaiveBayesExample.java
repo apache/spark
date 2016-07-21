@@ -62,7 +62,7 @@ public class JavaNaiveBayesExample {
       .setPredictionCol("prediction")
       .setMetricName("accuracy");
     double accuracy = evaluator.evaluate(predictions);
-    System.out.println("Model accuracy on test set: " + accuracy);
+    System.out.println("Test set accuracy = " + accuracy);
     // $example off$
 
     spark.stop();

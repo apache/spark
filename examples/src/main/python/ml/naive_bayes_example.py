@@ -53,7 +53,7 @@ if __name__ == "__main__":
     evaluator = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction",
                                                   metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
-    print("Model accuracy on test set: " + str(accuracy))
+    print("Test set accuracy = " + str(accuracy))
     # $example off$
 
     spark.stop()
