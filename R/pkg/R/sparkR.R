@@ -367,8 +367,8 @@ sparkR.session <- function(
   }
   if (!nzchar(master) || master_is_local(master)) {
     if (!dir.exists(sparkHome)) {
-      fmt <- paste("Spark not found in SPARK_HOME: %s.\n",
-                   "Search in the cache directory.",
+      fmt <- paste0("Spark not found in SPARK_HOME: %s.\n",
+                   "Search in the cache directory. ",
                    "It will be installed if not found.")
       msg <- sprintf(fmt, sparkHome)
       message(msg)

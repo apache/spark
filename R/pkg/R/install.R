@@ -47,7 +47,7 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
                         paste0(version, "-bin-without-hadoop"),
                         paste0(version, "-bin-hadoop", hadoop_version))
   if (is.null(local_dir)) {
-    local_dir <- getOption("spark.install.dir",spark_cache_path())
+    local_dir <- getOption("spark.install.dir", spark_cache_path())
   } else {
     local_dir <- normalizePath(local_dir)
   }
@@ -77,8 +77,8 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
     packageRemotePath <- paste0(file.path(mirror_url, version, packageName),
                                 ".tgz")
     fmt <- paste("Installing Spark %s for Hadoop %s.",
-                 "Downloading from:\n %s",
-                 "Installing to:\n %s", sep = "\n")
+                 "Downloading from:\n- %s",
+                 "Installing to:\n- %s", sep = "\n")
     msg <- sprintf(fmt, version, hadoop_version, packageRemotePath,
                    packageLocalDir)
     message(msg)
@@ -96,7 +96,7 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
       mirror_url <- mirror_sites$url[1]
       packageRemotePath <- paste0(file.path(mirror_url, version, packageName),
                                   ".tgz")
-      message(sprintf("Downloading from:\n %s", packageRemotePath))
+      message(sprintf("Downloading from:\n- %s", packageRemotePath))
       tryCatch(download.file(packageRemotePath, packageLocalPath),
                error = function(e) {
                  stop("Download failed. Please provide a valid mirror_url.")
