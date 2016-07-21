@@ -46,8 +46,7 @@ if __name__ == "__main__":
     idfModel = idf.fit(featurizedData)
     rescaledData = idfModel.transform(featurizedData)
 
-    for features_label in rescaledData.select("features", "label").take(3):
-        print(features_label)
+    rescaledData.select("label", "features").show()
     # $example off$
 
     spark.stop()

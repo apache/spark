@@ -51,7 +51,7 @@ object TfIdfExample {
     val idfModel = idf.fit(featurizedData)
 
     val rescaledData = idfModel.transform(featurizedData)
-    rescaledData.select("features", "label").take(3).foreach(println)
+    rescaledData.select("label", "features").show()
     // $example off$
 
     spark.stop()
