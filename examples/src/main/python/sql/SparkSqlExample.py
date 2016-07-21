@@ -50,6 +50,7 @@ def runBasicDataFrameExample(spark):
     # |  30|   Andy|
     # |  19| Justin|
     # +----+-------+
+    # $example off:create_df$
 
     # $example on:untyped_ops$
     # spark, df are from the previous example
@@ -136,7 +137,7 @@ def runInferSchemaExample(spark):
     for teenName in teenNames.collect():
         print(teenName)
     # Name: Justin
-    # $example on:schema_inferring$
+    # $example off:schema_inferring$
 
 
 def runProgrammaticSchemaExample(spark):
