@@ -20,7 +20,6 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.feature.MaxAbsScaler
 import org.apache.spark.ml.linalg.Vectors
-
 // $example off$
 import org.apache.spark.sql.SparkSession
 

@@ -30,7 +30,6 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # $example on$
-    #dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
     dataFrame = spark.createDataFrame([
         (0, Vectors.dense([1.0, 0.5, -1.0]),),
         (1, Vectors.dense([2.0, 1.0, 1.0]),),
