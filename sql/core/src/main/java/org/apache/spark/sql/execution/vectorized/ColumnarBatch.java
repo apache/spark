@@ -45,7 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *  - Compaction: The batch and columns should be able to compact based on a selection vector.
  */
 public final class ColumnarBatch {
-  private static final int DEFAULT_BATCH_SIZE = 2 * 2048 * 1024;
+  private static final int DEFAULT_BATCH_SIZE = 4 * 1024;
   private static MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
 
   private final StructType schema;

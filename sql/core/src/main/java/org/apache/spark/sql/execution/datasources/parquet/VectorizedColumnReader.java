@@ -135,10 +135,8 @@ public class VectorizedColumnReader {
    * Reads `total` values from this columnReader into column.
    */
   void readBatch(int total, ColumnVector column) throws IOException {
-    System.out.println("Reading batch " + total);
     int rowId = 0;
     while (total > 0) {
-      System.out.println("Reading page " + total);
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
       if (leftInPage == 0) {
@@ -147,7 +145,6 @@ public class VectorizedColumnReader {
       }
       int num = Math.min(total, leftInPage);
       if (useDictionary) {
-        System.out.println("dict");
         // Read and decode dictionary ids.
         ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
         defColumn.readIntegers(
@@ -167,12 +164,9 @@ public class VectorizedColumnReader {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
       } else {
-        System.out.println("no dict");
         if (column.hasDictionary() && rowId != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
           // does not support a mix of dictionary and not so we will decode the dictionary.
-          System.out.println("starting to decode");
-          System.out.println(rowId);
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);

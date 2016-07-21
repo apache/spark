@@ -42,7 +42,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Array for each type. Only 1 is populated for any type.
   private byte[] byteData;
   private short[] shortData;
-  public int[] intData;
+  private int[] intData;
   private long[] longData;
   private float[] floatData;
   private double[] doubleData;
