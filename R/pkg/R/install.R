@@ -67,7 +67,6 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
   if (tarExists) {
     message("Tar file found. Installing...")
   } else {
-    dir.create(packageLocalDir, recursive = TRUE)
     if (is.null(mirror_url)) {
       message("Remote URL not provided. Use Apache default.")
       mirror_url <- mirror_url_default()
