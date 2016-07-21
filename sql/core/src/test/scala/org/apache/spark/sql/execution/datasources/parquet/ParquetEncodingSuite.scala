@@ -87,19 +87,20 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
       // In order to explicitly test for SPARK-14217, we set the parquet dictionary and page size
       // such that the following data spans across 3 pages (within a single row group) where the
       // first page is dictionary encoded and the remaining two are plain encoded.
-      val data = (0 until 512).flatMap(i => List(i.toString, i.toString, i.toString))
+      val data = (0 until 512).flatMap(i => Seq.fill(3)(i.toString))
       data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
+      val file =
+        SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head.asInstanceOf[String]
 
       val reader = new VectorizedParquetRecordReader
-      reader.initialize(file.asInstanceOf[String], null)
-      val batch = reader.resultBatch()
+      reader.initialize(file, null /* set columns to null to project all columns */)
+      val column = reader.resultBatch().column(0)
       assert(reader.nextBatch())
 
       (0 until 512).foreach { i =>
-        assert(batch.column(0).getUTF8String(3 * i).toString == i.toString)
-        assert(batch.column(0).getUTF8String(3 * i + 1).toString == i.toString)
-        assert(batch.column(0).getUTF8String(3 * i + 2).toString == i.toString)
+        assert(column.getUTF8String(3 * i).toString == i.toString)
+        assert(column.getUTF8String(3 * i + 1).toString == i.toString)
+        assert(column.getUTF8String(3 * i + 2).toString == i.toString)
       }
     }
   }
