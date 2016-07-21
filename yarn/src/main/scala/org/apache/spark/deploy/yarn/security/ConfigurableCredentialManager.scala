@@ -86,11 +86,11 @@ private[yarn] final class ConfigurableCredentialManager (
     }.foldLeft(Long.MaxValue)(math.min)
   }
 
-  def delegationTokenRenewer(): AMDelegationTokenRenewer = {
-    new AMDelegationTokenRenewer(sparkConf, hadoopConf, this)
+  def credentialRenewer: AMCredentialRenewer = {
+    new AMCredentialRenewer(sparkConf, hadoopConf, this)
   }
 
-  def delegationTokenUpdater(): ExecutorDelegationTokenUpdater = {
-    new ExecutorDelegationTokenUpdater(sparkConf, hadoopConf, this)
+  def credentialUpdater: CredentialUpdater = {
+    new CredentialUpdater(sparkConf, hadoopConf, this)
   }
 }

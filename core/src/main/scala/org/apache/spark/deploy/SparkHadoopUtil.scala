@@ -311,15 +311,15 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Start a thread to periodically update the current user's credentials with new delegation
-   * tokens so that writes to HDFS do not fail.
+   * Start a thread to periodically update the current user's credentials with new credentails so
+   * that access to security service do not fail.
    */
-  private[spark] def startExecutorDelegationTokenRenewer(conf: SparkConf) {}
+  private[spark] def startCredentialUpdater(conf: SparkConf) {}
 
   /**
-   * Stop the thread that does the delegation token updates.
+   * Stop the thread that does the credential updates.
    */
-  private[spark] def stopExecutorDelegationTokenRenewer() {}
+  private[spark] def stopCredentialUpdater() {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.

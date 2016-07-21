@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.deploy.yarn.security
 
 import java.util.concurrent.{Executors, TimeUnit}
@@ -28,10 +29,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorDelegationTokenUpdater(
+private[spark] class CredentialUpdater(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
     credentialManager: ConfigurableCredentialManager) extends Logging {
@@ -43,12 +43,12 @@ private[spark] class ExecutorDelegationTokenUpdater(
     SparkHadoopUtil.get.getConfBypassingFSCache(
       hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
-  private val delegationTokenRenewer =
+  private val credentialUpdater =
     Executors.newSingleThreadScheduledExecutor(
-      ThreadUtils.namedThreadFactory("Delegation Token Refresh Thread"))
+      ThreadUtils.namedThreadFactory("Credential Refresh Thread"))
 
-  // On the executor, this thread wakes up and picks up new tokens from HDFS, if any.
-  private val executorUpdaterRunnable =
+  // This thread wakes up and picks up new credentials from HDFS, if any.
+  private val credentialUpdaterRunnable =
     new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
     }
@@ -65,17 +65,17 @@ private[spark] class ExecutorDelegationTokenUpdater(
         .lastOption.foreach { credentialsStatus =>
         val suffix = SparkHadoopUtil.get.getSuffixForCredentialsPath(credentialsStatus.getPath)
         if (suffix > lastCredentialsFileSuffix) {
-          logInfo("Reading new delegation tokens from " + credentialsStatus.getPath)
+          logInfo("Reading new credentials from " + credentialsStatus.getPath)
           val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
           lastCredentialsFileSuffix = suffix
           UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
-          logInfo("Tokens updated from credentials file.")
+          logInfo("Credentials updated from credentials file.")
           timeOfNextUpdate = getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)
         } else {
           // Check every hour to see if new credentials arrived.
-          logInfo("Updated delegation tokens were expected, but the driver has not updated the " +
-            "tokens yet, will check again in an hour.")
-          delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
+          logInfo("Updated credentials were expected, but the AM has not updated the " +
+            "credentials yet, will check again in an hour.")
+          credentialUpdater.schedule(credentialUpdaterRunnable, 1, TimeUnit.HOURS)
           return
         }
       }
@@ -84,18 +84,18 @@ private[spark] class ExecutorDelegationTokenUpdater(
         // We just checked for new credentials but none were there, wait a minute and retry.
         // This handles the shutdown case where the staging directory may have been removed(see
         // SPARK-12316 for more details).
-        delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.MINUTES)
+        credentialUpdater.schedule(credentialUpdaterRunnable, 1, TimeUnit.MINUTES)
       } else {
-        logInfo(s"Scheduling token refresh from HDFS in $remainingTime millis.")
-        delegationTokenRenewer.schedule(
-          executorUpdaterRunnable, remainingTime, TimeUnit.MILLISECONDS)
+        logInfo(s"Scheduling credentials refresh from HDFS in $remainingTime millis.")
+        credentialUpdater.schedule(
+          credentialUpdaterRunnable, remainingTime, TimeUnit.MILLISECONDS)
       }
     } catch {
       // Since the file may get deleted while we are reading it, catch the Exception and come
       // back in an hour to try again
       case NonFatal(e) =>
         logWarning("Error while trying to update credentials, will try again in 1 hour", e)
-        delegationTokenRenewer.schedule(executorUpdaterRunnable, 1, TimeUnit.HOURS)
+        credentialUpdater.schedule(credentialUpdaterRunnable, 1, TimeUnit.HOURS)
     }
   }
 
@@ -115,11 +115,11 @@ private[spark] class ExecutorDelegationTokenUpdater(
     val index = name.lastIndexOf(SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM)
     val slice = name.substring(0, index)
     val last2index = slice.lastIndexOf(SparkHadoopUtil.SPARK_YARN_CREDS_COUNTER_DELIM)
-    name.substring(last2index).toLong
+    name.substring(last2index + 1, index).toLong
   }
 
   def stop(): Unit = {
-    delegationTokenRenewer.shutdown()
+    credentialUpdater.shutdown()
   }
 
 }

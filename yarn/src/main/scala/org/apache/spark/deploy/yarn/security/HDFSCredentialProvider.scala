@@ -71,7 +71,7 @@ private[yarn] class HDFSCredentialProvider extends ServiceCredentialProvider wit
         .map { t =>
           val identifier = new DelegationTokenIdentifier()
           identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-          (identifier.getIssueDate + interval * 0.75).toLong
+          identifier.getIssueDate + interval
       }.foldLeft(0L)(math.max)
     }
   }

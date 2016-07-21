@@ -20,14 +20,10 @@ package org.apache.spark.deploy.yarn.security
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * ::DeveloperApi::
- * A credential provider for this service, any service want to access by spark through security
- * way must implement this interface.
+ * A credential provider for a service. A user must implement this if they need to access a
+ * secure service from Spark.
  */
-@DeveloperApi
 trait ServiceCredentialProvider {
 
   /**
@@ -38,7 +34,7 @@ trait ServiceCredentialProvider {
 
   /**
    * To decide whether credential is required for this service. By default it based on whether
-   * security is enabled or not.
+   * Hadoop security is enabled.
    */
   def isCredentialRequired(hadoopConf: Configuration): Boolean = {
     UserGroupInformation.isSecurityEnabled

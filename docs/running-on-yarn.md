@@ -467,14 +467,10 @@ To use a custom metrics.properties for the application master and executors, upd
   Controls whether to obtain credentials for services when security is enabled.
   By default, credentials for all supported services are retrieved when those services are
   configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run.
+  application being run. For the details please see
+  [Running in a Secure Cluster](running-on-yarn.html#running-in-a-secure-cluster)
   <p/>
   Currently supported services are: <code>hdfs</code>, <code>hive</code>, <code>hbase</code>
-  <p/>
-  For other 3rd party services need to be communicate with Spark through security way should implement
-  ServiceCredentialProvider and place configuration file in the resource directory
-  META-INFO/services to let ServiceLoader to load in. Also 3rd party services can be controlled by
-  this configuratio with specific service name to decide whether to disable or not.
   </td>
 </tr>
 <tr>
@@ -538,15 +534,21 @@ token for the cluster's HDFS filesystem, and potentially for HBase and Hive.
 
 An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
 the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
-and `spark.yarn.security.tokens.hbase.enabled` is not set to `false`.
+and `spark.yarn.security.credentials.hbase.enabled` is not set to `false`.
 
 Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
 includes a URI of the metadata store in `"hive.metastore.uris`, and
-`spark.yarn.security.tokens.hive.enabled` is not set to `false`.
+`spark.yarn.security.credentials.hive.enabled` is not set to `false`.
 
 If an application needs to interact with other secure HDFS clusters, then
 the tokens needed to access these clusters must be explicitly requested at
 launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
+
+Also Spark supports interacting with other security services through plug-in mechanism, user must implement
+`org.apache.spark.deploy.yarn.security.ServiceCredentialProvider` and register the class into META-INFO/services for
+ServiceLoader to load in. Also this plugged-in credential provider can be disabed by setting
+`spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
+credential provider.
 
 ```
 spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/

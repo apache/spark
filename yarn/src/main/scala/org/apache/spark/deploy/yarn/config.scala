@@ -319,12 +319,12 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewal")
+  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
     .internal()
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefault(Long.MaxValue)
 
-  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.update")
+  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.updateTime")
     .internal()
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefault(Long.MaxValue)

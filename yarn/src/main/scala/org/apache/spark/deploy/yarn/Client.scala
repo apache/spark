@@ -395,15 +395,25 @@ private[spark] class Client(
     // Merge credentials obtained from registered providers
     val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
 
+    if (credentials != null) {
+      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
+
     // If we use principal and keytab to login, also credentials can be renewed some time
     // after current time, we should pass the next renewal and updating time to delegation token
     // renewer and updater.
     if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
       nearestTimeOfNextRenewal != Long.MaxValue) {
-      sparkConf.set(CREDENTIALS_RENEWAL_TIME, nearestTimeOfNextRenewal)
-      val nearestTimeOfNextUpdate =
-        (nearestTimeOfNextRenewal - System.currentTimeMillis()) * 1.1 + System.currentTimeMillis()
-      sparkConf.set(CREDENTIALS_UPDATE_TIME, nearestTimeOfNextUpdate.toLong)
+
+      // Valid renewal time is 75% of next renewal time, and the valid update time will be
+      // slightly later then renewal time (80% of next renewal time). This is to make sure
+      // credentials are renewed and updated before expired.
+      val currTime = System.currentTimeMillis()
+      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
+      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
+
+      sparkConf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
+      sparkConf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
     }
 
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
@@ -414,9 +424,6 @@ private[spark] class Client(
     // same name but different path files are added multiple time, YARN will fail to launch
     // containers for the app with an internal error.
     val distributedNames = new HashSet[String]
-    if (credentials != null) {
-      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
-    }
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
       .getOrElse(fs.getDefaultReplication(destDir))

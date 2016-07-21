@@ -35,8 +35,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.{AMDelegationTokenRenewer,
-  ConfigurableCredentialManager}
+import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
@@ -114,7 +113,7 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  private var delegationTokenRenewer: AMDelegationTokenRenewer = _
+  private var credentialRenewer: AMCredentialRenewer = _
 
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in
@@ -239,9 +238,9 @@ private[spark] class ApplicationMaster(
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        delegationTokenRenewer = new ConfigurableCredentialManager(sparkConf, yarnConf)
-          .delegationTokenRenewer()
-        delegationTokenRenewer.scheduleLoginFromKeytab()
+        credentialRenewer = new ConfigurableCredentialManager(sparkConf, yarnConf)
+          .credentialRenewer
+        credentialRenewer.scheduleLoginFromKeytab()
       }
 
       if (isClusterMode) {
@@ -308,9 +307,9 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
-        if (!inShutdown && delegationTokenRenewer != null) {
-          delegationTokenRenewer.stop()
-          delegationTokenRenewer = null
+        if (!inShutdown && credentialRenewer != null) {
+          credentialRenewer.stop()
+          credentialRenewer = null
         }
       }
     }
