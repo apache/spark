@@ -222,6 +222,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("conditional function: least - type cast") {
+    checkAnswer(
+      testData2.select(least(lit(BigDecimal("-1")), lit(0), col("a"), col("b"))).limit(1),
+      Row(BigDecimal("-1"))
+    )
+    checkAnswer(
+      sql("SELECT least(a, 1.5) as l from testData2 order by l"),
+      Seq(
+        Row(BigDecimal("1.0")),
+        Row(BigDecimal("1.0")),
+        Row(BigDecimal("1.5")),
+        Row(BigDecimal("1.5")),
+        Row(BigDecimal("1.5")),
+        Row(BigDecimal("1.5")))
+    )
+  }
+
+  test("conditional function: least - type cast failure") {
+    val message = intercept[AnalysisException] {
+      testData2.select(
+        least(lit(BigDecimal("0.000000000000000000001")), lit(0L), col("a"), col("b"))).limit(1)
+    }.message
+    assert(
+      message.contains("cannot resolve 'least(CAST(1E-21 AS DECIMAL(21,21)), 0L, `a`, `b`)'" +
+        " due to data type mismatch") )
+  }
+
   test("conditional function: greatest") {
     checkAnswer(
       testData2.select(greatest(lit(2), lit(3), col("a"), col("b"))).limit(1),
@@ -231,6 +258,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       sql("SELECT greatest(a, 2) as g from testData2 order by g"),
       Seq(Row(2), Row(2), Row(2), Row(2), Row(3), Row(3))
     )
+  }
+
+  test("conditional function: greatest - type cast") {
+    checkAnswer(
+      testData2.select(greatest(lit(2), lit(BigDecimal("3")), col("a"), col("b"))).limit(1),
+      Row(BigDecimal("3"))
+    )
+    checkAnswer(
+      sql("SELECT greatest(a, 2.5) as g from testData2 order by g"),
+      Seq(
+        Row(BigDecimal("2.5")),
+        Row(BigDecimal("2.5")),
+        Row(BigDecimal("2.5")),
+        Row(BigDecimal("2.5")),
+        Row(BigDecimal("3")),
+        Row(BigDecimal("3")))
+    )
+  }
+
+  test("conditional function: greatest - type cast failure") {
+    val message = intercept[AnalysisException] {
+      testData2.select(
+        greatest(lit(BigDecimal("0.000000000000000000001")), lit(0L), col("a"), col("b")))
+    }.message
+    assert(
+      message.contains("cannot resolve 'greatest(CAST(1E-21 AS DECIMAL(21,21)), 0L, `a`, `b`)'" +
+        " due to data type mismatch") )
   }
 
   test("pmod") {
