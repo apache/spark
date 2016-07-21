@@ -212,22 +212,19 @@ case class Elt(children: Seq[Expression])
       s"""
         case ${index + 1}:
           ${ev.value} = ${eval.isNull} ? null : ${eval.value};
-           break;
+          break;
       """
     }.mkString("\n")
     val indexVal = ctx.freshName("index")
     val stringArray = ctx.freshName("strings");
 
     ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
-      int $indexVal = ${index.value};
-      boolean ${ev.isNull} = false;
+      final int $indexVal = ${index.value};
       UTF8String ${ev.value} = null;
       switch ($indexVal) {
         $assignStringValue
       }
-      if (${ev.value} == null) {
-        ${ev.isNull} = true;
-      }
+      final boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
 }
