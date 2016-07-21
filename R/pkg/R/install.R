@@ -41,7 +41,7 @@
 #' @note install_spark since 2.1.0
 install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
                           local_dir = NULL) {
-  version <- paste0("spark-", spark_version_default())
+  version <- paste0("spark-", packageVersion("SparkR"))
   hadoop_version <- match.arg(hadoop_version, supported_versions_hadoop())
   packageName <- ifelse(hadoop_version == "without",
                         paste0(version, "-bin-without-hadoop"),
@@ -72,10 +72,12 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
       message("Remote URL not provided. Use Apache default.")
       mirror_url <- mirror_url_default()
     }
-    # This is temporary, should be removed when released
-    version <- "spark-releases/spark-2.0.0-rc4-bin"
-    packageRemotePath <- paste0(file.path(mirror_url, version, packageName),
-                                ".tgz")
+
+    version <- "spark-2.0.0-rc4-bin"
+    # When 2.0 released, remove the above line and
+    # change spark-releases to spark in the statement below
+    packageRemotePath <- paste0(
+      file.path(mirror_url, "spark-releases", version, packageName), ".tgz")
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n- %s",
                  "Installing to:\n- %s", sep = "\n")
@@ -138,7 +140,7 @@ spark_cache_path <- function() {
       path <- file.path(Sys.getenv("HOME"), "Library/Caches", "spark")
     } else {
       path <- file.path(
-        Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")), 
+        Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")),
         "spark")
     }
   } else {
@@ -149,12 +151,4 @@ spark_cache_path <- function() {
 
 mirror_url_csv <- function() {
   system.file("extdata", "spark_download.csv", package = "SparkR")
-}
-
-spark_version_default <- function() {
-  "2.0.0"
-}
-
-hadoop_version_default <- function() {
-  "2.7"
 }
