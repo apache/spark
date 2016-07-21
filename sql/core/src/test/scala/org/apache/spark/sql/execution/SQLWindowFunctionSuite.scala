@@ -366,7 +366,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       """.stripMargin), Row(0, 1))
   }
 
-  test("lead/lag should return the default value if the offset row does not exist") {
+  test("SPARK-16633: lead/lag should return the default value if the offset row does not exist") {
     checkAnswer(sql(
       """
         |SELECT
@@ -386,7 +386,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
       Row(2, 2))
   }
 
-  test("lead/lag should be able to handle null input value correctly") {
+  test("lead/lag should respect null values") {
     checkAnswer(sql(
       """
         |SELECT
