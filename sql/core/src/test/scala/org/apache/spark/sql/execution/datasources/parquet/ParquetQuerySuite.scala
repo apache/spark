@@ -26,7 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
 import org.apache.spark.sql.execution.BatchedDataSourceScanExec
-import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
+import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -668,9 +668,47 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-16344: array of struct with a single field named 'element'") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      Seq(Tuple1(Array(SingleElement(42)))).toDF("f").write.parquet(path)
+
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Row(Array(Row(42)))
+      )
+    }
+  }
+
+  test("SPARK-16632: read Parquet int32 as ByteType and ShortType") {
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        // When being written to Parquet, `TINYINT` and `SMALLINT` should be converted into
+        // `int32 (INT_8)` and `int32 (INT_16)` respectively. However, Hive doesn't add the `INT_8`
+        // and `INT_16` annotation properly (HIVE-14294). Thus, when reading files written by Hive
+        // using Spark with the vectorized Parquet reader enabled, we may hit error due to type
+        // mismatch.
+        //
+        // Here we are simulating Hive's behavior by writing a single `INT` field and then read it
+        // back as `TINYINT` and `SMALLINT` in Spark to verify this issue.
+        Seq(1).toDF("f").write.parquet(path)
+
+        val withByteField = new StructType().add("f", ByteType)
+        checkAnswer(spark.read.schema(withByteField).parquet(path), Row(1: Byte))
+
+        val withShortField = new StructType().add("f", ShortType)
+        checkAnswer(spark.read.schema(withShortField).parquet(path), Row(1: Short))
+      }
+    }
+  }
 }
 
 object TestingUDT {
+  case class SingleElement(element: Long)
+
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
   case class NestedStruct(a: Integer, b: Long, c: Double)
 
