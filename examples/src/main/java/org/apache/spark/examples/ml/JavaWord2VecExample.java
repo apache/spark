@@ -29,7 +29,6 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.*;
-import scala.collection.mutable.WrappedArray;
 // $example off$
 
 public class JavaWord2VecExample {

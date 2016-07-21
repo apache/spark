@@ -27,10 +27,10 @@ import scala.collection.mutable.WrappedArray;
 
 import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
+import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.types.*;
 // $example off$
 
