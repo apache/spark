@@ -26,8 +26,6 @@ import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.OriginalType._
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
@@ -123,12 +121,6 @@ private[parquet] object ParquetReadSupport {
   }
 
   private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {
-    val primName = if (parquetType.isPrimitive()) {
-      parquetType.asPrimitiveType().getPrimitiveTypeName()
-    } else {
-      null
-    }
-
     catalystType match {
       case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
         // Only clips array types with nested type as element type.
@@ -142,16 +134,6 @@ private[parquet] object ParquetReadSupport {
 
       case t: StructType =>
         clipParquetGroup(parquetType.asGroupType(), t)
-
-      case _: ByteType if primName == INT32 =>
-        // SPARK-16632: Handle case where Hive stores bytes in a int32 field without specifying
-        // the original type.
-        Types.primitive(INT32, parquetType.getRepetition()).as(INT_8).named(parquetType.getName())
-
-      case _: ShortType if primName == INT32 =>
-        // SPARK-16632: Handle case where Hive stores shorts in a int32 field without specifying
-        // the original type.
-        Types.primitive(INT32, parquetType.getRepetition()).as(INT_16).named(parquetType.getName())
 
       case _ =>
         // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
