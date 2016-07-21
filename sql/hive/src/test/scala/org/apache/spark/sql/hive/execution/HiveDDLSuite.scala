@@ -26,6 +26,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.CreateTableUsingAsSelect
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -137,6 +138,40 @@ class HiveDDLSuite
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
         assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
         assert(viewMetadata.properties.get("comment") == Option("no comment"))
+      }
+    }
+  }
+
+  test("Create Cataloged Table As Select - Convert to Data Source Table") {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withTable("t", "t1") {
+        val df1 = sql("CREATE TABLE t STORED AS orc SELECT 1 as a, 1 as b")
+        assert(df1.queryExecution.analyzed.isInstanceOf[CreateTableUsingAsSelect])
+        val analyzedDf1 = df1.queryExecution.analyzed.asInstanceOf[CreateTableUsingAsSelect]
+        assert(analyzedDf1.provider == "orc")
+        checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
+
+        val df2 = sql(
+          """
+            |CREATE TABLE t1
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.orc.OrcSerde'
+            |STORED AS
+            |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.orc.OrcInputFormat'
+            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat'
+            |SELECT 1 as a, 1 as b
+          """.stripMargin)
+        assert(df2.queryExecution.analyzed.isInstanceOf[CreateTableUsingAsSelect])
+        val analyzedDf2 = df2.queryExecution.analyzed.asInstanceOf[CreateTableUsingAsSelect]
+        assert(analyzedDf2.provider == "orc")
+        checkAnswer(spark.table("t1"), Row(1, 1) :: Nil)
+      }
+    }
+
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
+      withTable("t", "t1") {
+        val df1 = sql("CREATE TABLE t STORED AS orc SELECT 1 as a, 1 as b")
+        assert(df1.queryExecution.analyzed.isInstanceOf[CreateHiveTableAsSelectCommand])
+        checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
       }
     }
   }

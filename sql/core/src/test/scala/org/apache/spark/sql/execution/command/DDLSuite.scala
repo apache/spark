@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, Catal
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
-import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -1260,6 +1260,45 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql(s"SELECT * FROM $tabName")
         }.getMessage
         assert(message.contains("Hive support is required to select over the following tables"))
+      }
+    }
+  }
+
+  test("Create Cataloged Table As Select - Convert to Data Source Table") {
+    import testImplicits._
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withTable("t", "t1", "t2", "t3", "t4") {
+        val df1 = sql("CREATE TABLE t STORED AS parquet SELECT 1 as a, 1 as b")
+        assert(df1.queryExecution.analyzed.isInstanceOf[CreateTableUsingAsSelect])
+        val analyzedDf1 = df1.queryExecution.analyzed.asInstanceOf[CreateTableUsingAsSelect]
+        assert(analyzedDf1.provider == "parquet")
+        checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
+
+        spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+        val df2 = sql("CREATE TABLE t2 STORED AS parquet SELECT a, b from t1")
+        assert(df2.queryExecution.analyzed.isInstanceOf[CreateTableUsingAsSelect])
+        val analyzedDf2 = df2.queryExecution.analyzed.asInstanceOf[CreateTableUsingAsSelect]
+        assert(analyzedDf2.provider == "parquet")
+        checkAnswer(spark.table("t2"), spark.table("t1"))
+
+        val df3 = sql(
+          """
+            |CREATE TABLE t3
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+            |STORED AS
+            |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+            |SELECT 1 as a, 1 as b
+          """.stripMargin)
+        assert(df3.queryExecution.analyzed.isInstanceOf[CreateTableUsingAsSelect])
+        val analyzedDf3 = df3.queryExecution.analyzed.asInstanceOf[CreateTableUsingAsSelect]
+        assert(analyzedDf3.provider == "parquet")
+        checkAnswer(spark.table("t3"), Row(1, 1) :: Nil)
+
+        val e = intercept[AnalysisException] {
+          sql("CREATE TABLE t4 STORED AS orc SELECT 1 as a, 1 as b")
+        }.getMessage
+        assert(e.contains("The ORC data source must be used with Hive support enabled"))
       }
     }
   }
