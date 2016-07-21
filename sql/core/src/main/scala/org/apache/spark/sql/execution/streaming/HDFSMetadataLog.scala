@@ -109,13 +109,13 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
       Thread.currentThread match {
-        case t: UninterruptibleThread =>
-          t.runUninterruptibly { writeBatch(batchId, serialize(metadata)) }
-          true
+        case ut: UninterruptibleThread =>
+          ut.runUninterruptibly { writeBatch(batchId, serialize(metadata)) }
         case _ =>
           throw new IllegalStateException(
             "HDFSMetadataLog.add() must be executed on a o.a.spark.util.UninterruptibleThread")
       }
+      true
     }
   }
 
