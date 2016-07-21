@@ -225,6 +225,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     checkEndOfRowGroup();
 
     int num = (int) Math.min((long) columnarBatch.capacity(), totalCountLoadedSoFar - rowsReturned);
+    System.out.println(totalCountLoadedSoFar);
+    System.out.println(rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
       if (columnReaders[i] == null) continue;
       columnReaders[i].readBatch(num, columnarBatch.column(i));

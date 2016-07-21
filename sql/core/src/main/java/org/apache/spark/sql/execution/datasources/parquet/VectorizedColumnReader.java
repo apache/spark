@@ -135,10 +135,10 @@ public class VectorizedColumnReader {
    * Reads `total` values from this columnReader into column.
    */
   void readBatch(int total, ColumnVector column) throws IOException {
-    System.out.println("Reading batch");
+    System.out.println("Reading batch " + total);
     int rowId = 0;
     while (total > 0) {
-      System.out.println("Reading page");
+      System.out.println("Reading page " + total);
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
       if (leftInPage == 0) {

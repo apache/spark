@@ -83,6 +83,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
   test("Hybrid") {
     (128 * 1024 :: Nil).foreach { n =>
+
       withTempPath { dir =>
         val l = (0 until n).map(i => (i, i))
           .flatMap(i => List(i._1.toString))
@@ -114,10 +115,11 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
   test("experiments") {
     spark.conf.set("parquet.dictionary.page.size", "2048")
     spark.conf.set("parquet.page.size", "4096")
-    spark.conf.set("parquet.block.size", "8192")
+    // spark.conf.set("parquet.block.size", "81920")
 
     withTempPath { dir =>
-      val data = (10 until 30).map(_.toString * 512) ++ (0 until 30).map(_ => "ab" * 512)
+      val data = (10 until 99).map(_.toString * 512) ++ (0 until 99).map(_ => "ab" * 512)
+      println(data.length)
       data.toDF("f").coalesce(1).write.mode("overwrite").parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
@@ -125,6 +127,31 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
       reader.initialize(file.asInstanceOf[String], null)
       val batch = reader.resultBatch()
       assert(reader.nextBatch())
+    }
+  }
+
+  test("experiments 2") {
+    spark.conf.set("parquet.dictionary.page.size", "2048")
+    spark.conf.set("parquet.page.size", "4096")
+
+    withTempPath { dir =>
+      val data = (0 until 512).flatMap(i => List(i.toString, i.toString, i.toString))
+      data.toDF("f").coalesce(1).write.mode("overwrite").parquet(dir.getCanonicalPath)
+      val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
+
+      val reader = new VectorizedParquetRecordReader
+      reader.initialize(file.asInstanceOf[String], null)
+      val batch = reader.resultBatch()
+      assert(reader.nextBatch())
+
+      var i = 0
+      while (i < 512) {
+        assert(batch.column(0).getUTF8String(3 * i).toString == i.toString)
+        assert(batch.column(0).getUTF8String(3 * i + 1).toString == i.toString)
+        assert(batch.column(0).getUTF8String(3 * i + 2).toString == i.toString)
+        i += 1
+      }
+
     }
   }
 }
