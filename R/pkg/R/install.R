@@ -25,8 +25,8 @@
 #' specify a desired Hadoop version, the remote site, and the directory where
 #' the package is installed locally.
 #'
-#' @param hadoop_version Version of Hadoop to install. 2.3, 2.4, 2.6,
-#'        and 2.7 (default)
+#' @param hadoop_version Version of Hadoop to install, 2.4, 2.6,
+#'        2.7 (default) and without
 #' @param mirror_url the base URL of the repositories to use
 #' @param local_dir local directory that Spark is installed to
 #' @return \code{install_spark} returns the local directory 
@@ -135,9 +135,11 @@ spark_cache_path <- function() {
     }
   } else if (.Platform$OS.type == "unix") {
     if (Sys.info()["sysname"] == "Darwin") {
-      path <- file.path("~/Library/Caches", "spark")
+      path <- file.path(Sys.getenv("HOME"), "Library/Caches", "spark")
     } else {
-      path <- file.path(Sys.getenv("XDG_CACHE_HOME", "~/.cache"), "spark")
+      path <- file.path(
+        Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")), 
+        "spark")
     }
   } else {
     stop("Unknown OS")
