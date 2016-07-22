@@ -23,7 +23,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 
-class BlockReplicationObjectives extends SparkFunSuite with Matchers {
+class BlockReplicationObjectivesSuite extends SparkFunSuite with Matchers {
   val objectives: Set[BlockReplicationObjective] = Set(
     ReplicateToADifferentHost,
     ReplicateBlockOutsideRack,
