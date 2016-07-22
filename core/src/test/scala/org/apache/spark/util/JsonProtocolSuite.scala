@@ -73,8 +73,8 @@ class JsonProtocolSuite extends SparkFunSuite {
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
-    val workerUrlMap = Map("url" -> "spark://Worker@192.168.1.104:32790",
-      "ui_url" -> "http://192.168.1.104:46445").toMap
+    val workerUrlMap = Map("url" -> "spark://Worker@someHost:8080",
+      "ui_url" -> "http://someHost:1234").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"))
     val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
@@ -1753,8 +1753,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "stdout" : "mystdout"
       |    },
       |    "Worker" : {
-      |      "url" : "spark://Worker@192.168.1.104:32790",
-      |      "ui_url" : "http://192.168.1.104:46445"
+      |      "url" : "spark://Worker@someHost:8080",
+      |      "ui_url" : "http://someHost:1234"
       |    }
       |  }
       |}
