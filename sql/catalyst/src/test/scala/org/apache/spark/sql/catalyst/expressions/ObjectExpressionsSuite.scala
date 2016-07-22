@@ -27,7 +27,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-16622: The returned value of the called method in Invoke can be null") {
     val inputRow = InternalRow.fromSeq(Seq((false, null)))
-    val cls = classOf[Tuple2[Boolean, Int]]
+    val cls = classOf[Tuple2[Boolean, java.lang.Integer]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val invoke = Invoke(inputObject, "_2", IntegerType)
     checkEvaluationWithGeneratedMutableProjection(invoke, null, inputRow)
