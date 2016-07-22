@@ -39,11 +39,11 @@ def call_in_background(f, *args):
     return result
 
 
-if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("PythonStatusAPIDemo") \
-        .config("spark.ui.showConsoleProgress", "false") \
+def main():
+    spark = SparkSession\
+        .builder\
+        .appName("PythonStatusAPIDemo")\
+        .config("spark.ui.showConsoleProgress", "false")\
         .getOrCreate()
 
     def run():
@@ -66,5 +66,7 @@ if __name__ == "__main__":
         time.sleep(1)
 
     print("Job results are:", result.get())
-
     spark.stop()
+
+if __name__ == "__main__":
+    main()
