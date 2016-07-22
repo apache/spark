@@ -67,6 +67,10 @@ class JsonProtocolSuite extends SparkFunSuite {
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
+    val sessionUpdate = SparkListenerSessionUpdate(Map[String, String](
+      "spark.app.name" -> "Spark shell",
+      "spark.driver.port" -> "1234"
+    ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
       BlockManagerId("Stars", "In your multitude...", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
@@ -100,6 +104,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(jobStart, jobStartJsonString)
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
+    testEvent(sessionUpdate, sessionUpdateJsonString)
     testEvent(blockManagerAdded, blockManagerAddedJsonString)
     testEvent(blockManagerRemoved, blockManagerRemovedJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
@@ -528,6 +533,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
+      case (e1: SparkListenerSessionUpdate, e2: SparkListenerSessionUpdate) =>
+        assertEquals_(e1.sessionDetails, e2.sessionDetails)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
         assert(e1.executorId === e1.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
@@ -681,6 +688,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
         assert(key1 === key2)
         values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
+    }
+  }
+
+  // TODO: Anyway to overwrite the assertEquals(Map[String, Seq[(String, String)]],
+  // Map[String, Seq[(String, String)]]) above? It reports that assertEquals(Map, Map)
+  // is already defined in the scope, if I use assertEquals as the function name here.
+  private def assertEquals_(details1: Map[String, String], details2: Map[String, String]) {
+    details1.zip(details2).foreach {
+      case ((key1, values1), (key2, values2)) =>
+        assert(key1 === key2)
+        assert(values1 === values2)
     }
   }
 
@@ -1662,6 +1680,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  },
       |  "Classpath Entries": {
       |    "Super library": "/tmp/super_library"
+      |  }
+      |}
+    """.stripMargin
+
+  private val sessionUpdateJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerSessionUpdate",
+      |  "Session Properties": {
+      |    "spark.app.name": "Spark shell",
+      |    "spark.driver.port": "1234"
       |  }
       |}
     """.stripMargin

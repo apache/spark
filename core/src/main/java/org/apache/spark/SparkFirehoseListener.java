@@ -73,6 +73,11 @@ public class SparkFirehoseListener implements SparkListenerInterface {
     }
 
     @Override
+    public final void onSessionUpdate(SparkListenerSessionUpdate sessionUpdate) {
+        onEvent(sessionUpdate);
+    }
+
+    @Override
     public final void onBlockManagerAdded(SparkListenerBlockManagerAdded blockManagerAdded) {
         onEvent(blockManagerAdded);
     }

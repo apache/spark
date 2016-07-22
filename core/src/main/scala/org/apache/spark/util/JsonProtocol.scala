@@ -80,6 +80,8 @@ private[spark] object JsonProtocol {
         jobEndToJson(jobEnd)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
         environmentUpdateToJson(environmentUpdate)
+      case sessionUpdate: SparkListenerSessionUpdate =>
+        sessionUpdateToJson(sessionUpdate)
       case blockManagerAdded: SparkListenerBlockManagerAdded =>
         blockManagerAddedToJson(blockManagerAdded)
       case blockManagerRemoved: SparkListenerBlockManagerRemoved =>
@@ -175,6 +177,13 @@ private[spark] object JsonProtocol {
     ("Spark Properties" -> sparkProperties) ~
     ("System Properties" -> systemProperties) ~
     ("Classpath Entries" -> classpathEntries)
+  }
+
+  def sessionUpdateToJson(sessionUpdate: SparkListenerSessionUpdate): JValue = {
+    val sessionDetails = sessionUpdate.sessionDetails
+    val sessionConf = mapToJson(sessionDetails.toMap)
+    ("Event" -> Utils.getFormattedClassName(sessionUpdate)) ~
+    ("Session Properties" -> sessionConf)
   }
 
   def blockManagerAddedToJson(blockManagerAdded: SparkListenerBlockManagerAdded): JValue = {
@@ -491,6 +500,7 @@ private[spark] object JsonProtocol {
     val jobStart = Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
     val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
+    val sessionUpdate = Utils.getFormattedClassName(SparkListenerSessionUpdate)
     val blockManagerAdded = Utils.getFormattedClassName(SparkListenerBlockManagerAdded)
     val blockManagerRemoved = Utils.getFormattedClassName(SparkListenerBlockManagerRemoved)
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
@@ -510,6 +520,7 @@ private[spark] object JsonProtocol {
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
       case `environmentUpdate` => environmentUpdateFromJson(json)
+      case `sessionUpdate` => sessionUpdateFromJson(json)
       case `blockManagerAdded` => blockManagerAddedFromJson(json)
       case `blockManagerRemoved` => blockManagerRemovedFromJson(json)
       case `unpersistRDD` => unpersistRDDFromJson(json)
@@ -588,6 +599,11 @@ private[spark] object JsonProtocol {
       "System Properties" -> mapFromJson(json \ "System Properties").toSeq,
       "Classpath Entries" -> mapFromJson(json \ "Classpath Entries").toSeq)
     SparkListenerEnvironmentUpdate(environmentDetails)
+  }
+
+  def sessionUpdateFromJson(json: JValue): SparkListenerSessionUpdate = {
+    val sessionDetails = mapFromJson(json \ "Session Properties")
+    SparkListenerSessionUpdate(sessionDetails)
   }
 
   def blockManagerAddedFromJson(json: JValue): SparkListenerBlockManagerAdded = {

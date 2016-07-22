@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerSessionUpdate}
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -28,7 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * @since 2.0.0
  */
-class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
+class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf,
+                                 listenerBus: Option[LiveListenerBus] = None) {
 
   /**
    * Sets the given Spark runtime configuration property.
@@ -37,6 +41,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def set(key: String, value: String): Unit = {
     sqlConf.setConfString(key, value)
+    postSessionUpdate()
   }
 
   /**
@@ -123,6 +128,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def unset(key: String): Unit = {
     sqlConf.unsetConf(key)
+    postSessionUpdate()
   }
 
   /**
@@ -130,6 +136,22 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   protected[sql] def contains(key: String): Boolean = {
     sqlConf.contains(key)
+  }
+
+  /**
+   * Set the sqlConf multiple times while call postSessionUpdate only once.
+   * This is faster than calling set multiple times which posts session update every time.
+   */
+  protected[sql] def setBatch(options: HashMap[String, String]): Unit = {
+    options.foreach { case (k, v) => sqlConf.setConfString(k, v) }
+    postSessionUpdate()
+  }
+
+  private def postSessionUpdate() {
+    if (listenerBus.isDefined) {
+      val sessionUpdate = SparkListenerSessionUpdate(getAll)
+      listenerBus.get.post(sessionUpdate)
+    }
   }
 
 }
