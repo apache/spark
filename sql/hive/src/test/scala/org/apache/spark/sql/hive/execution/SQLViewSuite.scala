@@ -64,7 +64,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("error handling: insert into a temp view") {
+  test("error handling: insert/load/truncate table commands against a temp view") {
     val viewName = "testView"
     withView(viewName) {
       sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT id FROM jt")
@@ -86,7 +86,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("error handling: insert into a view") {
+  test("error handling: insert/load/truncate table commands against a view") {
     val viewName = "testView"
     withView(viewName) {
       sql(s"CREATE VIEW $viewName AS SELECT id FROM jt")
