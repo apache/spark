@@ -169,11 +169,12 @@ abstract class ExternalCatalog {
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /**
-   * Returns partitions filtered by predicates for the given table, It just work for Hive.
+   * Returns partitions filtered by predicates for the given table, It just works for Hive.
    *
    * The filters Expressions may optionally be provided to filter the partitions returned.
    * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
    * then the filters (a='1') will return the first two only.
+   *
    * @param db database name
    * @param table table name
    * @param filters The filters used to prune which partitions are returned.
