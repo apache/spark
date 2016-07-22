@@ -36,7 +36,7 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 
   import MultilayerPerceptronClassifierWrapper._
 
-  private val multilayerPerceptronClassifierModel: MultilayerPerceptronClassificationModel =
+  private val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
     pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
 
   def transform(dataset: Dataset[_]): DataFrame = {
@@ -103,8 +103,8 @@ private[r] object MultilayerPerceptronClassifierWrapper
   }
 
   /**
-    * Returns an [[MLReader]] instance for this class.
-    */
+   * Returns an [[MLReader]] instance for this class.
+   */
   override def read: MLReader[MultilayerPerceptronClassifierWrapper] =
     new MultilayerPerceptronClassifierWrapperReader
 
@@ -142,5 +142,4 @@ private[r] object MultilayerPerceptronClassifierWrapper
       instance.pipeline.save(pipelinePath)
     }
   }
-
 }

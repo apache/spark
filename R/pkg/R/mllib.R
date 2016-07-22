@@ -414,7 +414,7 @@ setMethod("predict", signature(object = "KMeansModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Multilayer Perceptron Classifier Model
+#' Multilayer Perceptron Classification Model
 #'
 #' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
@@ -438,7 +438,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' \dontrun{
 #' df <- createDataFrame(infert)
 #'
-#' # fit a Bernoulli naive Bayes model
+#' # fit a Multilayer Perceptron Classification Model
 #' model <- spark.mlp(df, education ~ ., layers = (4, 5, 4, 3), blockSize = 128, seed = 1234L, maxIter = 100)
 #'
 #' # get the summary of the model
