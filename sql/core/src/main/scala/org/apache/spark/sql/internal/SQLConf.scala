@@ -270,7 +270,7 @@ object SQLConf {
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
       "distinct semantics.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = SQLConfigBuilder("spark.sql.columnNameOfCorruptRecord")
     .doc("The name of internal column for storing raw/un-parsed JSON records that fail to parse.")

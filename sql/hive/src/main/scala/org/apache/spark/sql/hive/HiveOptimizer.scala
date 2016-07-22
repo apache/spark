@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{catalyst, ExperimentalMethods, SparkSession}
-import org.apache.spark.sql.execution.SparkOptimizer
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, PredicateHelper}
+import org.apache.spark.sql.{ExperimentalMethods, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.SparkOptimizer
 import org.apache.spark.sql.internal.SQLConf
 
 class HiveOptimizer (
@@ -38,22 +38,23 @@ class HiveOptimizer (
 case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.partitionPrunerForStatsEnabled) {
+      return plan
+    }
+
     plan.transform {
       case filter @ Filter(condition, relation: MetastoreRelation)
         if relation.partitionKeys.nonEmpty && condition.deterministic =>
         val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val predicates = splitConjunctivePredicates(condition)
-        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
+        val pruningPredicates = predicates.filter { predicate =>
           !predicate.references.isEmpty &&
             predicate.references.subsetOf(partitionKeyIds)
         }
-        val filterCondition: Option[Expression] =
-          otherPredicates.reduceLeftOption(catalyst.expressions.And)
         if (pruningPredicates.nonEmpty) {
           relation.partitionPruningPred = pruningPredicates
         }
-
-        filterCondition.map(Filter(_, relation)).getOrElse(relation)
+        filter
     }
   }
 }
