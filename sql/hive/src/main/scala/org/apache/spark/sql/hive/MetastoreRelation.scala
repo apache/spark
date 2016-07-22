@@ -43,7 +43,6 @@ import org.apache.spark.sql.types.BooleanType
 private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
-    alias: Option[String],
     var partitionPruningPred: Seq[Expression] = Seq.empty[Expression])
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
@@ -54,7 +53,6 @@ private[hive] case class MetastoreRelation(
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
         tableName == relation.tableName &&
-        alias == relation.alias &&
         output == relation.output &&
         partitionPruningPred.size == relation.partitionPruningPred.size &&
         (partitionPruningPred, relation.partitionPruningPred).zipped.forall(_ semanticEquals _)
@@ -62,7 +60,7 @@ private[hive] case class MetastoreRelation(
   }
 
   override def hashCode(): Int = {
-    Objects.hashCode(databaseName, tableName, alias, output)
+    Objects.hashCode(databaseName, tableName, output)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
@@ -173,7 +171,7 @@ private[hive] case class MetastoreRelation(
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
-      tPartition.setValues(p.spec.values.toList.asJava)
+      tPartition.setValues(partitionKeys.map(a => p.spec(a.name)).asJava)
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
@@ -226,7 +224,7 @@ private[hive] case class MetastoreRelation(
 
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {
-    plan match {
+    plan.canonicalized match {
       case mr: MetastoreRelation =>
         mr.databaseName == databaseName && mr.tableName == tableName &&
           partitionPruningPred.size == mr.partitionPruningPred.size &&
@@ -251,7 +249,7 @@ private[hive] case class MetastoreRelation(
       CatalystSqlParser.parseDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifier = Some(alias.getOrElse(tableName)))
+    )(qualifier = Some(tableName))
   }
 
   /** PartitionKey attributes */
@@ -286,7 +284,7 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias, partitionPruningPred)(
+    MetastoreRelation(databaseName, tableName, partitionPruningPred)(
       catalogTable, client, sparkSession)
   }
 }

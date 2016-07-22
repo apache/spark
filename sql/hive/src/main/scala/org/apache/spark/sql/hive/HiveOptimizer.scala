@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.{catalyst, ExperimentalMethods, SparkSession}
+import org.apache.spark.sql.execution.SparkOptimizer
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, PredicateHelper}
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -29,18 +29,17 @@ class HiveOptimizer (
   catalog: HiveSessionCatalog,
   conf: SQLConf,
   experimentalMethods: ExperimentalMethods)
-  extends Optimizer(catalog, conf) {
+  extends SparkOptimizer(catalog, conf, experimentalMethods) {
 
   override def batches: Seq[Batch] = super.batches :+
-    Batch("Push filter into relation", Once, PushFilterIntoRelation(conf)) :+
-      Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+    Batch("Push filter into relation", Once, PushFilterIntoRelation(conf))
 }
 
 case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transform {
-      case filter@Filter(condition, relation: MetastoreRelation)
+      case filter @ Filter(condition, relation: MetastoreRelation)
         if relation.partitionKeys.nonEmpty && condition.deterministic =>
         val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val predicates = splitConjunctivePredicates(condition)
