@@ -120,6 +120,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENABLE_PARTITION_PRUNER_FOR_STATS = SQLConfigBuilder("spark.sql.statistics.partitionPruner")
+    .doc("When true, some predicates will be pushed down into MetastoreRelation so that " +
+      "determining if partitions that are involved are small enough to use auto broadcast joins.")
+    .booleanConf
+    .createWithDefault(false)
+
   val DEFAULT_SIZE_IN_BYTES = SQLConfigBuilder("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to a larger " +
@@ -263,10 +269,6 @@ object SQLConf {
       "to produce the partition columns instead of table scans. It applies when all the columns " +
       "scanned are partition columns and the query has an aggregate operator that satisfies " +
       "distinct semantics.")
-
-  val HIVE_PARTITION_PRUNER_FOR_STATS = SQLConfigBuilder("spark.sql.hive.partitionPrunerForStats")
-    .doc("When true, some predicates will be pushed down into MetastoreRelation so that " +
-      "determining if partitions that are involved are small enough to use auto broadcast joins.")
     .booleanConf
     .createWithDefault(false)
 
@@ -420,6 +422,13 @@ object SQLConf {
       " method.")
     .booleanConf
     .createWithDefault(true)
+
+  val WHOLESTAGE_MAX_NUM_FIELDS = SQLConfigBuilder("spark.sql.codegen.maxFields")
+    .internal()
+    .doc("The maximum number of fields (including nested fields) that will be supported before" +
+      " deactivating whole-stage codegen.")
+    .intConf
+    .createWithDefault(100)
 
   val WHOLESTAGE_FALLBACK = SQLConfigBuilder("spark.sql.codegen.fallback")
     .internal()
@@ -601,9 +610,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
-  def hivePartitionPrunerForStats: Boolean = getConf(HIVE_PARTITION_PRUNER_FOR_STATS)
-
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def wholeStageFallback: Boolean = getConf(WHOLESTAGE_FALLBACK)
 
@@ -619,6 +628,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
+  def partitionPrunerForStatsEnabled: Boolean = getConf(ENABLE_PARTITION_PRUNER_FOR_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 

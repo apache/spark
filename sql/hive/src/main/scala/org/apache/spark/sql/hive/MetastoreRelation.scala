@@ -135,7 +135,7 @@ private[hive] case class MetastoreRelation(
           try {
             val hadoopConf = sparkSession.sessionState.newHadoopConf()
             if (partitionPruningPred.isEmpty ||
-              !sparkSession.sessionState.conf.hivePartitionPrunerForStats) {
+              !sparkSession.sessionState.conf.partitionPrunerForStatsEnabled) {
               val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
               fs.getContentSummary(hiveQlTable.getPath).getLength
             } else {
