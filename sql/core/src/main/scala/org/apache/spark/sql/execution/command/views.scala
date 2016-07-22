@@ -105,6 +105,12 @@ case class CreateViewCommand(
       val tableIdentifier = tableDesc.identifier.copy(database = Option(database))
 
       if (sessionState.catalog.tableExists(tableIdentifier)) {
+        val tableMetadata = sessionState.catalog.getTableMetadata(tableIdentifier)
+        if (tableMetadata.tableType != CatalogTableType.VIEW) {
+          throw new AnalysisException(
+            s"Existing table is not a view. The following is an existing table, " +
+              s"not a view: $tableIdentifier")
+        }
         if (allowExisting) {
           // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
           // already exists.
