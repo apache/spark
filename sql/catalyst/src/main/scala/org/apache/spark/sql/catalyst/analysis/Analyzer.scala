@@ -1179,11 +1179,17 @@ class Analyzer(
    * underlying aggregate operator and then projected away after the original operator.
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
+    private def canPushDown(filter: Filter): Boolean = {
+      val havingCondition = filter.condition
+      containsAggregate(havingCondition) || (!filter.resolved &&
+        !ResolveGroupingAnalytics.hasGroupingFunction(havingCondition) &&
+        !containsUDF(havingCondition))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case filter @ Filter(havingCondition,
              aggregate @ Aggregate(grouping, originalAggExprs, child))
-          if aggregate.resolved && (containsAggregate(havingCondition) || !filter.resolved) &&
-            !ResolveGroupingAnalytics.hasGroupingFunction(havingCondition) =>
+          if aggregate.resolved && canPushDown(filter) =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         try {
@@ -1201,28 +1207,15 @@ class Analyzer(
           // If resolution was successful and we see the filter has an aggregate in it, add it to
           // the original aggregate operator.
           if (resolvedOperator.resolved) {
-            // Try to replace all aggregate expressions in the filter by an alias.
-            val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
-            val transformedAggregateFilter = resolvedAggregateFilter.transformDown {
-              case ae: AggregateExpression =>
-                val alias = Alias(ae, ae.toString)()
-                aggregateExpressions += alias
-                alias.toAttribute
-              case ne: NamedExpression => ne
-              case e: Expression =>
-                val alias = Alias(e, e.toString)()
-                aggregateExpressions += alias
-                alias.toAttribute
+            val (transformedCondition, pushedExpr) = resolvedAggregateFilter match {
+              case Alias(expr, _) =>
+                val alias = Alias(expr, expr.toString)()
+                (alias.toAttribute, alias)
             }
 
-            // Push the aggregate expressions into the aggregate (if any).
-            if (aggregateExpressions.nonEmpty) {
-              Project(aggregate.output,
-                Filter(transformedAggregateFilter,
-                  aggregate.copy(aggregateExpressions = originalAggExprs ++ aggregateExpressions)))
-            } else {
-              filter
-            }
+            Project(aggregate.output,
+              Filter(transformedCondition,
+                aggregate.copy(aggregateExpressions = originalAggExprs ++ Seq(pushedExpr))))
           } else {
             filter
           }
@@ -1295,6 +1288,10 @@ class Analyzer(
 
     def containsAggregate(condition: Expression): Boolean = {
       condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+    }
+
+    private def containsUDF(condition: Expression): Boolean = {
+      condition.find(_.isInstanceOf[ScalaUDF]).isDefined
     }
   }
 
