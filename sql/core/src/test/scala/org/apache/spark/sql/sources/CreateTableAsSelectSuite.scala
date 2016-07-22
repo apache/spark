@@ -22,6 +22,7 @@ import java.io.File
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -204,7 +205,7 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with bucket") {
+  test("create table using as select - with non-zero buckets") {
     val catalog = spark.sessionState.catalog
     withTable("t") {
       sql(
@@ -217,7 +218,23 @@ class CreateTableAsSelectSuite
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
-        Some(BucketSpec(5, Seq("a"), Seq("b"))))
+        Option(BucketSpec(5, Seq("a"), Seq("b"))))
+    }
+  }
+
+  test("create table using as select - with zero buckets") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '${path.toString}')
+             |CLUSTERED BY (a) SORTED BY (b) INTO 0 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+      }.getMessage
+      assert(e.contains("Expected positive number of buckets, but got `0`"))
     }
   }
 }
