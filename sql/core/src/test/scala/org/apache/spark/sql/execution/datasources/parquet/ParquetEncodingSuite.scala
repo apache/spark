@@ -16,7 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.test.SharedSQLContext
+
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
@@ -80,27 +84,26 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
   }
 
   test("Read row group containing both dictionary and plain encoded pages") {
-    spark.conf.set("parquet.dictionary.page.size", "2048")
-    spark.conf.set("parquet.page.size", "4096")
+    withSQLConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "2048",
+      ParquetOutputFormat.PAGE_SIZE -> "4096") {
+      withTempPath { dir =>
+        // In order to explicitly test for SPARK-14217, we set the parquet dictionary and page size
+        // such that the following data spans across 3 pages (within a single row group) where the
+        // first page is dictionary encoded and the remaining two are plain encoded.
+        val data = (0 until 512).flatMap(i => Seq.fill(3)(i.toString))
+        data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
+        val file = SpecificParquetRecordReaderBase.listDirectory(dir).asScala.head
 
-    withTempPath { dir =>
-      // In order to explicitly test for SPARK-14217, we set the parquet dictionary and page size
-      // such that the following data spans across 3 pages (within a single row group) where the
-      // first page is dictionary encoded and the remaining two are plain encoded.
-      val data = (0 until 512).flatMap(i => Seq.fill(3)(i.toString))
-      data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
-      val file =
-        SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head.asInstanceOf[String]
+        val reader = new VectorizedParquetRecordReader
+        reader.initialize(file, null /* set columns to null to project all columns */)
+        val column = reader.resultBatch().column(0)
+        assert(reader.nextBatch())
 
-      val reader = new VectorizedParquetRecordReader
-      reader.initialize(file, null /* set columns to null to project all columns */)
-      val column = reader.resultBatch().column(0)
-      assert(reader.nextBatch())
-
-      (0 until 512).foreach { i =>
-        assert(column.getUTF8String(3 * i).toString == i.toString)
-        assert(column.getUTF8String(3 * i + 1).toString == i.toString)
-        assert(column.getUTF8String(3 * i + 2).toString == i.toString)
+        (0 until 512).foreach { i =>
+          assert(column.getUTF8String(3 * i).toString == i.toString)
+          assert(column.getUTF8String(3 * i + 1).toString == i.toString)
+          assert(column.getUTF8String(3 * i + 2).toString == i.toString)
+        }
       }
     }
   }
