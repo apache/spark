@@ -54,6 +54,10 @@ private[hive] trait HiveStrategies {
     }
   }
 
+  /**
+   * Retrieves data using a HiveTableScan.  Partition pruning predicates are also detected and
+   * applied.
+   */
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
@@ -62,7 +66,7 @@ private[hive] trait HiveStrategies {
         val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
           !predicate.references.isEmpty &&
-            predicate.references.subsetOf(partitionKeyIds)
+          predicate.references.subsetOf(partitionKeyIds)
         }
 
         pruneFilterProject(
