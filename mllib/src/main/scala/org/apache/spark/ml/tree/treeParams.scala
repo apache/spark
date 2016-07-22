@@ -471,7 +471,7 @@ private[ml] object GBTClassifierParams {
   /** Accessor for support entropy settings: loss-based or variance */
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
   private final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
-    case "logistic" | "bernoulli" => ApproximateBernoulliImpurity //TODO: uses taylor-2 for splitting, exact for leaves
+    case "logistic" | "bernoulli" => ApproxBernoulliImpurity
     case _ => throw new RuntimeException(
       s"GBTClassifier does not have loss-based impurity for loss ${loss}")
   }
