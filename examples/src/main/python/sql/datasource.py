@@ -25,7 +25,7 @@ from pyspark.sql import Row
 """
 A simple example demonstrating Spark SQL Data Source.
 Run with:
-  ./bin/spark-submit examples/src/main/python/sql/SqlDataSourceExample.py
+  ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
 
 
@@ -144,7 +144,6 @@ if __name__ == "__main__":
     spark = SparkSession \
         .builder \
         .appName("PythonSQL") \
-        .config("spark.some.config.option", "some-value") \
         .getOrCreate()
 
     runBasicDataSourceExample(spark)

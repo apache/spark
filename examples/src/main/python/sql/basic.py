@@ -33,11 +33,11 @@ from pyspark.sql.types import *
 """
 A simple example demonstrating Spark SQL.
 Run with:
-  ./bin/spark-submit examples/src/main/python/SparkSQLExample.py
+  ./bin/spark-submit examples/src/main/python/sql/basic.py
 """
 
 
-def runBasicDataFrameExample(spark):
+def basic_df_example(spark):
     # $example on:create_df$
     # spark is an existing SparkSession
     df = spark.read.json("examples/src/main/resources/people.json")
@@ -50,6 +50,7 @@ def runBasicDataFrameExample(spark):
     # |  30|   Andy|
     # |  19| Justin|
     # +----+-------+
+    # $example off:create_df$
 
     # $example on:untyped_ops$
     # spark, df are from the previous example
@@ -114,7 +115,7 @@ def runBasicDataFrameExample(spark):
     # $example off:run_sql$
 
 
-def runInferSchemaExample(spark):
+def schema_inference_example(spark):
     # $example on:schema_inferring$
     sc = spark.sparkContext
 
@@ -132,14 +133,14 @@ def runInferSchemaExample(spark):
 
     # The results of SQL queries are Dataframe objects.
     # rdd returns the content as an :class:`pyspark.RDD` of :class:`Row`.
-    teenNames = teenagers.rdd.map(lambda p: "Name: " + p.name)
-    for teenName in teenNames.collect():
-        print(teenName)
+    teenNames = teenagers.rdd.map(lambda p: "Name: " + p.name).collect()
+    for name in teenNames:
+        print(name)
     # Name: Justin
-    # $example on:schema_inferring$
+    # $example off:schema_inferring$
 
 
-def runProgrammaticSchemaExample(spark):
+def programmatic_schema_example(spark):
     # $example on:programmatic_schema$
     sc = spark.sparkContext
 
@@ -179,15 +180,15 @@ def runProgrammaticSchemaExample(spark):
 
 if __name__ == "__main__":
     # $example on:init_session$
-    spark = SparkSession\
-        .builder\
-        .appName("PythonSQL")\
-        .config("spark.some.config.option", "some-value")\
+    spark = SparkSession \
+        .builder \
+        .appName("PythonSQL") \
+        .config("spark.some.config.option", "some-value") \
         .getOrCreate()
     # $example off:init_session$
 
-    runBasicDataFrameExample(spark)
-    runInferSchemaExample(spark)
-    runProgrammaticSchemaExample(spark)
+    basic_df_example(spark)
+    schema_inference_example(spark)
+    programmatic_schema_example(spark)
 
     spark.stop()
