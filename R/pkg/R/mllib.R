@@ -630,7 +630,8 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.0.0
-setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel", path = "character"),
+setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
+          path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
             if (overwrite) {

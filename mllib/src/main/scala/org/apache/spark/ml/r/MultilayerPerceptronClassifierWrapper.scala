@@ -111,7 +111,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
   class MultilayerPerceptronClassifierWrapperReader
     extends MLReader[MultilayerPerceptronClassifierWrapper]{
 
-    override def load(path: String): NaiveBayesWrapper = {
+    override def load(path: String): MultilayerPerceptronClassifierWrapper = {
       implicit val format = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
@@ -122,7 +122,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
       val features = (rMetadata \ "features").extract[Array[String]]
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new NaiveBayesWrapper(pipeline, labels, features)
+      new MultilayerPerceptronClassifierWrapper(pipeline, labels, features)
     }
   }
 
