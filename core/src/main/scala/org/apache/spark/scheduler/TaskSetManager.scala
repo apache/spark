@@ -740,7 +740,6 @@ private[spark] class TaskSetManager(
           successful(index) = true
           tasksSuccessful += 1
         }
-        // Not adding to failed executors for FetchFailed.
         isZombie = true
         None
 
@@ -800,7 +799,11 @@ private[spark] class TaskSetManager(
     // that bad node will get handled separately by spark's stage-failure handling mechanism.  It
     // shouldn't penalize *this* executor at all, so don't count it as a task-failure as far as
     // the blacklist is concerned.
-    if (!reason.isInstanceOf[FetchFailed]) {
+    val countTowardsTaskFailures = reason match {
+      case fail: TaskFailedReason => fail.countTowardsTaskFailures
+      case Success => false
+    }
+    if (countTowardsTaskFailures && blacklistTracker.isDefined) {
       updateBlacklistForFailedTask(info.host, info.executorId, index)
     }
 
@@ -815,9 +818,7 @@ private[spark] class TaskSetManager(
       addPendingTask(index)
     }
 
-    if (!isZombie && state != TaskState.KILLED
-        && reason.isInstanceOf[TaskFailedReason]
-        && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
+    if (!isZombie && countTowardsTaskFailures) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {

@@ -664,18 +664,25 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     verify(blacklist).expireExecutorsInBlacklist()
   }
 
-  test("don't update blacklist for shuffle-fetch failures") {
+  test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +
+    "or killed tasks") {
     val blacklist = mock[BlacklistTracker]
     taskScheduler = setupSchedulerWithMockTsm(blacklist)
-    val stage0 = FakeTask.createTaskSet(numTasks = 2, stageId = 0, stageAttemptId = 0)
+    val stage0 = FakeTask.createTaskSet(numTasks = 4, stageId = 0, stageAttemptId = 0)
     taskScheduler.submitTasks(stage0)
     val taskDescs = taskScheduler.resourceOffers(
       Seq(new WorkerOffer("executor0", "host0", 10))).flatten
-    assert(taskDescs.size === 2)
+    assert(taskDescs.size === 4)
 
     val tsm = stageToMockTsm(0)
     taskScheduler.handleFailedTask(tsm, taskDescs(0).taskId, TaskState.FAILED,
       FetchFailed(BlockManagerId("executor1", "host1", 12345), 0, 0, 0, "ignored"))
+    taskScheduler.handleFailedTask(tsm, taskDescs(1).taskId, TaskState.FAILED,
+      ExecutorLostFailure("executor0", exitCausedByApp = false, reason = None))
+    taskScheduler.handleFailedTask(tsm, taskDescs(2).taskId, TaskState.FAILED,
+      TaskCommitDenied(0, 2, 0))
+    taskScheduler.handleFailedTask(tsm, taskDescs(3).taskId, TaskState.KILLED,
+      TaskKilled)
     verify(tsm, never()).updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
   }
 }
