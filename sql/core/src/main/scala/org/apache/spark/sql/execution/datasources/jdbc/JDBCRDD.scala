@@ -322,44 +322,133 @@ private[sql] class JDBCRDD(
     }
   }
 
-  // Each JDBC-to-Catalyst conversion corresponds to a tag defined here so that
-  // we don't have to potentially poke around in the Metadata once for every
-  // row.
-  // Is there a better way to do this?  I'd rather be using a type that
-  // contains only the tags I define.
-  abstract class JDBCConversion
-  case object BooleanConversion extends JDBCConversion
-  case object DateConversion extends JDBCConversion
-  case class  DecimalConversion(precision: Int, scale: Int) extends JDBCConversion
-  case object DoubleConversion extends JDBCConversion
-  case object FloatConversion extends JDBCConversion
-  case object IntegerConversion extends JDBCConversion
-  case object LongConversion extends JDBCConversion
-  case object BinaryLongConversion extends JDBCConversion
-  case object StringConversion extends JDBCConversion
-  case object TimestampConversion extends JDBCConversion
-  case object BinaryConversion extends JDBCConversion
-  case class ArrayConversion(elementConversion: JDBCConversion) extends JDBCConversion
+  // A `JDBCConversion` is responsible for converting a value from `ResultSet`
+  // to a value in a field for `InternalRow`.
+  private type JDBCConversion = (ResultSet, Int) => Any
+
+  // This `ArrayElementConversion` is responsible for converting elements in
+  // an array from `ResultSet`.
+  private type ArrayElementConversion = (Object) => Any
 
   /**
-   * Maps a StructType to a type tag list.
+   * Maps a StructType to conversions for each type.
    */
   def getConversions(schema: StructType): Array[JDBCConversion] =
     schema.fields.map(sf => getConversions(sf.dataType, sf.metadata))
 
   private def getConversions(dt: DataType, metadata: Metadata): JDBCConversion = dt match {
-    case BooleanType => BooleanConversion
-    case DateType => DateConversion
-    case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
-    case DoubleType => DoubleConversion
-    case FloatType => FloatConversion
-    case IntegerType => IntegerConversion
-    case LongType => if (metadata.contains("binarylong")) BinaryLongConversion else LongConversion
-    case StringType => StringConversion
-    case TimestampType => TimestampConversion
-    case BinaryType => BinaryConversion
-    case ArrayType(et, _) => ArrayConversion(getConversions(et, metadata))
+    case BooleanType =>
+      (rs: ResultSet, pos: Int) => rs.getBoolean(pos)
+
+    case DateType =>
+      (rs: ResultSet, pos: Int) =>
+        // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
+        val dateVal = rs.getDate(pos)
+        if (dateVal != null) {
+          DateTimeUtils.fromJavaDate(dateVal)
+        } else {
+          null
+        }
+
+    case DecimalType.Fixed(p, s) =>
+      (rs: ResultSet, pos: Int) =>
+        val decimalVal = rs.getBigDecimal(pos)
+        if (decimalVal == null) {
+          null
+        } else {
+          Decimal(decimalVal, p, s)
+        }
+
+    case DoubleType =>
+      (rs: ResultSet, pos: Int) => rs.getDouble(pos)
+
+    case FloatType =>
+      (rs: ResultSet, pos: Int) => rs.getFloat(pos)
+
+    case IntegerType =>
+      (rs: ResultSet, pos: Int) => rs.getInt(pos)
+
+    case LongType if metadata.contains("binarylong") =>
+      (rs: ResultSet, pos: Int) =>
+        val bytes = rs.getBytes(pos)
+        var ans = 0L
+        var j = 0
+        while (j < bytes.size) {
+          ans = 256 * ans + (255 & bytes(j))
+          j = j + 1
+        }
+        ans
+
+    case LongType =>
+      (rs: ResultSet, pos: Int) => rs.getLong(pos)
+
+    case StringType =>
+      (rs: ResultSet, pos: Int) =>
+        // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
+        UTF8String.fromString(rs.getString(pos))
+
+    case TimestampType =>
+      (rs: ResultSet, pos: Int) =>
+        val t = rs.getTimestamp(pos)
+        if (t != null) {
+          DateTimeUtils.fromJavaTimestamp(t)
+        } else {
+          null
+        }
+
+    case BinaryType =>
+      (rs: ResultSet, pos: Int) => rs.getBytes(pos)
+
+    case ArrayType(et, _) =>
+      val elementConversion: ArrayElementConversion =
+        getArrayElementConversion(et, metadata)
+      (rs: ResultSet, pos: Int) =>
+        val array = rs.getArray(pos).getArray
+        if (array != null) {
+          val data = elementConversion.apply(array)
+          new GenericArrayData(data)
+        } else {
+          null
+        }
+
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
+  }
+
+  private def getArrayElementConversion(
+      dt: DataType,
+      metadata: Metadata): ArrayElementConversion = {
+    dt match {
+      case TimestampType =>
+        (array: Object) =>
+          array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
+            nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
+          }
+
+      case StringType =>
+        (array: Object) =>
+          array.asInstanceOf[Array[java.lang.String]]
+            .map(UTF8String.fromString)
+
+      case DateType =>
+        (array: Object) =>
+          array.asInstanceOf[Array[java.sql.Date]].map { date =>
+            nullSafeConvert(date, DateTimeUtils.fromJavaDate)
+          }
+
+      case dt: DecimalType =>
+        (array: Object) =>
+          array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
+            nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, dt.precision, dt.scale))
+          }
+
+      case LongType if metadata.contains("binarylong") =>
+        throw new IllegalArgumentException(s"Unsupported array element conversion.")
+
+      case ArrayType(_, _) =>
+        throw new IllegalArgumentException("Nested arrays unsupported")
+
+      case _ => (array: Object) => array.asInstanceOf[Array[Any]]
+    }
   }
 
   /**
@@ -398,7 +487,7 @@ private[sql] class JDBCRDD(
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
-    val conversions = getConversions(schema)
+    val conversions: Array[JDBCConversion] = getConversions(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
     def getNext(): InternalRow = {
@@ -407,84 +496,8 @@ private[sql] class JDBCRDD(
         var i = 0
         while (i < conversions.length) {
           val pos = i + 1
-          conversions(i) match {
-            case BooleanConversion => mutableRow.setBoolean(i, rs.getBoolean(pos))
-            case DateConversion =>
-              // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
-              val dateVal = rs.getDate(pos)
-              if (dateVal != null) {
-                mutableRow.setInt(i, DateTimeUtils.fromJavaDate(dateVal))
-              } else {
-                mutableRow.update(i, null)
-              }
-            // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
-            // object returned by ResultSet.getBigDecimal is not correctly matched to the table
-            // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
-            // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
-            // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
-            // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
-            // retrieve it, you will get wrong result 199.99.
-            // So it is needed to set precision and scale for Decimal based on JDBC metadata.
-            case DecimalConversion(p, s) =>
-              val decimalVal = rs.getBigDecimal(pos)
-              if (decimalVal == null) {
-                mutableRow.update(i, null)
-              } else {
-                mutableRow.update(i, Decimal(decimalVal, p, s))
-              }
-            case DoubleConversion => mutableRow.setDouble(i, rs.getDouble(pos))
-            case FloatConversion => mutableRow.setFloat(i, rs.getFloat(pos))
-            case IntegerConversion => mutableRow.setInt(i, rs.getInt(pos))
-            case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
-            // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-            case StringConversion => mutableRow.update(i, UTF8String.fromString(rs.getString(pos)))
-            case TimestampConversion =>
-              val t = rs.getTimestamp(pos)
-              if (t != null) {
-                mutableRow.setLong(i, DateTimeUtils.fromJavaTimestamp(t))
-              } else {
-                mutableRow.update(i, null)
-              }
-            case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
-            case BinaryLongConversion =>
-              val bytes = rs.getBytes(pos)
-              var ans = 0L
-              var j = 0
-              while (j < bytes.size) {
-                ans = 256 * ans + (255 & bytes(j))
-                j = j + 1
-              }
-              mutableRow.setLong(i, ans)
-            case ArrayConversion(elementConversion) =>
-              val array = rs.getArray(pos).getArray
-              if (array != null) {
-                val data = elementConversion match {
-                  case TimestampConversion =>
-                    array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
-                      nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
-                    }
-                  case StringConversion =>
-                    array.asInstanceOf[Array[java.lang.String]]
-                      .map(UTF8String.fromString)
-                  case DateConversion =>
-                    array.asInstanceOf[Array[java.sql.Date]].map { date =>
-                      nullSafeConvert(date, DateTimeUtils.fromJavaDate)
-                    }
-                  case DecimalConversion(p, s) =>
-                    array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
-                      nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, p, s))
-                    }
-                  case BinaryLongConversion =>
-                    throw new IllegalArgumentException(s"Unsupported array element conversion $i")
-                  case _: ArrayConversion =>
-                    throw new IllegalArgumentException("Nested arrays unsupported")
-                  case _ => array.asInstanceOf[Array[Any]]
-                }
-                mutableRow.update(i, new GenericArrayData(data))
-              } else {
-                mutableRow.update(i, null)
-              }
-          }
+          val value = conversions(i).apply(rs, pos)
+          mutableRow.update(i, value)
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
         }
