@@ -172,6 +172,7 @@ class SQLBuilder private (
         toSQL(p.right),
         p.condition.map(" ON " + _.sql).getOrElse(""))
 
+    // Hint on aliased table should be matched directly. Otherwise, this Hint will be propagate up.
     case h @ Hint(_, _, s @ SubqueryAlias(alias, p @ Project(_, _: SQLTable))) =>
       build("(" + toSQL(p.copy(child = h.copy(child = p.child))) + ")", "AS", s.alias)
 
