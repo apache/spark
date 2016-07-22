@@ -554,3 +554,15 @@ class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationB
     classOf[DummyTopologyMapper].getName)
 
 }
+
+class BlockManagerPrioritizerReplicationSuite extends BlockManagerReplicationBehavior {
+  override val conf: SparkConf = new SparkConf(false).set("spark.app.id", "test")
+  conf.set("spark.kryoserializer.buffer", "1m")
+  conf.set(
+    "spark.replication.topologyawareness.prioritizer",
+    "org.apache.spark.storage.PrioritizationWithObjectives")
+  conf.set(
+    "spark.replication.topologyawareness.topologyMapper",
+    "org.apache.spark.storage.DummyTopologyMapper"
+  )
+}
