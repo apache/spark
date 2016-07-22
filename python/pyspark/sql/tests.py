@@ -622,10 +622,10 @@ class SQLTests(ReusedPySparkTestCase):
         rows = [Row(dollars=ExampleMoney(1.0)), Row(dollars=ExampleMoney(2.0)), , Row(dollars=ExampleMoney(3.0))]
         df = self.spark.createDataFrame(rows)
 
-        less_than = df['dollars < 2.0']
+        less_than = df.filter(df.dollars < 2.0)
         self.assertEqual(Row(dollars=ExampleMoney(1.0)), less_than.collect())
 
-        equal = df['dollars == 2.0']
+        equal = df.filter(df.dollars == 2.0)
         self.assertEqual(Row(dollars=ExampleMoney(2.0)), equal.collect())
 
         greater_than = df['dollars > 2.0']
