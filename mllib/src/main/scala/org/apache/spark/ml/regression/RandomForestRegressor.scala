@@ -22,17 +22,17 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
-import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 
 
@@ -43,7 +43,7 @@ import org.apache.spark.sql.functions._
  */
 @Since("1.4.0")
 @Experimental
-class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestRegressorParams with DefaultParamsWritable {
 
@@ -93,24 +93,17 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   override def setFeatureSubsetStrategy(value: String): this.type =
     super.setFeatureSubsetStrategy(value)
 
-  override protected def train(dataset: Dataset[_]): RandomForestRegressionModel = {
+  override protected def train(dataset: DataFrame): RandomForestRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity)
-
-    val instr = Instrumentation.create(this, oldDataset)
-    instr.logParams(params: _*)
-
-    val trees = RandomForest
-      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
-      .map(_.asInstanceOf[DecisionTreeRegressionModel])
-
+    val trees =
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
+        .map(_.asInstanceOf[DecisionTreeRegressionModel])
     val numFeatures = oldDataset.first().features.size
-    val m = new RandomForestRegressionModel(trees, numFeatures)
-    instr.logSuccess(m)
-    m
+    new RandomForestRegressionModel(trees, numFeatures)
   }
 
   @Since("1.4.0")
@@ -144,13 +137,12 @@ object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor
  */
 @Since("1.4.0")
 @Experimental
-class RandomForestRegressionModel private[ml] (
+final class RandomForestRegressionModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     override val numFeatures: Int)
   extends PredictionModel[Vector, RandomForestRegressionModel]
-  with RandomForestRegressionModelParams with TreeEnsembleModel[DecisionTreeRegressionModel]
-  with MLWritable with Serializable {
+  with RandomForestRegressionModelParams with TreeEnsembleModel with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "RandomForestRegressionModel requires at least 1 tree.")
 
@@ -163,7 +155,7 @@ class RandomForestRegressionModel private[ml] (
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
 
   @Since("1.4.0")
-  override def trees: Array[DecisionTreeRegressionModel] = _trees
+  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
@@ -171,8 +163,8 @@ class RandomForestRegressionModel private[ml] (
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])
     }
@@ -244,7 +236,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
         "numTrees" -> instance.getNumTrees)
-      EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
+      EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
     }
   }
 
@@ -256,8 +248,8 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
 
     override def load(path: String): RandomForestRegressionModel = {
       implicit val format = DefaultFormats
-      val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
+      val (metadata: Metadata, treesData: Array[(Metadata, Node)]) =
+        EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
