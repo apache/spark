@@ -327,6 +327,8 @@ private[spark] object GradientBoostedTrees extends Logging {
       // Note: The setting of baseLearnerWeights is incorrect for losses other than SquaredError.
       //       Technically, the weight should be optimized for the particular loss.
       //       However, the behavior should be reasonable, though not optimal.
+      // Note: For loss-based impurities, which have optimized loss-based leaf predictions,
+      //       using a constant learning rate is correct.
       baseLearnerWeights(m) = learningRate
 
       predError = updatePredictionError(

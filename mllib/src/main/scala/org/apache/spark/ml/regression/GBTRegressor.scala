@@ -42,21 +42,26 @@ import org.apache.spark.sql.functions._
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  *
- * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+ * The implemention offers both Stochastic Gradient Boosting, as in J.H. Friedman 1999,
+ * "Stochastic Gradient Boosting" and TreeBoost, as in Friedman 1999
+ * "Greedy Function Approximation: A Gradient Boosting Machine"
  *
- * Notes on Gradient Boosting vs. TreeBoost:
- *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ * Notes on Stochastic Gradient Boosting (SGB) vs. TreeBoost:
+ *  - TreeBoost algorithms are a subset of SGB algorithms.
  *  - Both algorithms learn tree ensembles by minimizing loss functions.
- *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
- *    based on the loss function, whereas the original gradient boosting method does not.
- *     - When the loss is SquaredError, these methods give the same result, but they could differ
- *       for other loss functions.
- *  - We expect to implement TreeBoost in the future:
- *    [https://issues.apache.org/jira/browse/SPARK-4240]
+ *  - TreeBoost has two additional properties that general SGB trees don't:
+ *     - The loss function gradients are directly used as an approximate impurity measure.
+ *     - The value reported at a leaf is given by optimizing the loss function is optimized on
+ *       that leaf node's partition of the data, rather than just being the mean.
+ *  - In the case of squared error loss, variance impurity and mean leaf estimates happen
+ *    to make the SGB and TreeBoost algorithms identical.
+ *
+ * [[GBTRegressor]] will use the usual `"loss-based"` impurity by default, conforming to
+ * TreeBoost behavior. For SGB, set impurity to `"variance"`.
  */
 @Since("1.4.0")
 class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
+  extends Regressor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTRegressorParams with DefaultParamsWritable with Logging {
 
   @Since("1.4.0")
@@ -87,15 +92,8 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
-  /**
-   * The impurity setting is ignored for GBT models.
-   * Individual trees are built using impurity "Variance."
-   */
   @Since("1.4.0")
-  override def setImpurity(value: String): this.type = {
-    logWarning("GBTRegressor.setImpurity should NOT be used")
-    this
-  }
+  override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
   @Since("1.4.0")
