@@ -23,13 +23,13 @@ from pyspark.sql import Row
 # $example off:schema_merging$
 
 """
-A simple example demonstrating Spark SQL Data Source.
+A simple example demonstrating Spark SQL data sources.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/datasource.py
 """
 
 
-def runBasicDataSourceExample(spark):
+def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$
     df = spark.read.load("examples/src/main/resources/users.parquet")
     df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
@@ -45,7 +45,7 @@ def runBasicDataSourceExample(spark):
     # $example off:direct_sql$
 
 
-def runBasicParquetExample(spark):
+def parquet_example(spark):
     # $example on:basic_parquet_example$
     peopleDF = spark.read.json("examples/src/main/resources/people.json")
 
@@ -69,7 +69,7 @@ def runBasicParquetExample(spark):
     # $example off:basic_parquet_example$
 
 
-def runParquetSchemaMergingExample(spark):
+def parquet_schema_merging_example(spark):
     # $example on:schema_merging$
     # spark is from the previous example.
     # Create a simple DataFrame, stored into a partition directory
@@ -99,7 +99,7 @@ def runParquetSchemaMergingExample(spark):
     # $example off:schema_merging$
 
 
-def runJsonDatasetExample(spark):
+def json_dataset_examplg(spark):
     # $example on:json_dataset$
     # spark is from the previous example.
     sc = spark.sparkContext
@@ -146,9 +146,9 @@ if __name__ == "__main__":
         .appName("PythonSQL") \
         .getOrCreate()
 
-    runBasicDataSourceExample(spark)
-    runBasicParquetExample(spark)
-    runParquetSchemaMergingExample(spark)
-    runJsonDatasetExample(spark)
+    basic_datasource_example(spark)
+    parquet_example(spark)
+    parquet_schema_merging_example(spark)
+    json_dataset_examplg(spark)
 
     spark.stop()

@@ -31,7 +31,7 @@ from pyspark.sql.types import *
 # $example off:programmatic_schema$
 
 """
-A simple example demonstrating Spark SQL.
+A simple example demonstrating basic Spark SQL features.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/basic.py
 """

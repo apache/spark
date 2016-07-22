@@ -25,7 +25,7 @@ from pyspark.sql import Row
 # $example off:spark_hive$
 
 """
-A simple example demonstrating Spark SQL.
+A simple example demonstrating Spark SQL Hive integration.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/hive.py
 """
