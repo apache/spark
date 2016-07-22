@@ -175,8 +175,12 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
-      val bytes = IOUtils.toByteArray(input)
-      Some(deserialize(bytes))
+      try {
+        val bytes = IOUtils.toByteArray(input)
+        Some(deserialize(bytes))
+      } finally {
+        input.close()
+      }
     } else {
       logDebug(s"Unable to find batch $batchMetadataFile")
       None

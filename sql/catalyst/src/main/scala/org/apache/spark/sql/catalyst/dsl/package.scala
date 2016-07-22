@@ -293,11 +293,7 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
-      def filter[T : Encoder](func: T => Boolean): LogicalPlan = {
-        val deserialized = logicalPlan.deserialize[T]
-        val condition = expressions.callFunction(func, BooleanType, deserialized.output.head)
-        Filter(condition, deserialized).serialize[T]
-      }
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = TypedFilter(func, logicalPlan)
 
       def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
 
@@ -374,8 +370,11 @@ package object dsl {
         case plan => SubqueryAlias(alias, plan)
       }
 
-      def distribute(exprs: Expression*): LogicalPlan =
-        RepartitionByExpression(exprs, logicalPlan)
+      def repartition(num: Integer): LogicalPlan =
+        Repartition(num, shuffle = true, logicalPlan)
+
+      def distribute(exprs: Expression*)(n: Int = -1): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan, numPartitions = if (n < 0) None else Some(n))
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))

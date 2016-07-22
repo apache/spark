@@ -22,7 +22,7 @@ import java.util.Random
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
@@ -52,7 +52,6 @@ import org.apache.spark.storage.StorageLevel
  *     KDD Workshop on Text Mining, 2000.]]
  */
 @Since("1.6.0")
-@Experimental
 class BisectingKMeans private (
     private var k: Int,
     private var maxIterations: Int,
@@ -407,7 +406,6 @@ private object BisectingKMeans extends Serializable {
  * @param children children nodes
  */
 @Since("1.6.0")
-@Experimental
 private[clustering] class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,

@@ -333,7 +333,7 @@ Details you can read at [dimensionality reduction](mllib-dimensionality-reductio
 
 The following code demonstrates how to compute principal components on a `Vector`
 and use them to project the vectors into a low-dimensional space while keeping associated labels
-for calculation a [Linear Regression]((mllib-linear-methods.html))
+for calculation a [Linear Regression](mllib-linear-methods.html)
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

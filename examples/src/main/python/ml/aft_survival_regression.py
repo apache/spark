@@ -19,7 +19,7 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml.regression import AFTSurvivalRegression
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -32,7 +32,7 @@ Run with:
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
-        .appName("PythonAFTSurvivalRegressionExample") \
+        .appName("AFTSurvivalRegressionExample") \
         .getOrCreate()
 
     # $example on$

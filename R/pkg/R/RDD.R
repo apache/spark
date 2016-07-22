@@ -19,9 +19,11 @@
 
 setOldClass("jobj")
 
-#' @title S4 class that represents an RDD
-#' @description RDD can be created using functions like
+#' S4 class that represents an RDD
+#'
+#' RDD can be created using functions like
 #'              \code{parallelize}, \code{textFile} etc.
+#'
 #' @rdname RDD
 #' @seealso parallelize, textFile
 #' @slot env An R environment that stores bookkeeping states of the RDD
@@ -497,9 +499,9 @@ setMethod("map",
             lapply(X, FUN)
           })
 
-#' Flatten results after apply a function to all elements
+#' Flatten results after applying a function to all elements
 #'
-#' This function return a new RDD by first applying a function to all
+#' This function returns a new RDD by first applying a function to all
 #' elements of this RDD, and then flattening the results.
 #'
 #' @param X The RDD to apply the transformation.
@@ -713,7 +715,7 @@ setMethod("sumRDD",
             reduce(x, "+")
           })
 
-#' Applies a function to all elements in an RDD, and force evaluation.
+#' Applies a function to all elements in an RDD, and forces evaluation.
 #'
 #' @param x The RDD to apply the function
 #' @param func The function to be applied.
@@ -737,7 +739,7 @@ setMethod("foreach",
             invisible(collect(mapPartitions(x, partition.func)))
           })
 
-#' Applies a function to each partition in an RDD, and force evaluation.
+#' Applies a function to each partition in an RDD, and forces evaluation.
 #'
 #' @examples
 #'\dontrun{

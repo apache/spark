@@ -21,26 +21,21 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
-
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ContinuousQuery, OutputMode, ProcessingTime, Trigger}
-import org.apache.spark.util.Utils
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[Dataset.write]] to access this.
+ * key-value stores, etc). Use [[Dataset.write]] to access this.
  *
  * @since 1.4.0
  */
-final class DataFrameWriter private[sql](df: DataFrame) {
+final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
+
+  private val df = ds.toDF()
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
@@ -51,10 +46,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def mode(saveMode: SaveMode): DataFrameWriter = {
-    // mode() is used for non-continuous queries
-    // outputMode() is used for continuous queries
-    assertNotStreaming("mode() can only be called on non-continuous queries")
+  def mode(saveMode: SaveMode): DataFrameWriter[T] = {
     this.mode = saveMode
     this
   }
@@ -68,10 +60,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def mode(saveMode: String): DataFrameWriter = {
-    // mode() is used for non-continuous queries
-    // outputMode() is used for continuous queries
-    assertNotStreaming("mode() can only be called on non-continuous queries")
+  def mode(saveMode: String): DataFrameWriter[T] = {
     this.mode = saveMode.toLowerCase match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
@@ -84,81 +73,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
-   *                            written to the sink
-   *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
-   *                              to the sink every time these is some updates
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def outputMode(outputMode: OutputMode): DataFrameWriter = {
-    assertStreaming("outputMode() can only be called on continuous queries")
-    this.outputMode = outputMode
-    this
-  }
-
-  /**
-   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
-   *                 the sink
-   *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
-   *                 every time these is some updates
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def outputMode(outputMode: String): DataFrameWriter = {
-    assertStreaming("outputMode() can only be called on continuous queries")
-    this.outputMode = outputMode.toLowerCase match {
-      case "append" =>
-        OutputMode.Append
-      case "complete" =>
-        OutputMode.Complete
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append' and 'complete'")
-    }
-    this
-  }
-
-  /**
-   * :: Experimental ::
-   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
-   * the query as fast as possible.
-   *
-   * Scala Example:
-   * {{{
-   *   df.write.trigger(ProcessingTime("10 seconds"))
-   *
-   *   import scala.concurrent.duration._
-   *   df.write.trigger(ProcessingTime(10.seconds))
-   * }}}
-   *
-   * Java Example:
-   * {{{
-   *   df.write.trigger(ProcessingTime.create("10 seconds"))
-   *
-   *   import java.util.concurrent.TimeUnit
-   *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
-   * }}}
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def trigger(trigger: Trigger): DataFrameWriter = {
-    assertStreaming("trigger() can only be called on continuous queries")
-    this.trigger = trigger
-    this
-  }
-
-  /**
    * Specifies the underlying output data source. Built-in options include "parquet", "json", etc.
    *
    * @since 1.4.0
    */
-  def format(source: String): DataFrameWriter = {
+  def format(source: String): DataFrameWriter[T] = {
     this.source = source
     this
   }
@@ -168,7 +87,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def option(key: String, value: String): DataFrameWriter = {
+  def option(key: String, value: String): DataFrameWriter[T] = {
     this.extraOptions += (key -> value)
     this
   }
@@ -178,28 +97,28 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def option(key: String, value: Boolean): DataFrameWriter = option(key, value.toString)
+  def option(key: String, value: Boolean): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  def option(key: String, value: Long): DataFrameWriter = option(key, value.toString)
+  def option(key: String, value: Long): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  def option(key: String, value: Double): DataFrameWriter = option(key, value.toString)
+  def option(key: String, value: Double): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
    * @since 1.4.0
    */
-  def options(options: scala.collection.Map[String, String]): DataFrameWriter = {
+  def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
     this.extraOptions ++= options
     this
   }
@@ -209,7 +128,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def options(options: java.util.Map[String, String]): DataFrameWriter = {
+  def options(options: java.util.Map[String, String]): DataFrameWriter[T] = {
     this.options(options.asScala)
     this
   }
@@ -232,7 +151,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def partitionBy(colNames: String*): DataFrameWriter = {
+  def partitionBy(colNames: String*): DataFrameWriter[T] = {
     this.partitioningColumns = Option(colNames)
     this
   }
@@ -246,7 +165,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0
    */
   @scala.annotation.varargs
-  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
+  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter[T] = {
     this.numBuckets = Option(numBuckets)
     this.bucketColumnNames = Option(colName +: colNames)
     this
@@ -260,7 +179,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0
    */
   @scala.annotation.varargs
-  def sortBy(colName: String, colNames: String*): DataFrameWriter = {
+  def sortBy(colName: String, colNames: String*): DataFrameWriter[T] = {
     this.sortColumnNames = Option(colName +: colNames)
     this
   }
@@ -282,7 +201,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def save(): Unit = {
     assertNotBucketed("save")
-    assertNotStreaming("save() can only be called on non-continuous queries")
     val dataSource = DataSource(
       df.sparkSession,
       className = source,
@@ -292,114 +210,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
     dataSource.write(mode, df)
   }
-
-  /**
-   * :: Experimental ::
-   * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
-   * This name must be unique among all the currently active queries in the associated SQLContext.
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def queryName(queryName: String): DataFrameWriter = {
-    assertStreaming("queryName() can only be called on continuous queries")
-    this.extraOptions += ("queryName" -> queryName)
-    this
-  }
-
-  /**
-   * :: Experimental ::
-   * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
-   * the stream.
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def startStream(path: String): ContinuousQuery = {
-    option("path", path).startStream()
-  }
-
-  /**
-   * :: Experimental ::
-   * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
-   * the stream.
-   *
-   * @since 2.0.0
-   */
-  @Experimental
-  def startStream(): ContinuousQuery = {
-    assertNotBucketed("startStream")
-    assertStreaming("startStream() can only be called on continuous queries")
-
-    if (source == "memory") {
-      val queryName =
-        extraOptions.getOrElse(
-          "queryName", throw new AnalysisException("queryName must be specified for memory sink"))
-      val checkpointLocation = extraOptions.get("checkpointLocation").map { userSpecified =>
-        new Path(userSpecified).toUri.toString
-      }.orElse {
-        val checkpointConfig: Option[String] =
-          df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION)
-
-        checkpointConfig.map { location =>
-          new Path(location, queryName).toUri.toString
-        }
-      }.getOrElse {
-        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
-      }
-
-      // If offsets have already been created, we trying to resume a query.
-      val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
-      if (fs.exists(checkpointPath)) {
-        throw new AnalysisException(
-          s"Unable to resume query written to memory sink. Delete $checkpointPath to start over.")
-      } else {
-        checkpointPath.toUri.toString
-      }
-
-      val sink = new MemorySink(df.schema, outputMode)
-      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
-      resultDf.createOrReplaceTempView(queryName)
-      val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
-        queryName,
-        checkpointLocation,
-        df,
-        sink,
-        outputMode,
-        trigger)
-      continuousQuery
-    } else {
-      val dataSource =
-        DataSource(
-          df.sparkSession,
-          className = source,
-          options = extraOptions.toMap,
-          partitionColumns = normalizedParCols.getOrElse(Nil))
-
-      val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
-      val checkpointLocation = extraOptions.get("checkpointLocation")
-        .orElse {
-          df.sparkSession.sessionState.conf.checkpointLocation.map { l =>
-            new Path(l, queryName).toUri.toString
-          }
-        }.getOrElse {
-          throw new AnalysisException("checkpointLocation must be specified either " +
-            "through option() or SQLConf")
-        }
-
-      df.sparkSession.sessionState.continuousQueryManager.startQuery(
-        queryName,
-        checkpointLocation,
-        df,
-        dataSource.createSink(outputMode),
-        outputMode,
-        trigger)
-    }
-  }
-
   /**
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
@@ -431,26 +241,21 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
-    assertNotStreaming("insertInto() can only be called on non-continuous queries")
-    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
-    val overwrite = mode == SaveMode.Overwrite
 
-    // A partitioned relation's schema can be different from the input logicalPlan, since
-    // partition columns are all moved after data columns. We Project to adjust the ordering.
-    // TODO: this belongs to the analyzer.
-    val input = normalizedParCols.map { parCols =>
-      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
-        parCols.contains(attr.name)
-      }
-      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
-    }.getOrElse(df.logicalPlan)
+    if (partitioningColumns.isDefined) {
+      throw new AnalysisException(
+        "insertInto() can't be used together with partitionBy(). " +
+          "Partition columns have already be defined for the table. " +
+          "It is not necessary to use partitionBy()."
+      )
+    }
 
     df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
-        UnresolvedRelation(tableIdent),
-        partitions.getOrElse(Map.empty[String, Option[String]]),
-        input,
-        overwrite,
+        table = UnresolvedRelation(tableIdent),
+        partition = Map.empty[String, Option[String]],
+        child = df.logicalPlan,
+        overwrite = mode == SaveMode.Overwrite,
         ifNotExists = false)).toRdd
   }
 
@@ -502,8 +307,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private def assertNotBucketed(operation: String): Unit = {
     if (numBuckets.isDefined || sortColumnNames.isDefined) {
-      throw new IllegalArgumentException(
-        s"'$operation' does not support bucketing right now.")
+      throw new AnalysisException(s"'$operation' does not support bucketing right now")
+    }
+  }
+
+  private def assertNotPartitioned(operation: String): Unit = {
+    if (partitioningColumns.isDefined) {
+      throw new AnalysisException( s"'$operation' does not support partitioning")
     }
   }
 
@@ -545,7 +355,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    assertNotStreaming("saveAsTable() can only be called on non-continuous queries")
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
@@ -582,11 +391,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
-   *                             should be included.
+   *                             should be included. "batchsize" can be used to control the
+   *                             number of rows per insert.
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    assertNotStreaming("jdbc() can only be called on non-continuous queries")
+    assertNotPartitioned("jdbc")
+    assertNotBucketed("jdbc")
 
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
@@ -645,7 +456,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def json(path: String): Unit = {
-    assertNotStreaming("json() can only be called on non-continuous queries")
     format("json").save(path)
   }
 
@@ -657,14 +467,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `gzip`, and `lzo`).
-   * This will overwrite `spark.sql.parquet.compression.codec`. </li>
+   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
+   * compression codec to use when saving to file. This can be one of the known case-insensitive
+   * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
+   * `spark.sql.parquet.compression.codec`.</li>
    *
    * @since 1.4.0
    */
   def parquet(path: String): Unit = {
-    assertNotStreaming("parquet() can only be called on non-continuous queries")
     format("parquet").save(path)
   }
 
@@ -676,15 +486,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will overwrite `orc.compress`. </li>
+   * This will override `orc.compress`.</li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
-    assertNotStreaming("orc() can only be called on non-continuous queries")
     format("orc").save(path)
   }
 
@@ -708,7 +517,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.6.0
    */
   def text(path: String): Unit = {
-    assertNotStreaming("text() can only be called on non-continuous queries")
     format("text").save(path)
   }
 
@@ -729,6 +537,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>
+   * <li>`quoteAll` (default `false`): A flag indicating whether all values should always be
+   * enclosed in quotes. Default is to only escape values containing a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
@@ -738,7 +548,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def csv(path: String): Unit = {
-    assertNotStreaming("csv() can only be called on non-continuous queries")
     format("csv").save(path)
   }
 
@@ -750,10 +559,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 
-  private var outputMode: OutputMode = OutputMode.Append
-
-  private var trigger: Trigger = ProcessingTime(0L)
-
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
   private var partitioningColumns: Option[Seq[String]] = None
@@ -763,21 +568,4 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var numBuckets: Option[Int] = None
 
   private var sortColumnNames: Option[Seq[String]] = None
-
-  ///////////////////////////////////////////////////////////////////////////////////////
-  // Helper functions
-  ///////////////////////////////////////////////////////////////////////////////////////
-
-  private def assertNotStreaming(errMsg: String): Unit = {
-    if (df.isStreaming) {
-      throw new AnalysisException(errMsg)
-    }
-  }
-
-  private def assertStreaming(errMsg: String): Unit = {
-    if (!df.isStreaming) {
-      throw new AnalysisException(errMsg)
-    }
-  }
-
 }

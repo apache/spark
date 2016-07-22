@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
@@ -39,7 +39,6 @@ import org.apache.spark.sql.{Row, SparkSession}
  * @param root the root node of the clustering tree
  */
 @Since("1.6.0")
-@Experimental
 class BisectingKMeansModel private[clustering] (
     private[clustering] val root: ClusteringTreeNode
   ) extends Serializable with Saveable with Logging {
