@@ -182,6 +182,7 @@ object FunctionRegistry {
     expression[PosExplode]("posexplode"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
+    expression[Stack]("stack"),
     expression[CreateStruct]("struct"),
     expression[CaseWhen]("when"),
 
@@ -227,6 +228,7 @@ object FunctionRegistry {
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
+    expression[StringToMap]("str_to_map"),
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
@@ -287,6 +289,7 @@ object FunctionRegistry {
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
+    expression[ParseUrl]("parse_url"),
     expression[FormatString]("printf"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
@@ -295,6 +298,7 @@ object FunctionRegistry {
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
+    expression[Sentences]("sentences"),
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
@@ -307,7 +311,15 @@ object FunctionRegistry {
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
+    expression[XPathList]("xpath"),
     expression[XPathBoolean]("xpath_boolean"),
+    expression[XPathDouble]("xpath_double"),
+    expression[XPathDouble]("xpath_number"),
+    expression[XPathFloat]("xpath_float"),
+    expression[XPathInt]("xpath_int"),
+    expression[XPathLong]("xpath_long"),
+    expression[XPathShort]("xpath_short"),
+    expression[XPathString]("xpath_string"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -357,6 +369,8 @@ object FunctionRegistry {
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
     expression[CurrentDatabase]("current_database"),
+    expression[CallMethodViaReflection]("reflect"),
+    expression[CallMethodViaReflection]("java_method"),
 
     // grouping sets
     expression[Cube]("cube"),

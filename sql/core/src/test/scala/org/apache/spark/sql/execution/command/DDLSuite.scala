@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFor
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
@@ -352,7 +353,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }.getMessage
     assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
 
-    catalog.dropTable(tableIdent1, ignoreIfNotExists = false)
+    catalog.dropTable(tableIdent1, ignoreIfNotExists = false, purge = false)
 
     assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName RESTRICT")
@@ -1264,10 +1265,42 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("create table using CLUSTERED BY without schema specification") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withTable("jsonTable") {
+        (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
+
+        val e = intercept[ParseException] {
+        sql(
+          s"""
+             |CREATE TABLE jsonTable
+             |USING org.apache.spark.sql.json
+             |OPTIONS (
+             |  path '${tempDir.getCanonicalPath}'
+             |)
+             |CLUSTERED BY (inexistentColumnA) SORTED BY (inexistentColumnB) INTO 2 BUCKETS
+           """.stripMargin)
+        }.getMessage
+        assert(e.contains(
+          "Expected explicit specification of table schema when using CLUSTERED BY clause"))
+      }
+    }
+  }
+
   test("create table with datasource properties (not allowed)") {
     assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
     assertUnsupported("CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
+  }
+
+  test("drop current database") {
+    sql("CREATE DATABASE temp")
+    sql("USE temp")
+    val m = intercept[AnalysisException] {
+      sql("DROP DATABASE temp")
+    }.getMessage
+    assert(m.contains("Can not drop current database `temp`"))
   }
 
   test("drop default database") {
@@ -1311,6 +1344,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       data.write.partitionBy("length").saveAsTable("rectangles2")
       assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
       assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+    }
+  }
+
+  test("create temporary view with mismatched schema") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        val e = intercept[AnalysisException] {
+          sql("CREATE TEMPORARY VIEW view1 (col1, col3) AS SELECT * FROM tab1")
+        }.getMessage
+        assert(e.contains("the SELECT clause (num: `1`) does not match")
+          && e.contains("CREATE VIEW (num: `2`)"))
+      }
+    }
+  }
+
+  test("create temporary view with specified schema") {
+    withView("view1") {
+      sql("CREATE TEMPORARY VIEW view1 (col1, col2) AS SELECT 1, 2")
+      checkAnswer(
+        sql("SELECT * FROM view1"),
+        Row(1, 2) :: Nil
+      )
     }
   }
 

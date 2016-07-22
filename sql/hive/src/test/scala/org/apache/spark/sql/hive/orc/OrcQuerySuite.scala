@@ -222,7 +222,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
@@ -232,7 +232,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("self-join") {
@@ -460,6 +460,19 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           .where("_1 is not null")
         val expected = data.toDF()
         checkAnswer(actual, expected)
+      }
+    }
+  }
+
+  test("SPARK-15198 Support for pushing down filters for boolean types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(_ => (true, false))
+      withOrcFile(data) { file =>
+        val df = spark.read.orc(file).where("_2 == true")
+        val actual = stripSparkFilter(df).count()
+
+        // ORC filter should be applied and the total count should be 0.
+        assert(actual === 0)
       }
     }
   }
