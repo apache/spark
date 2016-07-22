@@ -439,7 +439,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' df <- createDataFrame(infert)
 #'
 #' # fit a Bernoulli naive Bayes model
-#' model <- spark.monmlp(df, education ~ ., smoothing = 0)
+#' model <- spark.mlp(df, education ~ ., layers = (4, 5, 4, 3), blockSize = 128, seed = 1234L, maxIter = 100)
 #'
 #' # get the summary of the model
 #' summary(model)

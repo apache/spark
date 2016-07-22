@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
-import org.apache.spark.ml.classification.{MultilayerPerceptronClassifier, MultilayerPerceptronClassifierModel}
+import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
@@ -36,8 +36,8 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 
   import MultilayerPerceptronClassifierWrapper._
 
-  private val multilayerPerceptronClassifierModel: MultilayerPerceptronClassifierModel =
-    pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassifierModel]
+  private val multilayerPerceptronClassifierModel: MultilayerPerceptronClassificationModel =
+    pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
