@@ -1242,9 +1242,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         userSpecifiedColumns,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        ctx.EXISTS != null,
-        ctx.REPLACE != null,
-        ctx.TEMPORARY != null
+        allowExisting = ctx.EXISTS != null,
+        replace = ctx.REPLACE != null,
+        isTemporary = ctx.TEMPORARY != null
       )
     }
   }
@@ -1260,7 +1260,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedColumns = Seq.empty,
       query = ctx.query,
       properties = Map.empty,
-      allowExist = false,
+      allowExisting = false,
       replace = true,
       isTemporary = false)
   }
@@ -1275,7 +1275,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       userSpecifiedColumns: Seq[(String, Option[String])],
       query: QueryContext,
       properties: Map[String, String],
-      allowExist: Boolean,
+      allowExisting: Boolean,
       replace: Boolean,
       isTemporary: Boolean): LogicalPlan = {
     val originalText = source(query)
@@ -1286,9 +1286,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties,
       Some(originalText),
       plan(query),
-      allowExist,
-      replace,
-      isTemporary)
+      allowExisting = allowExisting,
+      replace = replace,
+      isTemporary = isTemporary)
   }
 
   /**

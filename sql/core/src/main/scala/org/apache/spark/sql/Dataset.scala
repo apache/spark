@@ -2421,16 +2421,7 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    CreateViewCommand(
-      name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      userSpecifiedColumns = Nil,
-      comment = None,
-      properties = Map.empty,
-      originalText = None,
-      child = logicalPlan,
-      allowExisting = false,
-      replace = false,
-      isTemporary = true)
+    createViewCommand(viewName, replace = false)
   }
 
   /**
@@ -2441,6 +2432,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
+    createViewCommand(viewName, replace = true)
+  }
+
+  private def createViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
     CreateViewCommand(
       name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       userSpecifiedColumns = Nil,
@@ -2449,7 +2444,7 @@ class Dataset[T] private[sql](
       originalText = None,
       child = logicalPlan,
       allowExisting = false,
-      replace = true,
+      replace = replace,
       isTemporary = true)
   }
 
