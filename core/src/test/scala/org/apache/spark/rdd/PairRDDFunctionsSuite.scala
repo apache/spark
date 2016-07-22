@@ -176,7 +176,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       val data = sc.parallelize(1 to n, 2)
       val fractionPositive = 0.3
       val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
-      val keys = stratifiedData.keys.distinct().collect()
+      val keys = Array("0", "1")
       val splitWeights = Array(0.3, 0.2, 0.5)
       val weights: Array[scala.collection.Map[String, Double]] =
         splitWeights.map(w => keys.map(k => (k, w)).toMap)
@@ -188,7 +188,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       val n = 100
       val data = sc.parallelize(1 to n, 2)
       val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
-      val keys = stratifiedData.keys.distinct().collect()
+      val keys = Array("0", "1")
       val splitWeights = Array(0.3, 0.2, 0.5)
       val weights: Array[scala.collection.Map[String, Double]] =
         splitWeights.map(w => keys.map(k => (k, w)).toMap)
@@ -200,7 +200,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val fractionPositive = 0.3
     val data = sc.parallelize(1 to n, 2)
     val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
-    val keys = stratifiedData.keys.distinct().collect()
+    val keys = Array("0", "1")
 
     // use different weights for each key in the split
     val unevenWeights: Array[scala.collection.Map[String, Double]] =
@@ -217,12 +217,15 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 
     // vary the number of splits
     for (numSplits <- 1 to 3) {
-      val splitWeights = (1 to numSplits).map(n => 1.toDouble).toArray // check normalization too
+      val splitWeights = Array.fill(numSplits)(1.0) // check normalization too
       val weights: Array[scala.collection.Map[String, Double]] =
         splitWeights.map(w => keys.map(k => (k, w)).toMap)
-//      println(weights.mkString("***"))
       StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, true)
     }
+    val thrown = intercept[IllegalArgumentException] {
+      stratifiedData.randomSplitByKey(Array.empty[scala.collection.Map[String, Double]], true, 42L)
+    }
+    assert(thrown.getMessage.contains("weights cannot be empty"))
   }
 
   test("randomSplitByKey") {
@@ -233,7 +236,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       val data = sc.parallelize(1 to n, 2)
       val fractionPositive = 0.3
       val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
-      val keys = stratifiedData.keys.distinct().collect()
+      val keys = Array("0", "1")
       val splitWeights = Array(0.3, 0.2, 0.5)
       val weights: Array[scala.collection.Map[String, Double]] =
         splitWeights.map(w => keys.map(k => (k, w)).toMap)
@@ -245,7 +248,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       val n = 500
       val data = sc.parallelize(1 to n, 2)
       val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
-      val keys = stratifiedData.keys.distinct().collect()
+      val keys = Array("0", "1")
       val splitWeights = Array(0.3, 0.2, 0.5)
       val weights: Array[scala.collection.Map[String, Double]] =
         splitWeights.map(w => keys.map(k => (k, w)).toMap)
@@ -257,7 +260,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val fractionPositive = 0.3
     val data = sc.parallelize(1 to n, 2)
     val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
-    val keys = stratifiedData.keys.distinct().collect()
+    val keys = Array("0", "1")
 
     // use different weights for each key in the split
     val unevenWeights: Array[scala.collection.Map[String, Double]] =
@@ -279,6 +282,10 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         splitWeights.map(w => keys.map(k => (k, w)).toMap)
       StratifiedAuxiliary.testSplits(stratifiedData, weights, defaultSeed, n, false)
     }
+    val thrown = intercept[IllegalArgumentException] {
+      stratifiedData.randomSplitByKey(Array.empty[scala.collection.Map[String, Double]], false, 42L)
+    }
+    assert(thrown.getMessage.contains("weights cannot be empty"))
   }
 
   test("reduceByKey") {
@@ -326,8 +333,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     def error(est: Long, size: Long): Double = math.abs(est - size) / size.toDouble
 
     /* Since HyperLogLog unique counting is approximate, and the relative standard deviation is
-     * only a statistical bound, the tests can fail for large values of relativeSD. We will be
-   using
+     * only a statistical bound, the tests can fail for large values of relativeSD. We will be using
      * relatively tight error bounds to check correctness of functionality rather than checking
      * whether the approximation conforms with the requested bound.
      */
@@ -650,8 +656,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
-  test("failure callbacks should be called before calling writer.close() in saveNewAPIHadoopFile")
-   {
+  test("failure callbacks should be called before calling writer.close() in saveNewAPIHadoopFile") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
 
     FakeWriterWithCallback.calledBy = ""
@@ -768,10 +773,11 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       if (exact) {
         // all splits will not be exact, but must be within 1 of expected size
         assert(math.abs(expected - actual) <= 1)
+      } else {
+        val stdev = math.sqrt(expected * p * (1 - p))
+        // Very forgiving margin since we're dealing with very small sample sizes most of the time
+        assert(math.abs(actual - expected) <= 6 * stdev)
       }
-      val stdev = math.sqrt(expected * p * (1 - p))
-      // Very forgiving margin since we're dealing with very small sample sizes most of the time
-      assert(math.abs(actual - expected) <= 6 * stdev)
     }
 
     def testSampleExact(stratifiedData: RDD[(String, Int)],
@@ -823,16 +829,15 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         val takeComplement = complement.collect()
 
         // no duplicates in samples
-        assert(takeSample.length == takeSample.toSet.size)
-        assert(takeComplement.length == takeComplement.toSet.size)
+        assert(takeSample.length === takeSample.toSet.size)
+        assert(takeComplement.length === takeComplement.toSet.size)
 
         val sampleCounts = countByKey(takeSample)
         val complementCounts = countByKey(takeComplement)
-//        println(sampleCounts, complementCounts, fractions, totalCounts)
         val observedTotals = totalCounts.map { case (k, v) =>
           k -> (sampleCounts.getOrElse(k, 0) + complementCounts.getOrElse(k, 0))
         }
-        assert(observedTotals == totalCounts)
+        assert(observedTotals === totalCounts)
 
         sampleCounts.foreach { case (k, count) =>
           val expectedCount = math.ceil(totalCounts(k) * fractions(k)).toInt
@@ -845,11 +850,11 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 
         sampleSet ++= takeSample
         val samplesPlusComplements = (takeSample ++ takeComplement).toSet
-        assert(samplesPlusComplements == dataSet)
+        assert(samplesPlusComplements === dataSet)
       }
 
       // union of all samples equals original data
-      assert(sampleSet == dataSet)
+      assert(sampleSet === dataSet)
     }
 
     // Without replacement validation

@@ -88,6 +88,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.1.0")
   def setStratifiedCol(value: String): this.type = set(stratifiedCol, value)
   setDefault(stratifiedCol -> "")
 
@@ -109,13 +111,13 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
         val keys = pairData.keys.distinct.collect()
         val weights: Array[scala.collection.Map[Any, Double]] =
           Array(keys.map((_, $(trainRatio))).toMap, keys.map((_, 1 - $(trainRatio))).toMap)
-        val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, 0)
+        val splitsWithKeys = pairData.randomSplitByKey(weights, exact = true, $(seed))
         val Array(training, validation) =
           splitsWithKeys.map { case (subsample, complement) => subsample.values }
         Array(sparkSession.createDataFrame(training, schema),
           sparkSession.createDataFrame(validation, schema))
       } else {
-        dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)))
+        dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
       }
 
     trainingDataset.cache()

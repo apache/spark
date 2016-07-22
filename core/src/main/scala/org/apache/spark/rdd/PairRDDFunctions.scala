@@ -265,7 +265,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val samplingFunc = if (withReplacement) {
       StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, false, seed)
     } else {
-      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, false, seed)
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, false, seed)._1
     }
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
@@ -295,7 +295,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val samplingFunc = if (withReplacement) {
       StratifiedSamplingUtils.getPoissonSamplingFunction(self, fractions, true, seed)
     } else {
-      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, true, seed)
+      StratifiedSamplingUtils.getBernoulliSamplingFunction(self, fractions, true, seed)._1
     }
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
@@ -324,64 +324,27 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     require(weights.flatMap(_.values).forall(v => v >= 0.0), "Negative sampling rates.")
     if (weights.length > 1) {
       require(weights.map(m => m.keys.toSet).sliding(2).forall(t => t(0) == t(1)),
-        "Inconsistent keys between splits.")
+        "randomSplitByKey(): Each split must specify fractions for each key.")
     }
-
-    val zeroBoundary = weights.head.map { case (k, v) => (k, 0.0)}
-
-    // normalize and cumulative sum
-    val sumWeightsByKey = weights.foldLeft(zeroBoundary) { case (acc, splitWeights) =>
-      acc.map { case (k, v) => (k, v + splitWeights(k)) }
+    require(weights.nonEmpty, "randomSplitByKey(): Split weights cannot be empty.")
+    val sumWeights = weights.foldLeft(mutable.HashMap.empty[K, Double].withDefaultValue(0.0)) {
+      case (acc, fractions) =>
+        fractions.foreach { case (k, v) => acc(k) += v }
+        acc
     }
-
-    val normedCumWeightsByKey = weights.scanLeft(zeroBoundary) { case (acc, splitWeights) =>
-      splitWeights.map { case (key, fraction) =>
-        val keySum = sumWeightsByKey(key)
-        val norm = if (keySum > 0.0) keySum else 1.0
-        key -> (acc(key) + (fraction / norm))
+    val normedWeights = weights.map { case fractions =>
+      fractions.map { case (k, v) =>
+        val keySum = sumWeights(k)
+        k -> (if (keySum > 0.0) v / keySum else 0.0)
       }
     }
+    val samplingFuncs =
+      StratifiedSamplingUtils.getBernoulliCellSamplingFunctions(self, normedWeights, exact, seed)
 
-    // compute exact thresholds for each stratum if required
-    val splitThresholds = if (exact) {
-      val left = normedCumWeightsByKey.head
-      val right = normedCumWeightsByKey.last
-      val innerSplits = normedCumWeightsByKey.drop(1).dropRight(1)
-      val finalResults =
-        StratifiedSamplingUtils.getAcceptanceResults(self, withReplacement = false, innerSplits,
-          None, seed)
-      val exactInnerSplits = finalResults.zip(innerSplits).map { case (finalResult, fractions) =>
-        StratifiedSamplingUtils.computeThresholdByKey(finalResult, fractions)
-      }
-      left +: exactInnerSplits :+ right
-    } else {
-      normedCumWeightsByKey
-    }
-
-    splitThresholds.sliding(2).map { case Array(lb, ub) =>
-        (randomSampleByKeyWithRange(lb, ub, seed),
-          randomSampleByKeyWithRange(lb, ub, seed, complement = true))
+    samplingFuncs.map { case (func, complementFunc) =>
+      (self.mapPartitionsWithIndex(func, preservesPartitioning = true),
+        self.mapPartitionsWithIndex(complementFunc, preservesPartitioning = true))
     }.toArray
-  }
-
-  /**
-   * Internal method exposed for Stratified Random Splits in DataFrames. Samples an RDD given
-   * probability bounds for each stratum.
-   *
-   * @param lb map of lower bound for each key to use for the Bernoulli cell sampler
-   * @param ub map of upper bound for each key to use for the Bernoulli cell sampler
-   * @param seed the seed for the Random number generator
-   * @param complement boolean specifying whether to return subsample or its complement
-   * @return A random, stratified sub-sample of the RDD without replacement.
-   */
-  private[spark] def randomSampleByKeyWithRange(
-      lb: Map[K, Double],
-      ub: Map[K, Double],
-      seed: Long,
-      complement: Boolean = false): RDD[(K, V)] = {
-    val samplingFunc = StratifiedSamplingUtils.getBernoulliCellSamplingFunction[K, V](
-      lb, ub, seed, complement)
-    self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }
 
   /**

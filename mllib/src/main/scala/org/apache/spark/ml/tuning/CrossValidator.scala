@@ -52,7 +52,6 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   def getNumFolds: Int = $(numFolds)
 
   setDefault(numFolds -> 3)
-
 }
 
 /**
@@ -89,7 +88,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
-  @Since("2.0.0")
+  @Since("2.1.0")
   def setStratifiedCol(value: String): this.type = set(stratifiedCol, value)
   setDefault(stratifiedCol -> "")
 
@@ -107,7 +106,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val splits = if ($(stratifiedCol).nonEmpty) {
       val stratifiedColIndex = schema.fieldNames.indexOf($(stratifiedCol))
       val pairData = dataset.toDF.rdd.map(row => (row(stratifiedColIndex), row))
-      val splitsWithKeys = MLUtils.kFoldStratified(pairData, $(numFolds), 0)
+      val splitsWithKeys = MLUtils.kFoldStratified(pairData, $(numFolds), $(seed))
       splitsWithKeys.map { case (training, validation) => (training.values, validation.values)}
     } else {
       MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))

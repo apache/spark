@@ -50,7 +50,9 @@ import org.apache.spark.rdd.RDD
  * http://jmlr.org/proceedings/papers/v28/meng13a.html
  */
 
-object StratifiedSamplingUtils extends Logging {
+private[spark] object StratifiedSamplingUtils extends Logging {
+
+  type StratifiedSamplingFunc[K, V] = (Int, Iterator[(K, V)]) => Iterator[(K, V)]
 
   /**
    * Count the number of items instantly accepted and generate the waitlist for each stratum.
@@ -59,9 +61,9 @@ object StratifiedSamplingUtils extends Logging {
    */
   def getAcceptanceResults[K, V](rdd: RDD[(K, V)],
       withReplacement: Boolean,
-      fractions: Array[Map[K, Double]],
+      fractions: Seq[Map[K, Double]],
       counts: Option[Map[K, Long]],
-      seed: Long): Array[mutable.Map[K, AcceptanceResult]] = {
+      seed: Long): Seq[mutable.Map[K, AcceptanceResult]] = {
     val combOp = getCombOp[K]
     val mappedPartitionRDD = rdd.mapPartitionsWithIndex { case (partition, iter) =>
       val zeroU: Array[mutable.Map[K, AcceptanceResult]] = Array.fill(fractions.length) {
@@ -78,20 +80,23 @@ object StratifiedSamplingUtils extends Logging {
     mappedPartitionRDD.reduce(combOp)
   }
 
+  /**
+   * Convenience version of [[getAcceptanceResults()]] for a single sample.
+   */
   def getAcceptanceResults[K, V](
       rdd: RDD[(K, V)],
       withReplacement: Boolean,
       fractions: Map[K, Double],
       counts: Option[Map[K, Long]],
       seed: Long): mutable.Map[K, AcceptanceResult] = {
-    getAcceptanceResults(rdd, withReplacement, Array(fractions), counts, seed).head
+    getAcceptanceResults(rdd, withReplacement, Seq(fractions), counts, seed).head
   }
 
   /**
    * Returns the function used by aggregate to collect sampling statistics for each partition.
    */
   def getSeqOp[K, V](withReplacement: Boolean,
-      fractions: Array[Map[K, Double]],
+      fractions: Seq[Map[K, Double]],
       rngs: Array[RandomDataGenerator],
       counts: Option[Map[K, Long]]):
     (Array[mutable.Map[K, AcceptanceResult]], (K, V)) => Array[mutable.Map[K, AcceptanceResult]] = {
@@ -214,6 +219,18 @@ object StratifiedSamplingUtils extends Logging {
   }
 
   /**
+   * Convenience version of [[getBernoulliSamplingFunction()]] for a single split.
+   */
+  def getBernoulliSamplingFunction[K: ClassTag, V: ClassTag](
+      rdd: RDD[(K, V)],
+      fractions: Map[K, Double],
+      exact: Boolean,
+      seed: Long): (StratifiedSamplingFunc[K, V], StratifiedSamplingFunc[K, V]) = {
+    val complementFractions = fractions.map { case (k, v) => k -> (1.0 - v) }
+    getBernoulliCellSamplingFunctions(rdd, Seq(fractions, complementFractions), exact, seed).head
+  }
+
+  /**
    * Return the per partition sampling function used for sampling without replacement.
    *
    * When exact sample size is required, we make an additional pass over the RDD to determine the
@@ -221,23 +238,43 @@ object StratifiedSamplingUtils extends Logging {
    *
    * The sampling function has a unique seed per partition.
    */
-  def getBernoulliSamplingFunction[K, V](rdd: RDD[(K, V)],
-      fractions: Map[K, Double],
+  def getBernoulliCellSamplingFunctions[K: ClassTag, V: ClassTag](
+      rdd: RDD[(K, V)],
+      fractions: Seq[Map[K, Double]],
       exact: Boolean,
-      seed: Long): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
-    var samplingRateByKey = fractions
-    if (exact) {
-      // determine threshold for each stratum and resample
-      val finalResult = getAcceptanceResults(rdd, false, fractions, None, seed)
-      samplingRateByKey = computeThresholdByKey(finalResult, fractions)
+      seed: Long): Seq[(StratifiedSamplingFunc[K, V], StratifiedSamplingFunc[K, V])] = {
+    val thresholds = splitFractionsToSplitPoints(fractions)
+    val innerThresholds = if (exact) {
+      val finalResults =
+        getAcceptanceResults(rdd, withReplacement = false, thresholds, None, seed)
+      finalResults.zip(thresholds).map { case (finalResult, thresh) =>
+        computeThresholdByKey(finalResult, thresh)
+      }
+    } else {
+      thresholds
     }
-    (idx: Int, iter: Iterator[(K, V)]) => {
-      val rng = new RandomDataGenerator()
-      rng.reSeed(seed + idx)
-      // Must use the same invoke pattern on the rng as in getSeqOp for without replacement
-      // in order to generate the same sequence of random numbers when creating the sample
-      iter.filter(t => rng.nextUniform() < samplingRateByKey(t._1))
-    }
+    val leftBound = fractions.head.map { case (k, v) => (k, 0.0)}
+    val rightBound = fractions.head.map { case (k, v) => (k, 1.0)}
+    val outerThresholds = leftBound +: innerThresholds :+ rightBound
+    outerThresholds.sliding(2).map { case Seq(lb, ub) =>
+      (getBernoulliCellSamplingFunction[K, V](lb, ub, seed),
+        getBernoulliCellSamplingFunction[K, V](lb, ub, seed, complement = true))
+    }.toSeq
+  }
+
+  /**
+   * Helper function to cumulative sum a sequence of Maps.
+   */
+  private def splitFractionsToSplitPoints[K](
+      fractions: Seq[Map[K, Double]]): Seq[Map[K, Double]] = {
+    val acc = new mutable.HashMap[K, Double]()
+    fractions.map { case splitWeights =>
+      splitWeights.map { case (k, v) =>
+        val thisKeySum = acc.getOrElseUpdate(k, 0.0)
+        acc(k) += v
+        k -> (v + thisKeySum)
+      }
+    }.dropRight(1)
   }
 
   /**
@@ -250,18 +287,18 @@ object StratifiedSamplingUtils extends Logging {
       lb: Map[K, Double],
       ub: Map[K, Double],
       seed: Long,
-      complement: Boolean = false): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
+      complement: Boolean = false): StratifiedSamplingFunc[K, V] = {
     (idx: Int, iter: Iterator[(K, V)]) => {
       val rng = new RandomDataGenerator()
       rng.reSeed(seed + idx)
 
       if (complement) {
-        iter.filter { case(k, _) =>
+        iter.filter { case (k, _) =>
           val x = rng.nextUniform()
           (x < lb(k)) || (x >= ub(k))
         }
       } else {
-        iter.filter { case(k, _) =>
+        iter.filter { case (k, _) =>
           val x = rng.nextUniform()
           (x >= lb(k)) && (x < ub(k))
         }
@@ -282,7 +319,7 @@ object StratifiedSamplingUtils extends Logging {
   def getPoissonSamplingFunction[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
       fractions: Map[K, Double],
       exact: Boolean,
-      seed: Long): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {
+      seed: Long): StratifiedSamplingFunc[K, V] = {
     // TODO implement the streaming version of sampling w/ replacement that doesn't require counts
     if (exact) {
       val counts = Some(rdd.countByKey())
@@ -358,7 +395,7 @@ object StratifiedSamplingUtils extends Logging {
  *
  * `[random]` here is necessary since it's in the return type signature of seqOp defined above
  */
-class AcceptanceResult(var numItems: Long = 0L, var numAccepted: Long = 0L)
+private[random] class AcceptanceResult(var numItems: Long = 0L, var numAccepted: Long = 0L)
   extends Serializable {
 
   val waitList = new ArrayBuffer[Double]
