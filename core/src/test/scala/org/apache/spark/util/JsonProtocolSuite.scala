@@ -1751,6 +1751,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Log Urls" : {
       |      "stderr" : "mystderr",
       |      "stdout" : "mystdout"
+      |    },
+      |    "Worker" : {
+      |      "url" : "spark://Worker@192.168.1.104:32790",
+      |      "ui_url" : "http://192.168.1.104:46445"
       |    }
       |  }
       |}
