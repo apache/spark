@@ -400,8 +400,7 @@ private[sql] class JDBCRDD(
       (rs: ResultSet, pos: Int) => rs.getBytes(pos)
 
     case ArrayType(et, _) =>
-      val elementConversion: ArrayElementConversion =
-        getArrayElementConversion(et, metadata)
+      val elementConversion: ArrayElementConversion = getArrayElementConversion(et, metadata)
       (rs: ResultSet, pos: Int) =>
         val array = rs.getArray(pos).getArray
         if (array != null) {
