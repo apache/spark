@@ -133,20 +133,19 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       val query = "select * from largeTbl join partTbl on (largeTbl.col1 = partTbl.col1 " +
         "and partTbl.part1 = 'a' and partTbl.part2 = 1)"
       withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true",
-        SQLConf.ENABLE_PARTITION_PRUNER_FOR_STATS.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "8001") {
-        val df = sql(query)
-        val broadcastJoins =
-          df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-        assert(broadcastJoins.nonEmpty)
-      }
-      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true",
-        SQLConf.ENABLE_PARTITION_PRUNER_FOR_STATS.key -> "false",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "8001") {
-        val df = sql(query)
-        val broadcastJoins =
-          df.queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
-        assert(broadcastJoins.isEmpty)
+
+        withSQLConf(SQLConf.ENABLE_PARTITION_PRUNER_FOR_STATS.key -> "true") {
+          val broadcastJoins =
+            sql(query).queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
+          assert(broadcastJoins.nonEmpty)
+        }
+
+        withSQLConf(SQLConf.ENABLE_PARTITION_PRUNER_FOR_STATS.key -> "false") {
+          val broadcastJoins =
+            sql(query).queryExecution.sparkPlan.collect { case j: BroadcastHashJoinExec => j }
+          assert(broadcastJoins.isEmpty)
+        }
       }
     }
   }
