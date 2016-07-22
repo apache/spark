@@ -752,7 +752,7 @@ class JDBCSuite extends SparkFunSuite
     assertEmptyQuery(s"SELECT * FROM foobar WHERE $FALSE1 AND ($FALSE2 OR $TRUE)")
 
     // Tests JDBCPartition whereClause clause push down.
-    withTempTable("tempFrame") {
+    withTempView("tempFrame") {
       val jdbcPartitionWhereClause = s"$FALSE1 OR $TRUE"
       val df = spark.read.jdbc(
         urlWithUserAndPass,

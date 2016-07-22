@@ -60,7 +60,7 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-16337 temporary view refresh") {
-    withTempTable("view_refresh") { withTempPath { (location: File) =>
+    withTempView("view_refresh") { withTempPath { (location: File) =>
       // Create a Parquet directory
       spark.range(start = 0, end = 100, step = 1, numPartitions = 3)
         .write.parquet(location.getAbsolutePath)
