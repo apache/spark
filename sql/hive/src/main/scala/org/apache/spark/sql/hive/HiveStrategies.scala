@@ -18,9 +18,10 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 
@@ -53,36 +54,22 @@ private[hive] trait HiveStrategies {
     }
   }
 
-  /**
-   * Retrieves data using a HiveTableScan.  Partition pruning predicates are also detected and
-   * applied.
-   */
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case p @Project(projectList, relation: MetastoreRelation) =>
-        val projectSet = AttributeSet(projectList.flatMap(_.references))
-        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet) {
-          HiveTableScanExec(projectList.asInstanceOf[Seq[Attribute]], relation,
-            relation.partitionPruningPred)(sparkSession) :: Nil
-        } else {
-          ProjectExec(projectList, HiveTableScanExec(projectSet.toSeq, relation,
-            relation.partitionPruningPred)(sparkSession)) :: Nil
+      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
+        // Filter out all predicates that only deal with partition keys, these are given to the
+        // hive table scan operator to be used for partition pruning.
+        val partitionKeyIds = AttributeSet(relation.partitionKeys)
+        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
+          !predicate.references.isEmpty &&
+            predicate.references.subsetOf(partitionKeyIds)
         }
-      case p @Project(projectList, filter@Filter(condition, relation: MetastoreRelation)) =>
-        val projectSet = AttributeSet(projectList.flatMap(_.references))
-        val filterSet = AttributeSet(condition.flatMap(_.references))
-        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-          filterSet.subsetOf(projectSet)) {
-          FilterExec(condition, HiveTableScanExec(projectList.asInstanceOf[Seq[Attribute]],
-            relation, relation.partitionPruningPred)(sparkSession)) :: Nil
-        } else {
-          val scan = HiveTableScanExec((projectSet ++ filterSet).toSeq, relation,
-            relation.partitionPruningPred)(sparkSession)
-          ProjectExec(projectList, FilterExec(condition, scan)) :: Nil
-        }
-      case relation: MetastoreRelation =>
-        HiveTableScanExec(relation.output, relation, relation.partitionPruningPred)(
-          sparkSession) :: Nil
+
+        pruneFilterProject(
+          projectList,
+          otherPredicates,
+          identity[Seq[Expression]],
+          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
       case _ =>
         Nil
     }
