@@ -416,7 +416,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 
 #' Multilayer Perceptron Classifier Model
 #'
-#' \code{spark.monmlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
+#' \code{spark.mlp} fits a multi-layer perceptron neural network model against a SparkDataFrame.
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' Only categorical data is supported.
@@ -428,11 +428,11 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param initialWeights InitialWeights parameter
 #' @param layers Layers parameter
 #' @param solver Solver parameter
-#' @return \code{spark.monmlp} returns a fitted naive Bayes model
-#' @rdname spark.monmlp
-#' @aliases spark.monmlp,SparkDataFrame,formula-method
-#' @name spark.monmlp
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/monmlp/}
+#' @return \code{spark.mlp} returns a fitted naive Bayes model
+#' @rdname spark.mlp
+#' @aliases spark.mlp,SparkDataFrame,formula-method
+#' @name spark.mlp
+#' @seealso e1071: \url{https://cran.r-project.org/web/packages/mlp/}
 #' @export
 #' @examples
 #' \dontrun{
@@ -453,8 +453,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #' }
-#' @note spark.monmlp since 2.0.0
-setMethod("spark.monmlp", signature(data = "SparkDataFrame", formula = "formula"),
+#' @note spark.mlp since 2.1.0
+setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, blockSize, initialWeights, layers,
                    solver, seed, maxIter, tol, stepSize, ...) {
             formula <- paste(deparse(formula), collapse = "")
@@ -464,13 +464,13 @@ setMethod("spark.monmlp", signature(data = "SparkDataFrame", formula = "formula"
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
 
-# Makes predictions from a naive Bayes model or a model produced by spark.monmlp(),
+# Makes predictions from a naive Bayes model or a model produced by spark.mlp(),
 # similarly to R package e1071's predict.
 
 #' @param newData A SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction"
-#' @rdname spark.monmlp
+#' @rdname spark.mlp
 #' @export
 #' @note predict(MultilayerPerceptronClassificationModel) since 2.0.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
@@ -478,12 +478,12 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-# Returns the summary of a naive Bayes model produced by \code{spark.monmlp}
+# Returns the summary of a naive Bayes model produced by \code{spark.mlp}
 
-#' @param object A naive Bayes model fitted by \code{spark.monmlp}
+#' @param object A naive Bayes model fitted by \code{spark.mlp}
 #' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
 #'         \code{tables}, conditional probabilities given the target label
-#' @rdname spark.monmlp
+#' @rdname spark.mlp
 #' @export
 #' @note summary(MultilayerPerceptronClassificationModel) since 2.0.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
@@ -626,7 +626,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname spark.monmlp
+#' @rdname spark.mlp
 #' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.0.0
