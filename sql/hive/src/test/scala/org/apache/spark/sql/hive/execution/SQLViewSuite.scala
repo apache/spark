@@ -54,7 +54,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("error handling: existing a table with the duplicate name when creating a view") {
+  test("error handling: existing a table with the duplicate name when creating/altering a view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1 (id int)")
       var e = intercept[AnalysisException] {
@@ -63,6 +63,10 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
       e = intercept[AnalysisException] {
         sql("CREATE VIEW tab1 AS SELECT * FROM jt")
+      }.getMessage
+      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+      e = intercept[AnalysisException] {
+        sql("ALTER VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
       assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
     }
