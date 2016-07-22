@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
 
-import org.apache.hadoop.hive.conf.HiveConf
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -136,5 +134,11 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
     testParquetHiveCompatibility(
       Row(Row(1, Seq("foo", "bar", null))),
       "STRUCT<f0: INT, f1: ARRAY<STRING>>")
+  }
+
+  test("SPARK-16344: array of struct with a single field named 'array_element'") {
+    testParquetHiveCompatibility(
+      Row(Seq(Row(1))),
+      "ARRAY<STRUCT<array_element: INT>>")
   }
 }

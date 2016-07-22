@@ -138,6 +138,14 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("pipe with empty partition") {
+    val data = sc.parallelize(Seq("foo", "bing"), 8)
+    val piped = data.pipe("wc -c")
+    assert(piped.count == 8)
+    val charCounts = piped.map(_.trim.toInt).collect().toSet
+    assert(Set(0, 4, 5) == charCounts)
+  }
+
   test("pipe with env variable") {
     if (testCommandAvailable("printenv")) {
       val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)

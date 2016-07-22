@@ -2965,4 +2965,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-16644: Aggregate should not put aggregate expressions to constraints") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
+      checkAnswer(sql(
+        """
+          |SELECT
+          |  a,
+          |  MAX(b) AS c1,
+          |  b AS c2
+          |FROM tbl
+          |WHERE a = b
+          |GROUP BY a, b
+          |HAVING c1 = 1
+        """.stripMargin), Nil)
+    }
+  }
 }
