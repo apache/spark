@@ -601,6 +601,22 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer.analyze)
   }
 
+  test("don't push project down into sample if project brings new attributes") {
+    val x = testRelation.subquery('x)
+    val originalQuery =
+      Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
+
+    val originalQueryAnalyzed =
+      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
+
+    val optimized = Optimize.execute(originalQueryAnalyzed)
+
+    val correctAnswer =
+      Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
+
+    comparePlans(optimized, correctAnswer.analyze)
+  }
+
   test("aggregate: push down filter when filter on group by expression") {
     val originalQuery = testRelation
                         .groupBy('a)('a, count('b) as 'c)

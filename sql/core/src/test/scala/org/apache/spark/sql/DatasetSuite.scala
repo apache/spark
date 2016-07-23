@@ -422,6 +422,35 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3, 17, 27, 58, 62)
   }
 
+  test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
+    val udfOne = spark.udf.register("udfOne", (n: Int) => {
+      if (n == 1) {
+        throw new RuntimeException("udfOne shouldn't see swid=1!")
+      } else {
+        1
+      }
+    })
+
+    val d = Seq(
+      (0, "string0"),
+      (1, "string1"),
+      (2, "string2"),
+      (3, "string3"),
+      (4, "string4"),
+      (5, "string5"),
+      (6, "string6"),
+      (7, "string7"),
+      (8, "string8"),
+      (9, "string9")
+    )
+    val df = spark.createDataFrame(d).toDF("swid", "stringData")
+    val sampleDF = df.sample(false, 0.7, 50)
+    // After sampling, sampleDF doesn't contain swid=1.
+    assert(!sampleDF.select("swid").collect.contains(1))
+    // udfOne should not encounter swid=1.
+    sampleDF.select(udfOne($"swid")).collect
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")

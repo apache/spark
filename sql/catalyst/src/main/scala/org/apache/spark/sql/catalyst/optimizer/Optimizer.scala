@@ -150,12 +150,19 @@ class SimpleTestOptimizer extends Optimizer(
 
 /**
  * Pushes projects down beneath Sample to enable column pruning with sampling.
+ * This rule is only doable when the projects don't add new attributes.
  */
 object PushProjectThroughSample extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down projection into sample
-    case Project(projectList, Sample(lb, up, replace, seed, child)) =>
+    case p @ Project(projectList, Sample(lb, up, replace, seed, child))
+        if !hasNewOutput(projectList, p.child.output) =>
       Sample(lb, up, replace, seed, Project(projectList, child))()
+  }
+  private def hasNewOutput(
+      projectList: Seq[NamedExpression],
+      childOutput: Seq[Attribute]): Boolean = {
+    projectList.exists(p => !childOutput.exists(_.semanticEquals(p)))
   }
 }
 
