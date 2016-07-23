@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * and some auxiliary data, which differs based on implementation:
  * i.e., `FixedLengthRowBasedKeyValueBatch` and `VariableLengthRowBasedKeyValueBatch`.
  *
- * We use `FixedLengthRowBasedKeyValueBatch` if all fiends in the key and the value are fixed-length
+ * We use `FixedLengthRowBasedKeyValueBatch` if all fields in the key and the value are fixed-length
  * data types. Otherwise we use `VariableLengthRowBasedKeyValueBatch`.
  *
  * RowBasedKeyValueBatch is backed by a single page / MemoryBlock (defaults to 64MB). If the page
@@ -48,8 +48,8 @@ import org.slf4j.LoggerFactory;
 public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
   protected final Logger logger = LoggerFactory.getLogger(RowBasedKeyValueBatch.class);
 
-  protected static final int DEFAULT_CAPACITY = 1 << 16;
-  protected static final long DEFAULT_PAGE_SIZE = 64 * 1024 * 1024;
+  private static final int DEFAULT_CAPACITY = 1 << 16;
+  private static final long DEFAULT_PAGE_SIZE = 64 * 1024 * 1024;
 
   protected final StructType keySchema;
   protected final StructType valueSchema;
