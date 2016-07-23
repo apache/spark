@@ -692,7 +692,7 @@ abstract class CatalogTestUtils {
         CatalogColumn("a", "int"),
         CatalogColumn("b", "string")),
       partitionColumnNames = Seq("a", "b"),
-      bucketColumnNames = Seq("col1"))
+      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
