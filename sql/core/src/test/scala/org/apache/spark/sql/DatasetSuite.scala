@@ -424,11 +424,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
     val udfOne = spark.udf.register("udfOne", (n: Int) => {
-      if (n == 1) {
-        throw new RuntimeException("udfOne shouldn't see swid=1!")
-      } else {
-        1
-      }
+      require(n != 1, "udfOne shouldn't see swid=1!")
+      1
     })
 
     val d = Seq(
