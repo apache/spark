@@ -170,6 +170,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
     }.getMessage
     assert(m.contains("Column \"seq\" not found"))
+    assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
 
