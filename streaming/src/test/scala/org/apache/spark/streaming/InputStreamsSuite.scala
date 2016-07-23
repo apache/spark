@@ -19,11 +19,12 @@ package org.apache.spark.streaming
 
 import java.io.{BufferedWriter, File, OutputStreamWriter}
 import java.net.{ServerSocket, Socket, SocketException}
-import java.nio.charset.Charset
-import java.util.concurrent.{ArrayBlockingQueue, CountDownLatch, Executors, TimeUnit}
+import java.nio.charset.StandardCharsets
+import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer, SynchronizedQueue}
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.language.postfixOps
 
 import com.google.common.io.Files
@@ -33,13 +34,12 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerBatchCompleted}
 import org.apache.spark.util.{ManualClock, Utils}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
@@ -58,15 +58,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val batchCounter = new BatchCounter(ssc)
         val networkStream = ssc.socketTextStream(
           "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-        val outputStream = new TestOutputStream(networkStream, outputBuffer)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(networkStream, outputQueue)
         outputStream.register()
         ssc.start()
 
         // Feed data to the server to send to the network receiver
         val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val expectedOutput = input.map(_.toString)
-        for (i <- 0 until input.size) {
+        for (i <- input.indices) {
           testServer.send(input(i).toString + "\n")
           Thread.sleep(500)
           clock.advance(batchDuration.milliseconds)
@@ -77,7 +77,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
 
         // Ensure progress listener has been notified of all events
-        ssc.scheduler.listenerBus.waitUntilEmpty(500)
+        ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
         // Verify all "InputInfo"s have been reported
         assert(ssc.progressListener.numTotalReceivedRecords === input.size)
@@ -90,9 +90,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
         // Verify whether data received was as expected
         logInfo("--------------------------------")
-        logInfo("output.size = " + outputBuffer.size)
+        logInfo("output.size = " + outputQueue.size)
         logInfo("output")
-        outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+        outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
         logInfo("expected output.size = " + expectedOutput.size)
         logInfo("expected output")
         expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
@@ -100,9 +100,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
         // Verify whether all the elements received are as expected
         // (whether the elements were received one in each interval is not verified)
-        val output: ArrayBuffer[String] = outputBuffer.flatMap(x => x)
-        assert(output.size === expectedOutput.size)
-        for (i <- 0 until output.size) {
+        val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
+        assert(output.length === expectedOutput.size)
+        for (i <- output.indices) {
           assert(output(i) === expectedOutput(i))
         }
       }
@@ -119,8 +119,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val batchCounter = new BatchCounter(ssc)
         val networkStream = ssc.socketTextStream(
           "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-        val outputStream = new TestOutputStream(networkStream, outputBuffer)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(networkStream, outputQueue)
         outputStream.register()
         ssc.start()
 
@@ -140,13 +140,13 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("binary records stream") {
-    val testDir: File = null
+    var testDir: File = null
     try {
       val batchDuration = Seconds(2)
-      val testDir = Utils.createTempDir()
+      testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
-      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      Files.write("0\n", existingFile, StandardCharsets.UTF_8)
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
       // Set up the streaming context and input streams
@@ -156,9 +156,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
         val fileStream = ssc.binaryRecordsStream(testDir.toString, 1)
-        val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]]
-          with SynchronizedBuffer[Seq[Array[Byte]]]
-        val outputStream = new TestOutputStream(fileStream, outputBuffer)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[Array[Byte]]]
+        val outputStream = new TestOutputStream(fileStream, outputQueue)
         outputStream.register()
         ssc.start()
 
@@ -183,8 +182,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
 
         val expectedOutput = input.map(i => i.toByte)
-        val obtainedOutput = outputBuffer.flatten.toList.map(i => i(0).toByte)
-        assert(obtainedOutput === expectedOutput)
+        val obtainedOutput = outputQueue.asScala.flatten.toList.map(i => i(0).toByte)
+        assert(obtainedOutput.toSeq === expectedOutput)
       }
     } finally {
       if (testDir != null) Utils.deleteRecursively(testDir)
@@ -199,6 +198,68 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testFileStream(newFilesOnly = false)
   }
 
+  test("file input stream - wildcard") {
+    var testDir: File = null
+    try {
+      val batchDuration = Seconds(2)
+      testDir = Utils.createTempDir()
+      val testSubDir1 = Utils.createDirectory(testDir.toString, "tmp1")
+      val testSubDir2 = Utils.createDirectory(testDir.toString, "tmp2")
+
+      // Create a file that exists before the StreamingContext is created:
+      val existingFile = new File(testDir, "0")
+      Files.write("0\n", existingFile, StandardCharsets.UTF_8)
+      assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
+
+      val pathWithWildCard = testDir.toString + "/*/"
+
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
+        val batchCounter = new BatchCounter(ssc)
+        // monitor "testDir/*/"
+        val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
+          pathWithWildCard).map(_._2.toString)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(fileStream, outputQueue)
+        outputStream.register()
+        ssc.start()
+
+        // Advance the clock so that the files are created after StreamingContext starts, but
+        // not enough to trigger a batch
+        clock.advance(batchDuration.milliseconds / 2)
+
+        def createFileAndAdvenceTime(data: Int, dir: File): Unit = {
+          val file = new File(testSubDir1, data.toString)
+          Files.write(data + "\n", file, StandardCharsets.UTF_8)
+          assert(file.setLastModified(clock.getTimeMillis()))
+          assert(file.lastModified === clock.getTimeMillis())
+          logInfo("Created file " + file)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
+          clock.advance(batchDuration.milliseconds)
+          eventually(eventuallyTimeout) {
+            assert(batchCounter.getNumCompletedBatches === data)
+          }
+        }
+        // Over time, create files in the temp directory 1
+        val input1 = Seq(1, 2, 3, 4, 5)
+        input1.foreach(i => createFileAndAdvenceTime(i, testSubDir1))
+
+        // Over time, create files in the temp directory 1
+        val input2 = Seq(6, 7, 8, 9, 10)
+        input2.foreach(i => createFileAndAdvenceTime(i, testSubDir2))
+
+        // Verify that all the files have been read
+        val expectedOutput = (input1 ++ input2).map(_.toString).toSet
+        assert(outputQueue.asScala.flatten.toSet === expectedOutput)
+      }
+    } finally {
+      if (testDir != null) Utils.deleteRecursively(testDir)
+    }
+  }
+
   test("multi-thread receiver") {
     // set up the test receiver
     val numThreads = 10
@@ -206,15 +267,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val numTotalRecords = numThreads * numRecordsPerThread
     val testReceiver = new MultiThreadTestReceiver(numThreads, numRecordsPerThread)
     MultiThreadTestReceiver.haveAllThreadsFinished = false
-    val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
-    def output: ArrayBuffer[Long] = outputBuffer.flatMap(x => x)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[Long]]
+    def output: Iterable[Long] = outputQueue.asScala.flatMap(x => x)
 
     // set up the network stream using the test receiver
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       val networkStream = ssc.receiverStream[Int](testReceiver)
       val countStream = networkStream.count
 
-      val outputStream = new TestOutputStream(countStream, outputBuffer)
+      val outputStream = new TestOutputStream(countStream, outputQueue)
       outputStream.register()
       ssc.start()
 
@@ -231,9 +292,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether data received was as expected
     logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output.size = " + outputQueue.size)
     logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
     logInfo("--------------------------------")
     assert(output.sum === numTotalRecords)
   }
@@ -241,14 +302,14 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   test("queue input stream - oneAtATime = true") {
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+    def output: Iterable[Seq[String]] = outputQueue.asScala.filter(_.nonEmpty)
 
     // Set up the streaming context and input streams
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-      val queue = new SynchronizedQueue[RDD[String]]()
+      val queue = new mutable.Queue[RDD[String]]()
       val queueStream = ssc.queueStream(queue, oneAtATime = true)
-      val outputStream = new TestOutputStream(queueStream, outputBuffer)
+      val outputStream = new TestOutputStream(queueStream, outputQueue)
       outputStream.register()
       ssc.start()
 
@@ -256,9 +317,13 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
 
       val inputIterator = input.toIterator
-      for (i <- 0 until input.size) {
+      for (i <- input.indices) {
         // Enqueue more than 1 item per tick but they should dequeue one at a time
-        inputIterator.take(2).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
+        inputIterator.take(2).foreach { i =>
+          queue.synchronized {
+            queue += ssc.sparkContext.makeRDD(Seq(i))
+          }
+        }
         clock.advance(batchDuration.milliseconds)
       }
       Thread.sleep(1000)
@@ -266,9 +331,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether data received was as expected
     logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output.size = " + outputQueue.size)
     logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
     logInfo("expected output.size = " + expectedOutput.size)
     logInfo("expected output")
     expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
@@ -276,22 +341,20 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether all the elements received are as expected
     assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
-    }
+    output.zipWithIndex.foreach{case (e, i) => assert(e == expectedOutput(i))}
   }
 
   test("queue input stream - oneAtATime = false") {
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+    def output: Iterable[Seq[String]] = outputQueue.asScala.filter(_.nonEmpty)
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = Seq(Seq("1", "2", "3"), Seq("4", "5"))
 
     // Set up the streaming context and input streams
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
-      val queue = new SynchronizedQueue[RDD[String]]()
+      val queue = new mutable.Queue[RDD[String]]()
       val queueStream = ssc.queueStream(queue, oneAtATime = false)
-      val outputStream = new TestOutputStream(queueStream, outputBuffer)
+      val outputStream = new TestOutputStream(queueStream, outputQueue)
       outputStream.register()
       ssc.start()
 
@@ -300,21 +363,29 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Enqueue the first 3 items (one by one), they should be merged in the next batch
       val inputIterator = input.toIterator
-      inputIterator.take(3).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
+      inputIterator.take(3).foreach { i =>
+        queue.synchronized {
+          queue += ssc.sparkContext.makeRDD(Seq(i))
+        }
+      }
       clock.advance(batchDuration.milliseconds)
       Thread.sleep(1000)
 
       // Enqueue the remaining items (again one by one), merged in the final batch
-      inputIterator.foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
+      inputIterator.foreach { i =>
+        queue.synchronized {
+          queue += ssc.sparkContext.makeRDD(Seq(i))
+        }
+      }
       clock.advance(batchDuration.milliseconds)
       Thread.sleep(1000)
     }
 
     // Verify whether data received was as expected
     logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
+    logInfo("output.size = " + outputQueue.size)
     logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+    outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
     logInfo("expected output.size = " + expectedOutput.size)
     logInfo("expected output")
     expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
@@ -322,9 +393,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Verify whether all the elements received are as expected
     assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
-    }
+    output.zipWithIndex.foreach{case (e, i) => assert(e == expectedOutput(i))}
   }
 
   test("test track the number of input stream") {
@@ -356,13 +425,13 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   def testFileStream(newFilesOnly: Boolean) {
-    val testDir: File = null
+    var testDir: File = null
     try {
       val batchDuration = Seconds(2)
-      val testDir = Utils.createTempDir()
+      testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
-      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      Files.write("0\n", existingFile, StandardCharsets.UTF_8)
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
       // Set up the streaming context and input streams
@@ -373,8 +442,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val batchCounter = new BatchCounter(ssc)
         val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
           testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
-        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-        val outputStream = new TestOutputStream(fileStream, outputBuffer)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(fileStream, outputQueue)
         outputStream.register()
         ssc.start()
 
@@ -386,7 +455,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val input = Seq(1, 2, 3, 4, 5)
         input.foreach { i =>
           val file = new File(testDir, i.toString)
-          Files.write(i + "\n", file, Charset.forName("UTF-8"))
+          Files.write(i + "\n", file, StandardCharsets.UTF_8)
           assert(file.setLastModified(clock.getTimeMillis()))
           assert(file.lastModified === clock.getTimeMillis())
           logInfo("Created file " + file)
@@ -404,7 +473,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         } else {
           (Seq(0) ++ input).map(_.toString).toSet
         }
-        assert(outputBuffer.flatten.toSet === expectedOutput)
+        assert(outputQueue.asScala.flatten.toSet === expectedOutput)
       }
     } finally {
       if (testDir != null) Utils.deleteRecursively(testDir)
@@ -441,7 +510,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
             try {
               clientSocket.setTcpNoDelay(true)
               val outputStream = new BufferedWriter(
-                new OutputStreamWriter(clientSocket.getOutputStream))
+                new OutputStreamWriter(clientSocket.getOutputStream, StandardCharsets.UTF_8))
 
               while (clientSocket.isConnected) {
                 val msg = queue.poll(100, TimeUnit.MILLISECONDS)

@@ -22,6 +22,10 @@ import java.util.Properties
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
+import org.json4s.JsonDSL._
+import org.scalatest.Assertions
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -32,12 +36,7 @@ import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
 class JsonProtocolSuite extends SparkFunSuite {
-
-  val jobSubmissionTime = 1421191042750L
-  val jobCompletionTime = 1421191296660L
-
-  val executorAddedTime = 1421458410000L
-  val executorRemovedTime = 1421458922000L
+  import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
     val stageSubmitted =
@@ -82,9 +81,14 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
-    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", Seq(
-      (1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
-        hasHadoopInput = true, hasOutput = true))))
+    val executorMetricsUpdate = {
+      // Use custom accum ID for determinism
+      val accumUpdates =
+        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
+          .accumulators().map(AccumulatorSuite.makeInfo)
+          .zipWithIndex.map { case (a, i) => a.copy(id = i) }
+      SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
+    }
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -142,7 +146,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       "Some exception")
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskEndReason
-    val exceptionFailure = new ExceptionFailure(exception, None)
+    val exceptionFailure = new ExceptionFailure(exception, Seq.empty[AccumulableInfo])
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
     testTaskEndReason(fetchFailed)
@@ -166,9 +170,8 @@ class JsonProtocolSuite extends SparkFunSuite {
    |  Backward compatibility tests  |
    * ============================== */
 
-  test("ExceptionFailure backward compatibility") {
-    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
-      None, None)
+  test("ExceptionFailure backward compatibility: full stack trace") {
+    val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null, None)
     val oldEvent = JsonProtocol.taskEndReasonToJson(exceptionFailure)
       .removeField({ _._1 == "Full Stack Trace" })
     assertEquals(exceptionFailure, JsonProtocol.taskEndReasonFromJson(oldEvent))
@@ -195,49 +198,41 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = false)
-    assert(metrics.inputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.inputMetrics.isEmpty)
   }
 
   test("Input/Output records backwards compatibility") {
     // records read were added after 1.2
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = true, hasOutput = true, hasRecords = false)
-    assert(metrics.inputMetrics.nonEmpty)
-    assert(metrics.outputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
                          .removeField { case (field, _) => field == "Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.inputMetrics.get.recordsRead == 0)
-    assert(newMetrics.outputMetrics.get.recordsWritten == 0)
+    assert(newMetrics.inputMetrics.recordsRead == 0)
+    assert(newMetrics.outputMetrics.recordsWritten == 0)
   }
 
   test("Shuffle Read/Write records backwards compatibility") {
     // records read were added after 1.2
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
-    assert(metrics.shuffleReadMetrics.nonEmpty)
-    assert(metrics.shuffleWriteMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
-    assert(newMetrics.shuffleWriteMetrics.get.shuffleRecordsWritten == 0)
+    assert(newMetrics.shuffleReadMetrics.recordsRead == 0)
+    assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
-    assert(metrics.outputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Output Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.outputMetrics.isEmpty)
   }
 
   test("BlockManager events backward compatibility") {
@@ -263,7 +258,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("FetchFailed backwards compatibility") {
-    // FetchFailed in Spark 1.1.0 does not have an "Message" property.
+    // FetchFailed in Spark 1.1.0 does not have a "Message" property.
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "ignored")
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
@@ -273,16 +268,14 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
-  test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {
-    // Metrics about local shuffle bytes read and local read time were added in 1.3.1.
+  test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
+    // Metrics about local shuffle bytes read were added in 1.3.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
-    assert(metrics.shuffleReadMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
-      .removeField { case (field, _) => field == "Local Read Time" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
+    assert(newMetrics.shuffleReadMetrics.localBytesRead == 0)
   }
 
   test("SparkListenerApplicationStart backwards compatibility") {
@@ -371,22 +364,78 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("AccumulableInfo backward compatibility") {
-    // "Internal" property of AccumulableInfo were added after 1.5.1.
-    val accumulableInfo = makeAccumulableInfo(1)
-    val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
-      .removeField({ _._1 == "Internal" })
+    // "Internal" property of AccumulableInfo was added in 1.5.1
+    val accumulableInfo = makeAccumulableInfo(1, internal = true, countFailedValues = true)
+    val accumulableInfoJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+    val oldJson = accumulableInfoJson.removeField({ _._1 == "Internal" })
     val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
-    assert(false === oldInfo.internal)
+    assert(!oldInfo.internal)
+    // "Count Failed Values" property of AccumulableInfo was added in 2.0.0
+    val oldJson2 = accumulableInfoJson.removeField({ _._1 == "Count Failed Values" })
+    val oldInfo2 = JsonProtocol.accumulableInfoFromJson(oldJson2)
+    assert(!oldInfo2.countFailedValues)
+    // "Metadata" property of AccumulableInfo was added in 2.0.0
+    val oldJson3 = accumulableInfoJson.removeField({ _._1 == "Metadata" })
+    val oldInfo3 = JsonProtocol.accumulableInfoFromJson(oldJson3)
+    assert(oldInfo3.metadata.isEmpty)
   }
 
-  /** -------------------------- *
-   | Helper test running methods |
-   * --------------------------- */
+  test("ExceptionFailure backward compatibility: accumulator updates") {
+    // "Task Metrics" was replaced with "Accumulator Updates" in 2.0.0. For older event logs,
+    // we should still be able to fallback to constructing the accumulator updates from the
+    // "Task Metrics" field, if it exists.
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val tmJson = JsonProtocol.taskMetricsToJson(tm)
+    val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
+    val exception = new SparkException("sentimental")
+    val exceptionFailure = new ExceptionFailure(exception, accumUpdates)
+    val exceptionFailureJson = JsonProtocol.taskEndReasonToJson(exceptionFailure)
+    val tmFieldJson: JValue = "Task Metrics" -> tmJson
+    val oldExceptionFailureJson: JValue =
+      exceptionFailureJson.removeField { _._1 == "Accumulator Updates" }.merge(tmFieldJson)
+    val oldExceptionFailure =
+      JsonProtocol.taskEndReasonFromJson(oldExceptionFailureJson).asInstanceOf[ExceptionFailure]
+    assert(exceptionFailure.className === oldExceptionFailure.className)
+    assert(exceptionFailure.description === oldExceptionFailure.description)
+    assertSeqEquals[StackTraceElement](
+      exceptionFailure.stackTrace, oldExceptionFailure.stackTrace, assertStackTraceElementEquals)
+    assert(exceptionFailure.fullStackTrace === oldExceptionFailure.fullStackTrace)
+    assertSeqEquals[AccumulableInfo](
+      exceptionFailure.accumUpdates, oldExceptionFailure.accumUpdates, (x, y) => x == y)
+  }
+
+  test("AccumulableInfo value de/serialization") {
+    import InternalAccumulator._
+    val blocks = Seq[(BlockId, BlockStatus)](
+      (TestBlockId("meebo"), BlockStatus(StorageLevel.MEMORY_ONLY, 1L, 2L)),
+      (TestBlockId("feebo"), BlockStatus(StorageLevel.DISK_ONLY, 3L, 4L)))
+    val blocksJson = JArray(blocks.toList.map { case (id, status) =>
+      ("Block ID" -> id.toString) ~
+      ("Status" -> JsonProtocol.blockStatusToJson(status))
+    })
+    testAccumValue(Some(RESULT_SIZE), 3L, JInt(3))
+    testAccumValue(Some(shuffleRead.REMOTE_BLOCKS_FETCHED), 2, JInt(2))
+    testAccumValue(Some(UPDATED_BLOCK_STATUSES), blocks, blocksJson)
+    // For anything else, we just cast the value to a string
+    testAccumValue(Some("anything"), blocks, JString(blocks.toString))
+    testAccumValue(Some("anything"), 123, JString("123"))
+  }
+
+}
+
+
+private[spark] object JsonProtocolSuite extends Assertions {
+  import InternalAccumulator._
+
+  private val jobSubmissionTime = 1421191042750L
+  private val jobCompletionTime = 1421191296660L
+  private val executorAddedTime = 1421458410000L
+  private val executorRemovedTime = 1421458922000L
 
   private def testEvent(event: SparkListenerEvent, jsonString: String) {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
     val newEvent = JsonProtocol.sparkEventFromJson(parse(actualJsonString))
-    assertJsonStringEquals(jsonString, actualJsonString)
+    assertJsonStringEquals(jsonString, actualJsonString, event.getClass.getSimpleName)
     assertEquals(event, newEvent)
   }
 
@@ -440,11 +489,19 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(info, newInfo)
   }
 
+  private def testAccumValue(name: Option[String], value: Any, expectedJson: JValue): Unit = {
+    val json = JsonProtocol.accumValueToJson(name, value)
+    assert(json === expectedJson)
+    val newValue = JsonProtocol.accumValueFromJson(name, json)
+    val expectedValue = if (name.exists(_.startsWith(METRICS_PREFIX))) value else value.toString
+    assert(newValue === expectedValue)
+  }
+
   /** -------------------------------- *
    | Util methods for comparing events |
    * --------------------------------- */
 
-  private def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
+  private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
       case (e1: SparkListenerStageSubmitted, e2: SparkListenerStageSubmitted) =>
         assert(e1.properties === e2.properties)
@@ -478,14 +535,17 @@ class JsonProtocolSuite extends SparkFunSuite {
         assert(e1.executorId === e1.executorId)
       case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
         assert(e1.execId === e2.execId)
-        assertSeqEquals[(Long, Int, Int, TaskMetrics)](e1.taskMetrics, e2.taskMetrics, (a, b) => {
-          val (taskId1, stageId1, stageAttemptId1, metrics1) = a
-          val (taskId2, stageId2, stageAttemptId2, metrics2) = b
-          assert(taskId1 === taskId2)
-          assert(stageId1 === stageId2)
-          assert(stageAttemptId1 === stageAttemptId2)
-          assertEquals(metrics1, metrics2)
-        })
+        assertSeqEquals[(Long, Int, Int, Seq[AccumulableInfo])](
+          e1.accumUpdates,
+          e2.accumUpdates,
+          (a, b) => {
+            val (taskId1, stageId1, stageAttemptId1, updates1) = a
+            val (taskId2, stageId2, stageAttemptId2, updates2) = b
+            assert(taskId1 === taskId2)
+            assert(stageId1 === stageId2)
+            assert(stageAttemptId1 === stageAttemptId2)
+            assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
+          })
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -544,20 +604,16 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
-    assert(metrics1.hostname === metrics2.hostname)
     assert(metrics1.executorDeserializeTime === metrics2.executorDeserializeTime)
     assert(metrics1.resultSize === metrics2.resultSize)
     assert(metrics1.jvmGCTime === metrics2.jvmGCTime)
     assert(metrics1.resultSerializationTime === metrics2.resultSerializationTime)
     assert(metrics1.memoryBytesSpilled === metrics2.memoryBytesSpilled)
     assert(metrics1.diskBytesSpilled === metrics2.diskBytesSpilled)
-    assertOptionEquals(
-      metrics1.shuffleReadMetrics, metrics2.shuffleReadMetrics, assertShuffleReadEquals)
-    assertOptionEquals(
-      metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics, assertShuffleWriteEquals)
-    assertOptionEquals(
-      metrics1.inputMetrics, metrics2.inputMetrics, assertInputMetricsEquals)
-    assertOptionEquals(metrics1.updatedBlocks, metrics2.updatedBlocks, assertBlocksEquals)
+    assertEquals(metrics1.shuffleReadMetrics, metrics2.shuffleReadMetrics)
+    assertEquals(metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics)
+    assertEquals(metrics1.inputMetrics, metrics2.inputMetrics)
+    assertBlocksEquals(metrics1.updatedBlockStatuses, metrics2.updatedBlockStatuses)
   }
 
   private def assertEquals(metrics1: ShuffleReadMetrics, metrics2: ShuffleReadMetrics) {
@@ -568,12 +624,11 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def assertEquals(metrics1: ShuffleWriteMetrics, metrics2: ShuffleWriteMetrics) {
-    assert(metrics1.shuffleBytesWritten === metrics2.shuffleBytesWritten)
-    assert(metrics1.shuffleWriteTime === metrics2.shuffleWriteTime)
+    assert(metrics1.bytesWritten === metrics2.bytesWritten)
+    assert(metrics1.writeTime === metrics2.writeTime)
   }
 
   private def assertEquals(metrics1: InputMetrics, metrics2: InputMetrics) {
-    assert(metrics1.readMethod === metrics2.readMethod)
     assert(metrics1.bytesRead === metrics2.bytesRead)
   }
 
@@ -601,7 +656,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
         assert(r1.fullStackTrace === r2.fullStackTrace)
-        assertOptionEquals(r1.metrics, r2.metrics, assertTaskMetricsEquals)
+        assertSeqEquals[AccumulableInfo](r1.accumUpdates, r2.accumUpdates, (a, b) => a.equals(b))
       case (TaskResultLost, TaskResultLost) =>
       case (TaskKilled, TaskKilled) =>
       case (TaskCommitDenied(jobId1, partitionId1, attemptNumber1),
@@ -637,10 +692,17 @@ class JsonProtocolSuite extends SparkFunSuite {
       assertStackTraceElementEquals)
   }
 
-  private def assertJsonStringEquals(json1: String, json2: String) {
-    val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    assert(formatJsonString(json1) === formatJsonString(json2),
-      s"input ${formatJsonString(json1)} got ${formatJsonString(json2)}")
+  private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
+    val expectedJson = pretty(parse(expected))
+    val actualJson = pretty(parse(actual))
+    if (expectedJson != actualJson) {
+      // scalastyle:off
+      // This prints something useful if the JSON strings don't match
+      println("=== EXPECTED ===\n" + expectedJson + "\n")
+      println("=== ACTUAL ===\n" + actualJson + "\n")
+      // scalastyle:on
+      throw new TestFailedException(s"$metadata JSON did not equal", 1)
+    }
   }
 
   private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit) {
@@ -665,22 +727,6 @@ class JsonProtocolSuite extends SparkFunSuite {
   /**
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
-
-  private def assertShuffleReadEquals(r1: ShuffleReadMetrics, r2: ShuffleReadMetrics) {
-    assertEquals(r1, r2)
-  }
-
-  private def assertShuffleWriteEquals(w1: ShuffleWriteMetrics, w2: ShuffleWriteMetrics) {
-    assertEquals(w1, w2)
-  }
-
-  private def assertInputMetricsEquals(i1: InputMetrics, i2: InputMetrics) {
-    assertEquals(i1, i2)
-  }
-
-  private def assertTaskMetricsEquals(t1: TaskMetrics, t2: TaskMetrics) {
-    assertEquals(t1, t2)
-  }
 
   private def assertBlocksEquals(
       blocks1: Seq[(BlockId, BlockStatus)],
@@ -746,8 +792,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     taskInfo
   }
 
-  private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
+  private def makeAccumulableInfo(
+      id: Int,
+      internal: Boolean = false,
+      countFailedValues: Boolean = false,
+      metadata: Option[String] = None): AccumulableInfo =
+    new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
+      internal, countFailedValues, metadata)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -763,8 +814,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
-    val t = new TaskMetrics
-    t.setHostname("localhost")
+    val t = TaskMetrics.empty
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)
@@ -773,35 +823,31 @@ class JsonProtocolSuite extends SparkFunSuite {
     t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.incBytesRead(d + e + f)
+      val inputMetrics = t.inputMetrics
+      inputMetrics.setBytesRead(d + e + f)
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
-      t.setInputMetrics(Some(inputMetrics))
     } else {
-      val sr = new ShuffleReadMetrics
+      val sr = t.createTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
       sr.incLocalBytesRead(a + f)
-      t.setShuffleReadMetrics(Some(sr))
+      t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
-      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
-      outputMetrics.setBytesWritten(a + b + c)
-      outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
-      t.outputMetrics = Some(outputMetrics)
+      t.outputMetrics.setBytesWritten(a + b + c)
+      t.outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     } else {
-      val sw = new ShuffleWriteMetrics
-      sw.incShuffleBytesWritten(a + b + c)
-      sw.incShuffleWriteTime(b + c + d)
-      sw.setShuffleRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
-      t.shuffleWriteMetrics = Some(sw)
+      val sw = t.shuffleWriteMetrics
+      sw.incBytesWritten(a + b + c)
+      sw.incWriteTime(b + c + d)
+      sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
-    t.updatedBlocks = Some((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i, c%i))
+    t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
+      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
     }.toSeq)
     t
   }
@@ -821,7 +867,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Stage Name": "greetings",
       |    "Number of Tasks": 200,
       |    "RDD Info": [],
-      |    "ParentIDs" : [100, 200, 300],
+      |    "Parent IDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -829,14 +875,16 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
@@ -847,7 +895,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Ukraine": "Kiev"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val stageCompletedJsonString =
     """
@@ -867,18 +915,16 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "Storage Level": {
       |          "Use Disk": true,
       |          "Use Memory": true,
-      |          "Use ExternalBlockStore": false,
       |          "Deserialized": true,
       |          "Replication": 1
       |        },
       |        "Number of Partitions": 201,
       |        "Number of Cached Partitions": 301,
       |        "Memory Size": 401,
-      |        "ExternalBlockStore Size": 0,
       |        "Disk Size": 501
       |      }
       |    ],
-      |    "ParentIDs" : [100, 200, 300],
+      |    "Parent IDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -886,19 +932,21 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
       |}
-    """
+    """.stripMargin
 
   private val taskStartJsonString =
     """
@@ -918,27 +966,31 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -961,27 +1013,31 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  }
@@ -1010,32 +1066,35 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1049,12 +1108,20 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Fetch Wait Time": 900,
       |      "Remote Bytes Read": 1000,
       |      "Local Bytes Read": 1100,
-      |      "Total Records Read" : 10
+      |      "Total Records Read": 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500,
       |      "Shuffle Records Written": 12
+      |    },
+      |    "Input Metrics" : {
+      |      "Bytes Read" : 0,
+      |      "Records Read" : 0
+      |    },
+      |    "Output Metrics" : {
+      |      "Bytes Written" : 0,
+      |      "Records Written" : 0
       |    },
       |    "Updated Blocks": [
       |      {
@@ -1063,12 +1130,10 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
@@ -1099,32 +1164,35 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1132,15 +1200,26 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Result Serialization Time": 700,
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
+      |    "Shuffle Read Metrics" : {
+      |      "Remote Blocks Fetched" : 0,
+      |      "Local Blocks Fetched" : 0,
+      |      "Fetch Wait Time" : 0,
+      |      "Remote Bytes Read" : 0,
+      |      "Local Bytes Read" : 0,
+      |      "Total Records Read" : 0
+      |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500,
       |      "Shuffle Records Written": 12
       |    },
       |    "Input Metrics": {
-      |      "Data Read Method": "Hadoop",
       |      "Bytes Read": 2100,
       |      "Records Read": 21
+      |    },
+      |     "Output Metrics" : {
+      |      "Bytes Written" : 0,
+      |      "Records Written" : 0
       |    },
       |    "Updated Blocks": [
       |      {
@@ -1149,19 +1228,17 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
       |    ]
       |  }
       |}
-    """
+    """.stripMargin
 
   private val taskEndWithOutputJsonString =
     """
@@ -1185,32 +1262,35 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
       |        "Value": "val1",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
       |        "Value": "val2",
-      |        "Internal": false
+      |        "Internal": false,
+      |        "Count Failed Values": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
       |        "Value": "val3",
-      |        "Internal": true
+      |        "Internal": true,
+      |        "Count Failed Values": false
       |      }
       |    ]
       |  },
       |  "Task Metrics": {
-      |    "Host Name": "localhost",
       |    "Executor Deserialize Time": 300,
       |    "Executor Run Time": 400,
       |    "Result Size": 500,
@@ -1218,13 +1298,24 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Result Serialization Time": 700,
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
+      |    "Shuffle Read Metrics" : {
+      |      "Remote Blocks Fetched" : 0,
+      |      "Local Blocks Fetched" : 0,
+      |      "Fetch Wait Time" : 0,
+      |      "Remote Bytes Read" : 0,
+      |      "Local Bytes Read" : 0,
+      |      "Total Records Read" : 0
+      |    },
+      |    "Shuffle Write Metrics" : {
+      |      "Shuffle Bytes Written" : 0,
+      |      "Shuffle Write Time" : 0,
+      |      "Shuffle Records Written" : 0
+      |    },
       |    "Input Metrics": {
-      |      "Data Read Method": "Hadoop",
       |      "Bytes Read": 2100,
       |      "Records Read": 21
       |    },
       |    "Output Metrics": {
-      |      "Data Write Method": "Hadoop",
       |      "Bytes Written": 1200,
       |      "Records Written": 12
       |    },
@@ -1235,19 +1326,17 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": false,
       |            "Replication": 2
       |          },
       |          "Memory Size": 0,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 0
       |        }
       |      }
       |    ]
       |  }
       |}
-    """
+    """.stripMargin
 
   private val jobStartJsonString =
     """
@@ -1270,14 +1359,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 200,
       |          "Number of Cached Partitions": 300,
       |          "Memory Size": 400,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 500
       |        }
       |      ],
@@ -1286,17 +1373,19 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1314,14 +1403,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 400,
       |          "Number of Cached Partitions": 600,
       |          "Memory Size": 800,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1000
       |        },
       |        {
@@ -1332,33 +1419,33 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 401,
       |          "Number of Cached Partitions": 601,
       |          "Memory Size": 801,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1001
       |        }
       |      ],
-      |      "ParentIDs" : [100, 200, 300],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1376,14 +1463,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 600,
       |          "Number of Cached Partitions": 900,
       |          "Memory Size": 1200,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1500
       |        },
       |        {
@@ -1394,14 +1479,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 601,
       |          "Number of Cached Partitions": 901,
       |          "Memory Size": 1201,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1501
       |        },
       |        {
@@ -1412,33 +1495,33 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 602,
       |          "Number of Cached Partitions": 902,
       |          "Memory Size": 1202,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 1502
       |        }
       |      ],
-      |      "ParentIDs" : [100, 200, 300],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    },
@@ -1456,14 +1539,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 800,
       |          "Number of Cached Partitions": 1200,
       |          "Memory Size": 1600,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2000
       |        },
       |        {
@@ -1474,14 +1555,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 801,
       |          "Number of Cached Partitions": 1201,
       |          "Memory Size": 1601,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2001
       |        },
       |        {
@@ -1492,14 +1571,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 802,
       |          "Number of Cached Partitions": 1202,
       |          "Memory Size": 1602,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2002
       |        },
       |        {
@@ -1510,33 +1587,33 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "Storage Level": {
       |            "Use Disk": true,
       |            "Use Memory": true,
-      |            "Use ExternalBlockStore": false,
       |            "Deserialized": true,
       |            "Replication": 1
       |          },
       |          "Number of Partitions": 803,
       |          "Number of Cached Partitions": 1203,
       |          "Memory Size": 1603,
-      |          "ExternalBlockStore Size": 0,
       |          "Disk Size": 2003
       |        }
       |      ],
-      |      "ParentIDs" : [100, 200, 300],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
       |          "ID": 2,
-      |          "Name": " Accumulable 2",
+      |          "Name": "Accumulable2",
       |          "Update": "delta2",
       |          "Value": "val2",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        },
       |        {
       |          "ID": 1,
-      |          "Name": " Accumulable 1",
+      |          "Name": "Accumulable1",
       |          "Update": "delta1",
       |          "Value": "val1",
-      |          "Internal": false
+      |          "Internal": false,
+      |          "Count Failed Values": false
       |        }
       |      ]
       |    }
@@ -1554,7 +1631,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Ukraine": "Kiev"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val jobEndJsonString =
     """
@@ -1566,7 +1643,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Result": "JobSucceeded"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val environmentUpdateJsonString =
     """
@@ -1587,7 +1664,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Super library": "/tmp/super_library"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val blockManagerAddedJsonString =
     """
@@ -1601,7 +1678,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  "Maximum Memory": 500,
       |  "Timestamp": 1
       |}
-    """
+    """.stripMargin
 
   private val blockManagerRemovedJsonString =
     """
@@ -1614,7 +1691,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  },
       |  "Timestamp": 2
       |}
-    """
+    """.stripMargin
 
   private val unpersistRDDJsonString =
     """
@@ -1622,7 +1699,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  "Event": "SparkListenerUnpersistRDD",
       |  "RDD ID": 12345
       |}
-    """
+    """.stripMargin
 
   private val applicationStartJsonString =
     """
@@ -1634,7 +1711,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  "User": "Garfield",
       |  "App Attempt ID": "appAttempt"
       |}
-    """
+    """.stripMargin
 
   private val applicationStartJsonWithLogUrlsString =
     """
@@ -1650,7 +1727,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      "stdout" : "mystdout"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val applicationEndJsonString =
     """
@@ -1658,7 +1735,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  "Event": "SparkListenerApplicationEnd",
       |  "Timestamp": 42
       |}
-    """
+    """.stripMargin
 
   private val executorAddedJsonString =
     s"""
@@ -1675,7 +1752,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    }
       |  }
       |}
-    """
+    """.stripMargin
 
   private val executorRemovedJsonString =
     s"""
@@ -1685,56 +1762,197 @@ class JsonProtocolSuite extends SparkFunSuite {
       |  "Executor ID": "exec2",
       |  "Removed Reason": "test reason"
       |}
-    """
+    """.stripMargin
 
   private val executorMetricsUpdateJsonString =
-  s"""
-     |{
-     |  "Event": "SparkListenerExecutorMetricsUpdate",
-     |  "Executor ID": "exec3",
-     |  "Metrics Updated": [
-     |  {
-     |    "Task ID": 1,
-     |    "Stage ID": 2,
-     |    "Stage Attempt ID": 3,
-     |    "Task Metrics": {
-     |    "Host Name": "localhost",
-     |    "Executor Deserialize Time": 300,
-     |    "Executor Run Time": 400,
-     |    "Result Size": 500,
-     |    "JVM GC Time": 600,
-     |    "Result Serialization Time": 700,
-     |    "Memory Bytes Spilled": 800,
-     |    "Disk Bytes Spilled": 0,
-     |    "Input Metrics": {
-     |      "Data Read Method": "Hadoop",
-     |      "Bytes Read": 2100,
-     |      "Records Read": 21
-     |    },
-     |    "Output Metrics": {
-     |      "Data Write Method": "Hadoop",
-     |      "Bytes Written": 1200,
-     |      "Records Written": 12
-     |    },
-     |    "Updated Blocks": [
-     |      {
-     |        "Block ID": "rdd_0_0",
-     |        "Status": {
-     |          "Storage Level": {
-     |            "Use Disk": true,
-     |            "Use Memory": true,
-     |            "Use ExternalBlockStore": false,
-     |            "Deserialized": false,
-     |            "Replication": 2
-     |          },
-     |          "Memory Size": 0,
-     |          "ExternalBlockStore Size": 0,
-     |          "Disk Size": 0
-     |        }
-     |      }
-     |    ]
-     |  }
-     |  }]
-     |}
-   """.stripMargin
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorMetricsUpdate",
+      |  "Executor ID": "exec3",
+      |  "Metrics Updated": [
+      |    {
+      |      "Task ID": 1,
+      |      "Stage ID": 2,
+      |      "Stage Attempt ID": 3,
+      |      "Accumulator Updates": [
+      |        {
+      |          "ID": 0,
+      |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
+      |          "Update": 300,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 1,
+      |          "Name": "$EXECUTOR_RUN_TIME",
+      |          "Update": 400,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 2,
+      |          "Name": "$RESULT_SIZE",
+      |          "Update": 500,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 3,
+      |          "Name": "$JVM_GC_TIME",
+      |          "Update": 600,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 4,
+      |          "Name": "$RESULT_SERIALIZATION_TIME",
+      |          "Update": 700,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 5,
+      |          "Name": "$MEMORY_BYTES_SPILLED",
+      |          "Update": 800,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 6,
+      |          "Name": "$DISK_BYTES_SPILLED",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 7,
+      |          "Name": "$PEAK_EXECUTION_MEMORY",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 8,
+      |          "Name": "$UPDATED_BLOCK_STATUSES",
+      |          "Update": [
+      |            {
+      |              "Block ID": "rdd_0_0",
+      |              "Status": {
+      |                "Storage Level": {
+      |                  "Use Disk": true,
+      |                  "Use Memory": true,
+      |                  "Deserialized": false,
+      |                  "Replication": 2
+      |                },
+      |                "Memory Size": 0,
+      |                "Disk Size": 0
+      |              }
+      |            }
+      |          ],
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 9,
+      |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 10,
+      |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 11,
+      |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 12,
+      |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 13,
+      |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 14,
+      |          "Name": "${shuffleRead.RECORDS_READ}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 15,
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 16,
+      |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 17,
+      |          "Name": "${shuffleWrite.WRITE_TIME}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 18,
+      |          "Name": "${input.BYTES_READ}",
+      |          "Update": 2100,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 19,
+      |          "Name": "${input.RECORDS_READ}",
+      |          "Update": 21,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 20,
+      |          "Name": "${output.BYTES_WRITTEN}",
+      |          "Update": 1200,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 21,
+      |          "Name": "${output.RECORDS_WRITTEN}",
+      |          "Update": 12,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 22,
+      |          "Name": "$TEST_ACCUM",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        }
+      |      ]
+      |    }
+      |  ]
+      |}
+    """.stripMargin
 }

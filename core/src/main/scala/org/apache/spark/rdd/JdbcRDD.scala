@@ -17,14 +17,15 @@
 
 package org.apache.spark.rdd
 
-import java.sql.{Connection, PreparedStatement, ResultSet}
+import java.sql.{Connection, ResultSet}
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.NextIterator
 
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
@@ -33,7 +34,7 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
 
 // TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
- * An RDD that executes an SQL query on a JDBC connection and reads results.
+ * An RDD that executes a SQL query on a JDBC connection and reads results.
  * For usage example, see test case JdbcRDDSuite.
  *
  * @param getConnection a function that returns an open Connection.
@@ -64,11 +65,11 @@ class JdbcRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
     val length = BigInt(1) + upperBound - lowerBound
-    (0 until numPartitions).map(i => {
+    (0 until numPartitions).map { i =>
       val start = lowerBound + ((i * length) / numPartitions)
       val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
       new JdbcPartition(i, start.toLong, end.toLong)
-    }).toArray
+    }.toArray
   }
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
@@ -137,7 +138,7 @@ object JdbcRDD {
   }
 
   /**
-   * Create an RDD that executes an SQL query on a JDBC connection and reads results.
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results.
    * For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
    *
    * @param connectionFactory a factory that returns an open Connection.
@@ -177,7 +178,7 @@ object JdbcRDD {
   }
 
   /**
-   * Create an RDD that executes an SQL query on a JDBC connection and reads results. Each row is
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results. Each row is
    * converted into a `Object` array. For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
    *
    * @param connectionFactory a factory that returns an open Connection.

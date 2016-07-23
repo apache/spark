@@ -22,6 +22,7 @@ import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
@@ -50,18 +51,21 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("local-cluster format") {
-    sc = new SparkContext("local-cluster[2,1,1024]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
-    sc = new SparkContext("local-cluster[2 , 1 , 1024]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
-    sc = new SparkContext("local-cluster[2, 1, 1024]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
-    sc = new SparkContext("local-cluster[ 2, 1, 1024 ]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
+    import SparkMasterRegex._
+
+    val masterStrings = Seq(
+      "local-cluster[2,1,1024]",
+      "local-cluster[2 , 1 , 1024]",
+      "local-cluster[2, 1, 1024]",
+      "local-cluster[ 2, 1, 1024 ]"
+    )
+
+    masterStrings.foreach {
+      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
+        assert(numSlaves.toInt == 2)
+        assert(coresPerSlave.toInt == 1)
+        assert(memoryPerSlave.toInt == 1024)
+    }
   }
 
   test("simple groupByKey") {
@@ -88,8 +92,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("accumulators") {
     sc = new SparkContext(clusterUrl, "test")
-    val accum = sc.accumulator(0)
-    sc.parallelize(1 to 10, 10).foreach(x => accum += x)
+    val accum = sc.longAccumulator
+    sc.parallelize(1 to 10, 10).foreach(x => accum.add(x))
     assert(accum.value === 55)
   }
 
@@ -105,7 +109,6 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("repeatedly failing task") {
     sc = new SparkContext(clusterUrl, "test")
-    val accum = sc.accumulator(0)
     val thrown = intercept[SparkException] {
       // scalastyle:off println
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
@@ -192,12 +195,13 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
-    val blockTransfer = SparkEnv.get.blockTransferService
+    val blockTransfer = blockManager.blockTransferService
+    val serializerManager = SparkEnv.get.serializerManager
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
-        .asInstanceOf[Iterator[Int]].toList
+      val deserialized = serializerManager.dataDeserializeStream[Int](blockId,
+        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream()).toList
       assert(deserialized === (1 to 100).toList)
     }
   }
@@ -219,10 +223,10 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("compute when only some partitions fit in memory") {
     val size = 10000
-    val numPartitions = 10
+    val numPartitions = 20
     val conf = new SparkConf()
       .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", (size * numPartitions).toString)
+      .set("spark.testing.memory", size.toString)
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
@@ -318,7 +322,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
           Thread.sleep(200)
         }
       } catch {
-        case _: Throwable => { Thread.sleep(10) }
+        case _: Throwable => Thread.sleep(10)
           // Do nothing. We might see exceptions because block manager
           // is racing this thread to remove entries from the driver.
       }

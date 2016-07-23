@@ -87,4 +87,7 @@ private[spark] object ToolTips {
        multiple operations (e.g. two map() functions) if they can be pipelined. Some operations
        also create multiple RDDs internally. Cached RDDs are shown in green.
     """
+
+  val TASK_TIME =
+  "Shaded red when garbage collection (GC) time is over 10% of task time"
 }

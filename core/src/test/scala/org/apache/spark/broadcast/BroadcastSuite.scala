@@ -37,7 +37,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
     rdd.map { x =>
       val bm = SparkEnv.get.blockManager
       // Check if broadcast block was fetched
-      val isFound = bm.getLocal(BroadcastBlockId(bid)).isDefined
+      val isFound = bm.getLocalValues(BroadcastBlockId(bid)).isDefined
       (x, isFound)
     }.collect().toSet
   }
@@ -130,8 +130,15 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
     assert(thrown.getMessage.toLowerCase.contains("stopped"))
   }
 
+  test("Forbid broadcasting RDD directly") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val rdd = sc.parallelize(1 to 4)
+    intercept[IllegalArgumentException] { sc.broadcast(rdd) }
+    sc.stop()
+  }
+
   /**
-   * Verify the persistence of state associated with an TorrentBroadcast in a local-cluster.
+   * Verify the persistence of state associated with a TorrentBroadcast in a local-cluster.
    *
    * This test creates a broadcast variable, uses it on all executors, and then unpersists it.
    * In between each step, this test verifies that the broadcast blocks are present only on the

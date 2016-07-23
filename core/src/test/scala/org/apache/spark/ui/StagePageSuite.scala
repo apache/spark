@@ -26,10 +26,14 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.StorageStatusListener
+import org.apache.spark.ui.exec.ExecutorsListener
 import org.apache.spark.ui.jobs.{JobProgressListener, StagePage, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
+
+  private val peakExecutionMemory = 10
 
   test("peak execution memory only displayed if unsafe is enabled") {
     val unsafeConf = "spark.sql.unsafe.enabled"
@@ -52,7 +56,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf(false).set(unsafeConf, "true")
     val html = renderStagePage(conf).toString().toLowerCase
     // verify min/25/50/75/max show task value not cumulative values
-    assert(html.contains("<td>10.0 b</td>" * 5))
+    assert(html.contains(s"<td>$peakExecutionMemory.0 b</td>" * 5))
   }
 
   /**
@@ -62,11 +66,13 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
   private def renderStagePage(conf: SparkConf): Seq[Node] = {
     val jobListener = new JobProgressListener(conf)
     val graphListener = new RDDOperationGraphListener(conf)
+    val executorsListener = new ExecutorsListener(new StorageStatusListener(conf), conf)
     val tab = mock(classOf[StagesTab], RETURNS_SMART_NULLS)
     val request = mock(classOf[HttpServletRequest])
     when(tab.conf).thenReturn(conf)
     when(tab.progressListener).thenReturn(jobListener)
     when(tab.operationGraphListener).thenReturn(graphListener)
+    when(tab.executorsListener).thenReturn(executorsListener)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
     when(request.getParameter("id")).thenReturn("0")
@@ -79,14 +85,13 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
     (1 to 2).foreach {
       taskId =>
         val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY, false)
-        val peakExecutionMemory = 10
-        taskInfo.accumulables += new AccumulableInfo(0, InternalAccumulator.PEAK_EXECUTION_MEMORY,
-          Some(peakExecutionMemory.toString), (peakExecutionMemory * taskId).toString, true)
         jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
-        taskInfo.markSuccessful()
+        taskInfo.markFinished(TaskState.FINISHED)
+        val taskMetrics = TaskMetrics.empty
+        taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
         jobListener.onTaskEnd(
-          SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, TaskMetrics.empty))
+          SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, taskMetrics))
     }
     jobListener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
     page.render(request)

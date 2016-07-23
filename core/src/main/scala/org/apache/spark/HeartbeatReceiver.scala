@@ -22,11 +22,11 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util._
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    taskMetrics: Array[(Long, TaskMetrics)], // taskId -> TaskMetrics
+    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])], // taskId -> accumulator updates
     blockManagerId: BlockManagerId)
 
 /**
@@ -56,7 +56,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
  * Lives in the driver to receive heartbeats from executors..
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
-  extends ThreadSafeRpcEndpoint with SparkListener with Logging {
+  extends SparkListener with ThreadSafeRpcEndpoint with Logging {
 
   def this(sc: SparkContext) {
     this(sc, new SystemClock)
@@ -119,14 +119,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       context.reply(true)
 
     // Messages received from executors
-    case heartbeat @ Heartbeat(executorId, taskMetrics, blockManagerId) =>
+    case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
           executorLastSeen(executorId) = clock.getTimeMillis()
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
-                executorId, taskMetrics, blockManagerId)
+                executorId, accumUpdates, blockManagerId)
               val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
               context.reply(response)
             }
@@ -166,7 +166,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 
   /**
-   * Send ExecutorRemoved to the event loop to remove a executor. Only for test.
+   * Send ExecutorRemoved to the event loop to remove an executor. Only for test.
    *
    * @return if HeartbeatReceiver is stopped, return None. Otherwise, return a Some(Future) that
    *         indicate if this operation is successful.
@@ -220,6 +220,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 }
 
-object HeartbeatReceiver {
+
+private[spark] object HeartbeatReceiver {
   val ENDPOINT_NAME = "HeartbeatReceiver"
 }

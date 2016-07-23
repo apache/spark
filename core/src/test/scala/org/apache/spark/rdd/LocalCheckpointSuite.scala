@@ -17,8 +17,6 @@
 
 package org.apache.spark.rdd
 
-import org.mockito.Mockito.spy
-
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
@@ -46,10 +44,6 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     assert(transform(StorageLevel.MEMORY_AND_DISK_SER) === StorageLevel.MEMORY_AND_DISK_SER)
     assert(transform(StorageLevel.MEMORY_AND_DISK_2) === StorageLevel.MEMORY_AND_DISK_2)
     assert(transform(StorageLevel.MEMORY_AND_DISK_SER_2) === StorageLevel.MEMORY_AND_DISK_SER_2)
-    // Off-heap is not supported and Spark should fail fast
-    intercept[SparkException] {
-      transform(StorageLevel.OFF_HEAP)
-    }
   }
 
   test("basic lineage truncation") {

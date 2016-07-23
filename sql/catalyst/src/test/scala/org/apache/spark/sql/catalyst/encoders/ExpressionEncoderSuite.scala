@@ -17,25 +17,30 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
-import java.util.concurrent.ConcurrentMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import com.google.common.collect.MapMaker
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
 case class NestedArray(a: Array[Array[Int]]) {
+  override def hashCode(): Int =
+    java.util.Arrays.deepHashCode(a.asInstanceOf[Array[AnyRef]])
+
   override def equals(other: Any): Boolean = other match {
     case NestedArray(otherArray) =>
       java.util.Arrays.deepEquals(
@@ -65,20 +70,45 @@ case class SpecificCollection(l: List[Int])
 
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {
-  override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[KryoSerializable].value
+  override def hashCode(): Int = value
+
+  override def equals(other: Any): Boolean = other match {
+    case that: KryoSerializable => this.value == that.value
+    case _ => false
   }
 }
 
 /** For testing Java serialization based encoder. */
 class JavaSerializable(val value: Int) extends Serializable {
-  override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[JavaSerializable].value
+  override def hashCode(): Int = value
+
+  override def equals(other: Any): Boolean = other match {
+    case that: JavaSerializable => this.value == that.value
+    case _ => false
   }
 }
 
-class ExpressionEncoderSuite extends SparkFunSuite {
-  OuterScopes.outerScopes.put(getClass.getName, this)
+/** For testing UDT for a case class */
+@SQLUserDefinedType(udt = classOf[UDTForCaseClass])
+case class UDTCaseClass(uri: java.net.URI)
+
+class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
+
+  override def sqlType: DataType = StringType
+
+  override def serialize(obj: UDTCaseClass): UTF8String = {
+    UTF8String.fromString(obj.uri.toString)
+  }
+
+  override def userClass: Class[UDTCaseClass] = classOf[UDTCaseClass]
+
+  override def deserialize(datum: Any): UDTCaseClass = datum match {
+    case uri: UTF8String => UDTCaseClass(new java.net.URI(uri.toString))
+  }
+}
+
+class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
+  OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
@@ -100,11 +130,15 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(new java.lang.Double(-3.7), "boxed double")
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
-  // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+  encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+  encodeDecodeTest(BigInt("23134123123"), "scala biginteger")
+  encodeDecodeTest(new BigInteger("23134123123"), "java BigInteger")
+  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
   encodeDecodeTest(Timestamp.valueOf("2016-01-29 10:00:00"), "timestamp")
+  encodeDecodeTest(Array(Timestamp.valueOf("2016-01-29 10:00:00")), "array of timestamp")
   encodeDecodeTest(Array[Byte](13, 21, -23), "binary")
 
   encodeDecodeTest(Seq(31, -123, 4), "seq of int")
@@ -134,6 +168,12 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
   encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")
 
+  encodeDecodeTest(List(1, 2), "list of int")
+  encodeDecodeTest(List("a", null), "list with String and null")
+
+  encodeDecodeTest(
+    UDTCaseClass(new java.net.URI("http://spark.apache.org/")), "udt with case class")
+
   // Kryo encoders
   encodeDecodeTest("hello", "kryo string")(encoderFor(Encoders.kryo[String]))
   encodeDecodeTest(new KryoSerializable(15), "kryo object")(
@@ -152,6 +192,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   case class InnerClass(i: Int)
   productTest(InnerClass(1))
   encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
+
+  encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -293,7 +335,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.defaultBinding
+      val boundEncoder = encoder.resolveAndBind()
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
@@ -308,6 +350,11 @@ class ExpressionEncoderSuite extends SparkFunSuite {
             """.stripMargin, e)
       }
 
+      // Test the correct resolution of serialization / deserialization.
+      val attr = AttributeReference("obj", encoder.deserializer.dataType)()
+      val plan = LocalRelation(attr).serialize[T].deserialize[T]
+      assertAnalysisSuccess(plan)
+
       val isCorrect = (input, convertedBack) match {
         case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
         case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
@@ -315,6 +362,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+        case (left: Comparable[_], right: Comparable[_]) =>
+          left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
         case _ => input == convertedBack
       }
 
@@ -348,7 +397,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
              |${encoder.schema.treeString}
              |
              |fromRow Expressions:
-             |${boundEncoder.fromRowExpression.treeString}
+             |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
     }

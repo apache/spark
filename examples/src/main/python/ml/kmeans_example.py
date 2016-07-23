@@ -17,55 +17,43 @@
 
 from __future__ import print_function
 
-import sys
-import re
+# $example on$
+from pyspark.ml.clustering import KMeans
+# $example off$
 
-import numpy as np
-from pyspark import SparkContext
-from pyspark.ml.clustering import KMeans, KMeansModel
-from pyspark.mllib.linalg import VectorUDT, _convert_to_vector
-from pyspark.sql import SQLContext
-from pyspark.sql.types import Row, StructField, StructType
+from pyspark.sql import SparkSession
 
 """
-A simple example demonstrating a k-means clustering.
+An example demonstrating k-means clustering.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/kmeans_example.py <input> <k>
+  bin/spark-submit examples/src/main/python/ml/kmeans_example.py
 
 This example requires NumPy (http://www.numpy.org/).
 """
 
-
-def parseVector(line):
-    array = np.array([float(x) for x in line.split(' ')])
-    return _convert_to_vector(array)
-
-
 if __name__ == "__main__":
+    spark = SparkSession\
+        .builder\
+        .appName("KMeansExample")\
+        .getOrCreate()
 
-    FEATURES_COL = "features"
+    # $example on$
+    # Loads data.
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    if len(sys.argv) != 3:
-        print("Usage: kmeans_example.py <file> <k>", file=sys.stderr)
-        exit(-1)
-    path = sys.argv[1]
-    k = sys.argv[2]
+    # Trains a k-means model.
+    kmeans = KMeans().setK(2).setSeed(1)
+    model = kmeans.fit(dataset)
 
-    sc = SparkContext(appName="PythonKMeansExample")
-    sqlContext = SQLContext(sc)
+    # Evaluate clustering by computing Within Set Sum of Squared Errors.
+    wssse = model.computeCost(dataset)
+    print("Within Set Sum of Squared Errors = " + str(wssse))
 
-    lines = sc.textFile(path)
-    data = lines.map(parseVector)
-    row_rdd = data.map(lambda x: Row(x))
-    schema = StructType([StructField(FEATURES_COL, VectorUDT(), False)])
-    df = sqlContext.createDataFrame(row_rdd, schema)
-
-    kmeans = KMeans().setK(2).setSeed(1).setFeaturesCol(FEATURES_COL)
-    model = kmeans.fit(df)
+    # Shows the result.
     centers = model.clusterCenters()
-
     print("Cluster Centers: ")
     for center in centers:
         print(center)
+    # $example off$
 
-    sc.stop()
+    spark.stop()

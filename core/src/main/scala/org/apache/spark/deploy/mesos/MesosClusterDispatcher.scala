@@ -19,9 +19,10 @@ package org.apache.spark.deploy.mesos
 
 import java.util.concurrent.CountDownLatch
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.mesos._
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -50,7 +51,7 @@ private[mesos] class MesosClusterDispatcher(
   extends Logging {
 
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
-  private val recoveryMode = conf.get("spark.mesos.deploy.recoveryMode", "NONE").toUpperCase()
+  private val recoveryMode = conf.get("spark.deploy.recoveryMode", "NONE").toUpperCase()
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
 
   private val engineFactory = recoveryMode match {
@@ -73,7 +74,7 @@ private[mesos] class MesosClusterDispatcher(
 
   def start(): Unit = {
     webUi.bind()
-    scheduler.frameworkUrl = webUi.activeWebUiUrl
+    scheduler.frameworkUrl = conf.get("spark.mesos.dispatcher.webui.url", webUi.activeWebUiUrl)
     scheduler.start()
     server.start()
   }
@@ -98,8 +99,8 @@ private[mesos] object MesosClusterDispatcher extends Logging {
     conf.setMaster(dispatcherArgs.masterUrl)
     conf.setAppName(dispatcherArgs.name)
     dispatcherArgs.zookeeperUrl.foreach { z =>
-      conf.set("spark.mesos.deploy.recoveryMode", "ZOOKEEPER")
-      conf.set("spark.mesos.deploy.zookeeper.url", z)
+      conf.set("spark.deploy.recoveryMode", "ZOOKEEPER")
+      conf.set("spark.deploy.zookeeper.url", z)
     }
     val dispatcher = new MesosClusterDispatcher(dispatcherArgs, conf)
     dispatcher.start()

@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -66,6 +67,19 @@ private[sql] case object NoOp extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
 }
 
+object AggregateExpression {
+  def apply(
+      aggregateFunction: AggregateFunction,
+      mode: AggregateMode,
+      isDistinct: Boolean): AggregateExpression = {
+    AggregateExpression(
+      aggregateFunction,
+      mode,
+      isDistinct,
+      NamedExpression.newExprId)
+  }
+}
+
 /**
  * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
@@ -73,9 +87,30 @@ private[sql] case object NoOp extends Expression with Unevaluable {
 private[sql] case class AggregateExpression(
     aggregateFunction: AggregateFunction,
     mode: AggregateMode,
-    isDistinct: Boolean)
+    isDistinct: Boolean,
+    resultId: ExprId)
   extends Expression
   with Unevaluable {
+
+  lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
+    AttributeReference(
+      aggregateFunction.toString,
+      aggregateFunction.dataType,
+      aggregateFunction.nullable)(exprId = resultId)
+  } else {
+    // This is a bit of a hack.  Really we should not be constructing this container and reasoning
+    // about datatypes / aggregation mode until after we have finished analysis and made it to
+    // planning.
+    UnresolvedAttribute(aggregateFunction.toString)
+  }
+
+  // We compute the same thing regardless of our final result.
+  override lazy val canonicalized: Expression =
+    AggregateExpression(
+      aggregateFunction.canonicalized.asInstanceOf[AggregateFunction],
+      mode,
+      isDistinct,
+      ExprId(0))
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
@@ -91,13 +126,20 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
-  override def prettyString: String = aggregateFunction.prettyString
+  override def toString: String = {
+    val prefix = mode match {
+      case Partial => "partial_"
+      case PartialMerge => "merge_"
+      case Final | Complete => ""
+    }
+    prefix + aggregateFunction.toAggString(isDistinct)
+  }
 
-  override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
+  override def sql: String = aggregateFunction.sql(isDistinct)
 }
 
 /**
- * AggregateFunction2 is the superclass of two aggregation function interfaces:
+ * AggregateFunction is the superclass of two aggregation function interfaces:
  *
  *  - [[ImperativeAggregate]] is for aggregation functions that are specified in terms of
  *    initialize(), update(), and merge() functions that operate on Row-based aggregation buffers.
@@ -163,6 +205,17 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }
+
+  def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
+  }
+
+  /** String representation used in explain plans. */
+  def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    prettyName + flatArguments.mkString(start, ", ", ")")
+  }
 }
 
 /**
@@ -192,7 +245,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share the same
    * aggregation buffer. In this shared buffer, the position of the first buffer value of `avg(x)`
    * will be 0 and the position of the first buffer value of `avg(y)` will be 2:
-   *
+   * {{{
    *          avg(x) mutableAggBufferOffset = 0
    *                  |
    *                  v
@@ -202,7 +255,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *                                    ^
    *                                    |
    *                     avg(y) mutableAggBufferOffset = 2
-   *
+   * }}}
    */
   protected val mutableAggBufferOffset: Int
 
@@ -225,7 +278,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the first
    * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
    * will be 3 (position 0 is used for the value of `key`):
-   *
+   * {{{
    *          avg(x) inputAggBufferOffset = 1
    *                   |
    *                   v
@@ -235,7 +288,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *                                     ^
    *                                     |
    *                       avg(y) inputAggBufferOffset = 3
-   *
+   * }}}
    */
   protected val inputAggBufferOffset: Int
 
@@ -336,4 +389,3 @@ abstract class DeclarativeAggregate
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
 }
-

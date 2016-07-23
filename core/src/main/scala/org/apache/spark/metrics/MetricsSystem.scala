@@ -25,9 +25,10 @@ import scala.collection.mutable
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
-import org.apache.spark.metrics.source.Source
+import org.apache.spark.metrics.source.{Source, StaticSources}
 import org.apache.spark.util.Utils
 
 /**
@@ -95,6 +96,7 @@ private[spark] class MetricsSystem private (
   def start() {
     require(!running, "Attempting to start a MetricsSystem that is already running")
     running = true
+    StaticSources.allSources.foreach(registerSource)
     registerSources()
     registerSinks()
     sinks.foreach(_.start)
@@ -195,10 +197,9 @@ private[spark] class MetricsSystem private (
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             logError("Sink class " + classPath + " cannot be instantiated")
             throw e
-          }
         }
       }
     }

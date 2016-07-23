@@ -41,7 +41,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       assertSuccess(expr)
     }
     assert(e.getMessage.contains(
-      s"cannot resolve '${expr.prettyString}' due to data type mismatch:"))
+      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
     assert(e.getMessage.contains(errorMessage))
   }
 
@@ -52,7 +52,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
     assertError(expr,
-      s"differing types in '${expr.prettyString}'")
+      s"differing types in '${expr.sql}'")
   }
 
   test("check types for unary arithmetic") {
@@ -85,7 +85,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Subtract('booleanField, 'booleanField),
       "requires (numeric or calendarinterval) type")
     assertError(Multiply('booleanField, 'booleanField), "requires numeric type")
-    assertError(Divide('booleanField, 'booleanField), "requires numeric type")
+    assertError(Divide('booleanField, 'booleanField), "requires (double or decimal) type")
     assertError(Remainder('booleanField, 'booleanField), "requires numeric type")
 
     assertError(BitwiseAnd('booleanField, 'booleanField), "requires integral type")
@@ -132,13 +132,13 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
     assertError(
-      CaseWhen(Seq('booleanField, 'intField, 'booleanField, 'mapField)),
+      CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('booleanField.attr, 'mapField.attr))),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
       CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'mapField)),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
-      CaseWhen(Seq('booleanField, 'intField, 'intField, 'intField)),
+      CaseWhen(Seq(('booleanField.attr, 'intField.attr), ('intField.attr, 'intField.attr))),
       "WHEN expressions in CaseWhen should all be boolean type")
   }
 
@@ -166,6 +166,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
+    assertError(PosExplode('intField),
+      "input to function explode should be array or map type")
   }
 
   test("check types for CreateNamedStruct") {
@@ -173,16 +175,26 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       CreateNamedStruct(Seq("a", "b", 2.0)), "even number of arguments")
     assertError(
       CreateNamedStruct(Seq(1, "a", "b", 2.0)),
-        "Only foldable StringType expressions are allowed to appear at odd position")
+      "Only foldable StringType expressions are allowed to appear at odd position")
     assertError(
       CreateNamedStruct(Seq('a.string.at(0), "a", "b", 2.0)),
-        "Only foldable StringType expressions are allowed to appear at odd position")
+      "Only foldable StringType expressions are allowed to appear at odd position")
     assertError(
       CreateNamedStruct(Seq(Literal.create(null, StringType), "a")),
-        "Field name should not be null")
+      "Field name should not be null")
   }
 
-  test("check types for ROUND") {
+  test("check types for CreateMap") {
+    assertError(CreateMap(Seq("a", "b", 2.0)), "even number of arguments")
+    assertError(
+      CreateMap(Seq('intField, 'stringField, 'booleanField, 'stringField)),
+      "keys of function map should all be the same type")
+    assertError(
+      CreateMap(Seq('stringField, 'intField, 'stringField, 'booleanField)),
+      "values of function map should all be the same type")
+  }
+
+  test("check types for ROUND/BROUND") {
     assertSuccess(Round(Literal(null), Literal(null)))
     assertSuccess(Round('intField, Literal(1)))
 
@@ -190,6 +202,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Round('intField, 'booleanField), "requires int type")
     assertError(Round('intField, 'mapField), "requires int type")
     assertError(Round('booleanField, 'intField), "requires numeric type")
+
+    assertSuccess(BRound(Literal(null), Literal(null)))
+    assertSuccess(BRound('intField, Literal(1)))
+
+    assertError(BRound('intField, 'intField), "Only foldable Expression is allowed")
+    assertError(BRound('intField, 'booleanField), "requires int type")
+    assertError(BRound('intField, 'mapField), "requires int type")
+    assertError(BRound('booleanField, 'intField), "requires numeric type")
   }
 
   test("check types for Greatest/Least") {

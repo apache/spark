@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  * :: DeveloperApi ::
  * MultivariateOnlineSummarizer implements [[MultivariateStatisticalSummary]] to compute the mean,
  * variance, minimum, maximum, counts, and nonzero counts for instances in sparse or dense vector
- * format in a online fashion.
+ * format in an online fashion.
  *
  * Two MultivariateOnlineSummarizer can be merged together to have a statistical summary of
  * the corresponding joint dataset.

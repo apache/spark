@@ -30,62 +30,65 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
 
   import org.apache.spark.mllib.clustering.PowerIterationClustering._
 
+  /** Generates a circle of points. */
+  private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
+    Array.tabulate(n) { i =>
+      val theta = 2.0 * math.Pi * i / n
+      (r * math.cos(theta), r * math.sin(theta))
+    }
+  }
+
+  /** Computes Gaussian similarity. */
+  private def sim(x: (Double, Double), y: (Double, Double)): Double = {
+    val dist2 = (x._1 - y._1) * (x._1 - y._1) + (x._2 - y._2) * (x._2 - y._2)
+    math.exp(-dist2 / 2.0)
+  }
+
   test("power iteration clustering") {
-    /*
-     We use the following graph to test PIC. All edges are assigned similarity 1.0 except 0.1 for
-     edge (3, 4).
+    // Generate two circles following the example in the PIC paper.
+    val r1 = 1.0
+    val n1 = 10
+    val r2 = 4.0
+    val n2 = 40
+    val n = n1 + n2
+    val points = genCircle(r1, n1) ++ genCircle(r2, n2)
+    val similarities = for (i <- 1 until n; j <- 0 until i) yield {
+      (i.toLong, j.toLong, sim(points(i), points(j)))
+    }
 
-     15-14 -13 -12
-     |           |
-     4 . 3 - 2  11
-     |   | x |   |
-     5   0 - 1  10
-     |           |
-     6 - 7 - 8 - 9
-     */
-
-    val similarities = Seq[(Long, Long, Double)]((0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0),
-      (1, 3, 1.0), (2, 3, 1.0), (3, 4, 0.1), // (3, 4) is a weak edge
-      (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0), (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0),
-      (10, 11, 1.0), (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0))
     val model = new PowerIterationClustering()
       .setK(2)
+      .setMaxIterations(40)
       .run(sc.parallelize(similarities, 2))
     val predictions = Array.fill(2)(mutable.Set.empty[Long])
     model.assignments.collect().foreach { a =>
       predictions(a.cluster) += a.id
     }
-    assert(predictions.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
+    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
 
     val model2 = new PowerIterationClustering()
       .setK(2)
+      .setMaxIterations(10)
       .setInitializationMode("degree")
       .run(sc.parallelize(similarities, 2))
     val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
     model2.assignments.collect().foreach { a =>
       predictions2(a.cluster) += a.id
     }
-    assert(predictions2.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
+    assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
   }
 
   test("power iteration clustering on graph") {
-    /*
-     We use the following graph to test PIC. All edges are assigned similarity 1.0 except 0.1 for
-     edge (3, 4).
-
-     15-14 -13 -12
-     |           |
-     4 . 3 - 2  11
-     |   | x |   |
-     5   0 - 1  10
-     |           |
-     6 - 7 - 8 - 9
-     */
-
-    val similarities = Seq[(Long, Long, Double)]((0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0),
-      (1, 3, 1.0), (2, 3, 1.0), (3, 4, 0.1), // (3, 4) is a weak edge
-      (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0), (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0),
-      (10, 11, 1.0), (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0))
+    // Generate two circles following the example in the PIC paper.
+    val r1 = 1.0
+    val n1 = 10
+    val r2 = 4.0
+    val n2 = 40
+    val n = n1 + n2
+    val points = genCircle(r1, n1) ++ genCircle(r2, n2)
+    val similarities = for (i <- 1 until n; j <- 0 until i) yield {
+      (i.toLong, j.toLong, sim(points(i), points(j)))
+    }
 
     val edges = similarities.flatMap { case (i, j, s) =>
       if (i != j) {
@@ -98,22 +101,24 @@ class PowerIterationClusteringSuite extends SparkFunSuite with MLlibTestSparkCon
 
     val model = new PowerIterationClustering()
       .setK(2)
+      .setMaxIterations(40)
       .run(graph)
     val predictions = Array.fill(2)(mutable.Set.empty[Long])
     model.assignments.collect().foreach { a =>
       predictions(a.cluster) += a.id
     }
-    assert(predictions.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
+    assert(predictions.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
 
     val model2 = new PowerIterationClustering()
       .setK(2)
+      .setMaxIterations(10)
       .setInitializationMode("degree")
       .run(sc.parallelize(similarities, 2))
     val predictions2 = Array.fill(2)(mutable.Set.empty[Long])
     model2.assignments.collect().foreach { a =>
       predictions2(a.cluster) += a.id
     }
-    assert(predictions2.toSet == Set((0 to 3).toSet, (4 to 15).toSet))
+    assert(predictions2.toSet == Set((0 until n1).toSet, (n1 until n).toSet))
   }
 
   test("normalize and powerIter") {

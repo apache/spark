@@ -24,7 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.matching.Regex
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 private[spark] class MetricsConfig(conf: SparkConf) extends Logging {

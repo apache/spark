@@ -30,7 +30,7 @@ dependencies, and can support different cluster managers and deploy modes that S
 
 {% highlight bash %}
 ./bin/spark-submit \
-  --class <main-class>
+  --class <main-class> \
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   --conf <key>=<value> \
@@ -58,8 +58,7 @@ for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
-the drivers and the executors. Note that `cluster` mode is currently not supported for
-Mesos clusters. Currently only YARN supports cluster mode for Python applications.
+the drivers and the executors. Currently only YARN supports cluster mode for Python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
@@ -92,8 +91,8 @@ run it with `--help`. Here are a few examples of common options:
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   /path/to/examples.jar \
@@ -120,8 +119,8 @@ export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master mesos://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   http://path/to/examples.jar \
@@ -150,12 +149,6 @@ The master URL passed to Spark can be in one of the following formats:
         <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
         The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
 </td></tr>
-<tr><td> <code>yarn-client</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode client</code>,
-        which is preferred to `yarn-client`
-</td></tr>
-<tr><td> <code>yarn-cluster</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode cluster</code>,
-        which is preferred to `yarn-cluster`
-</td></tr>
 </table>
 
 
@@ -177,8 +170,9 @@ debugging information by running `spark-submit` with the `--verbose` option.
 
 # Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. Spark uses the following URL scheme to allow
-different strategies for disseminating jars:
+will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included on the driver and executor classpaths. Directory expansion does not work with `--jars`.
+
+Spark uses the following URL scheme to allow different strategies for disseminating jars:
 
 - **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
   every executor pulls the file from the driver HTTP server.

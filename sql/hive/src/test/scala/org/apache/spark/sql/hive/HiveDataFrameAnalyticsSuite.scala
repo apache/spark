@@ -27,18 +27,23 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 // `hive` package is optional in compiling, however, `SQLContext.sql` doesn't
 // support the `cube` or `rollup` yet.
 class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
-  import hiveContext.implicits._
-  import hiveContext.sql
+  import spark.implicits._
+  import spark.sql
 
   private var testData: DataFrame = _
 
   override def beforeAll() {
+    super.beforeAll()
     testData = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
-    hiveContext.registerDataFrameAsTable(testData, "mytable")
+    testData.createOrReplaceTempView("mytable")
   }
 
   override def afterAll(): Unit = {
-    hiveContext.dropTempTable("mytable")
+    try {
+      spark.catalog.dropTempView("mytable")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("rollup") {
@@ -50,17 +55,6 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
     checkAnswer(
       testData.rollup("a", "b").agg(sum("b")),
       sql("select a, b, sum(b) from mytable group by a, b with rollup").collect()
-    )
-  }
-
-  test("collect functions") {
-    checkAnswer(
-      testData.select(collect_list($"a"), collect_list($"b")),
-      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
-    )
-    checkAnswer(
-      testData.select(collect_set($"a"), collect_set($"b")),
-      Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
     )
   }
 

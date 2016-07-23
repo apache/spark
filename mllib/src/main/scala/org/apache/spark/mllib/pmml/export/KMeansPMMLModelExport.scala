@@ -26,14 +26,14 @@ import org.apache.spark.mllib.clustering.KMeansModel
 /**
  * PMML Model Export for KMeansModel class
  */
-private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
+private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport{
 
   populateKMeansPMML(model)
 
   /**
    * Export the input KMeansModel model to PMML format.
    */
-  private def populateKMeansPMML(model : KMeansModel): Unit = {
+  private def populateKMeansPMML(model: KMeansModel): Unit = {
     pmml.getHeader.setDescription("k-means clustering")
 
     if (model.clusterCenters.length > 0) {

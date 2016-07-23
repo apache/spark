@@ -20,23 +20,23 @@ Decision Tree Classification Example.
 """
 from __future__ import print_function
 
-import sys
-
 # $example on$
-from pyspark import SparkContext, SQLContext
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import DecisionTreeClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="decision_tree_classification_example")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("DecisionTreeClassificationExample")\
+        .getOrCreate()
 
     # $example on$
     # Load the data stored in LIBSVM format as a DataFrame.
-    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Index labels, adding metadata to the label column.
     # Fit on whole dataset to include all labels in index.
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     # Select (prediction, true label) and compute test error
     evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
+        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test Error = %g " % (1.0 - accuracy))
 
@@ -74,3 +74,5 @@ if __name__ == "__main__":
     # summary only
     print(treeModel)
     # $example off$
+
+    spark.stop()

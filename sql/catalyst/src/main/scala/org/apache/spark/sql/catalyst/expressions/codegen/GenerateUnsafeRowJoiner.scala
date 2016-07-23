@@ -157,8 +157,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     }.mkString("\n")
 
     // ------------------------ Finally, put everything together  --------------------------- //
-    val code = s"""
-       |public java.lang.Object generate($exprType[] exprs) {
+    val codeBody = s"""
+       |public java.lang.Object generate(Object[] references) {
        |  return new SpecificUnsafeRowJoiner();
        |}
        |
@@ -193,10 +193,10 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |  }
        |}
      """.stripMargin
-
+    val code = CodeFormatter.stripOverlappingComments(new CodeAndComment(codeBody, Map.empty))
     logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
 
-    val c = compile(code)
+    val c = CodeGenerator.compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
   }
 }

@@ -24,9 +24,9 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
 class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
@@ -266,37 +266,31 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0L)
         if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
-          taskMetrics.inputMetrics should not be ('defined)
-          taskMetrics.outputMetrics should not be ('defined)
-          taskMetrics.shuffleWriteMetrics should be ('defined)
-          taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0L)
+          assert(taskMetrics.shuffleWriteMetrics.bytesWritten > 0L)
         }
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
-          taskMetrics.shuffleReadMetrics should be ('defined)
-          val sm = taskMetrics.shuffleReadMetrics.get
-          sm.totalBlocksFetched should be (2*numSlices)
-          sm.localBlocksFetched should be (2*numSlices)
-          sm.remoteBlocksFetched should be (0)
-          sm.remoteBytesRead should be (0L)
+          assert(taskMetrics.shuffleReadMetrics.totalBlocksFetched == 2 * numSlices)
+          assert(taskMetrics.shuffleReadMetrics.localBlocksFetched == 2 * numSlices)
+          assert(taskMetrics.shuffleReadMetrics.remoteBlocksFetched == 0)
+          assert(taskMetrics.shuffleReadMetrics.remoteBytesRead == 0L)
         }
       }
     }
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    val conf = new SparkConf().set("spark.akka.frameSize", "1")
+    val conf = new SparkConf().set("spark.rpc.message.maxSize", "1")
     sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
-    // Make a task whose result is larger than the akka frame size
-    val akkaFrameSize =
-      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
-    assert(akkaFrameSize === 1024 * 1024)
+    // Make a task whose result is larger than the RPC message size
+    val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
+    assert(maxRpcMessageSize === 1024 * 1024)
     val result = sc.parallelize(Seq(1), 1)
-      .map { x => 1.to(akkaFrameSize).toArray }
+      .map { x => 1.to(maxRpcMessageSize).toArray }
       .reduce { case (x, y) => x }
-    assert(result === 1.to(akkaFrameSize).toArray)
+    assert(result === 1.to(maxRpcMessageSize).toArray)
 
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val TASK_INDEX = 0
@@ -310,7 +304,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
-    // Make a task whose result is larger than the akka frame size
+    // Make a task whose result is larger than the RPC message size
     val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
     assert(result === 2)
 
@@ -378,13 +372,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("registering listeners via spark.extraListeners") {
+    val listeners = Seq(
+      classOf[ListenerThatAcceptsSparkConf],
+      classOf[FirehoseListenerThatAcceptsSparkConf],
+      classOf[BasicJobCounter])
     val conf = new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.extraListeners", classOf[ListenerThatAcceptsSparkConf].getName + "," +
-        classOf[BasicJobCounter].getName)
+      .set("spark.extraListeners", listeners.map(_.getName).mkString(","))
     sc = new SparkContext(conf)
     sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
+    sc.listenerBus.listeners.asScala
+        .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
   }
 
   /**
@@ -476,4 +475,12 @@ private class SparkContextStoppingListener(val sc: SparkContext) extends SparkLi
 private class ListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkListener {
   var count = 0
   override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
+}
+
+private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkFirehoseListener {
+  var count = 0
+  override def onEvent(event: SparkListenerEvent): Unit = event match {
+    case job: SparkListenerJobEnd => count += 1
+    case _ =>
+  }
 }

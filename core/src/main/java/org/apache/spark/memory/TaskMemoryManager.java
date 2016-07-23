@@ -67,17 +67,14 @@ public class TaskMemoryManager {
 
   /**
    * Maximum supported data page size (in bytes). In principle, the maximum addressable page size is
-   * (1L &lt;&lt; OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's maximum page
-   * size is limited by the maximum amount of data that can be stored in a  long[] array, which is
-   * (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
+   * (1L &lt;&lt; OFFSET_BITS) bytes, which is 2+ petabytes. However, the on-heap allocator's
+   * maximum page size is limited by the maximum amount of data that can be stored in a long[]
+   * array, which is (2^32 - 1) * 8 bytes (or 16 gigabytes). Therefore, we cap this at 16 gigabytes.
    */
   public static final long MAXIMUM_PAGE_SIZE_BYTES = ((1L << 31) - 1) * 8L;
 
   /** Bit mask for the lower 51 bits of a long. */
   private static final long MASK_LONG_LOWER_51_BITS = 0x7FFFFFFFFFFFFL;
-
-  /** Bit mask for the upper 13 bits of a long */
-  private static final long MASK_LONG_UPPER_13_BITS = ~MASK_LONG_LOWER_51_BITS;
 
   /**
    * Similar to an operating system's page table, this array maps page numbers into base object
@@ -112,6 +109,11 @@ public class TaskMemoryManager {
   private final HashSet<MemoryConsumer> consumers;
 
   /**
+   * The amount of memory that is acquired but not used.
+   */
+  private volatile long acquiredButNotUsed = 0L;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
@@ -127,11 +129,10 @@ public class TaskMemoryManager {
    *
    * @return number of bytes successfully granted (<= N).
    */
-  public long acquireExecutionMemory(
-      long required,
-      MemoryMode mode,
-      MemoryConsumer consumer) {
+  public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
     assert(required >= 0);
+    assert(consumer != null);
+    MemoryMode mode = consumer.getMode();
     // If we are allocating Tungsten pages off-heap and receive a request to allocate on-heap
     // memory here, then it may not make sense to spill since that would only end up freeing
     // off-heap memory. This is subject to change, though, so it may be risky to make this
@@ -144,10 +145,10 @@ public class TaskMemoryManager {
       if (got < required) {
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: consumers) {
-          if (c != consumer && c.getUsed() > 0) {
+          if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
             try {
               long released = c.spill(required - got, consumer);
-              if (released > 0 && mode == tungstenMemoryMode) {
+              if (released > 0) {
                 logger.debug("Task {} released {} from {} for {}", taskAttemptId,
                   Utils.bytesToString(released), c, consumer);
                 got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
@@ -165,10 +166,10 @@ public class TaskMemoryManager {
       }
 
       // call spill() on itself
-      if (got < required && consumer != null) {
+      if (got < required) {
         try {
           long released = consumer.spill(required - got, consumer);
-          if (released > 0 && mode == tungstenMemoryMode) {
+          if (released > 0) {
             logger.debug("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
             got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
@@ -180,10 +181,8 @@ public class TaskMemoryManager {
         }
       }
 
-      if (consumer != null) {
-        consumers.add(consumer);
-      }
-      logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
+      consumers.add(consumer);
+      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
   }
@@ -191,9 +190,9 @@ public class TaskMemoryManager {
   /**
    * Release N bytes of execution memory for a MemoryConsumer.
    */
-  public void releaseExecutionMemory(long size, MemoryMode mode, MemoryConsumer consumer) {
+  public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
     logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
-    memoryManager.releaseExecutionMemory(size, taskAttemptId, mode);
+    memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
   }
 
   /**
@@ -236,12 +235,14 @@ public class TaskMemoryManager {
    * contains fewer bytes than requested, so callers should verify the size of returned pages.
    */
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+    assert(consumer != null);
+    assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new IllegalArgumentException(
         "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
     }
 
-    long acquired = acquireExecutionMemory(size, tungstenMemoryMode, consumer);
+    long acquired = acquireExecutionMemory(size, consumer);
     if (acquired <= 0) {
       return null;
     }
@@ -250,13 +251,26 @@ public class TaskMemoryManager {
     synchronized (this) {
       pageNumber = allocatedPages.nextClearBit(0);
       if (pageNumber >= PAGE_TABLE_SIZE) {
-        releaseExecutionMemory(acquired, tungstenMemoryMode, consumer);
+        releaseExecutionMemory(acquired, consumer);
         throw new IllegalStateException(
           "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
+    MemoryBlock page = null;
+    try {
+      page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
+    } catch (OutOfMemoryError e) {
+      logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);
+      // there is no enough memory actually, it means the actual free memory is smaller than
+      // MemoryManager thought, we should keep the acquired memory.
+      synchronized (this) {
+        acquiredButNotUsed += acquired;
+        allocatedPages.clear(pageNumber);
+      }
+      // this could trigger spilling to free some pages.
+      return allocatePage(size, consumer);
+    }
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
@@ -281,7 +295,7 @@ public class TaskMemoryManager {
     }
     long pageSize = page.size();
     memoryManager.tungstenMemoryAllocator().free(page);
-    releaseExecutionMemory(pageSize, tungstenMemoryMode, consumer);
+    releaseExecutionMemory(pageSize, consumer);
   }
 
   /**
@@ -312,7 +326,7 @@ public class TaskMemoryManager {
 
   @VisibleForTesting
   public static int decodePageNumber(long pagePlusOffsetAddress) {
-    return (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> OFFSET_BITS);
+    return (int) (pagePlusOffsetAddress >>> OFFSET_BITS);
   }
 
   private static long decodeOffset(long pagePlusOffsetAddress) {
@@ -361,7 +375,6 @@ public class TaskMemoryManager {
    */
   public long cleanUpAllAllocatedMemory() {
     synchronized (this) {
-      Arrays.fill(pageTable, null);
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
           // In case of failed task, it's normal to see leaked memory
@@ -369,14 +382,18 @@ public class TaskMemoryManager {
         }
       }
       consumers.clear();
+
+      for (MemoryBlock page : pageTable) {
+        if (page != null) {
+          logger.warn("leak a page: " + page + " in task " + taskAttemptId);
+          memoryManager.tungstenMemoryAllocator().free(page);
+        }
+      }
+      Arrays.fill(pageTable, null);
     }
 
-    for (MemoryBlock page : pageTable) {
-      if (page != null) {
-        memoryManager.tungstenMemoryAllocator().free(page);
-      }
-    }
-    Arrays.fill(pageTable, null);
+    // release the memory that is not used by any consumer (acquired for pages in tungsten mode).
+    memoryManager.releaseExecutionMemory(acquiredButNotUsed, taskAttemptId, tungstenMemoryMode);
 
     return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
   }
@@ -386,5 +403,12 @@ public class TaskMemoryManager {
    */
   public long getMemoryConsumptionForThisTask() {
     return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
+  }
+
+  /**
+   * Returns Tungsten memory mode
+   */
+  public MemoryMode getTungstenMemoryMode() {
+    return tungstenMemoryMode;
   }
 }

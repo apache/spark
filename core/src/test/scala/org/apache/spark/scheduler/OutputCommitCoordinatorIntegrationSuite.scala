@@ -37,8 +37,7 @@ class OutputCommitCoordinatorIntegrationSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     val conf = new SparkConf()
-      .set("master", "local[2,4]")
-      .set("spark.speculation", "true")
+      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
       .set("spark.hadoop.mapred.output.committer.class",
         classOf[ThrowExceptionOnFirstAttemptOutputCommitter].getCanonicalName)
     sc = new SparkContext("local[2, 4]", "test", conf)

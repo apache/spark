@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * An event loop to receive events from the caller and process all events in the event thread. It
@@ -47,13 +47,12 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
           try {
             onReceive(event)
           } catch {
-            case NonFatal(e) => {
+            case NonFatal(e) =>
               try {
                 onError(e)
               } catch {
                 case NonFatal(e) => logError("Unexpected error in " + name, e)
               }
-            }
           }
         }
       } catch {

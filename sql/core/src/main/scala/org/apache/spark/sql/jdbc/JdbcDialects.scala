@@ -100,11 +100,11 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
-    * Override connection specific properties to run before a select is made.  This is in place to
-    * allow dialects that need special treatment to optimize behavior.
-    * @param connection The connection object
-    * @param properties The connection properties.  This is passed through from the relation.
-    */
+   * Override connection specific properties to run before a select is made.  This is in place to
+   * allow dialects that need special treatment to optimize behavior.
+   * @param connection The connection object
+   * @param properties The connection properties.  This is passed through from the relation.
+   */
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
@@ -126,7 +126,7 @@ object JdbcDialects {
 
   /**
    * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
-   * Readding an existing dialect will cause a move-to-front.
+   * Reading an existing dialect will cause a move-to-front.
    *
    * @param dialect The new dialect.
    */

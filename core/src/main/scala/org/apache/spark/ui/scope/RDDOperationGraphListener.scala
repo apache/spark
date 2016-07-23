@@ -52,9 +52,8 @@ private[ui] class RDDOperationGraphListener(conf: SparkConf) extends SparkListen
    * An empty list is returned if one or more of its stages has been cleaned up.
    */
   def getOperationGraphForJob(jobId: Int): Seq[RDDOperationGraph] = synchronized {
-    val skippedStageIds = jobIdToSkippedStageIds.get(jobId).getOrElse(Seq.empty)
-    val graphs = jobIdToStageIds.get(jobId)
-      .getOrElse(Seq.empty)
+    val skippedStageIds = jobIdToSkippedStageIds.getOrElse(jobId, Seq.empty)
+    val graphs = jobIdToStageIds.getOrElse(jobId, Seq.empty)
       .flatMap { sid => stageIdToGraph.get(sid) }
     // Mark any skipped stages as such
     graphs.foreach { g =>

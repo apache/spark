@@ -20,11 +20,12 @@ package org.apache.spark.scheduler.cluster.mesos
 import org.apache.mesos.Protos.{ContainerInfo, Volume}
 import org.apache.mesos.Protos.ContainerInfo.DockerInfo
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 
 /**
  * A collection of utility functions which can be used by both the
- * MesosSchedulerBackend and the CoarseMesosSchedulerBackend.
+ * MesosSchedulerBackend and the [[MesosFineGrainedSchedulerBackend]].
  */
 private[mesos] object MesosSchedulerBackendUtil extends Logging {
   /**
@@ -54,11 +55,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
             Some(vol.setContainerPath(container_path)
               .setHostPath(host_path)
               .setMode(Volume.Mode.RO))
-          case spec => {
+          case spec =>
             logWarning(s"Unable to parse volume specs: $volumes. "
               + "Expected form: \"[host-dir:]container-dir[:rw|:ro](, ...)\"")
             None
-          }
       }
     }
     .map { _.build() }
@@ -89,11 +89,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
           Some(portmap.setHostPort(host_port.toInt)
             .setContainerPort(container_port.toInt)
             .setProtocol(protocol))
-        case spec => {
+        case spec =>
           logWarning(s"Unable to parse port mapping specs: $portmaps. "
             + "Expected form: \"host_port:container_port[:udp|:tcp](, ...)\"")
           None
-        }
       }
     }
     .map { _.build() }

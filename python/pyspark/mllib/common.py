@@ -60,13 +60,13 @@ _picklable_classes = [
 
 # this will call the MLlib version of pythonToJava()
 def _to_java_object_rdd(rdd):
-    """ Return an JavaRDD of Object by unpickling
+    """ Return a JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
+    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(rdd._jrdd, True)
 
 
 def _py2java(sc, obj):
@@ -85,7 +85,7 @@ def _py2java(sc, obj):
         pass
     else:
         data = bytearray(PickleSerializer().dumps(obj))
-        obj = sc._jvm.SerDe.loads(data)
+        obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)
     return obj
 
 
@@ -98,17 +98,17 @@ def _java2py(sc, r, encoding="bytes"):
             clsName = 'JavaRDD'
 
         if clsName == 'JavaRDD':
-            jrdd = sc._jvm.SerDe.javaToPython(r)
+            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
-        if clsName == 'DataFrame':
+        if clsName == 'Dataset':
             return DataFrame(r, SQLContext.getOrCreate(sc))
 
         if clsName in _picklable_classes:
-            r = sc._jvm.SerDe.dumps(r)
+            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
             try:
-                r = sc._jvm.SerDe.dumps(r)
+                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
             except Py4JJavaError:
                 pass  # not pickable
 

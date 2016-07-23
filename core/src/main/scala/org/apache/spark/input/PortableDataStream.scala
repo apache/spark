@@ -41,9 +41,8 @@ private[spark] abstract class StreamFileInputFormat[T]
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context).asScala
-    val totalLen = files.map(file => if (file.isDirectory) 0L else file.getLen).sum
-    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.size).toLong
+    val totalLen = listStatus(context).asScala.filterNot(_.isDirectory).map(_.getLen).sum
+    val maxSplitSize = math.ceil(totalLen / math.max(minPartitions, 1.0)).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -184,15 +183,6 @@ class PortableDataStream(
     } finally {
       Closeables.close(stream, true)
     }
-  }
-
-  /**
-   * Closing the PortableDataStream is not needed anymore. The user either can use the
-   * PortableDataStream to get a DataInputStream (which the user needs to close after usage),
-   * or a byte array.
-   */
-  @deprecated("Closing the PortableDataStream is not needed anymore.", "1.6.0")
-  def close(): Unit = {
   }
 
   def getPath(): String = path

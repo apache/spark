@@ -19,42 +19,26 @@ package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
-public class JavaVectorAssemblerSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext sqlContext;
+import org.junit.Assert;
+import org.junit.Test;
 
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaVectorAssemblerSuite");
-    sqlContext = new SQLContext(jsc);
-  }
+import org.apache.spark.SharedSparkSession;
+import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
+public class JavaVectorAssemblerSuite extends SharedSparkSession {
 
   @Test
   public void testVectorAssembler() {
-    StructType schema = createStructType(new StructField[] {
+    StructType schema = createStructType(new StructField[]{
       createStructField("id", IntegerType, false),
       createStructField("x", DoubleType, false),
       createStructField("y", new VectorUDT(), false),
@@ -64,14 +48,14 @@ public class JavaVectorAssemblerSuite {
     });
     Row row = RowFactory.create(
       0, 0.0, Vectors.dense(1.0, 2.0), "a",
-      Vectors.sparse(2, new int[] {1}, new double[] {3.0}), 10L);
-    DataFrame dataset = sqlContext.createDataFrame(Arrays.asList(row), schema);
+      Vectors.sparse(2, new int[]{1}, new double[]{3.0}), 10L);
+    Dataset<Row> dataset = spark.createDataFrame(Arrays.asList(row), schema);
     VectorAssembler assembler = new VectorAssembler()
-      .setInputCols(new String[] {"x", "y", "z", "n"})
+      .setInputCols(new String[]{"x", "y", "z", "n"})
       .setOutputCol("features");
-    DataFrame output = assembler.transform(dataset);
+    Dataset<Row> output = assembler.transform(dataset);
     Assert.assertEquals(
-      Vectors.sparse(6, new int[] {1, 2, 4, 5}, new double[] {1.0, 2.0, 3.0, 10.0}),
+      Vectors.sparse(6, new int[]{1, 2, 4, 5}, new double[]{1.0, 2.0, 3.0, 10.0}),
       output.select("features").first().<Vector>getAs(0));
   }
 }

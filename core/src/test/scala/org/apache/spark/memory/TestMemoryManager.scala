@@ -17,10 +17,8 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.storage.BlockId
 
 class TestMemoryManager(conf: SparkConf)
   extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {
@@ -44,19 +42,19 @@ class TestMemoryManager(conf: SparkConf)
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
+      memoryMode: MemoryMode): Boolean = true
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseStorageMemory(numBytes: Long): Unit = {}
+     memoryMode: MemoryMode): Boolean = true
+  override def releaseStorageMemory(numBytes: Long, memoryMode: MemoryMode): Unit = {}
   override private[memory] def releaseExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
       memoryMode: MemoryMode): Unit = {
     available += numBytes
   }
-  override def maxStorageMemory: Long = Long.MaxValue
+  override def maxOnHeapStorageMemory: Long = Long.MaxValue
 
   private var oomOnce = false
   private var available = Long.MaxValue

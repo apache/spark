@@ -27,9 +27,9 @@ import org.apache.spark.mllib.regression.GeneralizedLinearModel
  * PMML Model Export for GeneralizedLinearModel class with binary ClassificationModel
  */
 private[mllib] class BinaryClassificationPMMLModelExport(
-    model : GeneralizedLinearModel,
-    description : String,
-    normalizationMethod : RegressionNormalizationMethodType,
+    model: GeneralizedLinearModel,
+    description: String,
+    normalizationMethod: RegressionNormalizationMethodType,
     threshold: Double)
   extends PMMLModelExport {
 

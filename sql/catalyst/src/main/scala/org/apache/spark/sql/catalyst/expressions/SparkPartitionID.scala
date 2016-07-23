@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -44,11 +44,10 @@ private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterm
 
   override protected def evalInternal(input: InternalRow): Int = partitionId
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val idTerm = ctx.freshName("partitionId")
     ctx.addMutableState(ctx.JAVA_INT, idTerm,
       s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
-    ev.isNull = "false"
-    s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;"
+    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;", isNull = "false")
   }
 }

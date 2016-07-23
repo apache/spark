@@ -18,14 +18,12 @@
 // scalastyle:off classforname
 package org.apache.spark.tools
 
-import java.io.File
-import java.util.jar.JarFile
-
 import scala.collection.mutable
-import scala.collection.JavaConverters._
 import scala.reflect.runtime.{universe => unv}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
+
+import org.clapper.classutil.ClassFinder
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -42,14 +40,6 @@ object GenerateMIMAIgnore {
   private val classLoader = Thread.currentThread().getContextClassLoader
   private val mirror = runtimeMirror(classLoader)
 
-
-  private def isDeveloperApi(sym: unv.Symbol) =
-    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
-
-  private def isExperimental(sym: unv.Symbol) =
-    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
-
-
   private def isPackagePrivate(sym: unv.Symbol) =
     !sym.privateWithin.fullName.startsWith("<none>")
 
@@ -58,7 +48,7 @@ object GenerateMIMAIgnore {
 
   /**
    * For every class checks via scala reflection if the class itself or contained members
-   * have DeveloperApi or Experimental annotations or they are package private.
+   * are package private.
    * Returns the tuple of such classes and members.
    */
   private def privateWithin(packageName: String): (Set[String], Set[String]) = {
@@ -75,8 +65,6 @@ object GenerateMIMAIgnore {
           isPackagePrivate(classSymbol) ||
           isPackagePrivateModule(moduleSymbol) ||
           classSymbol.isPrivate
-        val developerApi = isDeveloperApi(classSymbol) || isDeveloperApi(moduleSymbol)
-        val experimental = isExperimental(classSymbol) || isExperimental(moduleSymbol)
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
@@ -88,7 +76,7 @@ object GenerateMIMAIgnore {
             false
           }
         }
-        if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi || experimental) {
+        if (directlyPrivateSpark || indirectlyPrivateSpark) {
           ignoredClasses += className
         }
         // check if this class has package-private/annotated members.
@@ -103,10 +91,11 @@ object GenerateMIMAIgnore {
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
   }
 
-  /** Scala reflection does not let us see inner function even if they are upgraded
-    * to public for some reason. So had to resort to java reflection to get all inner
-    * functions with $$ in there name.
-    */
+  /**
+   * Scala reflection does not let us see inner function even if they are upgraded
+   * to public for some reason. So had to resort to java reflection to get all inner
+   * functions with $$ in there name.
+   */
   def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
     try {
       Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)
@@ -123,9 +112,7 @@ object GenerateMIMAIgnore {
   private def getAnnotatedOrPackagePrivateMembers(classSymbol: unv.ClassSymbol) = {
     classSymbol.typeSignature.members.filterNot(x =>
       x.fullName.startsWith("java") || x.fullName.startsWith("scala")
-    ).filter(x =>
-      isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)
-    ).map(_.fullName) ++ getInnerFunctions(classSymbol)
+    ).filter(x => isPackagePrivate(x)).map(_.fullName) ++ getInnerFunctions(classSymbol)
   }
 
   def main(args: Array[String]) {
@@ -145,7 +132,6 @@ object GenerateMIMAIgnore {
     // scalastyle:on println
   }
 
-
   private def shouldExclude(name: String) = {
     // Heuristic to remove JVM classes that do not correspond to user-facing classes in Scala
     name.contains("anon") ||
@@ -160,35 +146,13 @@ object GenerateMIMAIgnore {
    * and subpackages both from directories and jars present on the classpath.
    */
   private def getClasses(packageName: String): Set[String] = {
-    val path = packageName.replace('.', '/')
-    val resources = classLoader.getResources(path)
-
-    val jars = resources.asScala.filter(_.getProtocol == "jar")
-      .map(_.getFile.split(":")(1).split("!")(0)).toSeq
-
-    jars.flatMap(getClassesFromJar(_, path))
-      .map(_.getName)
-      .filterNot(shouldExclude).toSet
-  }
-
-  /**
-   * Get all classes in a package from a jar file.
-   */
-  private def getClassesFromJar(jarPath: String, packageName: String) = {
-    import scala.collection.mutable
-    val jar = new JarFile(new File(jarPath))
-    val enums = jar.entries().asScala.map(_.getName).filter(_.startsWith(packageName))
-    val classes = mutable.HashSet[Class[_]]()
-    for (entry <- enums if entry.endsWith(".class")) {
-      try {
-        classes += Class.forName(entry.replace('/', '.').stripSuffix(".class"), false, classLoader)
-      } catch {
-        // scalastyle:off println
-        case _: Throwable => println("Unable to load:" + entry)
-        // scalastyle:on println
-      }
-    }
-    classes
+    val finder = ClassFinder()
+    finder
+      .getClasses
+      .map(_.name)
+      .filter(_.startsWith(packageName))
+      .filterNot(shouldExclude)
+      .toSet
   }
 }
 // scalastyle:on classforname

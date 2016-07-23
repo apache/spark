@@ -205,8 +205,10 @@ setMethod("flatMapValues",
 #' @aliases partitionBy,RDD,integer-method
 #' @noRd
 setMethod("partitionBy",
-          signature(x = "RDD", numPartitions = "numeric"),
+          signature(x = "RDD"),
           function(x, numPartitions, partitionFunc = hashCode) {
+            stopifnot(is.numeric(numPartitions))
+
             partitionFunc <- cleanClosure(partitionFunc)
             serializedHashFuncBytes <- serialize(partitionFunc, connection = NULL)
 
@@ -305,11 +307,11 @@ setMethod("groupByKey",
 #'  Merge values by key
 #'
 #' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
-#' and merges the values for each key using an associative reduce function.
+#' and merges the values for each key using an associative and commutative reduce function.
 #'
 #' @param x The RDD to reduce by key. Should be an RDD where each element is
 #'             list(K, V) or c(K, V).
-#' @param combineFunc The associative reduce function to use.
+#' @param combineFunc The associative and commutative reduce function to use.
 #' @param numPartitions Number of partitions to create.
 #' @return An RDD where each element is list(K, V') where V' is the merged
 #'         value
@@ -347,12 +349,12 @@ setMethod("reduceByKey",
 #' Merge values by key locally
 #'
 #' This function operates on RDDs where every element is of the form list(K, V) or c(K, V).
-#' and merges the values for each key using an associative reduce function, but return the
-#' results immediately to the driver as an R list.
+#' and merges the values for each key using an associative and commutative reduce function, but
+#' return the results immediately to the driver as an R list.
 #'
 #' @param x The RDD to reduce by key. Should be an RDD where each element is
 #'             list(K, V) or c(K, V).
-#' @param combineFunc The associative reduce function to use.
+#' @param combineFunc The associative and commutative reduce function to use.
 #' @return A list of elements of type list(K, V') where V' is the merged value for each key
 #' @seealso reduceByKey
 #' @examples

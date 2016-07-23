@@ -24,7 +24,7 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.FileSystem
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Various utility methods used by Spark.
@@ -170,9 +170,7 @@ private [util] class SparkShutdownHookManager {
   @volatile private var shuttingDown = false
 
   /**
-   * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
-   * have `ShutdownHookManager`, so in that case we just use the JVM's `Runtime` object and hope for
-   * the best.
+   * Install a hook to run at shutdown and run all registered hooks in order.
    */
   def install(): Unit = {
     val hookTask = new Runnable() {
