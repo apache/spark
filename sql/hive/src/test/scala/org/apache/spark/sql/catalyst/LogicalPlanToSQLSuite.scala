@@ -927,6 +927,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
+  test("predicate subquery") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(a int)")
+      val df = sql("select * from t1 b where exists (select * from t1 a)")
+      new SQLBuilder(df).toSQL
+    }
+  }
+
   test("SPARK-14933 - select orc table") {
     withTable("orc_t") {
       sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
