@@ -497,7 +497,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("rename temporary table - destination table with database name") {
-    withTempTable("tab1") {
+    withTempView("tab1") {
       sql(
         """
           |CREATE TEMPORARY TABLE tab1
@@ -522,7 +522,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("rename temporary table - destination table already exists") {
-    withTempTable("tab1", "tab2") {
+    withTempView("tab1", "tab2") {
       sql(
         """
           |CREATE TEMPORARY TABLE tab1
@@ -677,7 +677,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("show tables") {
-    withTempTable("show1a", "show2b") {
+    withTempView("show1a", "show2b") {
       sql(
         """
           |CREATE TEMPORARY TABLE show1a

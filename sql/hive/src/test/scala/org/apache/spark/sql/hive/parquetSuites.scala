@@ -702,7 +702,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
   }
 
   test("Verify the PARQUET conversion parameter: CONVERT_METASTORE_PARQUET") {
-    withTempTable("single") {
+    withTempView("single") {
       val singleRowDF = Seq((0, "foo")).toDF("key", "value")
       singleRowDF.createOrReplaceTempView("single")
 
