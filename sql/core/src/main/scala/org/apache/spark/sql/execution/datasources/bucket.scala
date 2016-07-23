@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.AnalysisException
+
 /**
  * A container for bucketing information.
  * Bucketing is a technology for decomposing data sets into more manageable parts, and the number
@@ -29,7 +31,11 @@ package org.apache.spark.sql.execution.datasources
 private[sql] case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String])
+    sortColumnNames: Seq[String]) {
+  if (numBuckets <= 0) {
+    throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
+  }
+}
 
 private[sql] object BucketingUtils {
   // The file name of bucketed data should have 3 parts:

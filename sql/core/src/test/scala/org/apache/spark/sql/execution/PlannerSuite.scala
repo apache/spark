@@ -71,7 +71,7 @@ class PlannerSuite extends SharedSQLContext {
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
     def checkPlan(fieldTypes: Seq[DataType]): Unit = {
-      withTempTable("testLimit") {
+      withTempView("testLimit") {
         val fields = fieldTypes.zipWithIndex.map {
           case (dataType, index) => StructField(s"c${index}", dataType, true)
         } :+ StructField("key", IntegerType, true)
@@ -131,7 +131,7 @@ class PlannerSuite extends SharedSQLContext {
 
   test("InMemoryRelation statistics propagation") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "81920") {
-      withTempTable("tiny") {
+      withTempView("tiny") {
         testData.limit(3).createOrReplaceTempView("tiny")
         sql("CACHE TABLE tiny")
 
@@ -157,7 +157,7 @@ class PlannerSuite extends SharedSQLContext {
       val df = spark.read.parquet(path)
       df.createOrReplaceTempView("testPushed")
 
-      withTempTable("testPushed") {
+      withTempView("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
         assert(exp.toString.contains("PushedFilters: [IsNotNull(key), EqualTo(key,15)]"))
       }
@@ -198,7 +198,7 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("PartitioningCollection") {
-    withTempTable("normal", "small", "tiny") {
+    withTempView("normal", "small", "tiny") {
       testData.createOrReplaceTempView("normal")
       testData.limit(10).createOrReplaceTempView("small")
       testData.limit(3).createOrReplaceTempView("tiny")
