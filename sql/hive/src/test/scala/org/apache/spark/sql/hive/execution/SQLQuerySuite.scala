@@ -1766,4 +1766,77 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("select into(check relation)") {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withTable("si1", "si2") {
+        val defaultDataSource = sessionState.conf.defaultDataSourceName
+        sql("SELECT key, value INTO si1 FROM src ORDER BY key, value")
+        val message = intercept[AnalysisException] {
+          sql("SELECT key, value INTO si1 FROM src ORDER BY key, value")
+        }.getMessage
+        assert(message.contains("already exists"))
+        checkRelation("si1", true, defaultDataSource)
+
+        // Specifying database name for query can be converted to data source write path
+        // is not allowed right now.
+        sql("SELECT key, value INTO default.si2 FROM src ORDER BY key, value")
+        checkRelation("si2", true, defaultDataSource)
+      }
+    }
+  }
+
+  test("select into(check answer)") {
+    withTable("si1", "si2", "si3", "si4") {
+      sql("SELECT key, value INTO si1 FROM src")
+      checkAnswer(
+        sql("SELECT key, value FROM si1 ORDER BY key"),
+        sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+
+      sql("SELECT key k, value INTO si2 FROM src ORDER BY k,value").collect()
+      checkAnswer(
+        sql("SELECT k, value FROM si2 ORDER BY k, value"),
+        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+
+      sql("SELECT 1 AS key,value INTO si3 FROM src LIMIT 1").collect()
+      checkAnswer(
+        sql("SELECT key, value FROM si3 ORDER BY key, value"),
+        sql("SELECT key, value FROM si3 LIMIT 1").collect().toSeq)
+
+      sql("SELECT 1 INTO si4").collect()
+      checkAnswer(
+        sql("SELECT 1 FROM si4"),
+        sql("SELECT 1").collect().toSeq)
+    }
+  }
+
+  test("select into(specifying the column list)") {
+    withTable("mytable1", "si1") {
+      Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
+
+      sql("SELECT key as a,value as b INTO si1 FROM mytable1")
+      checkAnswer(
+        sql("SELECT a, b from si1"),
+        sql("select key, value from mytable1").collect())
+    }
+  }
+
+  test("select into(double nested data)") {
+    withTable("nested", "si1") {
+      sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+        .toDF().createOrReplaceTempView("nested")
+      checkAnswer(
+        sql("SELECT f1.f2.f3 FROM nested"),
+        Row(1))
+
+      sql("SELECT * INTO si1 FROM nested")
+      checkAnswer(
+        sql("SELECT * FROM si1"),
+        sql("SELECT * FROM nested").collect().toSeq)
+
+      intercept[AnalysisException] {
+        sql("SELECT * INTO si1 FROM notexists").collect()
+      }
+    }
+  }
 }

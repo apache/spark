@@ -132,6 +132,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody.asScala.map {
       body =>
+        assert(body.querySpecification.intoClause == null,
+          "Multi-Insert queries cannot have a into clause in their individual SELECT statements",
+          body)
+
         assert(body.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
@@ -155,11 +159,26 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitSingleInsertQuery(
       ctx: SingleInsertQueryContext): LogicalPlan = withOrigin(ctx) {
+    // Find intoClause
+    val intoClause = ctx.queryTerm match {
+      case queryTermDefault : QueryTermDefaultContext =>
+        queryTermDefault.queryPrimary match {
+          case queryPrimaryDefault : QueryPrimaryDefaultContext =>
+            queryPrimaryDefault.querySpecification.intoClause
+          case _ => null
+        }
+      case _ => null
+    }
+    if (ctx.insertInto != null && intoClause != null) {
+      operationNotAllowed("INSERT INTO ... SELECT INTO", ctx)
+    }
     plan(ctx.queryTerm).
       // Add organization statements.
       optionalMap(ctx.queryOrganization)(withQueryResultClauses).
       // Add insert.
-      optionalMap(ctx.insertInto())(withInsertInto)
+      optionalMap(ctx.insertInto())(withInsertInto).
+      // exist intoClause
+      optionalMap(intoClause)(withSelectInto)
   }
 
   /**
@@ -392,6 +411,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     throw new ParseException("Script Transform is not supported", ctx)
+  }
+
+  /**
+   * Change to Hive CTAS statement.
+   */
+  protected def withSelectInto(
+      ctx: IntoClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    throw new ParseException("Script Select Into is not supported", ctx)
   }
 
   /**

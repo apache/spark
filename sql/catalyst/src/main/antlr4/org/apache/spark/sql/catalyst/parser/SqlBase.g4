@@ -339,12 +339,17 @@ querySpecification
        fromClause?
        (WHERE where=booleanExpression)?)
     | ((kind=SELECT setQuantifier? namedExpressionSeq fromClause?
+       |kind=SELECT setQuantifier? namedExpressionSeq intoClause? fromClause?
        | fromClause (kind=SELECT setQuantifier? namedExpressionSeq)?)
        lateralView*
        (WHERE where=booleanExpression)?
        aggregation?
        (HAVING having=booleanExpression)?
        windows?)
+    ;
+
+intoClause
+    : INTO tableIdentifier
     ;
 
 fromClause
