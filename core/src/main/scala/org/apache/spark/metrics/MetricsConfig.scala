@@ -33,16 +33,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private val DEFAULT_PREFIX = "*"
   private val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
   private val DEFAULT_METRICS_CONF_FILENAME = "metrics.properties"
-  // This is intetionally made to not fall in the prefix (spark.metrics.conf) because it's not
-  // intended to be a _real_ metrics property, for example, its first part before the dot
-  // doesn't represent the instance (master, worker, etc.). Instead, it's used to configure the
-  // metrics systems. Where accessed, this namespace property should be directly accessed
-  // from SparkConf using its full name, represented here.
-  private val NAMESPACE_CONFIG_PROPERTY = "spark.metrics.namespace"
 
   private[metrics] val properties = new Properties()
   private[metrics] var perInstanceSubProperties: mutable.HashMap[String, Properties] = null
-  private[metrics] var metricsNamespace: String = null
 
   private def setDefaultProperties(prop: Properties) {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
@@ -88,7 +81,6 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
         prop.put(k, v)
       }
     }
-    metricsNamespace = conf.getOption(NAMESPACE_CONFIG_PROPERTY).getOrElse("spark.app.id")
   }
 
   /**

@@ -346,17 +346,17 @@ This allows users to report Spark metrics to a variety of sinks including HTTP, 
 files. The metrics system is configured via a configuration file that Spark expects to be present
 at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the
 `spark.metrics.conf` [configuration property](configuration.html#spark-properties).
-Also, a custom namespace can be specified to report metrics using `spark.metrics.namespace` 
-configuration property. By default, the root namespace used for driver or executor metrics is 
+By default, the root namespace used for driver or executor metrics is 
 the value of `spark.app.id`. However, often times, users want to be able to track the metrics 
-across apps for driver and executor metrics, which is hard to do with application ID 
+across apps for driver and executors, which is hard to do with application ID 
 (i.e. `spark.app.id`) since it changes with every invocation of the app. For such use cases,
-users can set the `spark.metrics.namespace` property to another spark configuration key like
-`spark.app.name` which is then used to populate the root namespace of the metrics system 
-(with the app name in our example). `spark.metrics.namespace` property can be set to any 
-arbitrary spark property key, whose value would be used to set the root namespace of the 
-metrics system. Non driver and executor metrics are never prefixed with `spark.app.id`, nor
-does the `spark.metrics.namespace` property have any such affect on such metrics.
+a custom namespace can be specified for metrics reporting using `spark.metrics.namespace`
+configuration property. 
+If, say, users wanted to set the metrics namespace to the name of the application, they
+can set the `spark.metrics.namespace` property to a value like `${spark.app.name}`. This value is
+then expanded appropriately by Spark and is used as the root namespace of the metrics system. 
+Non driver and executor metrics are never prefixed with `spark.app.id`, nor does the 
+`spark.metrics.namespace` property have any such affect on such metrics.
 
 Spark's metrics are decoupled into different
 _instances_ corresponding to Spark components. Within each instance, you can configure a

@@ -26,6 +26,7 @@ import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.{Source, StaticSources}
@@ -125,7 +126,9 @@ private[spark] class MetricsSystem private (
    *         application, executor/driver and metric source.
    */
   private[spark] def buildRegistryName(source: Source): String = {
-    val metricsNamespace = conf.getOption(metricsConfig.metricsNamespace)
+    val metricsNamespace = conf.get(METRICS_NAMESPACE).map(Some(_))
+      .getOrElse(conf.getOption("spark.app.id"))
+
     val executorId = conf.getOption("spark.executor.id")
     val defaultName = MetricRegistry.name(source.sourceName)
 
@@ -135,12 +138,13 @@ private[spark] class MetricsSystem private (
       } else {
         // Only Driver and Executor set spark.app.id and spark.executor.id.
         // Other instance types, e.g. Master and Worker, are not related to a specific application.
-        val warningMsgFormat = s"Using default name $defaultName for source because %s is not set."
         if (metricsNamespace.isEmpty) {
-          logWarning(warningMsgFormat.format(metricsConfig.metricsNamespace))
+          logWarning(s"Using default name $defaultName for source because neither " +
+            s"${METRICS_NAMESPACE.key} nor spark.app.id is set.")
         }
         if (executorId.isEmpty) {
-          logWarning(warningMsgFormat.format("spark.executor.id"))
+          logWarning(s"Using default name $defaultName for source because spark.executor.id is " +
+            s"not set.")
         }
         defaultName
       }
