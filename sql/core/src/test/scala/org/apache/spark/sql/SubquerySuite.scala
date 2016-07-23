@@ -128,7 +128,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
 
@@ -267,7 +267,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15832: Test embedded existential predicate sub-queries") {
-    withTempTable("t1", "t2", "t3", "t4", "t5") {
+    withTempView("t1", "t2", "t3", "t4", "t5") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
       Seq((1, 1), (2, 2), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t3")
