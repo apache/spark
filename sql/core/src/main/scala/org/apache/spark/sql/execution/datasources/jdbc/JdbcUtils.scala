@@ -138,7 +138,8 @@ object JdbcUtils extends Logging {
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
 
-  // A `ValueSetter` is responsible for setting a field of an `Row` to `PreparedStatement`.
+  // A `ValueSetter` is responsible for setting a field of a `Row`
+  // to the `PreparedStatement`.
   private type ValueSetter = (Row, Int) => Unit
 
   private def makeSetter(
