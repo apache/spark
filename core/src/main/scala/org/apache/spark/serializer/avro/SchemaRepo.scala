@@ -2,7 +2,8 @@ package org.apache.spark.serializer.avro
 
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 
 /**
  * Created by rotems on 12/6/15.
