@@ -45,6 +45,17 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
 
   override def children: Seq[Expression] = child :: Nil
 
+  // SPARK-16648: Default `TreeNode.withNewChildren` implementation doesn't work for `First` when
+  // both constructor arguments are the same, e.g.:
+  //
+  //   FIRST_VALUE(FALSE) // The 2nd argument defaults to FALSE
+  //   FIRST_VALUE(FALSE, FALSE)
+  //   FIRST_VALUE(TRUE, TRUE)
+  override def withNewChildren(newChildren: Seq[Expression]): Expression = {
+    val Seq(newChild) = newChildren
+    copy(child = newChild)
+  }
+
   override def nullable: Boolean = true
 
   // First is not a deterministic function.
