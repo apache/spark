@@ -353,10 +353,10 @@ private[sql] class JDBCRDD(
     case DecimalType.Fixed(p, s) =>
       (rs: ResultSet, pos: Int) =>
         val decimalVal = rs.getBigDecimal(pos)
-        if (decimalVal == null) {
-          null
-        } else {
+        if (decimalVal != null) {
           Decimal(decimalVal, p, s)
+        } else {
+          null
         }
 
     case DoubleType =>
@@ -441,7 +441,8 @@ private[sql] class JDBCRDD(
           }
 
       case LongType if metadata.contains("binarylong") =>
-        throw new IllegalArgumentException(s"Unsupported array element conversion.")
+        throw new IllegalArgumentException(s"Unsupported array element " +
+          s"type ${dt.simpleString} based on binary")
 
       case ArrayType(_, _) =>
         throw new IllegalArgumentException("Nested arrays unsupported")
