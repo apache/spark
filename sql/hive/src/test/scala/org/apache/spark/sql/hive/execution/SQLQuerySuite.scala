@@ -19,6 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import scala.sys.process.Process
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
@@ -64,14 +67,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import spark.implicits._
 
   test("script") {
-    val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
-    df.createOrReplaceTempView("script_table")
-    val query1 = sql(
-      """
-        |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
-        |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
-        |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
-    checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
+      val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
+      df.createOrReplaceTempView("script_table")
+      val query1 = sql(
+        """
+          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+          |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
+          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+      checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    }
+    // else skip this test
   }
 
   test("UDTF") {
@@ -1765,5 +1771,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           Row(2))
       }
     }
+  }
+
+  def testCommandAvailable(command: String): Boolean = {
+    Try(Process(command) !!).isSuccess
   }
 }
