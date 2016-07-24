@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -53,13 +54,10 @@ case class CreateTableUsing(
  * analyzer can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
-case class CreateTableUsingAsSelect(
-    tableIdent: TableIdentifier,
+case class CreateTableAsSelect(
+    tableDesc: CatalogTable,
     provider: String,
-    partitionColumns: Array[String],
-    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
-    options: Map[String, String],
     child: LogicalPlan) extends logical.UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }

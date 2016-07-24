@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTableAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.streaming.{DataStreamWriter, StreamingQuery}
@@ -175,7 +175,7 @@ class Dataset[T] private[sql](
     def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
       case _: Command |
            _: InsertIntoTable |
-           _: CreateTableUsingAsSelect => true
+           _: CreateTableAsSelect => true
       case _ => false
     }
 

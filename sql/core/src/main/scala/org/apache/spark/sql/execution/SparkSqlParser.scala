@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.DataType
 
@@ -310,7 +310,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
+   * Create a [[CreateTableUsing]] or a [[CreateTableAsSelect]] logical plan.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
@@ -340,8 +340,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         SaveMode.ErrorIfExists
       }
 
-      CreateTableUsingAsSelect(
-        table, provider, partitionColumnNames, bucketSpec, mode, options, query)
+      val sortColumnNames = bucketSpec.map(_.sortColumnNames).getOrElse(Seq.empty)
+      val bucketColumnNames = bucketSpec.map(_.bucketColumnNames).getOrElse(Seq.empty)
+      val numBuckets = bucketSpec.map(_.numBuckets).getOrElse(-1)
+
+      val tableDesc = CatalogTable(
+        identifier = table,
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = Seq.empty[CatalogColumn],
+        partitionColumnNames = partitionColumnNames,
+        sortColumnNames = sortColumnNames,
+        bucketColumnNames = bucketColumnNames,
+        numBuckets = numBuckets,
+        properties = options)
+
+      CreateTableAsSelect(
+        tableDesc = tableDesc, provider = provider, mode = mode, child = query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
       if (struct.isEmpty && bucketSpec.nonEmpty) {
@@ -891,8 +906,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a table, returning either a [[CreateTableCommand]] or a
-   * [[CreateHiveTableAsSelectLogicalPlan]].
+   * Create a table, returning either a [[CreateTableCommand]] or a [[CreateTableAsSelect]].
    *
    * This is not used to create datasource tables, which is handled through
    * "CREATE TABLE ... USING ...".
@@ -1005,6 +1019,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       properties = properties,
       comment = comment)
 
+    val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+
     selectQuery match {
       case Some(q) =>
         // Just use whatever is projected in the select statement as our schema
@@ -1024,27 +1040,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         }
 
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
-        if (conf.convertCTAS && !hasStorageProperties) {
-          val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
-          // are empty Maps.
-          val optionsWithPath = if (location.isDefined) {
-            Map("path" -> location.get)
-          } else {
-            Map.empty[String, String]
-          }
-          CreateTableUsingAsSelect(
-            tableIdent = tableDesc.identifier,
-            provider = conf.defaultDataSourceName,
-            partitionColumns = tableDesc.partitionColumnNames.toArray,
-            bucketSpec = None,
-            mode = mode,
-            options = optionsWithPath,
-            q
-          )
-        } else {
-          CreateHiveTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
-        }
+
+        val provider =
+          if (conf.convertCTAS && !hasStorageProperties) conf.defaultDataSourceName else "hive"
+
+        CreateTableAsSelect(
+          tableDesc = tableDesc,
+          provider = provider,
+          mode = mode,
+          child = q)
+
       case None => CreateTableCommand(tableDesc, ifNotExists)
     }
   }

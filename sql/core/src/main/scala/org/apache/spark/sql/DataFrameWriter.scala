@@ -23,8 +23,9 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 
 /**
@@ -366,14 +367,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
+        val bucketSpec = getBucketSpec
+        val sortColumnNames = bucketSpec.map(_.sortColumnNames).getOrElse(Seq.empty)
+        val bucketColumnNames = bucketSpec.map(_.bucketColumnNames).getOrElse(Seq.empty)
+        val numBuckets = bucketSpec.map(_.numBuckets).getOrElse(-1)
+
+        val tableDesc = CatalogTable(
+          identifier = tableIdent,
+          tableType = CatalogTableType.MANAGED,
+          storage = CatalogStorageFormat.empty,
+          schema = Seq.empty[CatalogColumn],
+          partitionColumnNames = partitioningColumns.getOrElse(Seq.empty[String]),
+          sortColumnNames = sortColumnNames,
+          bucketColumnNames = bucketColumnNames,
+          numBuckets = numBuckets,
+          properties = extraOptions.toMap)
+
         val cmd =
-          CreateTableUsingAsSelect(
-            tableIdent,
+          CreateTableAsSelect(
+            tableDesc,
             source,
-            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-            getBucketSpec,
             mode,
-            extraOptions.toMap,
             df.logicalPlan)
         df.sparkSession.sessionState.executePlan(cmd).toRdd
     }

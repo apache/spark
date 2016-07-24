@@ -445,15 +445,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new AnalysisException(
           "allowExisting should be set to false when creating a temporary table.")
 
-      case c: CreateTableUsingAsSelect =>
+      case c: CreateTableAsSelect if c.provider != "hive" =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
-            c.tableIdent,
+            c.tableDesc,
             c.provider,
-            c.partitionColumns,
-            c.bucketSpec,
             c.mode,
-            c.options,
             c.child)
         ExecutedCommandExec(cmd) :: Nil
 
