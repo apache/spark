@@ -99,6 +99,22 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * Truncates a table from the JDBC database.
+   */
+  def truncateTable(conn: Connection, table: String): Unit = {
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(s"TRUNCATE TABLE $table")
+    } finally {
+      statement.close()
+    }
+  }
+
+  def isCascadingTruncateTable(url: String): Option[Boolean] = {
+    JdbcDialects.get(url).isCascadingTruncateTable()
+  }
+
+  /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType, dialect: JdbcDialect)
