@@ -96,7 +96,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       val piped = nums.pipe(Seq("cat"),
         Map[String, String](),
         (f: String => Unit) => {
-          bl.value.map(f(_)); f("\u0001")
+          bl.value.foreach(f); f("\u0001")
         },
         (i: Int, f: String => Unit) => f(i + "_"))
 
@@ -117,7 +117,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
         pipe(Seq("cat"),
           Map[String, String](),
           (f: String => Unit) => {
-            bl.value.map(f(_)); f("\u0001")
+            bl.value.foreach(f); f("\u0001")
           },
           (i: Tuple2[String, Iterable[String]], f: String => Unit) => {
             for (e <- i._2) {
