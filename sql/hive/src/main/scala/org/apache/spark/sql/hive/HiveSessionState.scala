@@ -93,7 +93,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
-          Scripts,
+          HiveScripts,
           Aggregation,
           JoinSelection,
           BasicOperators

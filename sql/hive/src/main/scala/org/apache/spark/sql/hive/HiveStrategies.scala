@@ -117,7 +117,7 @@ private[hive] trait HiveStrategies {
 
   val sparkSession: SparkSession
 
-  object Scripts extends Strategy {
+  object HiveScripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)

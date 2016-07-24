@@ -313,6 +313,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object Scripts extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+        ScriptTransformationExec(
+          input,
+          script,
+          output,
+          planLater(child),
+          ScriptTransformIOSchema(ioschema)
+        ) :: Nil
+      case _ => Nil
+    }
+  }
+
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def numPartitions: Int = self.numPartitions
