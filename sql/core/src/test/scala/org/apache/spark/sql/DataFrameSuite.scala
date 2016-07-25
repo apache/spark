@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, ExampleMoney, ExampleMoneyUDT, SharedSQLContext}
+import org.apache.spark.sql.test.{ExampleMoney, ExampleMoneyUDT, ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -111,7 +111,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test filtering with predicates on UDT columns") {
-    val rowRDD = sparkContext.parallelize(Seq(Row(new ExampleMoney(1.0)), Row(new ExampleMoney(2.0)), Row(new ExampleMoney(3.0))))
+    val rowRDD = sparkContext.parallelize(
+      Seq(Row(new ExampleMoney(1.0)), Row(new ExampleMoney(2.0)), Row(new ExampleMoney(3.0)))
+    )
     val schema = StructType(Array(StructField("dollar", new ExampleMoneyUDT(), false)))
     val df = spark.createDataFrame(rowRDD, schema)
 
@@ -122,7 +124,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("test filtering with predicates on UDT columns in spark sql") {
-    val rowRDD = sparkContext.parallelize(Seq(Row(new ExampleMoney(1.0)), Row(new ExampleMoney(2.0)), Row(new ExampleMoney(3.0))))
+    val rowRDD = sparkContext.parallelize(
+      Seq(Row(new ExampleMoney(1.0)), Row(new ExampleMoney(2.0)), Row(new ExampleMoney(3.0)))
+    )
     val schema = StructType(Array(StructField("dollar", new ExampleMoneyUDT(), false)))
     val df = spark.createDataFrame(rowRDD, schema)
     df.createOrReplaceTempView("udtData")

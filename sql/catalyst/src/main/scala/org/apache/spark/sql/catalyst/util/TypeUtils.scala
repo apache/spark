@@ -66,7 +66,6 @@ object TypeUtils {
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case u: UserDefinedType[_] => u.interpretedOrdering
-      case p: PythonUserDefinedType => p.interpretedOrdering
     }
   }
 

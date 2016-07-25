@@ -619,7 +619,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_udt_with_predicates(self):
         from pyspark.sql.tests import ExampleMoney, ExampleMoneyUDT
-        rows = [Row(dollars=ExampleMoney(1.0)), Row(dollars=ExampleMoney(2.0)), , Row(dollars=ExampleMoney(3.0))]
+        rows = [
+            Row(dollars=ExampleMoney(1.0)),
+            Row(dollars=ExampleMoney(2.0)),
+            Row(dollars=ExampleMoney(3.0))
+        ]
         df = self.spark.createDataFrame(rows)
 
         less_than = df.filter(df.dollars < 2.0)
@@ -633,7 +637,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_udt_with_predicates_in_sql(self):
         from pyspark.sql.tests import ExampleMoney, ExampleMoneyUDT
-        rows = [Row(dollars=ExampleMoney(1.0)), Row(dollars=ExampleMoney(2.0)), , Row(dollars=ExampleMoney(3.0))]
+        rows = [
+            Row(dollars=ExampleMoney(1.0)),
+            Row(dollars=ExampleMoney(2.0)),
+            Row(dollars=ExampleMoney(3.0))
+        ]
         df = self.spark.createDataFrame(rows)
         df.createOrReplaceTempView("money_table")
 

@@ -23,6 +23,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.catalyst.util.TypeUtils
 
 /**
  * The data type for User Defined Types (UDTs).
@@ -42,6 +43,10 @@ import org.apache.spark.annotation.DeveloperApi
  */
 private[spark]
 abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
+
+  final def interpretedOrdering: Ordering[Any] = {
+    TypeUtils.getInterpretedOrdering(this.sqlType)
+  }
 
   /** Underlying storage type for this UDT */
   def sqlType: DataType
@@ -121,6 +126,11 @@ private[sql] class PythonUserDefinedType(
       ("pyClass" -> pyUDT) ~
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: DataType => this.acceptsType(that)
+    case _ => false
   }
 
   override def hashCode(): Int = Objects.hashCode(pyUDT)
