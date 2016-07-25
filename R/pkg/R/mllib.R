@@ -89,6 +89,8 @@ NULL
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
+#' @param weightCol The weight column name. If this is not set or NULL, we treat all instance
+#'                  weights as 1.0.
 #' @param tol Positive convergence tolerance of iterations.
 #' @param maxIter Integer giving the maximal number of IRLS iterations.
 #' @aliases spark.glm,SparkDataFrame,formula-method
@@ -119,7 +121,7 @@ NULL
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25) {
+          function(data, formula, family = gaussian, weightCol = NULL, tol = 1e-6, maxIter = 25) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -132,9 +134,12 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             }
 
             formula <- paste(deparse(formula), collapse = "")
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
-                                "fit", formula, data@sdf, family$family, family$link,
+                                "fit", formula, data@sdf, family$family, family$link, weightCol,
                                 tol, as.integer(maxIter))
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
@@ -149,6 +154,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
+#' @param weightCol The weight column name. If this is not set or NULL, we treat all instance
+#'                  weights as 1.0.
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
 #' @return \code{glm} returns a fitted generalized linear model.
@@ -165,8 +172,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @note glm since 1.5.0
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25) {
-            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
+          function(formula, family = gaussian, data, weightCol = NULL, epsilon = 1e-6, maxit = 25) {
+            spark.glm(data, formula, family, weightCol, tol = epsilon, maxIter = maxit)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
