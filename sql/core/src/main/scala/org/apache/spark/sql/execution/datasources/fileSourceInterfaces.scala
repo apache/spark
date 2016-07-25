@@ -389,16 +389,17 @@ private[sql] object HadoopFsRelation extends Logging {
   // tasks/jobs may leave partial/corrupted data files there.  Files and directories whose name
   // start with "." are also ignored.
   def listLeafFiles(fs: FileSystem, status: FileStatus, filter: PathFilter): Array[FileStatus] = {
-    logInfo(s"Listing ${status.getPath}")
+    logTrace(s"Listing ${status.getPath}")
     val name = status.getPath.getName.toLowerCase
     if (shouldFilterOut(name)) {
-      Array.empty
+      Array.empty[FileStatus]
     } else {
       val statuses = {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
         val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir, filter))
         if (filter != null) stats.filter(f => filter.accept(f.getPath)) else stats
       }
+      // statuses do not have any dirs.
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus => f
 
@@ -439,7 +440,8 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkSession: SparkSession): mutable.LinkedHashSet[FileStatus] = {
+      sparkSession: SparkSession,
+      ignoreFileNotFound: Boolean): mutable.LinkedHashSet[FileStatus] = {
     assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
@@ -460,7 +462,11 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
-        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter)).getOrElse(Array.empty)
+        try {
+          listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
+        } catch {
+          case e: java.io.FileNotFoundException if ignoreFileNotFound => Array.empty[FileStatus]
+        }
       }
     }.map { status =>
       val blockLocations = status match {

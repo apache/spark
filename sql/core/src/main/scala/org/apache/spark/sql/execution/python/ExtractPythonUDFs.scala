@@ -150,10 +150,10 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
         sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
-      val rewritten = plan.transformExpressions {
+      val rewritten = plan.withNewChildren(newChildren).transformExpressions {
         case p: PythonUDF if attributeMap.contains(p) =>
           attributeMap(p)
-      }.withNewChildren(newChildren)
+      }
 
       // extract remaining python UDFs recursively
       val newPlan = extract(rewritten)

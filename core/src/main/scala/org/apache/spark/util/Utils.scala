@@ -52,6 +52,7 @@ import org.slf4j.Logger
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
@@ -1771,50 +1772,66 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Terminates a process waiting for at most the specified duration. Returns whether
-   * the process terminated.
+   * Terminates a process waiting for at most the specified duration.
+   *
+   * @return the process exit value if it was successfully terminated, else None
    */
   def terminateProcess(process: Process, timeoutMs: Long): Option[Int] = {
-    try {
-      // Java8 added a new API which will more forcibly kill the process. Use that if available.
-      val destroyMethod = process.getClass().getMethod("destroyForcibly");
-      destroyMethod.setAccessible(true)
-      destroyMethod.invoke(process)
-    } catch {
-      case NonFatal(e) =>
-        if (!e.isInstanceOf[NoSuchMethodException]) {
-          logWarning("Exception when attempting to kill process", e)
-        }
-        process.destroy()
-    }
+    // Politely destroy first
+    process.destroy()
+
     if (waitForProcess(process, timeoutMs)) {
+      // Successful exit
       Option(process.exitValue())
     } else {
-      None
+      // Java 8 added a new API which will more forcibly kill the process. Use that if available.
+      try {
+        classOf[Process].getMethod("destroyForcibly").invoke(process)
+      } catch {
+        case _: NoSuchMethodException => return None // Not available; give up
+        case NonFatal(e) => logWarning("Exception when attempting to kill process", e)
+      }
+      // Wait, again, although this really should return almost immediately
+      if (waitForProcess(process, timeoutMs)) {
+        Option(process.exitValue())
+      } else {
+        logWarning("Timed out waiting to forcibly kill process")
+        None
+      }
     }
   }
 
   /**
    * Wait for a process to terminate for at most the specified duration.
-   * Return whether the process actually terminated after the given timeout.
+   *
+   * @return whether the process actually terminated before the given timeout.
    */
   def waitForProcess(process: Process, timeoutMs: Long): Boolean = {
-    var terminated = false
-    val startTime = System.currentTimeMillis
-    while (!terminated) {
-      try {
-        process.exitValue()
-        terminated = true
-      } catch {
-        case e: IllegalThreadStateException =>
-          // Process not terminated yet
-          if (System.currentTimeMillis - startTime > timeoutMs) {
-            return false
+    try {
+      // Use Java 8 method if available
+      classOf[Process].getMethod("waitFor", java.lang.Long.TYPE, classOf[TimeUnit])
+        .invoke(process, timeoutMs.asInstanceOf[java.lang.Long], TimeUnit.MILLISECONDS)
+        .asInstanceOf[Boolean]
+    } catch {
+      case _: NoSuchMethodException =>
+        // Otherwise implement it manually
+        var terminated = false
+        val startTime = System.currentTimeMillis
+        while (!terminated) {
+          try {
+            process.exitValue()
+            terminated = true
+          } catch {
+            case e: IllegalThreadStateException =>
+              // Process not terminated yet
+              if (System.currentTimeMillis - startTime > timeoutMs) {
+                return false
+              }
+              Thread.sleep(100)
           }
-          Thread.sleep(100)
-      }
+        }
+        true
     }
-    true
   }
 
   /**
@@ -1864,7 +1881,11 @@ private[spark] object Utils extends Logging {
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {
-      case NonFatal(_) | _: InterruptedException | _: NotImplementedError | _: ControlThrowable =>
+      case NonFatal(_) |
+           _: InterruptedException |
+           _: NotImplementedError |
+           _: ControlThrowable |
+           _: LinkageError =>
         false
       case _ =>
         true
@@ -2309,19 +2330,39 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return whether dynamic allocation is enabled in the given conf
-   * Dynamic allocation and explicitly setting the number of executors are inherently
-   * incompatible. In environments where dynamic allocation is turned on by default,
-   * the latter should override the former (SPARK-9092).
+   * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    val numExecutor = conf.getInt("spark.executor.instances", 0)
     val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
-    if (numExecutor != 0 && dynamicAllocationEnabled) {
-      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
-    }
-    numExecutor == 0 && dynamicAllocationEnabled &&
+    dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
+  }
+
+  /**
+   * Return the initial number of executors for dynamic allocation.
+   */
+  def getDynamicAllocationInitialExecutors(conf: SparkConf): Int = {
+    if (conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
+      logWarning(s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key} less than " +
+        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, ignoring its setting, " +
+          "please update your configs.")
+    }
+
+    if (conf.get(EXECUTOR_INSTANCES).getOrElse(0) < conf.get(DYN_ALLOCATION_MIN_EXECUTORS)) {
+      logWarning(s"${EXECUTOR_INSTANCES.key} less than " +
+        s"${DYN_ALLOCATION_MIN_EXECUTORS.key} is invalid, ignoring its setting, " +
+          "please update your configs.")
+    }
+
+    val initialExecutors = Seq(
+      conf.get(DYN_ALLOCATION_MIN_EXECUTORS),
+      conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS),
+      conf.get(EXECUTOR_INSTANCES).getOrElse(0)).max
+
+    logInfo(s"Using initial executors = $initialExecutors, max of " +
+      s"${DYN_ALLOCATION_INITIAL_EXECUTORS.key}, ${DYN_ALLOCATION_MIN_EXECUTORS.key} and " +
+        s"${EXECUTOR_INSTANCES.key}")
+    initialExecutors
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
@@ -2368,9 +2409,9 @@ private[spark] object Utils extends Logging {
    * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
    * only the "spark.jars" property.
    */
-  def getUserJars(conf: SparkConf): Seq[String] = {
+  def getUserJars(conf: SparkConf, isShell: Boolean = false): Seq[String] = {
     val sparkJars = conf.getOption("spark.jars")
-    if (conf.get("spark.master") == "yarn") {
+    if (conf.get("spark.master") == "yarn" && isShell) {
       val yarnJars = conf.getOption("spark.yarn.dist.jars")
       unionFileLists(sparkJars, yarnJars).toSeq
     } else {

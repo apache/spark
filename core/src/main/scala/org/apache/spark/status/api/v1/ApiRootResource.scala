@@ -91,12 +91,28 @@ private[v1] class ApiRootResource extends UIRootFromServletContext {
     }
   }
 
+  @Path("applications/{appId}/allexecutors")
+  def getAllExecutors(@PathParam("appId") appId: String): AllExecutorListResource = {
+    uiRoot.withSparkUI(appId, None) { ui =>
+      new AllExecutorListResource(ui)
+    }
+  }
+
   @Path("applications/{appId}/{attemptId}/executors")
   def getExecutors(
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): ExecutorListResource = {
     uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
       new ExecutorListResource(ui)
+    }
+  }
+
+  @Path("applications/{appId}/{attemptId}/allexecutors")
+  def getAllExecutors(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): AllExecutorListResource = {
+    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
+      new AllExecutorListResource(ui)
     }
   }
 

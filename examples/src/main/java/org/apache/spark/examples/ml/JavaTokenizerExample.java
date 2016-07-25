@@ -57,17 +57,24 @@ public class JavaTokenizerExample {
 
     Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
 
-    Dataset<Row> wordsDataFrame = tokenizer.transform(sentenceDataFrame);
-    for (Row r : wordsDataFrame.select("words", "label").takeAsList(3)) {
+    RegexTokenizer regexTokenizer = new RegexTokenizer()
+        .setInputCol("sentence")
+        .setOutputCol("words")
+        .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
+
+    Dataset<Row> tokenized = tokenizer.transform(sentenceDataFrame);
+    for (Row r : tokenized.select("words", "label").takeAsList(3)) {
       java.util.List<String> words = r.getList(0);
       for (String word : words) System.out.print(word + " ");
       System.out.println();
     }
 
-    RegexTokenizer regexTokenizer = new RegexTokenizer()
-      .setInputCol("sentence")
-      .setOutputCol("words")
-      .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
+    Dataset<Row> regexTokenized = regexTokenizer.transform(sentenceDataFrame);
+    for (Row r : regexTokenized.select("words", "label").takeAsList(3)) {
+      java.util.List<String> words = r.getList(0);
+      for (String word : words) System.out.print(word + " ");
+      System.out.println();
+    }
     // $example off$
     spark.stop();
   }

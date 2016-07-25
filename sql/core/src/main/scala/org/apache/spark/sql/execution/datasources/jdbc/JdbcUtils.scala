@@ -34,6 +34,11 @@ import org.apache.spark.sql.types._
  */
 object JdbcUtils extends Logging {
 
+  // the property names are case sensitive
+  val JDBC_BATCH_FETCH_SIZE = "fetchsize"
+  val JDBC_BATCH_INSERT_SIZE = "batchsize"
+  val JDBC_TXN_ISOLATION_LEVEL = "isolationLevel"
+
   /**
    * Returns a factory for creating connections to the given JDBC URL.
    *
@@ -94,10 +99,27 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * Truncates a table from the JDBC database.
+   */
+  def truncateTable(conn: Connection, table: String): Unit = {
+    val statement = conn.createStatement
+    try {
+      statement.executeUpdate(s"TRUNCATE TABLE $table")
+    } finally {
+      statement.close()
+    }
+  }
+
+  def isCascadingTruncateTable(url: String): Option[Boolean] = {
+    JdbcDialects.get(url).isCascadingTruncateTable()
+  }
+
+  /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val columns = rddSchema.fields.map(_.name).mkString(",")
+  def insertStatement(conn: Connection, table: String, rddSchema: StructType, dialect: JdbcDialect)
+      : PreparedStatement = {
+    val columns = rddSchema.fields.map(x => dialect.quoteIdentifier(x.name)).mkString(",")
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
     val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
     conn.prepareStatement(sql)
@@ -134,8 +156,8 @@ object JdbcUtils extends Logging {
 
   /**
    * Saves a partition of a DataFrame to the JDBC database.  This is done in
-   * a single database transaction in order to avoid repeatedly inserting
-   * data as much as possible.
+   * a single database transaction (unless isolation level is "NONE")
+   * in order to avoid repeatedly inserting data as much as possible.
    *
    * It is still theoretically possible for rows in a DataFrame to be
    * inserted into the database more than once if a stage somehow fails after
@@ -153,23 +175,46 @@ object JdbcUtils extends Logging {
       rddSchema: StructType,
       nullTypes: Array[Int],
       batchSize: Int,
-      dialect: JdbcDialect): Iterator[Byte] = {
+      dialect: JdbcDialect,
+      isolationLevel: Int): Iterator[Byte] = {
+    require(batchSize >= 1,
+      s"Invalid value `${batchSize.toString}` for parameter " +
+      s"`${JdbcUtils.JDBC_BATCH_INSERT_SIZE}`. The minimum value is 1.")
+
     val conn = getConnection()
     var committed = false
-    val supportsTransactions = try {
-      conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
-      conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Exception while detecting transaction support", e)
-        true
+
+    var finalIsolationLevel = Connection.TRANSACTION_NONE
+    if (isolationLevel != Connection.TRANSACTION_NONE) {
+      try {
+        val metadata = conn.getMetaData
+        if (metadata.supportsTransactions()) {
+          // Update to at least use the default isolation, if any transaction level
+          // has been chosen and transactions are supported
+          val defaultIsolation = metadata.getDefaultTransactionIsolation
+          finalIsolationLevel = defaultIsolation
+          if (metadata.supportsTransactionIsolationLevel(isolationLevel))  {
+            // Finally update to actually requested level if possible
+            finalIsolationLevel = isolationLevel
+          } else {
+            logWarning(s"Requested isolation level $isolationLevel is not supported; " +
+                s"falling back to default isolation level $defaultIsolation")
+          }
+        } else {
+          logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
+        }
+      } catch {
+        case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
+      }
     }
+    val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
 
     try {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
+        conn.setTransactionIsolation(finalIsolationLevel)
       }
-      val stmt = insertStatement(conn, table, rddSchema)
+      val stmt = insertStatement(conn, table, rddSchema, dialect)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -252,7 +297,7 @@ object JdbcUtils extends Logging {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field =>
-      val name = field.name
+      val name = dialect.quoteIdentifier(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
@@ -275,10 +320,18 @@ object JdbcUtils extends Logging {
 
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
-    val batchSize = properties.getProperty("batchsize", "1000").toInt
-    df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
-    }
+    val batchSize = properties.getProperty(JDBC_BATCH_INSERT_SIZE, "1000").toInt
+    val isolationLevel =
+      properties.getProperty(JDBC_TXN_ISOLATION_LEVEL, "READ_UNCOMMITTED") match {
+        case "NONE" => Connection.TRANSACTION_NONE
+        case "READ_UNCOMMITTED" => Connection.TRANSACTION_READ_UNCOMMITTED
+        case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
+        case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
+        case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
+      }
+    df.foreachPartition(iterator => savePartition(
+      getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect, isolationLevel)
+    )
   }
 
 }

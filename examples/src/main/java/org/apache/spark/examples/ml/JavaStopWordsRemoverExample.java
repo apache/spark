@@ -47,7 +47,7 @@ public class JavaStopWordsRemoverExample {
       .setOutputCol("filtered");
 
     List<Row> data = Arrays.asList(
-      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
+      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "balloon")),
       RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
     );
 

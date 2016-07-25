@@ -195,7 +195,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -208,7 +208,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val row = sqlContext.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
+      val row = sparkSession.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
       val weights = row.getSeq[Double](0).toArray
       val mus = row.getSeq[OldVector](1).toArray
       val sigmas = row.getSeq[OldMatrix](2).toArray

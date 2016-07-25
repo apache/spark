@@ -1188,7 +1188,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.maxFailures</code></td>
   <td>4</td>
   <td>
-    Number of individual task failures before giving up on the job.
+    Number of failures of any particular task before giving up on the job.
+    The total number of failures spread across different tasks will not cause the job
+    to fail; a particular task has to fail this number of attempts.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
@@ -1236,6 +1238,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>
     Initial number of executors to run if dynamic allocation is enabled.
+    <br /><br />
+    If `--num-executors` (or `spark.executor.instances`) is set and larger than this value, it will
+    be used as the initial number of executors.
   </td>
 </tr>
 <tr>
@@ -1561,8 +1566,8 @@ spark.sql("SET -v").show(n=200, truncate=False)
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-# sqlContext is an existing sqlContext.
-properties <- sql(sqlContext, "SET -v")
+sparkR.session()
+properties <- sql("SET -v")
 showDF(properties, numRows = 200, truncate = FALSE)
 {% endhighlight %}
 

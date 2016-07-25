@@ -26,6 +26,8 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.StorageStatusListener
+import org.apache.spark.ui.exec.ExecutorsListener
 import org.apache.spark.ui.jobs.{JobProgressListener, StagePage, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 
@@ -64,11 +66,13 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
   private def renderStagePage(conf: SparkConf): Seq[Node] = {
     val jobListener = new JobProgressListener(conf)
     val graphListener = new RDDOperationGraphListener(conf)
+    val executorsListener = new ExecutorsListener(new StorageStatusListener(conf), conf)
     val tab = mock(classOf[StagesTab], RETURNS_SMART_NULLS)
     val request = mock(classOf[HttpServletRequest])
     when(tab.conf).thenReturn(conf)
     when(tab.progressListener).thenReturn(jobListener)
     when(tab.operationGraphListener).thenReturn(graphListener)
+    when(tab.executorsListener).thenReturn(executorsListener)
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
     when(request.getParameter("id")).thenReturn("0")

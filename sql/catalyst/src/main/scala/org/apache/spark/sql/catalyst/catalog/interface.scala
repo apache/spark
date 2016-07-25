@@ -49,12 +49,12 @@ case class CatalogStorageFormat(
     outputFormat: Option[String],
     serde: Option[String],
     compressed: Boolean,
-    serdeProperties: Map[String, String]) {
+    properties: Map[String, String]) {
 
   override def toString: String = {
     val serdePropsToString =
-      if (serdeProperties.nonEmpty) {
-        s"Properties: " + serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+      if (properties.nonEmpty) {
+        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
       } else {
         ""
       }
@@ -73,7 +73,7 @@ case class CatalogStorageFormat(
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
   val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, serdeProperties = Map.empty)
+    outputFormat = None, serde = None, compressed = false, properties = Map.empty)
 }
 
 /**
@@ -165,7 +165,7 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
+      serdeProperties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
       locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
   }
@@ -244,8 +244,7 @@ trait CatalogRelation {
  */
 case class SimpleCatalogRelation(
     databaseName: String,
-    metadata: CatalogTable,
-    alias: Option[String] = None)
+    metadata: CatalogTable)
   extends LeafNode with CatalogRelation {
 
   override def catalogTable: CatalogTable = metadata
@@ -261,7 +260,7 @@ case class SimpleCatalogRelation(
         CatalystSqlParser.parseDataType(f.dataType),
         // Since data can be dumped in randomly with no validation, everything is nullable.
         nullable = true
-      )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))
+      )(qualifier = Some(metadata.identifier.table))
     }
   }
 

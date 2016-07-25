@@ -179,7 +179,8 @@ case class DescribeDatabaseCommand(
 case class DropTableCommand(
     tableName: TableIdentifier,
     ifExists: Boolean,
-    isView: Boolean) extends RunnableCommand {
+    isView: Boolean,
+    purge: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -206,8 +207,8 @@ case class DropTableCommand(
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }
-      catalog.invalidateTable(tableName)
-      catalog.dropTable(tableName, ifExists)
+      catalog.refreshTable(tableName)
+      catalog.dropTable(tableName, ifExists, purge)
     }
     Seq.empty[Row]
   }
@@ -319,14 +320,14 @@ case class AlterTableSerDePropertiesCommand(
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
         serde = serdeClassName.orElse(table.storage.serde),
-        serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+        serdeProperties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
       val part = catalog.getPartition(tableName, spec)
       val newPart = part.copy(storage = part.storage.copy(
         serde = serdeClassName.orElse(part.storage.serde),
-        serdeProperties = part.storage.serdeProperties ++ serdeProperties.getOrElse(Map())))
+        properties = part.storage.properties ++ serdeProperties.getOrElse(Map())))
       catalog.alterPartitions(tableName, Seq(newPart))
     }
     Seq.empty[Row]
@@ -408,7 +409,8 @@ case class AlterTableRenamePartitionCommand(
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
-    ifExists: Boolean)
+    ifExists: Boolean,
+    purge: Boolean)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -418,7 +420,7 @@ case class AlterTableDropPartitionCommand(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
+    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists, purge = purge)
     Seq.empty[Row]
   }
 
@@ -464,7 +466,7 @@ case class AlterTableSetLocationCommand(
           if (DDLUtils.isDatasourceTable(table)) {
             table.withNewStorage(
               locationUri = Some(location),
-              serdeProperties = table.storage.serdeProperties ++ Map("path" -> location))
+              serdeProperties = table.storage.properties ++ Map("path" -> location))
           } else {
             table.withNewStorage(locationUri = Some(location))
           }

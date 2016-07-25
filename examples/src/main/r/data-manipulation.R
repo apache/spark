@@ -17,7 +17,7 @@
 
 # For this example, we shall use the "flights" dataset
 # The dataset consists of every flight departing Houston in 2011.
-# The data set is made up of 227,496 rows x 14 columns. 
+# The data set is made up of 227,496 rows x 14 columns.
 
 # To run this example use
 # ./bin/spark-submit examples/src/main/r/data-manipulation.R <path_to_csv>
@@ -33,11 +33,8 @@ if (length(args) != 1) {
   q("no")
 }
 
-## Initialize SparkContext
-sc <- sparkR.init(appName = "SparkR-data-manipulation-example")
-
-## Initialize SQLContext
-sqlContext <- sparkRSQL.init(sc)
+## Initialize SparkSession
+sparkR.session(appName = "SparkR-data-manipulation-example")
 
 flightsCsvPath <- args[[1]]
 
@@ -46,7 +43,7 @@ flights_df <- read.csv(flightsCsvPath, header = TRUE)
 flights_df$date <- as.Date(flights_df$date)
 
 ## Filter flights whose destination is San Francisco and write to a local data frame
-SFO_df <- flights_df[flights_df$dest == "SFO", ] 
+SFO_df <- flights_df[flights_df$dest == "SFO", ]
 
 # Convert the local data frame into a SparkDataFrame
 SFO_DF <- createDataFrame(SFO_df)
@@ -102,5 +99,5 @@ if("magrittr" %in% rownames(installed.packages())) {
   head(dailyDelayDF)
 }
 
-# Stop the SparkContext now
-sparkR.stop()
+# Stop the SparkSession now
+sparkR.session.stop()

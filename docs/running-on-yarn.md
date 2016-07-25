@@ -244,7 +244,7 @@ To use a custom metrics.properties for the application master and executors, upd
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
-    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used.
+    The number of executors for static allocation. With <code>spark.dynamicAllocation.enabled</code>, the initial set of executors will be at least this large.
   </td>
 </tr>
 <tr>
@@ -472,6 +472,30 @@ To use a custom metrics.properties for the application master and executors, upd
   Currently supported services are: <code>hive</code>, <code>hbase</code>
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.includePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined include pattern
+  and those log files will be aggregated in a rolling fashion.
+  This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
+  <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
+  configured in yarn-site.xml.
+  This feature can only be used with Hadoop 2.6.1+. The Spark log4j appender needs be changed to use
+  FileAppender or another appender that can handle the files being removed while its running. Based
+  on the file name configured in the log4j configuration (like spark.log), the user should set the
+  regex (spark*) to include all the log files that need to be aggregated.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.excludePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined exclude pattern
+  and those log files will not be aggregated in a rolling fashion. If the log file
+  name matches both the include and the exclude pattern, this file will be excluded eventually.
+  </td>
+</tr>
 </table>
 
 # Important notes
@@ -514,6 +538,37 @@ launch time. This is done by listing them in the `spark.yarn.access.namenodes` p
 ```
 spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
 ```
+
+## Configuring the External Shuffle Service
+
+To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
+instructions:
+
+1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
+pre-packaged distribution.
+1. Locate the `spark-<version>-yarn-shuffle.jar`. This should be under
+`$SPARK_HOME/common/network-yarn/target/scala-<version>` if you are building Spark yourself, and under
+`lib` if you are using a distribution.
+1. Add this jar to the classpath of all `NodeManager`s in your cluster.
+1. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
+then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
+`org.apache.spark.network.yarn.YarnShuffleService`.
+1. Restart all `NodeManager`s in your cluster.
+
+The following extra configuration options are available when the shuffle service is running on YARN:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
+  <td><code>false</code></td>
+  <td>
+    Whether to stop the NodeManager when there's a failure in the Spark Shuffle Service's
+    initialization. This prevents application failures caused by running containers on
+    NodeManagers where the Spark Shuffle Service is not running.
+  </td>
+</tr>
+</table>
 
 ## Launching your application with Apache Oozie
 
