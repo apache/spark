@@ -81,7 +81,7 @@ class GenericArrayData(val array: Array[Any],
 
   def this(array: Array[Any]) = this(array, null, null, null, null, null, null, null)
 
-  def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
+  def this(seqOrArray: Any) = this(GenericRefArrayData.anyToSeq(seqOrArray))
 
   override def copy(): ArrayData = {
     if (booleanArray != null) new GenericArrayData(booleanArray.clone())
