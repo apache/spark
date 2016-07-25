@@ -214,7 +214,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 
     val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
 
-    val options = table.storage.serdeProperties
+    val options = table.storage.properties
     val dataSource =
       DataSource(
         sparkSession,

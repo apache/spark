@@ -404,7 +404,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -488,7 +488,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
       spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -537,7 +537,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -577,7 +577,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           for {
@@ -613,7 +613,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .load(base.getCanonicalPath)
         .createOrReplaceTempView("t")
 
-      withTempTable("t") {
+      withTempView("t") {
         checkAnswer(
           sql("SELECT * FROM t"),
           (1 to 10).map(i => Row(i, null, 1)) ++ (1 to 10).map(i => Row(i, i.toString, 2)))

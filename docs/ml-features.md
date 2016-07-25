@@ -216,7 +216,7 @@ for more details on the API.
 
 [RegexTokenizer](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer) allows more
  advanced tokenization based on regular expression (regex) matching.
- By default, the parameter "pattern" (regex, default: \\s+) is used as delimiters to split the input text.
+ By default, the parameter "pattern" (regex, default: `"\\s+"`) is used as delimiters to split the input text.
  Alternatively, users can set parameter "gaps" to false indicating the regex "pattern" denotes
  "tokens" rather than splitting gaps, and find all matching occurrences as the tokenization result.
 
@@ -815,7 +815,7 @@ The rescaled value for a feature E is calculated as,
 `\begin{equation}
   Rescaled(e_i) = \frac{e_i - E_{min}}{E_{max} - E_{min}} * (max - min) + min
 \end{equation}`
-For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
+For the case `$E_{max} == E_{min}$`, `$Rescaled(e_i) = 0.5 * (max + min)$`
 
 Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 

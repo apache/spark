@@ -104,7 +104,7 @@ public class JavaSparkHiveExample {
     // |Key: 0, Value: val_0|
     // ...
 
-    // You can also use DataFrames to create temporary views within a HiveContext.
+    // You can also use DataFrames to create temporary views within a SparkSession.
     List<Record> records = new ArrayList<>();
     for (int key = 1; key < 100; key++) {
       Record record = new Record();

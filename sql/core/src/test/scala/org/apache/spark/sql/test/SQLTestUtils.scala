@@ -150,7 +150,7 @@ private[sql] trait SQLTestUtils
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
-  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+  protected def withTempView(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
