@@ -1,7 +1,9 @@
 Test Application Builds
 =======================
 
-This directory includes test applications which are built when auditing releases. You can run them locally by setting appropriate environment variables.
+This directory includes test applications which are built when auditing the ivy artifacts corresponding to releases.
+
+You can run them locally by setting appropriate environment variables.
 
 ```
 $ cd sbt_app_core
