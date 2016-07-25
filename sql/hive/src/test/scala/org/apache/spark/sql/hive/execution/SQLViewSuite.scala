@@ -82,7 +82,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("error handling: insert/load/truncate table commands against a temp view") {
     val viewName = "testView"
-    withView(viewName) {
+    withTempView(viewName) {
       sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT id FROM jt")
       var e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $viewName SELECT 1")
