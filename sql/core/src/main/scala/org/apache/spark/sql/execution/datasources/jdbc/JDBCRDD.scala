@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -444,7 +444,10 @@ private[sql] class JDBCRDD(
       }
 
       (rs: ResultSet, row: MutableRow, pos: Int) =>
-        row.update(pos, nullSafeConvert(rs.getArray(pos + 1).getArray, elementConversion))
+        val array = nullSafeConvert[Object](
+          rs.getArray(pos + 1).getArray,
+          array => new GenericArrayData(elementConversion.apply(array)))
+        row.update(pos, array)
 
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
   }
