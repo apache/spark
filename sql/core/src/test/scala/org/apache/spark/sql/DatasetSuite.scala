@@ -423,8 +423,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
-    val udfOne = udf((n: Int) => {
-      require(n != 1, "udfOne shouldn't see swid=1!")
+    val simpleUdf = udf((n: Int) => {
+      require(n != 1, "simpleUdf shouldn't see id=1!")
       1
     })
 
@@ -439,12 +439,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (7, "string7"),
       (8, "string8"),
       (9, "string9")
-    ).toDF("swid", "stringData")
+    ).toDF("id", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
-    // After sampling, sampleDF doesn't contain swid=1.
-    assert(!sampleDF.select("swid").collect.contains(1))
-    // udfOne should not encounter swid=1.
-    checkAnswer(sampleDF.select(udfOne($"swid")), List.fill(sampleDF.count.toInt)(Row(1)))
+    // After sampling, sampleDF doesn't contain id=1.
+    assert(!sampleDF.select("id").collect.contains(1))
+    // simpleUdf should not encounter id=1.
+    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
