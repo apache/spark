@@ -390,7 +390,7 @@ private[hive] class HiveClientImpl(
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
-          serdeProperties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
+          properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
             .map(_.asScala.toMap).orNull
         ),
         properties = properties,
@@ -775,7 +775,7 @@ private[hive] class HiveClientImpl(
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
+    table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
@@ -799,7 +799,7 @@ private[hive] class HiveClientImpl(
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
-    serdeInfo.setParameters(p.storage.serdeProperties.asJava)
+    serdeInfo.setParameters(p.storage.properties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
     tpart.setDbName(ht.getDbName)
     tpart.setTableName(ht.getTableName)
@@ -818,7 +818,7 @@ private[hive] class HiveClientImpl(
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
-        serdeProperties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
+        properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull))
   }
 }

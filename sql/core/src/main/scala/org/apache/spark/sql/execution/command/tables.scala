@@ -120,7 +120,7 @@ case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.serdeProperties.keys.toSeq, "CREATE TABLE")
+    DDLUtils.verifyTableProperties(table.storage.properties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
@@ -167,7 +167,7 @@ case class AlterTableRenameCommand(
       if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
         val newPath = catalog.defaultTablePath(newName)
         val newTable = table.withNewStorage(
-          serdeProperties = table.storage.serdeProperties ++ Map("path" -> newPath))
+          serdeProperties = table.storage.properties ++ Map("path" -> newPath))
         catalog.alterTable(newTable)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
@@ -349,7 +349,7 @@ case class TruncateTableCommand(
     }
     val locations =
       if (isDatasourceTable) {
-        Seq(table.storage.serdeProperties.get("path"))
+        Seq(table.storage.properties.get("path"))
       } else if (table.partitionColumnNames.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
@@ -492,7 +492,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.serdeProperties.foreach { case (key, value) =>
+    metadata.storage.properties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
   }
@@ -820,7 +820,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     storage.serde.foreach { serde =>
       builder ++= s"ROW FORMAT SERDE '$serde'\n"
 
-      val serdeProps = metadata.storage.serdeProperties.map {
+      val serdeProps = metadata.storage.properties.map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
@@ -890,7 +890,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     builder ++= s"USING ${props(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)}\n"
 
-    val dataSourceOptions = metadata.storage.serdeProperties.filterNot {
+    val dataSourceOptions = metadata.storage.properties.filterNot {
       case (key, value) =>
         // If it's a managed table, omit PATH option. Spark SQL always creates external table
         // when the table creation DDL contains the PATH option.

@@ -53,4 +53,6 @@ private case object OracleDialect extends JdbcDialect {
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
     case _ => None
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

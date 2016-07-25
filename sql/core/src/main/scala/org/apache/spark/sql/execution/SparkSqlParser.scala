@@ -344,6 +344,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         table, provider, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
+      if (struct.isEmpty && bucketSpec.nonEmpty) {
+        throw new ParseException(
+          "Expected explicit specification of table schema when using CLUSTERED BY clause.", ctx)
+      }
+
       CreateTableUsing(
         table,
         struct,
@@ -963,7 +968,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // whether to convert a table created by CTAS to a datasource table.
         serde = None,
         compressed = false,
-        serdeProperties = Map())
+        properties = Map())
     }
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
@@ -981,7 +986,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
       compressed = false,
-      serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+      properties = rowStorage.properties ++ fileStorage.properties)
     // If location is defined, we'll assume this is an external table.
     // Otherwise, we may accidentally delete existing data.
     val tableType = if (external || location.isDefined) {
@@ -1140,7 +1145,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     import ctx._
     CatalogStorageFormat.empty.copy(
       serde = Option(string(name)),
-      serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      properties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
@@ -1168,7 +1173,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             ctx)
           "line.delim" -> value
         }
-    CatalogStorageFormat.empty.copy(serdeProperties = entries.toMap)
+    CatalogStorageFormat.empty.copy(properties = entries.toMap)
   }
 
   /**

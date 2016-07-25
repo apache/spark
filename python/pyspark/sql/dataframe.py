@@ -1388,6 +1388,7 @@ class DataFrame(object):
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
@@ -1401,6 +1402,7 @@ class DataFrame(object):
     @ignore_unicode_prefix
     def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
+        This is a no-op if schema doesn't contain the given column name(s).
 
         :param cols: a string name of the column to drop, or a
             :class:`Column` to drop, or a list of string name of the columns to drop.
