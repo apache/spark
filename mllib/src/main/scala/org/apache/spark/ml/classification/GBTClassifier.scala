@@ -61,6 +61,10 @@ import org.apache.spark.sql.types.DoubleType
  * [[GBTClassifier]] will use the usual `"loss-based"` impurity by default, conforming to
  * TreeBoost behavior. For SGB, set impurity to `"variance"`.
  * use of TreeBoost, set impurity to `"loss-based"`.
+ *
+ * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
+ * ease and speed. Leaf selection is aligned with theory. This is the approach `R`'s
+ * [[https://cran.r-project.org/web/packages/gbm/index.html gbm package]] takes.
  */
 @Since("1.4.0")
 class GBTClassifier @Since("1.4.0") (

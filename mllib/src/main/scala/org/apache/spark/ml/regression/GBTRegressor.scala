@@ -58,6 +58,10 @@ import org.apache.spark.sql.functions._
  *
  * [[GBTRegressor]] will use the usual `"loss-based"` impurity by default, conforming to
  * TreeBoost behavior. For SGB, set impurity to `"variance"`.
+ *
+ * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
+ * ease and speed. This is the approach `R`'s
+ * [[https://cran.r-project.org/web/packages/gbm/index.html gbm package]] takes.
  */
 @Since("1.4.0")
 class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)

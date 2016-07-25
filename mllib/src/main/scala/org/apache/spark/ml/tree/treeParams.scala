@@ -22,6 +22,7 @@ import scala.util.Try
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.tree.impurity._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
@@ -538,7 +539,7 @@ private[ml] object GBTRegressorParams {
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
   private final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
     case "gaussian" | "squared" => OldVariance
-    case "laplace" | "absolute" => ApproximateLaplaceImpurity // TODO squared error for splits like Friedman?
+    case "laplace" | "absolute" => ApproxLaplaceImpurity
     case _ => throw new RuntimeException(
       s"GBTClassifier does not have loss-based impurity for loss ${loss}")
 }
