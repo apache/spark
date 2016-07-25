@@ -54,7 +54,9 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
 
   packageLocalDir <- file.path(local_dir, packageName)
 
-  if (dir.exists(packageLocalDir)) {
+
+  # can use dir.exists(packageLocalDir) under R 3.2.0 or later
+  if (!is.na(file.info(packageLocalDir)$isdir)) {
     fmt <- "Spark %s for Hadoop %s has been installed."
     msg <- sprintf(fmt, version, hadoop_version)
     message(msg)
