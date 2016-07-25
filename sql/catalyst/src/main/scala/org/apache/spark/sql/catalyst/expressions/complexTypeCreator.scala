@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
@@ -33,13 +33,24 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.map(_.dataType).forall(_.isInstanceOf[DecimalType])) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function array")
+    }
+  }
 
   override def dataType: DataType = {
-    ArrayType(
-      children.headOption.map(_.dataType).getOrElse(NullType),
-      containsNull = children.exists(_.nullable))
+    var elementType: DataType = children.headOption.map(_.dataType).getOrElse(NullType)
+    if (elementType.isInstanceOf[DecimalType]) {
+      children.foreach { child =>
+        if (elementType.asInstanceOf[DecimalType].isTighterThan(child.dataType)) {
+          elementType = child.dataType
+        }
+      }
+    }
+    ArrayType(elementType, containsNull = children.exists(_.nullable))
   }
 
   override def nullable: Boolean = false
