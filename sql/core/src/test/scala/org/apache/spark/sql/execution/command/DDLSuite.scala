@@ -85,7 +85,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         outputFormat = None,
         serde = None,
         compressed = false,
-        serdeProperties = Map())
+        properties = Map())
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
@@ -892,9 +892,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
-    assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties.isEmpty)
+    assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
     assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
-    assert(catalog.getPartition(tableIdent, partSpec).storage.serdeProperties.isEmpty)
+    assert(catalog.getPartition(tableIdent, partSpec).storage.properties.isEmpty)
     // Verify that the location is set to the expected string
     def verifyLocation(expected: String, spec: Option[TablePartitionSpec] = None): Unit = {
       val storageFormat = spec
@@ -902,10 +902,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .getOrElse { catalog.getTableMetadata(tableIdent).storage }
       if (isDatasourceTable) {
         if (spec.isDefined) {
-          assert(storageFormat.serdeProperties.isEmpty)
+          assert(storageFormat.properties.isEmpty)
           assert(storageFormat.locationUri.isEmpty)
         } else {
-          assert(storageFormat.serdeProperties.get("path") === Some(expected))
+          assert(storageFormat.properties.get("path") === Some(expected))
           assert(storageFormat.locationUri === Some(expected))
         }
       } else {
@@ -948,7 +948,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     assert(catalog.getTableMetadata(tableIdent).storage.serde.isEmpty)
-    assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties.isEmpty)
+    assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
     // set table serde and/or properties (should fail on datasource tables)
     if (isDatasourceTable) {
       val e1 = intercept[AnalysisException] {
@@ -963,21 +963,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     } else {
       sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.jadoop'")
       assert(catalog.getTableMetadata(tableIdent).storage.serde == Some("org.apache.jadoop"))
-      assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties.isEmpty)
+      assert(catalog.getTableMetadata(tableIdent).storage.properties.isEmpty)
       sql("ALTER TABLE dbx.tab1 SET SERDE 'org.apache.madoop' " +
         "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
       assert(catalog.getTableMetadata(tableIdent).storage.serde == Some("org.apache.madoop"))
-      assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties ==
+      assert(catalog.getTableMetadata(tableIdent).storage.properties ==
         Map("k" -> "v", "kay" -> "vee"))
     }
     // set serde properties only
     sql("ALTER TABLE dbx.tab1 SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-    assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties ==
+    assert(catalog.getTableMetadata(tableIdent).storage.properties ==
       Map("k" -> "vvv", "kay" -> "vee"))
     // set things without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET SERDEPROPERTIES ('kay' = 'veee')")
-    assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties ==
+    assert(catalog.getTableMetadata(tableIdent).storage.properties ==
       Map("k" -> "vvv", "kay" -> "veee"))
     // table to alter does not exist
     intercept[AnalysisException] {
@@ -1004,7 +1004,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     assert(catalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
-    assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties.isEmpty)
+    assert(catalog.getPartition(tableIdent, spec).storage.properties.isEmpty)
     // set table serde and/or properties (should fail on datasource tables)
     if (isDatasourceTable) {
       val e1 = intercept[AnalysisException] {
@@ -1019,25 +1019,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     } else {
       sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.jadoop'")
       assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.jadoop"))
-      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties.isEmpty)
+      assert(catalog.getPartition(tableIdent, spec).storage.properties.isEmpty)
       sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
         "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
       assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.madoop"))
-      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+      assert(catalog.getPartition(tableIdent, spec).storage.properties ==
         Map("k" -> "v", "kay" -> "vee"))
     }
     // set serde properties only
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) " +
         "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+      assert(catalog.getPartition(tableIdent, spec).storage.properties ==
         Map("k" -> "vvv", "kay" -> "vee"))
     }
     // set things without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     maybeWrapException(isDatasourceTable) {
       sql("ALTER TABLE tab1 PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
-      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+      assert(catalog.getPartition(tableIdent, spec).storage.properties ==
         Map("k" -> "vvv", "kay" -> "veee"))
     }
     // table to alter does not exist
