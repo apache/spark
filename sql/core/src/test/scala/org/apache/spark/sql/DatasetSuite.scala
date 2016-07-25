@@ -423,12 +423,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
-    val udfOne = spark.udf.register("udfOne", (n: Int) => {
+    val udfOne = udf((n: Int) => {
       require(n != 1, "udfOne shouldn't see swid=1!")
       1
     })
 
-    val d = Seq(
+    val df = Seq(
       (0, "string0"),
       (1, "string1"),
       (2, "string2"),
@@ -439,8 +439,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (7, "string7"),
       (8, "string8"),
       (9, "string9")
-    )
-    val df = spark.createDataFrame(d).toDF("swid", "stringData")
+    ).toDF("swid", "stringData")
     val sampleDF = df.sample(false, 0.7, 50)
     // After sampling, sampleDF doesn't contain swid=1.
     assert(!sampleDF.select("swid").collect.contains(1))

@@ -156,13 +156,8 @@ object PushProjectThroughSample extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Push down projection into sample
     case p @ Project(projectList, Sample(lb, up, replace, seed, child))
-        if !hasNewOutput(projectList, p.child.output) =>
+        if p.outputSet.subsetOf(p.child.outputSet) =>
       Sample(lb, up, replace, seed, Project(projectList, child))()
-  }
-  private def hasNewOutput(
-      projectList: Seq[NamedExpression],
-      childOutput: Seq[Attribute]): Boolean = {
-    projectList.exists(p => !childOutput.exists(_.semanticEquals(p)))
   }
 }
 
