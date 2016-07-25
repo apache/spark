@@ -168,7 +168,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
           OldAlgo.Classification,
           Gini,
           maxDepth = 2,
-          numClasses = 100,
+          numClasses = 2,
           maxBins = 100,
           categoricalFeaturesInfo = Map(0 -> 1, 1 -> 5))
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
