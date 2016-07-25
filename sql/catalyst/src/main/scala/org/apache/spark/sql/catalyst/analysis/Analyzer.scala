@@ -1207,7 +1207,12 @@ class Analyzer(
                 val alias = Alias(ae, ae.toString)()
                 aggregateExpressions += alias
                 alias.toAttribute
+              // Replacing [[NamedExpression]] causes the error on [[Grouping]] because the
+              // grouping column will be new attribute created by adding additional [[Alias]].
+              // So we can't find the grouping column and replace it in the rule
+              // [[ResolveGroupingAnalytics]].
               case ne: NamedExpression => ne
+              // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
               case e: Expression if grouping.exists(_.semanticEquals(e)) &&
                   !ResolveGroupingAnalytics.hasGroupingFunction(e) =>
                 val alias = Alias(e, e.toString)()
