@@ -37,7 +37,6 @@ class HiveDDLCommandSuite extends PlanTest {
     parser.parsePlan(sql).collect {
       case c: CreateTableCommand => (c.table, c.ifNotExists)
       case c: CreateHiveTableAsSelectLogicalPlan => (c.tableDesc, c.allowExisting)
-      case c: CreateViewCommand => (c.tableDesc, c.allowExisting)
     }.head
   }
 
@@ -294,9 +293,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.tableType == CatalogTableType.MANAGED)
     assert(desc.schema == Seq(CatalogColumn("id", "int"), CatalogColumn("name", "string")))
     assert(desc.partitionColumnNames.isEmpty)
-    assert(desc.sortColumnNames.isEmpty)
-    assert(desc.bucketColumnNames.isEmpty)
-    assert(desc.numBuckets == -1)
+    assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
@@ -454,9 +451,7 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("name", "string"),
       CatalogColumn("month", "int")))
     assert(desc.partitionColumnNames == Seq("month"))
-    assert(desc.sortColumnNames.isEmpty)
-    assert(desc.bucketColumnNames.isEmpty)
-    assert(desc.numBuckets == -1)
+    assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.locationUri == Some("/path/to/mercury"))
@@ -470,47 +465,30 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("create view -- basic") {
     val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
-    val (desc, exists) = extractTableDesc(v1)
-    assert(!exists)
-    assert(desc.identifier.database.isEmpty)
-    assert(desc.identifier.table == "view1")
-    assert(desc.tableType == CatalogTableType.VIEW)
-    assert(desc.storage.locationUri.isEmpty)
-    assert(desc.schema == Seq.empty[CatalogColumn])
-    assert(desc.viewText == Option("SELECT * FROM tab1"))
-    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat.isEmpty)
-    assert(desc.storage.outputFormat.isEmpty)
-    assert(desc.storage.serde.isEmpty)
-    assert(desc.properties == Map())
+    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(!command.allowExisting)
+    assert(command.name.database.isEmpty)
+    assert(command.name.table == "view1")
+    assert(command.originalText == Some("SELECT * FROM tab1"))
+    assert(command.userSpecifiedColumns.isEmpty)
   }
 
   test("create view - full") {
     val v1 =
       """
         |CREATE OR REPLACE VIEW view1
-        |(col1, col3)
+        |(col1, col3 COMMENT 'hello')
         |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
-    val (desc, exists) = extractTableDesc(v1)
-    assert(desc.identifier.database.isEmpty)
-    assert(desc.identifier.table == "view1")
-    assert(desc.tableType == CatalogTableType.VIEW)
-    assert(desc.storage.locationUri.isEmpty)
-    assert(desc.schema ==
-      CatalogColumn("col1", null, nullable = true, None) ::
-        CatalogColumn("col3", null, nullable = true, None) :: Nil)
-    assert(desc.viewText == Option("SELECT * FROM tab1"))
-    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat.isEmpty)
-    assert(desc.storage.outputFormat.isEmpty)
-    assert(desc.storage.serde.isEmpty)
-    assert(desc.properties == Map("prop1Key" -> "prop1Val"))
-    assert(desc.comment == Option("BLABLA"))
+    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(command.name.database.isEmpty)
+    assert(command.name.table == "view1")
+    assert(command.userSpecifiedColumns == Seq("col1" -> None, "col3" -> Some("hello")))
+    assert(command.originalText == Some("SELECT * FROM tab1"))
+    assert(command.properties == Map("prop1Key" -> "prop1Val"))
+    assert(command.comment == Some("BLABLA"))
   }
 
   test("create view -- partitioned view") {
