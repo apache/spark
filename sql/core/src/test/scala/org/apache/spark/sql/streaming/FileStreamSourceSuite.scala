@@ -179,18 +179,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") { testError() }
   }
 
-  test("FileStreamSource schema: path doesn't exist, no schema") {
-    val e = intercept[IllegalArgumentException] {
-      createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
+  test("FileStreamSource schema: path doesn't exist (without schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = None)
+      }
     }
-    assert(e.getMessage.toLowerCase.contains("schema")) // reason is schema absence, not the path
   }
 
-  test("FileStreamSource schema: path doesn't exist, with schema") {
-    val userSchema = new StructType().add(new StructField("value", IntegerType))
-    val schema = createFileStreamSourceAndGetSchema(
-      format = None, path = Some("/a/b/c"), schema = Some(userSchema))
-    assert(schema === userSchema)
+  test("FileStreamSource schema: path doesn't exist (with schema) should throw exception") {
+    withTempDir { dir =>
+      intercept[AnalysisException] {
+        val userSchema = new StructType().add(new StructField("value", IntegerType))
+        val schema = createFileStreamSourceAndGetSchema(
+          format = None, path = Some(new File(dir, "1").getAbsolutePath), schema = Some(userSchema))
+      }
+    }
   }
 
 
@@ -224,20 +230,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   // =============== Parquet file stream schema tests ================
-
-  test("FileStreamSource schema: parquet, no existing files, no schema") {
-    withTempDir { src =>
-      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
-        val e = intercept[AnalysisException] {
-          createFileStreamSourceAndGetSchema(
-            format = Some("parquet"),
-            path = Some(new File(src, "1").getCanonicalPath),
-            schema = None)
-        }
-        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
-      }
-    }
-  }
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
@@ -593,6 +585,113 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("max files per trigger") {
+    withTempDir { case src =>
+      var lastFileModTime: Option[Long] = None
+
+      /** Create a text file with a single data item */
+      def createFile(data: Int): File = {
+        val file = stringToFile(new File(src, s"$data.txt"), data.toString)
+        if (lastFileModTime.nonEmpty) file.setLastModified(lastFileModTime.get + 1000)
+        lastFileModTime = Some(file.lastModified)
+        file
+      }
+
+      createFile(1)
+      createFile(2)
+      createFile(3)
+
+      // Set up a query to read text files 2 at a time
+      val df = spark
+        .readStream
+        .option("maxFilesPerTrigger", 2)
+        .text(src.getCanonicalPath)
+      val q = df
+        .writeStream
+        .format("memory")
+        .queryName("file_data")
+        .start()
+        .asInstanceOf[StreamExecution]
+      q.processAllAvailable()
+      val memorySink = q.sink.asInstanceOf[MemorySink]
+      val fileSource = q.logicalPlan.collect {
+        case StreamingExecutionRelation(source, _) if source.isInstanceOf[FileStreamSource] =>
+          source.asInstanceOf[FileStreamSource]
+      }.head
+
+      /** Check the data read in the last batch */
+      def checkLastBatchData(data: Int*): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.latestBatchData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
+      def checkAllData(data: Seq[Int]): Unit = {
+        val schema = StructType(Seq(StructField("value", StringType)))
+        val df = spark.createDataFrame(
+          spark.sparkContext.makeRDD(memorySink.allData), schema)
+        checkAnswer(df, data.map(_.toString).toDF("value"))
+      }
+
+      /** Check how many batches have executed since the last time this check was made */
+      var lastBatchId = -1L
+      def checkNumBatchesSinceLastCheck(numBatches: Int): Unit = {
+        require(lastBatchId >= 0)
+        assert(memorySink.latestBatchId.get === lastBatchId + numBatches)
+        lastBatchId = memorySink.latestBatchId.get
+      }
+
+      checkLastBatchData(3)  // (1 and 2) should be in batch 1, (3) should be in batch 2 (last)
+      checkAllData(1 to 3)
+      lastBatchId = memorySink.latestBatchId.get
+
+      fileSource.withBatchingLocked {
+        createFile(4)
+        createFile(5)   // 4 and 5 should be in a batch
+        createFile(6)
+        createFile(7)   // 6 and 7 should be in the last batch
+      }
+      q.processAllAvailable()
+      checkNumBatchesSinceLastCheck(2)
+      checkLastBatchData(6, 7)
+      checkAllData(1 to 7)
+
+      fileSource.withBatchingLocked {
+        createFile(8)
+        createFile(9)    // 8 and 9 should be in a batch
+        createFile(10)
+        createFile(11)   // 10 and 11 should be in a batch
+        createFile(12)   // 12 should be in the last batch
+      }
+      q.processAllAvailable()
+      checkNumBatchesSinceLastCheck(3)
+      checkLastBatchData(12)
+      checkAllData(1 to 12)
+
+      q.stop()
+    }
+  }
+
+  test("max files per trigger - incorrect values") {
+    withTempDir { case src =>
+      def testMaxFilePerTriggerValue(value: String): Unit = {
+        val df = spark.readStream.option("maxFilesPerTrigger", value).text(src.getCanonicalPath)
+        val e = intercept[IllegalArgumentException] {
+          testStream(df)()
+        }
+        Seq("maxFilesPerTrigger", value, "positive integer").foreach { s =>
+          assert(e.getMessage.contains(s))
+        }
+      }
+
+      testMaxFilePerTriggerValue("not-a-integer")
+      testMaxFilePerTriggerValue("-1")
+      testMaxFilePerTriggerValue("0")
+      testMaxFilePerTriggerValue("10.1")
+    }
+  }
+
   test("explain") {
     withTempDirs { case (src, tmp) =>
       src.mkdirs()
@@ -604,8 +703,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val q = df.writeStream.queryName("file_explain").format("memory").start()
         .asInstanceOf[StreamExecution]
       try {
-        assert("N/A" === q.explainInternal(false))
-        assert("N/A" === q.explainInternal(true))
+        assert("No physical plan. Waiting for data." === q.explainInternal(false))
+        assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
         val tempFile = Utils.tempFileWith(new File(tmp, "text"))
         val finalFile = new File(src, tempFile.getName)

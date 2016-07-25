@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -238,9 +238,16 @@ abstract class QueryTest extends PlanTest {
       case _: ObjectConsumer => return
       case _: ObjectProducer => return
       case _: AppendColumns => return
+      case _: TypedFilter => return
       case _: LogicalRelation => return
       case p if p.getClass.getSimpleName == "MetastoreRelation" => return
       case _: MemoryPlan => return
+      case p: InMemoryRelation =>
+        p.child.transform {
+          case _: ObjectConsumerExec => return
+          case _: ObjectProducerExec => return
+        }
+        p
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
       case _: TypedAggregateExpression => return

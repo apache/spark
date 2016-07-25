@@ -17,19 +17,17 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
- * :: Experimental ::
  * A tokenizer that converts the input string to lowercase and then splits it by white spaces.
  *
  * @see [[RegexTokenizer]]
  */
-@Experimental
 @Since("1.2.0")
 class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], Tokenizer] with DefaultParamsWritable {
@@ -59,13 +57,11 @@ object Tokenizer extends DefaultParamsReadable[Tokenizer] {
 }
 
 /**
- * :: Experimental ::
  * A regex based tokenizer that extracts tokens either by using the provided regex pattern to split
  * the text (default) or repeatedly matching the regex (if `gaps` is false).
  * Optional parameters also allow filtering tokens using a minimal length.
  * It returns an array of strings that can be empty.
  */
-@Experimental
 @Since("1.4.0")
 class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] with DefaultParamsWritable {

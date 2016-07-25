@@ -27,6 +27,7 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
+from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import Row, StringType
 from pyspark.sql.utils import install_exception_handler
 
@@ -438,8 +439,12 @@ class SQLContext(object):
         .. note:: Experimental.
 
         :return: :class:`DataStreamReader`
+
+        >>> text_sdf = sqlContext.readStream.text(tempfile.mkdtemp())
+        >>> text_sdf.isStreaming
+        True
         """
-        return DataStreamReader(self._wrapped)
+        return DataStreamReader(self)
 
     @property
     @since(2.0)
@@ -466,12 +471,11 @@ class HiveContext(SQLContext):
     .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
     """
 
-    warnings.warn(
-        "HiveContext is deprecated in Spark 2.0.0. Please use " +
-        "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-        DeprecationWarning)
-
     def __init__(self, sparkContext, jhiveContext=None):
+        warnings.warn(
+            "HiveContext is deprecated in Spark 2.0.0. Please use " +
+            "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+            DeprecationWarning)
         if jhiveContext is None:
             sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
@@ -487,7 +491,7 @@ class HiveContext(SQLContext):
         confusing error messages.
         """
         jsc = sparkContext._jsc.sc()
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc)
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName):
@@ -515,6 +519,7 @@ class UDFRegistration(object):
 def _test():
     import os
     import doctest
+    import tempfile
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.context
@@ -523,6 +528,8 @@ def _test():
 
     globs = pyspark.sql.context.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    globs['tempfile'] = tempfile
+    globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
     globs['rdd'] = rdd = sc.parallelize(

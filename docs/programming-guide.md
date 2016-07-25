@@ -1101,6 +1101,9 @@ for details.
 </tr>
 </table>
 
+The Spark RDD API also exposes asynchronous versions of some actions, like `foreachAsync` for `foreach`, which immediately return a `FutureAction` to the caller instead of blocking on completion of the action. This can be used to manage or wait for the asynchronous execution of the action.
+
+
 ### Shuffle operations
 
 Certain operations within Spark trigger an event known as the shuffle. The shuffle is Spark's
@@ -1568,7 +1571,7 @@ have changed from returning (key, list of values) pairs to (key, iterable of val
 </div>
 
 Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](mllib-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
+[MLlib](ml-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
 
 
 # Where to Go from Here

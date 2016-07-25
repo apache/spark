@@ -120,12 +120,12 @@ class StreamSuite extends StreamTest {
     }
 
     // Running streaming plan as a batch query
-    assertError("startStream" :: Nil) {
+    assertError("start" :: Nil) {
       streamInput.toDS.map { i => i }.count()
     }
 
     // Running non-streaming plan with as a streaming query
-    assertError("without streaming sources" :: "startStream" :: Nil) {
+    assertError("without streaming sources" :: "start" :: Nil) {
       val ds = batchInput.map { i => i }
       testStream(ds)()
     }
@@ -251,8 +251,8 @@ class StreamSuite extends StreamTest {
     val q = df.writeStream.queryName("memory_explain").format("memory").start()
       .asInstanceOf[StreamExecution]
     try {
-      assert("N/A" === q.explainInternal(false))
-      assert("N/A" === q.explainInternal(true))
+      assert("No physical plan. Waiting for data." === q.explainInternal(false))
+      assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
       inputData.addData("abc")
       q.processAllAvailable()

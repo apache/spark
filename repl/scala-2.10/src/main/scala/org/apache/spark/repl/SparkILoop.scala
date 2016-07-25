@@ -943,8 +943,6 @@ class SparkILoop(
       })
 
   private def process(settings: Settings): Boolean = savingContextLoader {
-    if (getMaster() == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
-
     this.settings = settings
     createInterpreter()
 
@@ -1068,7 +1066,7 @@ class SparkILoop(
       logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
     val jars = {
-      val userJars = Utils.getUserJars(conf)
+      val userJars = Utils.getUserJars(conf, isShell = true)
       if (userJars.isEmpty) {
         envJars.getOrElse("")
       } else {
