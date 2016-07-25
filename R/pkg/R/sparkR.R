@@ -28,14 +28,6 @@ connExists <- function(env) {
   })
 }
 
-#' @rdname sparkR.session.stop
-#' @name sparkR.stop
-#' @export
-#' @note sparkR.stop since 1.4.0
-sparkR.stop <- function() {
-  sparkR.session.stop()
-}
-
 #' Stop the Spark Session and Spark Context
 #'
 #' Stop the Spark Session and Spark Context.
@@ -88,6 +80,14 @@ sparkR.session.stop <- function() {
 
   # Clear jobj maps
   clearJobjs()
+}
+
+#' @rdname sparkR.session.stop
+#' @name sparkR.stop
+#' @export
+#' @note sparkR.stop since 1.4.0
+sparkR.stop <- function() {
+  sparkR.session.stop()
 }
 
 #' (Deprecated) Initialize a new Spark Context
