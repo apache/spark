@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 
 /**
@@ -127,7 +128,6 @@ case class BucketSpec(
   }
 }
 
-
 /**
  * A table defined in the catalog.
  *
@@ -189,11 +189,11 @@ case class CatalogTable(
 
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    val partitionColumns = partitionColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val bucketStrings = bucketSpec match {
       case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
-        val bucketColumnsString = bucketColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
-        val sortColumnsString = sortColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+        val bucketColumnsString = bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+        val sortColumnsString = sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
         Seq(
           s"Num Buckets: $numBuckets",
           if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumnsString" else "",
