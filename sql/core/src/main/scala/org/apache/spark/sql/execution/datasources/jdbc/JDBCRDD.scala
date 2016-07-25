@@ -328,12 +328,13 @@ private[sql] class JDBCRDD(
   private type JDBCValueSetter = (ResultSet, MutableRow, Int) => Unit
 
   /**
-   * Creates a StructType to setters for each type.
+   * Creates `JDBCValueSetter`s according to [[StructType]], which can set
+   * each value from `ResultSet` to each field of [[MutableRow]] correctly.
    */
   def makeSetters(schema: StructType): Array[JDBCValueSetter] =
-    schema.fields.map(sf => makeSetters(sf.dataType, sf.metadata))
+    schema.fields.map(sf => makeSetter(sf.dataType, sf.metadata))
 
-  private def makeSetters(dt: DataType, metadata: Metadata): JDBCValueSetter = dt match {
+  private def makeSetter(dt: DataType, metadata: Metadata): JDBCValueSetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: MutableRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
