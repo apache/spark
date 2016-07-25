@@ -287,12 +287,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     markBatchFullyProcessed(time)
   }
 
-  /** Perform checkpoint for the give `time`. */
+  /** Perform checkpoint for the given `time`. */
   private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
     if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
+    } else if (clearCheckpointDataLater) {
+      markBatchFullyProcessed(time)
     }
   }
 

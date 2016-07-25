@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
@@ -36,14 +36,12 @@ import org.apache.spark.sql.functions._
 
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for
  * classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
 @Since("1.4.0")
-@Experimental
 class RandomForestClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
@@ -124,7 +122,6 @@ class RandomForestClassifier @Since("1.4.0") (
 }
 
 @Since("1.4.0")
-@Experimental
 object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifier] {
   /** Accessor for supported impurity settings: entropy, gini */
   @Since("1.4.0")
@@ -140,7 +137,6 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
 }
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] model for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
@@ -149,7 +145,6 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
  *                Warning: These have null parents.
  */
 @Since("1.4.0")
-@Experimental
 class RandomForestClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],

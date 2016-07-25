@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
@@ -27,14 +27,12 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.DataType
 
 /**
- * :: Experimental ::
  * Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
  * which is available at [[http://en.wikipedia.org/wiki/Polynomial_expansion]], "In mathematics, an
  * expansion of a product of sums expresses it as a sum of products by using the fact that
  * multiplication distributes over addition". Take a 2-variable feature vector as an example:
  * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
  */
-@Experimental
 @Since("1.4.0")
 class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, PolynomialExpansion] with DefaultParamsWritable {

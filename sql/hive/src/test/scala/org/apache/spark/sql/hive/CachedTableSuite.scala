@@ -129,7 +129,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
-    withTempTable("testCacheTable") {
+    withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
       assertCached(table("testCacheTable"))
 
@@ -144,7 +144,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE tableName AS SELECT ...") {
-    withTempTable("testCacheTable") {
+    withTempView("testCacheTable") {
       sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
       assertCached(table("testCacheTable"))
 
@@ -177,7 +177,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("CACHE TABLE with Hive UDF") {
-    withTempTable("udfTest") {
+    withTempView("udfTest") {
       sql("CACHE TABLE udfTest AS SELECT * FROM src WHERE floor(key) = 1")
       assertCached(table("udfTest"))
       uncacheTable("udfTest")
@@ -276,7 +276,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("Cache/Uncache Qualified Tables") {
     withTempDatabase { db =>
-      withTempTable("cachedTable") {
+      withTempView("cachedTable") {
         sql(s"CREATE TABLE $db.cachedTable STORED AS PARQUET AS SELECT 1")
         sql(s"CACHE TABLE $db.cachedTable")
         assertCached(spark.table(s"$db.cachedTable"))
@@ -298,7 +298,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("Cache Table As Select - having database name") {
     withTempDatabase { db =>
-      withTempTable("cachedTable") {
+      withTempView("cachedTable") {
         val e = intercept[ParseException] {
           sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
         }.getMessage

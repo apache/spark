@@ -30,7 +30,7 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
                 "raising me. But they're both dead now. I didn't kill them. Honest.")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 test_that("take() gives back the original elements in correct count and order", {
@@ -65,3 +65,5 @@ test_that("take() gives back the original elements in correct count and order", 
   expect_equal(length(take(numListRDD, 0)), 0)
   expect_equal(length(take(numVectorRDD, 0)), 0)
 })
+
+sparkR.session.stop()

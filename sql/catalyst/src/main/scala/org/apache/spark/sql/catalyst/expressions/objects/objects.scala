@@ -134,29 +134,40 @@ case class Invoke(
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    val callFunc = if (method.isDefined && method.get.getReturnType.isPrimitive) {
-      s"${obj.value}.$functionName($argString)"
+    val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
+    val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
+
+    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
+      s"""
+        try {
+          $resultVal = $funcCall;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
     } else {
-      s"(${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString)"
+      s"$resultVal = $funcCall;"
+    }
+
+    val evaluate = if (returnPrimitive) {
+      getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
+    } else {
+      val funcResult = ctx.freshName("funcResult")
+      s"""
+        Object $funcResult = null;
+        ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
+        if ($funcResult == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
+        }
+      """
     }
 
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
       s"boolean ${ev.isNull} = ${obj.isNull} || ${argGen.map(_.isNull).mkString(" || ")};"
     } else {
       s"boolean ${ev.isNull} = ${obj.isNull};"
-    }
-
-    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
-      s"final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;"
-    } else {
-      s"""
-        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        try {
-          ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $callFunc;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """
     }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
@@ -166,12 +177,14 @@ case class Invoke(
     } else {
       ""
     }
-
     val code = s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
       $setIsNull
-      $evaluate
+      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        $evaluate
+      }
       $postNullCheck
      """
     ev.copy(code = code)
