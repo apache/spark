@@ -2982,4 +2982,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin), Nil)
     }
   }
+
+  test("SPARK-16674: field names containing dots for both fields and partitioned fields") {
+    withTempPath { path =>
+      val data = (1 to 10).map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "a" else "b"))
+        .toDF("col.1", "col.2", "part.col1", "part.col2")
+      data.write
+        .format("parquet")
+        .partitionBy("part.col1", "part.col2")
+        .save(path.getCanonicalPath)
+      val readBack = spark.read.format("parquet").load(path.getCanonicalPath)
+      checkAnswer(
+        readBack.selectExpr("`part.col1`", "`col.1`"),
+        data.selectExpr("`part.col1`", "`col.1`"))
+    }
+  }
 }
