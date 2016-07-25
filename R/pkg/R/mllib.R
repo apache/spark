@@ -1095,8 +1095,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.als since 2.1.0
-setMethod("spark.als", signature(data = "SparkDataFrame", ratingCol = "character",
-                                 userCol = "character", itemCol = "character"),
+setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "score", userCol = "user", itemCol = "item",
                    rank = 10, reg = 1.0, maxIter = 10) {
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
@@ -1104,3 +1103,36 @@ setMethod("spark.als", signature(data = "SparkDataFrame", ratingCol = "character
                                 rank, reg, maxIter)
             return(new("ALSModel", jobj = jobj))
           })
+
+
+# Makes predictions from an ALS model or a model produced by spark.als.
+
+#' @param newData A SparkDataFrame for testing
+#' @return \code{predict} returns a SparkDataFrame containing predicted values
+#' @rdname spark.als
+#' @export
+#' @note predict(ALSModel) since 2.1.0
+setMethod("predict", signature(object = "ALSModel"),
+function(object, newData) {
+    return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+})
+
+
+# Saves the ALS model to the input path.
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.als
+#' @export
+#' @seealso \link{read.ml}
+#' @note write.ml(ALSModel, character) since 2.1.0
+setMethod("write.ml", signature(object = "ALSModel", path = "character"),
+function(object, path, overwrite = FALSE) {
+    writer <- callJMethod(object@jobj, "write")
+    if (overwrite) {
+        writer <- callJMethod(writer, "overwrite")
+    }
+    invisible(callJMethod(writer, "save", path))
+})
