@@ -1800,12 +1800,11 @@ class Analyzer(
    * All new `Hint`s should be transformed into concrete Hint classes `BroadcastHint` here.
    */
   object SubstituteHints extends Rule[LogicalPlan] {
+    val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformDown {
-        case h @ Hint(name, parameters, child)
-            if Seq("BROADCAST", "BROADCASTJOIN", "MAPJOIN").contains(name.toUpperCase) =>
+        case h @ Hint(name, parameters, child) if BROADCAST_HINT_NAMES.contains(name.toUpperCase) =>
           var resolvedChild = child
-
           for (table <- parameters) {
             var stop = false
             resolvedChild = resolvedChild.transformDown {

@@ -374,7 +374,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Hint(_, _, _) =>
             throw new IllegalStateException(
-              "logical hint operator should have been removed by the optimizer")
+              "logical hint operator should have been removed by analyzer")
 
           case _ => // Analysis successful!
         }
