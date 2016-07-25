@@ -444,7 +444,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // After sampling, sampleDF doesn't contain swid=1.
     assert(!sampleDF.select("swid").collect.contains(1))
     // udfOne should not encounter swid=1.
-    sampleDF.select(udfOne($"swid")).collect
+    checkAnswer(sampleDF.select(udfOne($"swid")), List.fill(sampleDF.count.toInt)(Row(1)))
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
