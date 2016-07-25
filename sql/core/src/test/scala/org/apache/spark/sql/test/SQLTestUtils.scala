@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
@@ -149,7 +150,7 @@ private[sql] trait SQLTestUtils
   /**
    * Drops temporary table `tableName` after calling `f`.
    */
-  protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
+  protected def withTempView(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
@@ -196,7 +197,12 @@ private[sql] trait SQLTestUtils
       fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName) finally spark.sql(s"DROP DATABASE $dbName CASCADE")
+    try f(dbName) finally {
+      if (spark.catalog.currentDatabase == dbName) {
+        spark.sql(s"USE ${DEFAULT_DATABASE}")
+      }
+      spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
   }
 
   /**

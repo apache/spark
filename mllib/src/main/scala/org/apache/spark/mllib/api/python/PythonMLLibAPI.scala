@@ -30,7 +30,6 @@ import net.razorvine.pickle._
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
-import org.apache.spark.ml.linalg.{DenseMatrix => NewDenseMatrix, DenseVector => NewDenseVector, SparseMatrix => NewSparseMatrix, SparseVector => NewSparseVector, Vectors => NewVectors}
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.evaluation.RankingMetrics
@@ -1128,7 +1127,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Wrapper around RowMatrix constructor.
    */
   def createRowMatrix(rows: JavaRDD[Vector], numRows: Long, numCols: Int): RowMatrix = {
-    new RowMatrix(rows.rdd.retag(classOf[Vector]), numRows, numCols)
+    new RowMatrix(rows.rdd, numRows, numCols)
   }
 
   /**
@@ -1202,26 +1201,52 @@ private[python] class PythonMLLibAPI extends Serializable {
     val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     spark.createDataFrame(blockMatrix.blocks)
   }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsToML()]].
+   */
+  def convertVectorColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertVectorColumnsFromML()]]
+   */
+  def convertVectorColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertVectorColumnsFromML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsToML()]].
+   */
+  def convertMatrixColumnsToML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsToML(dataset, cols.asScala: _*)
+  }
+
+  /**
+   * Python-friendly version of [[MLUtils.convertMatrixColumnsFromML()]]
+   */
+  def convertMatrixColumnsFromML(dataset: DataFrame, cols: JArrayList[String]): DataFrame = {
+    MLUtils.convertMatrixColumnsFromML(dataset, cols.asScala: _*)
+  }
 }
 
 /**
- * SerDe utility functions for PythonMLLibAPI.
+ * Basic SerDe utility class.
  */
-private[spark] object SerDe extends Serializable {
+private[spark] abstract class SerDeBase {
 
-  val PYSPARK_PACKAGE = "pyspark.mllib"
-  val PYSPARK_ML_PACKAGE = "pyspark.ml"
+  val PYSPARK_PACKAGE: String
+  def initialize(): Unit
 
   /**
    * Base class used for pickle
    */
-  private[python] abstract class BasePickler[T: ClassTag]
+  private[spark] abstract class BasePickler[T: ClassTag]
     extends IObjectPickler with IObjectConstructor {
 
-    protected def packageName: String = PYSPARK_PACKAGE
-
     private val cls = implicitly[ClassTag[T]].runtimeClass
-    private val module = packageName + "." + cls.getName.split('.')(4)
+    private val module = PYSPARK_PACKAGE + "." + cls.getName.split('.')(4)
     private val name = cls.getSimpleName
 
     // register this to Pickler and Unpickler
@@ -1267,413 +1292,6 @@ private[spark] object SerDe extends Serializable {
 
     private[python] def saveState(obj: Object, out: OutputStream, pickler: Pickler)
   }
-
-  // Pickler for (mllib) DenseVector
-  private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val vector: DenseVector = obj.asInstanceOf[DenseVector]
-      val bytes = new Array[Byte](8 * vector.size)
-      val bb = ByteBuffer.wrap(bytes)
-      bb.order(ByteOrder.nativeOrder())
-      val db = bb.asDoubleBuffer()
-      db.put(vector.values)
-
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(bytes.length))
-      out.write(bytes)
-      out.write(Opcodes.TUPLE1)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      require(args.length == 1)
-      if (args.length != 1) {
-        throw new PickleException("should be 1")
-      }
-      val bytes = getBytes(args(0))
-      val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
-      bb.order(ByteOrder.nativeOrder())
-      val db = bb.asDoubleBuffer()
-      val ans = new Array[Double](bytes.length / 8)
-      db.get(ans)
-      Vectors.dense(ans)
-    }
-  }
-
-  // Pickler for (new) DenseVector
-  private[python] class NewDenseVectorPickler extends BasePickler[NewDenseVector] {
-
-    override protected def packageName = PYSPARK_ML_PACKAGE
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val vector: NewDenseVector = obj.asInstanceOf[NewDenseVector]
-      val bytes = new Array[Byte](8 * vector.size)
-      val bb = ByteBuffer.wrap(bytes)
-      bb.order(ByteOrder.nativeOrder())
-      val db = bb.asDoubleBuffer()
-      db.put(vector.values)
-
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(bytes.length))
-      out.write(bytes)
-      out.write(Opcodes.TUPLE1)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      require(args.length == 1)
-      if (args.length != 1) {
-        throw new PickleException("should be 1")
-      }
-      val bytes = getBytes(args(0))
-      val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
-      bb.order(ByteOrder.nativeOrder())
-      val db = bb.asDoubleBuffer()
-      val ans = new Array[Double](bytes.length / 8)
-      db.get(ans)
-      NewVectors.dense(ans)
-    }
-  }
-
-  // Pickler for (mllib) DenseMatrix
-  private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
-      val bytes = new Array[Byte](8 * m.values.length)
-      val order = ByteOrder.nativeOrder()
-      val isTransposed = if (m.isTransposed) 1 else 0
-      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
-
-      out.write(Opcodes.MARK)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(m.numRows))
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(m.numCols))
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(bytes.length))
-      out.write(bytes)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(isTransposed))
-      out.write(Opcodes.TUPLE)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 4) {
-        throw new PickleException("should be 4")
-      }
-      val bytes = getBytes(args(2))
-      val n = bytes.length / 8
-      val values = new Array[Double](n)
-      val order = ByteOrder.nativeOrder()
-      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().get(values)
-      val isTransposed = args(3).asInstanceOf[Int] == 1
-      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], values, isTransposed)
-    }
-  }
-
-  // Pickler for (new) DenseMatrix
-  private[python] class NewDenseMatrixPickler extends BasePickler[NewDenseMatrix] {
-
-    override protected def packageName = PYSPARK_ML_PACKAGE
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val m: NewDenseMatrix = obj.asInstanceOf[NewDenseMatrix]
-      val bytes = new Array[Byte](8 * m.values.length)
-      val order = ByteOrder.nativeOrder()
-      val isTransposed = if (m.isTransposed) 1 else 0
-      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
-
-      out.write(Opcodes.MARK)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(m.numRows))
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(m.numCols))
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(bytes.length))
-      out.write(bytes)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(isTransposed))
-      out.write(Opcodes.TUPLE)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 4) {
-        throw new PickleException("should be 4")
-      }
-      val bytes = getBytes(args(2))
-      val n = bytes.length / 8
-      val values = new Array[Double](n)
-      val order = ByteOrder.nativeOrder()
-      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().get(values)
-      val isTransposed = args(3).asInstanceOf[Int] == 1
-      new NewDenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], values, isTransposed)
-    }
-  }
-
-  // Pickler for (mllib) SparseMatrix
-  private[python] class SparseMatrixPickler extends BasePickler[SparseMatrix] {
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val s = obj.asInstanceOf[SparseMatrix]
-      val order = ByteOrder.nativeOrder()
-
-      val colPtrsBytes = new Array[Byte](4 * s.colPtrs.length)
-      val indicesBytes = new Array[Byte](4 * s.rowIndices.length)
-      val valuesBytes = new Array[Byte](8 * s.values.length)
-      val isTransposed = if (s.isTransposed) 1 else 0
-      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().put(s.colPtrs)
-      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().put(s.rowIndices)
-      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().put(s.values)
-
-      out.write(Opcodes.MARK)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(s.numRows))
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(s.numCols))
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(colPtrsBytes.length))
-      out.write(colPtrsBytes)
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(indicesBytes.length))
-      out.write(indicesBytes)
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(valuesBytes.length))
-      out.write(valuesBytes)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(isTransposed))
-      out.write(Opcodes.TUPLE)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 6) {
-        throw new PickleException("should be 6")
-      }
-      val order = ByteOrder.nativeOrder()
-      val colPtrsBytes = getBytes(args(2))
-      val indicesBytes = getBytes(args(3))
-      val valuesBytes = getBytes(args(4))
-      val colPtrs = new Array[Int](colPtrsBytes.length / 4)
-      val rowIndices = new Array[Int](indicesBytes.length / 4)
-      val values = new Array[Double](valuesBytes.length / 8)
-      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().get(colPtrs)
-      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().get(rowIndices)
-      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().get(values)
-      val isTransposed = args(5).asInstanceOf[Int] == 1
-      new SparseMatrix(
-        args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], colPtrs, rowIndices, values,
-        isTransposed)
-    }
-  }
-
-  // Pickler for (new) SparseMatrix
-  private[python] class NewSparseMatrixPickler extends BasePickler[NewSparseMatrix] {
-
-    override protected def packageName = PYSPARK_ML_PACKAGE
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val s = obj.asInstanceOf[NewSparseMatrix]
-      val order = ByteOrder.nativeOrder()
-
-      val colPtrsBytes = new Array[Byte](4 * s.colPtrs.length)
-      val indicesBytes = new Array[Byte](4 * s.rowIndices.length)
-      val valuesBytes = new Array[Byte](8 * s.values.length)
-      val isTransposed = if (s.isTransposed) 1 else 0
-      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().put(s.colPtrs)
-      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().put(s.rowIndices)
-      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().put(s.values)
-
-      out.write(Opcodes.MARK)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(s.numRows))
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(s.numCols))
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(colPtrsBytes.length))
-      out.write(colPtrsBytes)
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(indicesBytes.length))
-      out.write(indicesBytes)
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(valuesBytes.length))
-      out.write(valuesBytes)
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(isTransposed))
-      out.write(Opcodes.TUPLE)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 6) {
-        throw new PickleException("should be 6")
-      }
-      val order = ByteOrder.nativeOrder()
-      val colPtrsBytes = getBytes(args(2))
-      val indicesBytes = getBytes(args(3))
-      val valuesBytes = getBytes(args(4))
-      val colPtrs = new Array[Int](colPtrsBytes.length / 4)
-      val rowIndices = new Array[Int](indicesBytes.length / 4)
-      val values = new Array[Double](valuesBytes.length / 8)
-      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().get(colPtrs)
-      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().get(rowIndices)
-      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().get(values)
-      val isTransposed = args(5).asInstanceOf[Int] == 1
-      new NewSparseMatrix(
-        args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], colPtrs, rowIndices, values,
-        isTransposed)
-    }
-  }
-
-  // Pickler for (mllib) SparseVector
-  private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val v: SparseVector = obj.asInstanceOf[SparseVector]
-      val n = v.indices.length
-      val indiceBytes = new Array[Byte](4 * n)
-      val order = ByteOrder.nativeOrder()
-      ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
-      val valueBytes = new Array[Byte](8 * n)
-      ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().put(v.values)
-
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(v.size))
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(indiceBytes.length))
-      out.write(indiceBytes)
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(valueBytes.length))
-      out.write(valueBytes)
-      out.write(Opcodes.TUPLE3)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 3) {
-        throw new PickleException("should be 3")
-      }
-      val size = args(0).asInstanceOf[Int]
-      val indiceBytes = getBytes(args(1))
-      val valueBytes = getBytes(args(2))
-      val n = indiceBytes.length / 4
-      val indices = new Array[Int](n)
-      val values = new Array[Double](n)
-      if (n > 0) {
-        val order = ByteOrder.nativeOrder()
-        ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().get(indices)
-        ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().get(values)
-      }
-      new SparseVector(size, indices, values)
-    }
-  }
-
-  // Pickler for (new) SparseVector
-  private[python] class NewSparseVectorPickler extends BasePickler[NewSparseVector] {
-
-    override protected def packageName = PYSPARK_ML_PACKAGE
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val v: NewSparseVector = obj.asInstanceOf[NewSparseVector]
-      val n = v.indices.length
-      val indiceBytes = new Array[Byte](4 * n)
-      val order = ByteOrder.nativeOrder()
-      ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
-      val valueBytes = new Array[Byte](8 * n)
-      ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().put(v.values)
-
-      out.write(Opcodes.BININT)
-      out.write(PickleUtils.integer_to_bytes(v.size))
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(indiceBytes.length))
-      out.write(indiceBytes)
-      out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(valueBytes.length))
-      out.write(valueBytes)
-      out.write(Opcodes.TUPLE3)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 3) {
-        throw new PickleException("should be 3")
-      }
-      val size = args(0).asInstanceOf[Int]
-      val indiceBytes = getBytes(args(1))
-      val valueBytes = getBytes(args(2))
-      val n = indiceBytes.length / 4
-      val indices = new Array[Int](n)
-      val values = new Array[Double](n)
-      if (n > 0) {
-        val order = ByteOrder.nativeOrder()
-        ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().get(indices)
-        ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().get(values)
-      }
-      new NewSparseVector(size, indices, values)
-    }
-  }
-
-  // Pickler for MLlib LabeledPoint
-  private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
-      saveObjects(out, pickler, point.label, point.features)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 2) {
-        throw new PickleException("should be 2")
-      }
-      new LabeledPoint(args(0).asInstanceOf[Double], args(1).asInstanceOf[Vector])
-    }
-  }
-
-  // Pickler for Rating
-  private[python] class RatingPickler extends BasePickler[Rating] {
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val rating: Rating = obj.asInstanceOf[Rating]
-      saveObjects(out, pickler, rating.user, rating.product, rating.rating)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 3) {
-        throw new PickleException("should be 3")
-      }
-      new Rating(ratingsIdCheckLong(args(0)), ratingsIdCheckLong(args(1)),
-        args(2).asInstanceOf[Double])
-    }
-
-    private def ratingsIdCheckLong(obj: Object): Int = {
-      try {
-        obj.asInstanceOf[Int]
-      } catch {
-        case ex: ClassCastException =>
-          throw new PickleException(s"Ratings id ${obj.toString} exceeds " +
-            s"max integer value of ${Int.MaxValue}", ex)
-      }
-    }
-  }
-
-  var initialized = false
-  // This should be called before trying to serialize any above classes
-  // In cluster mode, this should be put in the closure
-  def initialize(): Unit = {
-    SerDeUtil.initialize()
-    synchronized {
-      if (!initialized) {
-        new DenseVectorPickler().register()
-        new DenseMatrixPickler().register()
-        new SparseMatrixPickler().register()
-        new SparseVectorPickler().register()
-        new NewDenseVectorPickler().register()
-        new NewDenseMatrixPickler().register()
-        new NewSparseMatrixPickler().register()
-        new NewSparseVectorPickler().register()
-        new LabeledPointPickler().register()
-        new RatingPickler().register()
-        initialized = true
-      }
-    }
-  }
-  // will not called in Executor automatically
-  initialize()
 
   def dumps(obj: AnyRef): Array[Byte] = {
     obj match {
@@ -1728,4 +1346,241 @@ private[spark] object SerDe extends Serializable {
       }
     }.toJavaRDD()
   }
+}
+
+/**
+ * SerDe utility functions for PythonMLLibAPI.
+ */
+private[spark] object SerDe extends SerDeBase with Serializable {
+
+  override val PYSPARK_PACKAGE = "pyspark.mllib"
+
+  // Pickler for DenseVector
+  private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val vector: DenseVector = obj.asInstanceOf[DenseVector]
+      val bytes = new Array[Byte](8 * vector.size)
+      val bb = ByteBuffer.wrap(bytes)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      db.put(vector.values)
+
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.TUPLE1)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      require(args.length == 1)
+      if (args.length != 1) {
+        throw new PickleException("should be 1")
+      }
+      val bytes = getBytes(args(0))
+      val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      val ans = new Array[Double](bytes.length / 8)
+      db.get(ans)
+      Vectors.dense(ans)
+    }
+  }
+
+  // Pickler for DenseMatrix
+  private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
+      val bytes = new Array[Byte](8 * m.values.length)
+      val order = ByteOrder.nativeOrder()
+      val isTransposed = if (m.isTransposed) 1 else 0
+      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
+
+      out.write(Opcodes.MARK)
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(m.numRows))
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(m.numCols))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(isTransposed))
+      out.write(Opcodes.TUPLE)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 4) {
+        throw new PickleException("should be 4")
+      }
+      val bytes = getBytes(args(2))
+      val n = bytes.length / 8
+      val values = new Array[Double](n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().get(values)
+      val isTransposed = args(3).asInstanceOf[Int] == 1
+      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], values, isTransposed)
+    }
+  }
+
+  // Pickler for SparseMatrix
+  private[python] class SparseMatrixPickler extends BasePickler[SparseMatrix] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val s = obj.asInstanceOf[SparseMatrix]
+      val order = ByteOrder.nativeOrder()
+
+      val colPtrsBytes = new Array[Byte](4 * s.colPtrs.length)
+      val indicesBytes = new Array[Byte](4 * s.rowIndices.length)
+      val valuesBytes = new Array[Byte](8 * s.values.length)
+      val isTransposed = if (s.isTransposed) 1 else 0
+      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().put(s.colPtrs)
+      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().put(s.rowIndices)
+      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().put(s.values)
+
+      out.write(Opcodes.MARK)
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(s.numRows))
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(s.numCols))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(colPtrsBytes.length))
+      out.write(colPtrsBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(indicesBytes.length))
+      out.write(indicesBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(valuesBytes.length))
+      out.write(valuesBytes)
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(isTransposed))
+      out.write(Opcodes.TUPLE)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 6) {
+        throw new PickleException("should be 6")
+      }
+      val order = ByteOrder.nativeOrder()
+      val colPtrsBytes = getBytes(args(2))
+      val indicesBytes = getBytes(args(3))
+      val valuesBytes = getBytes(args(4))
+      val colPtrs = new Array[Int](colPtrsBytes.length / 4)
+      val rowIndices = new Array[Int](indicesBytes.length / 4)
+      val values = new Array[Double](valuesBytes.length / 8)
+      ByteBuffer.wrap(colPtrsBytes).order(order).asIntBuffer().get(colPtrs)
+      ByteBuffer.wrap(indicesBytes).order(order).asIntBuffer().get(rowIndices)
+      ByteBuffer.wrap(valuesBytes).order(order).asDoubleBuffer().get(values)
+      val isTransposed = args(5).asInstanceOf[Int] == 1
+      new SparseMatrix(
+        args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], colPtrs, rowIndices, values,
+        isTransposed)
+    }
+  }
+
+  // Pickler for SparseVector
+  private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val v: SparseVector = obj.asInstanceOf[SparseVector]
+      val n = v.indices.length
+      val indiceBytes = new Array[Byte](4 * n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
+      val valueBytes = new Array[Byte](8 * n)
+      ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().put(v.values)
+
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(v.size))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(indiceBytes.length))
+      out.write(indiceBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(valueBytes.length))
+      out.write(valueBytes)
+      out.write(Opcodes.TUPLE3)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 3) {
+        throw new PickleException("should be 3")
+      }
+      val size = args(0).asInstanceOf[Int]
+      val indiceBytes = getBytes(args(1))
+      val valueBytes = getBytes(args(2))
+      val n = indiceBytes.length / 4
+      val indices = new Array[Int](n)
+      val values = new Array[Double](n)
+      if (n > 0) {
+        val order = ByteOrder.nativeOrder()
+        ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().get(indices)
+        ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().get(values)
+      }
+      new SparseVector(size, indices, values)
+    }
+  }
+
+  // Pickler for MLlib LabeledPoint
+  private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
+      saveObjects(out, pickler, point.label, point.features)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 2) {
+        throw new PickleException("should be 2")
+      }
+      new LabeledPoint(args(0).asInstanceOf[Double], args(1).asInstanceOf[Vector])
+    }
+  }
+
+  // Pickler for Rating
+  private[python] class RatingPickler extends BasePickler[Rating] {
+
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val rating: Rating = obj.asInstanceOf[Rating]
+      saveObjects(out, pickler, rating.user, rating.product, rating.rating)
+    }
+
+    def construct(args: Array[Object]): Object = {
+      if (args.length != 3) {
+        throw new PickleException("should be 3")
+      }
+      new Rating(ratingsIdCheckLong(args(0)), ratingsIdCheckLong(args(1)),
+        args(2).asInstanceOf[Double])
+    }
+
+    private def ratingsIdCheckLong(obj: Object): Int = {
+      try {
+        obj.asInstanceOf[Int]
+      } catch {
+        case ex: ClassCastException =>
+          throw new PickleException(s"Ratings id ${obj.toString} exceeds " +
+            s"max integer value of ${Int.MaxValue}", ex)
+      }
+    }
+  }
+
+  var initialized = false
+  // This should be called before trying to serialize any above classes
+  // In cluster mode, this should be put in the closure
+  override def initialize(): Unit = {
+    SerDeUtil.initialize()
+    synchronized {
+      if (!initialized) {
+        new DenseVectorPickler().register()
+        new DenseMatrixPickler().register()
+        new SparseMatrixPickler().register()
+        new SparseVectorPickler().register()
+        new LabeledPointPickler().register()
+        new RatingPickler().register()
+        initialized = true
+      }
+    }
+  }
+  // will not called in Executor automatically
+  initialize()
 }

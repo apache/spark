@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
  * Class for calculating variance during regression
  */
 @Since("1.0.0")
-@Experimental
 object Variance extends Impurity {
 
   /**

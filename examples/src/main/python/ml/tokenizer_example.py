@@ -34,12 +34,19 @@ if __name__ == "__main__":
         (1, "I wish Java could use case classes"),
         (2, "Logistic,regression,models,are,neat")
     ], ["label", "sentence"])
+
     tokenizer = Tokenizer(inputCol="sentence", outputCol="words")
-    wordsDataFrame = tokenizer.transform(sentenceDataFrame)
-    for words_label in wordsDataFrame.select("words", "label").take(3):
-        print(words_label)
+
     regexTokenizer = RegexTokenizer(inputCol="sentence", outputCol="words", pattern="\\W")
     # alternatively, pattern="\\w+", gaps(False)
+
+    tokenized = tokenizer.transform(sentenceDataFrame)
+    for words_label in tokenized.select("words", "label").take(3):
+        print(words_label)
+
+    regexTokenized = regexTokenizer.transform(sentenceDataFrame)
+    for words_label in regexTokenized.select("words", "label").take(3):
+        print(words_label)
     # $example off$
 
     spark.stop()

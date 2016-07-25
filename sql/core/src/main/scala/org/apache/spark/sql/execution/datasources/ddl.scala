@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -98,6 +99,15 @@ case class RefreshTable(tableIdent: TableIdentifier)
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
     sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    Seq.empty[Row]
+  }
+}
+
+case class RefreshResource(path: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.catalog.refreshByPath(path)
     Seq.empty[Row]
   }
 }

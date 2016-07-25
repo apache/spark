@@ -42,9 +42,11 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
         case Some(s) => s.values.toSeq
         case None => Seq[StageInfo]()
       }
-      val activeStagesTable = new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-        parent.basePath, parent.progressListener, isFairScheduler = parent.isFairScheduler,
-        killEnabled = parent.killEnabled)
+      val shouldShowActiveStages = activeStages.nonEmpty
+      val activeStagesTable =
+        new StageTableBase(request, activeStages, "activeStage", parent.basePath, "stages/pool",
+          parent.progressListener, parent.isFairScheduler, parent.killEnabled,
+          isFailedStage = false)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getPoolForName(poolName).getOrElse {
@@ -52,9 +54,10 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       }).toSeq
       val poolTable = new PoolTable(pools, parent)
 
-      val content =
-        <h4>Summary </h4> ++ poolTable.toNodeSeq ++
-        <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
+      var content = <h4>Summary </h4> ++ poolTable.toNodeSeq
+      if (shouldShowActiveStages) {
+        content ++= <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
+      }
 
       UIUtils.headerSparkPage("Fair Scheduler Pool: " + poolName, content, parent)
     }

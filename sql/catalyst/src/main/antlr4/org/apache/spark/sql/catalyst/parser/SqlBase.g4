@@ -106,15 +106,17 @@ statement
     | SHOW COLUMNS (FROM | IN) tableIdentifier
         ((FROM | IN) db=identifier)?                                   #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
-    | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
+    | SHOW identifier? FUNCTIONS
+        (LIKE? (qualifiedName | pattern=STRING))?                      #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
-    | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
-    | UNCACHE TABLE identifier                                         #uncacheTable
+    | REFRESH .*?                                                      #refreshResource
+    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
@@ -168,7 +170,7 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=SET kw4=FILEFORMAT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=ADD kw4=COLUMNS
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMNS?
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMN?
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=REPLACE kw4=COLUMNS
     | kw1=START kw2=TRANSACTION
     | kw1=COMMIT
@@ -202,7 +204,7 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
+    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
     ;
 
@@ -247,11 +249,18 @@ tablePropertyList
     ;
 
 tableProperty
-    : key=tablePropertyKey (EQ? value=STRING)?
+    : key=tablePropertyKey (EQ? value=tablePropertyValue)?
     ;
 
 tablePropertyKey
     : identifier ('.' identifier)*
+    | STRING
+    ;
+
+tablePropertyValue
+    : INTEGER_VALUE
+    | DECIMAL_VALUE
+    | booleanValue
     | STRING
     ;
 

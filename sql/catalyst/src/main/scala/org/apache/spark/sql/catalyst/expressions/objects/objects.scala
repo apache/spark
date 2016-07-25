@@ -22,7 +22,7 @@ import java.lang.reflect.Modifier
 import scala.language.existentials
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -134,29 +134,40 @@ case class Invoke(
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    val callFunc = if (method.isDefined && method.get.getReturnType.isPrimitive) {
-      s"${obj.value}.$functionName($argString)"
+    val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
+    val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
+
+    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
+      s"""
+        try {
+          $resultVal = $funcCall;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
     } else {
-      s"(${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString)"
+      s"$resultVal = $funcCall;"
+    }
+
+    val evaluate = if (returnPrimitive) {
+      getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
+    } else {
+      val funcResult = ctx.freshName("funcResult")
+      s"""
+        Object $funcResult = null;
+        ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
+        if ($funcResult == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
+        }
+      """
     }
 
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
       s"boolean ${ev.isNull} = ${obj.isNull} || ${argGen.map(_.isNull).mkString(" || ")};"
     } else {
       s"boolean ${ev.isNull} = ${obj.isNull};"
-    }
-
-    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
-      s"final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;"
-    } else {
-      s"""
-        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        try {
-          ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $callFunc;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """
     }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
@@ -166,12 +177,14 @@ case class Invoke(
     } else {
       ""
     }
-
     val code = s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
       $setIsNull
-      $evaluate
+      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        $evaluate
+      }
       $postNullCheck
      """
     ev.copy(code = code)
@@ -353,7 +366,7 @@ object MapObjects {
     val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
     val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
     val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
-    MapObjects(loopVar, function(loopVar), inputData)
+    MapObjects(loopValue, loopIsNull, elementType, function(loopVar), inputData)
   }
 }
 
@@ -365,14 +378,20 @@ object MapObjects {
  * The following collection ObjectTypes are currently supported:
  *   Seq, Array, ArrayData, java.util.List
  *
- * @param loopVar A place holder that used as the loop variable when iterate the collection, and
- *                used as input for the `lambdaFunction`. It also carries the element type info.
+ * @param loopValue the name of the loop variable that used when iterate the collection, and used
+ *                  as input for the `lambdaFunction`
+ * @param loopIsNull the nullity of the loop variable that used when iterate the collection, and
+ *                   used as input for the `lambdaFunction`
+ * @param loopVarDataType the data type of the loop variable that used when iterate the collection,
+ *                        and used as input for the `lambdaFunction`
  * @param lambdaFunction A function that take the `loopVar` as input, and used as lambda function
  *                       to handle collection elements.
  * @param inputData An expression that when evaluated returns a collection object.
  */
 case class MapObjects private(
-    loopVar: LambdaVariable,
+    loopValue: String,
+    loopIsNull: String,
+    loopVarDataType: DataType,
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
@@ -386,9 +405,9 @@ case class MapObjects private(
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val elementJavaType = ctx.javaType(loopVar.dataType)
-    ctx.addMutableState("boolean", loopVar.isNull, "")
-    ctx.addMutableState(elementJavaType, loopVar.value, "")
+    val elementJavaType = ctx.javaType(loopVarDataType)
+    ctx.addMutableState("boolean", loopIsNull, "")
+    ctx.addMutableState(elementJavaType, loopValue, "")
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -443,11 +462,11 @@ case class MapObjects private(
     }
 
     val loopNullCheck = inputData.dataType match {
-      case _: ArrayType => s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+      case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
       case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
-        s"${loopVar.isNull} = false"
-      case _ => s"${loopVar.isNull} = ${loopVar.value} == null;"
+        s"$loopIsNull = false"
+      case _ => s"$loopIsNull = $loopValue == null;"
     }
 
     val code = s"""
@@ -462,7 +481,7 @@ case class MapObjects private(
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          ${loopVar.value} = ($elementJavaType) ($getLoopVar);
+          $loopValue = ($elementJavaType) ($getLoopVar);
           $loopNullCheck
 
           ${genFunction.code}
@@ -547,11 +566,17 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
         (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
       }
     }
+    // try conf from env, otherwise create a new one
+    val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addMutableState(
-      serializerInstanceClass,
-      serializer,
-      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
+    val serializerInit = s"""
+      if ($env == null) {
+        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
+    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to serialize.
     val input = child.genCode(ctx)
@@ -587,11 +612,17 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
         (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
       }
     }
+    // try conf from env, otherwise create a new one
+    val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addMutableState(
-      serializerInstanceClass,
-      serializer,
-      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
+    val serializerInit = s"""
+      if ($env == null) {
+        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+       } else {
+         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+       }
+     """
+    ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
 
     // Code to deserialize.
     val input = child.genCode(ctx)

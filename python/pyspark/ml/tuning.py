@@ -25,7 +25,7 @@ from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
-from pyspark.mllib.common import inherit_doc, _py2java
+from pyspark.ml.common import inherit_doc, _py2java
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -33,8 +33,6 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
 
 class ParamGridBuilder(object):
     r"""
-    .. note:: Experimental
-
     Builder for a param grid used in grid search-based model selection.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -145,8 +143,6 @@ class ValidatorParams(HasSeed):
 
 class CrossValidator(Estimator, ValidatorParams):
     """
-    .. note:: Experimental
-
     K-fold cross validation.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -264,8 +260,6 @@ class CrossValidator(Estimator, ValidatorParams):
 
 class CrossValidatorModel(Model, ValidatorParams):
     """
-    .. note:: Experimental
-
     Model from k-fold cross validation.
 
     .. versionadded:: 1.4.0

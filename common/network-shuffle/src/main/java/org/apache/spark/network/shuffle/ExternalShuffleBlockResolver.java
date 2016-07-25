@@ -146,6 +146,10 @@ public class ExternalShuffleBlockResolver {
     this.directoryCleaner = directoryCleaner;
   }
 
+  public int getRegisteredExecutorsSize() {
+    return executors.size();
+  }
+
   /** Registers a new Executor with all the configuration we need to find its shuffle files. */
   public void registerExecutor(
       String appId,

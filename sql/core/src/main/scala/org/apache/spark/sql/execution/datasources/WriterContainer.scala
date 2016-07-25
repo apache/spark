@@ -28,6 +28,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 
 /** A container for all the details required when writing to a table. */
@@ -389,7 +391,9 @@ private[sql] class DynamicPartitionWriterContainer(
       StructType.fromAttributes(dataColumns),
       SparkEnv.get.blockManager,
       SparkEnv.get.serializerManager,
-      TaskContext.get().taskMemoryManager().pageSizeBytes)
+      TaskContext.get().taskMemoryManager().pageSizeBytes,
+      SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD))
 
     while (iterator.hasNext) {
       val currentRow = iterator.next()

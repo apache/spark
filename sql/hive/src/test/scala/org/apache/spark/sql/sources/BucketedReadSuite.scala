@@ -20,10 +20,11 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSourceStrategy}
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
@@ -238,7 +239,9 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       shuffleLeft: Boolean,
       shuffleRight: Boolean): Unit = {
     withTable("bucketed_table1", "bucketed_table2") {
-      def withBucket(writer: DataFrameWriter, bucketSpec: Option[BucketSpec]): DataFrameWriter = {
+      def withBucket(
+          writer: DataFrameWriter[Row],
+          bucketSpec: Option[BucketSpec]): DataFrameWriter[Row] = {
         bucketSpec.map { spec =>
           writer.bucketBy(
             spec.numBuckets,

@@ -178,7 +178,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   }
 
   override def listDatabases(): Seq[String] = synchronized {
-    catalog.keySet.toSeq
+    catalog.keySet.toSeq.sorted
   }
 
   override def listDatabases(pattern: String): Seq[String] = synchronized {
@@ -220,7 +220,8 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   override def dropTable(
       db: String,
       table: String,
-      ignoreIfNotExists: Boolean): Unit = synchronized {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     requireDbExists(db)
     if (tableExists(db, table)) {
       if (getTable(db, table).tableType == CatalogTableType.MANAGED) {
@@ -286,7 +287,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   override def listTables(db: String): Seq[String] = synchronized {
     requireDbExists(db)
-    catalog(db).tables.keySet.toSeq
+    catalog(db).tables.keySet.toSeq.sorted
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
@@ -358,7 +359,8 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       db: String,
       table: String,
       partSpecs: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = synchronized {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {

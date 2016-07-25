@@ -171,6 +171,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
+    val dynamicPartitionKeys = partitionKeys.filter(_._2.isEmpty)
+    if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
+      throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
+        "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
+    }
+
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
@@ -1424,13 +1430,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-
-    // Add the comment to the metadata.
-    val builder = new MetadataBuilder
-    if (STRING != null) {
-      builder.putString("comment", string(STRING))
-    }
-
-    StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }
