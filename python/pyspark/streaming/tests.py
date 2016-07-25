@@ -1010,8 +1010,8 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         cls._kafkaTestUtils.setup()
 
     @classmethod
-    def tearDown(cls):
-        super(KafkaStreamTests, cls).tearDown()
+    def tearDownClass(cls):
+        super(KafkaStreamTests, cls).tearDownClass()
 
         if cls._kafkaTestUtils is not None:
             cls._kafkaTestUtils.teardown()
