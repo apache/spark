@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -344,6 +345,36 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer1 =
       MapPartitions(func, Project(Seq('_1, '_2), input)).analyze
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
+  }
+
+  test("push project down into sample") {
+    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val x = testRelation.subquery('x)
+    val originalQuery =
+      Sample(0.0, 0.6, false, 11L, x)().select('a)
+
+    val originalQueryAnalyzed =
+      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
+
+    val optimized = Optimize.execute(originalQueryAnalyzed)
+
+    val correctAnswer =
+      Sample(0.0, 0.6, false, 11L, x.select('a))()
+
+    comparePlans(optimized, correctAnswer.analyze)
+
+    val originalQuery2 =
+      Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
+
+    val originalQueryAnalyzed2 =
+      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery2))
+
+    val optimized2 = Optimize.execute(originalQueryAnalyzed2)
+
+    val correctAnswer2 =
+      Sample(0.0, 0.6, false, 11L, x.select('a))().select('a as 'aa)
+
+    comparePlans(optimized2, correctAnswer2.analyze)
   }
 
   // todo: add more tests for column pruning

@@ -76,7 +76,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
       PushThroughSetOperations,
-      PushProjectThroughSample,
       ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
@@ -147,19 +146,6 @@ class SimpleTestOptimizer extends Optimizer(
     EmptyFunctionRegistry,
     new SimpleCatalystConf(caseSensitiveAnalysis = true)),
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
-
-/**
- * Pushes projects down beneath Sample to enable column pruning with sampling.
- * This rule is only doable when the projects don't add new attributes.
- */
-object PushProjectThroughSample extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down projection into sample
-    case p @ Project(projectList, Sample(lb, up, replace, seed, child))
-        if p.outputSet.subsetOf(p.child.outputSet) =>
-      Sample(lb, up, replace, seed, Project(projectList, child))()
-  }
-}
 
 /**
  * Removes the Project only conducting Alias of its child node.
