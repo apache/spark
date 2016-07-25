@@ -44,17 +44,6 @@ object GenericArrayData {
     new GenericBooleanArrayData(primitiveArray)
 }
 
-private object GenericArrayData {
-
-  // SPARK-16634: Workaround for JVM bug present in some 1.7 versions.
-  def anyToSeq(seqOrArray: Any): Seq[Any] = seqOrArray match {
-    case seq: Seq[Any] => seq
-    case array: Array[_] => array.toSeq
-    case _ => Seq.empty
-  }
-
-}
-
 abstract class GenericArrayData extends ArrayData {
   override def get(ordinal: Int, elementType: DataType): AnyRef =
     throw new UnsupportedOperationException("get() method is not supported")
@@ -90,7 +79,18 @@ abstract class GenericArrayData extends ArrayData {
   override def toString(): String = array.mkString("[", ",", "]")
 }
 
-final class GenericRefArrayData(val _array: Array[Any]) extends GenericArrayData {
+private object GenericRefArrayData {
+
+  // SPARK-16634: Workaround for JVM bug present in some 1.7 versions.
+  def anyToSeq(seqOrArray: Any): Seq[Any] = seqOrArray match {
+    case seq: Seq[Any] => seq
+    case array: Array[_] => array.toSeq
+    case _ => Seq.empty
+  }
+
+}
+
+final class GenericRefArrayData(val array: Array[Any]) extends GenericArrayData {
 
   def this(seq: Seq[Any]) = this(seq.toArray)
   def this(list: java.util.List[Any]) = this(list.asScala)
@@ -104,7 +104,7 @@ final class GenericRefArrayData(val _array: Array[Any]) extends GenericArrayData
   def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
   def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
 
-  def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
+  def this(seqOrArray: Any) = this(GenericRefArrayData.anyToSeq(seqOrArray))
 
   override def copy(): GenericRefArrayData = new GenericRefArrayData(array.clone())
 
