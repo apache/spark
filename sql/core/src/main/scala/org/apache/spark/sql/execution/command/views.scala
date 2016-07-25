@@ -119,7 +119,7 @@ case class CreateViewCommand(
           // already exists.
         } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
           throw new AnalysisException(
-            s"Existing table is not a view. The following is an existing table, " +
+            "Existing table is not a view. The following is an existing table, " +
               s"not a view: $qualifiedName")
         } else if (replace) {
           // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
