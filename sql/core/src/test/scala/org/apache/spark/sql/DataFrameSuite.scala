@@ -896,6 +896,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkError(df("`a.b`.c.`d"))
   }
 
+  test("SPARK-11977: Support accessing a column contains '.' without backticks") {
+    val df = sparkContext.parallelize(
+      (1, 2) :: (3, 4) ::  Nil).toDF("test.column1", "test.column.2")
+    checkAnswer(df.select("test.column1"), Seq(Row(1), Row(3)))
+    checkAnswer(df.select("test.column.2"), Seq(Row(2), Row(4)))
+
+    // Renaming to a column that contains "." character
+    val df2 = testData.toDF().withColumnRenamed("value", "value.Renamed")
+    assert(df2.schema.map(_.name) === Seq("key", "value.Renamed"))
+    assert(df2.select("value.Renamed").count() == 100)
+    assert(df2.select("value.Renamed").first() == Row("1"))
+  }
+
   test("SPARK-7324 dropDuplicates") {
     val testData = sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
