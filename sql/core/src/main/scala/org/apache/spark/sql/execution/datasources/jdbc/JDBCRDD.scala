@@ -325,15 +325,15 @@ private[sql] class JDBCRDD(
   // A `JDBCValueSetter` is responsible for converting and setting a value from `ResultSet`
   // into a field for `MutableRow`. The last argument `Int` means the index for the
   // value to be set in the row and also used for the value to retrieve from `ResultSet`.
-  private type ValueSetter = (ResultSet, MutableRow, Int) => Unit
+  private type JDBCValueSetter = (ResultSet, MutableRow, Int) => Unit
 
   /**
    * Creates a StructType to setters for each type.
    */
-  def makeSetters(schema: StructType): Array[ValueSetter] =
+  def makeSetters(schema: StructType): Array[JDBCValueSetter] =
     schema.fields.map(sf => makeSetters(sf.dataType, sf.metadata))
 
-  private def makeSetters(dt: DataType, metadata: Metadata): ValueSetter = dt match {
+  private def makeSetters(dt: DataType, metadata: Metadata): JDBCValueSetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: MutableRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
@@ -485,7 +485,7 @@ private[sql] class JDBCRDD(
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
-    val setters: Array[ValueSetter] = makeSetters(schema)
+    val setters: Array[JDBCValueSetter] = makeSetters(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
     def getNext(): InternalRow = {
