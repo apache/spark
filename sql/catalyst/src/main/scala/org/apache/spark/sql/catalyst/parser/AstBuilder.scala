@@ -339,11 +339,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.SELECT =>
         // Regular select
 
-        // Add hints.
-        val withHint = relation.optionalMap(ctx.hint)(withHints)
-
         // Add lateral views.
-        val withLateralView = ctx.lateralView.asScala.foldLeft(withHint)(withGenerate)
+        val withLateralView = ctx.lateralView.asScala.foldLeft(relation)(withGenerate)
 
         // Add where.
         val withFilter = withLateralView.optionalMap(where)(filter)
@@ -380,7 +377,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         }
 
         // Window
-        withDistinct.optionalMap(windows)(withWindows)
+        val withWindow = withDistinct.optionalMap(windows)(withWindows)
+
+        // Hint
+        withWindow.optionalMap(ctx.hint)(withHints)
     }
   }
 
@@ -516,9 +516,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   private def withHints(
       ctx: HintContext,
-      relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val stmt = ctx.hintStatement
-    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), relation)
+    Hint(stmt.hintName.getText, stmt.parameters.asScala.map(_.getText), query)
   }
 
   /**
