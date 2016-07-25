@@ -279,7 +279,16 @@ private[sql] case class RowDataSourceScanExec(
   }
 }
 
-/** Physical plan node for scanning data from files. */
+/**
+ * Physical plan node for scanning data from files.
+ *
+ * @param relation The file-based relation to scan.
+ * @param output Output attributes of the scan.
+ * @param outputSchema Output schema of the scan.
+ * @param partitionFilters Predicates to use for partition pruning.
+ * @param dataFilters Data source filters to use for filtering data within partitions.
+ * @param metastoreTableIdentifier
+ */
 private[sql] case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
@@ -298,7 +307,7 @@ private[sql] case class FileSourceScanExec(
     false
   }
 
-  override val outputPartitioning = {
+  override val outputPartitioning: Partitioning = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
