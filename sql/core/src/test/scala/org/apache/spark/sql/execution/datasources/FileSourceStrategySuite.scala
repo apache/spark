@@ -236,7 +236,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     val df = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
     // Filter on data only are advisory so we have to reevaluate.
     assert(getPhysicalFilters(df) contains resolve(df, "c1 = 1"))
-    // Need to evaluate filters that are not pushed down.
+    // Need to evalaute filters that are not pushed down.
     assert(getPhysicalFilters(df) contains resolve(df, "(p1 + c1) = 2"))
     // Don't reevaluate partition only filters.
     assert(!(getPhysicalFilters(df) contains resolve(df, "p1 = 1")))
@@ -311,76 +311,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
         val fileScanRDD = getFileScanRDD(table)
         assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 2)
-      }
-    }
-  }
-
-  test("Column pruning on partitioning columns") {
-    Seq("parquet", "json").foreach { fileFormat =>
-      withTempPath { path =>
-        val tempDir = path.getCanonicalPath
-        Seq(("val1_1", "val2_1", 1, 2, 3), ("val1_2", "val2_2", 1, 3, 3))
-          .toDF("value", "value2", "p1", "p2", "p3").write.format(fileFormat)
-          .partitionBy("p1", "p2", "p3").save(tempDir)
-
-        def verifyPruning(
-            projectList: Seq[String],
-            expectedScanList: Seq[String],
-            expectedResult: Seq[Row]): Unit = {
-          val df = spark.read.format(fileFormat).load(tempDir).selectExpr(projectList: _*)
-          assert(getDataSourceScanExec(df).output.map(_.name) == expectedScanList)
-          checkAnswer(df, expectedResult)
-        }
-
-        verifyPruning(
-          projectList = Seq("value", "p1", "p2", "p3"),
-          expectedScanList = Seq("value", "p1", "p2", "p3"),
-          Row("val1_1", 1, 2, 3) :: Row("val1_2", 1, 3, 3) :: Nil)
-
-        verifyPruning(
-          projectList = Seq("value2"),
-          expectedScanList = Seq("value2"),
-          Row("val2_1") :: Row("val2_2") :: Nil)
-
-        verifyPruning(
-          projectList = Seq("value2", "value"),
-          expectedScanList = Seq("value", "value2"),
-          Row("val2_1", "val1_1") :: Row("val2_2", "val1_2") :: Nil)
-
-        verifyPruning(
-          projectList = Seq("value"),
-          expectedScanList = Seq("value"),
-          Row("val1_1") :: Row("val1_2") :: Nil)
-
-        verifyPruning(
-          projectList = Seq("value", "value"),
-          expectedScanList = Seq("value"),
-          Row("val1_1", "val1_1") :: Row("val1_2", "val1_2") :: Nil)
-
-        verifyPruning(
-          projectList = Seq("value as v", "value"),
-          expectedScanList = Seq("value"),
-          Row("val1_1", "val1_1") :: Row("val1_2", "val1_2") :: Nil)
-
-        verifyPruning(
-          projectList = Seq("p2", "p2"),
-          expectedScanList = Seq("p1", "p2", "p3"),
-          Row(2, 2) :: Row(3, 3) :: Nil)
-
-        verifyPruning(
-          projectList = Seq("p2 as p", "p2"),
-          expectedScanList = Seq("p1", "p2", "p3"),
-          Row(2, 2) :: Row(3, 3) :: Nil)
-
-        verifyPruning(
-          projectList = Seq("p3", "value", "p2"),
-          expectedScanList = Seq("value", "p1", "p2", "p3"),
-          Row(3, "val1_2", 3) :: Row(3, "val1_1", 2) :: Nil)
-
-        verifyPruning(
-          projectList = Seq("p3", "p2", "value2"),
-          expectedScanList = Seq("value2", "p1", "p2", "p3"),
-          Row(3, 3, "val2_2") :: Row(3, 2, "val2_1") :: Nil)
       }
     }
   }
@@ -558,14 +488,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         scan.rdd.asInstanceOf[FileScanRDD]
     }.headOption.getOrElse {
       fail(s"No FileScan in query\n${df.queryExecution}")
-    }
-  }
-
-  def getDataSourceScanExec(df: DataFrame): DataSourceScanExec = {
-    df.queryExecution.executedPlan.collect {
-      case scan: DataSourceScanExec => scan
-    }.headOption.getOrElse {
-      fail(s"No DataSourceScanExec in query\n${df.queryExecution}")
     }
   }
 }

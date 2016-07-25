@@ -135,17 +135,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         PUSHED_FILTERS -> pushedDownFilters.mkString("[", ", ", "]"),
         INPUT_PATHS -> fsRelation.location.paths.mkString(", "))
 
-      // If the required attributes does not have the partitioning columns, we do not need
-      // to scan the partitioning columns. If partitioning columns are selected, the column order
-      // of partitionColumns is fixed in rdd. Thus, we always scan all the partitioning columns.
-      val scannedColumns = if (requiredAttributes.intersect(partitionSet).nonEmpty) {
-        readDataColumns ++ partitionColumns
-      } else {
-        readDataColumns
-      }
       val scan =
         DataSourceScanExec.create(
-          scannedColumns,
+          readDataColumns ++ partitionColumns,
           rdd,
           fsRelation,
           meta,
