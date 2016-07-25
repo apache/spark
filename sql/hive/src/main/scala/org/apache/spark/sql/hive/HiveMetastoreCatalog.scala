@@ -119,7 +119,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
 
-        val options = table.storage.serdeProperties
+        val options = table.storage.properties
         val dataSource =
           DataSource(
             sparkSession,

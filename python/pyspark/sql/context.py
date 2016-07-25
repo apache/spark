@@ -471,12 +471,11 @@ class HiveContext(SQLContext):
     .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
     """
 
-    warnings.warn(
-        "HiveContext is deprecated in Spark 2.0.0. Please use " +
-        "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-        DeprecationWarning)
-
     def __init__(self, sparkContext, jhiveContext=None):
+        warnings.warn(
+            "HiveContext is deprecated in Spark 2.0.0. Please use " +
+            "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+            DeprecationWarning)
         if jhiveContext is None:
             sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
