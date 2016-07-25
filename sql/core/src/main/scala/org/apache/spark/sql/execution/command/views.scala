@@ -70,7 +70,7 @@ case class CreateViewCommand(
 
   if (!isTemporary) {
     require(originalText.isDefined,
-      "The table to created with CREATE VIEW must have 'viewText'.")
+      "The table to created with CREATE VIEW must have 'originalText'.")
   }
 
   if (allowExisting && replace) {
