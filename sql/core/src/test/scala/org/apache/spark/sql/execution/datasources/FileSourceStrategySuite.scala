@@ -242,22 +242,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     assert(!(getPhysicalFilters(df) contains resolve(df, "p1 = 1")))
   }
 
-  test("field names containing dots for both fields and partitioned fields") {
-    val table =
-      createTable(
-        files = Seq(
-          "p.1=1/file1" -> 10,
-          "p.1=2/file2" -> 10))
-
-    val df = table.where("`p.1` = 1 AND (`p.1` + c1) = 2 AND `c.3` = 1")
-    // Filter on data only are advisory so we have to reevaluate.
-    assert(getPhysicalFilters(df) contains resolve(df, "`c.3` = 1"))
-    // Need to evalaute filters that are not pushed down.
-    assert(getPhysicalFilters(df) contains resolve(df, "(`p.1` + c1) = 2"))
-    // Don't reevaluate partition only filters.
-    assert(!(getPhysicalFilters(df) contains resolve(df, "`p.1` = 1")))
-  }
-
   test("bucketed table") {
     val table =
       createTable(
@@ -533,8 +517,7 @@ class TestFileFormat extends TextBasedFileFormat {
     Some(
       StructType(Nil)
           .add("c1", IntegerType)
-          .add("c2", IntegerType)
-          .add("c.3", IntegerType))
+          .add("c2", IntegerType))
 
   /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
