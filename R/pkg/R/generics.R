@@ -563,10 +563,6 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
-#' @rdname registerTempTable-deprecated
-#' @export
-setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
-
 #' @rdname sample
 #' @export
 setGeneric("sample",
