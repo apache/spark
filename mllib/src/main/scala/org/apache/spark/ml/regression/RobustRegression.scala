@@ -24,6 +24,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
@@ -277,21 +278,26 @@ class RobustRegressionModel private[ml] (
  *            \end{cases}
  * }}}
  *
- * @param parameters including three part: The scale parameter (sigma), the intercept and
+ * @param bcParameters including three part: The scale parameter (sigma), the intercept and
  *                regression coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
- * @param featuresStd The standard deviation values of the features.
+ * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param m The shape parameter to control the amount of robustness.
  */
 private class HuberAggregator(
-    parameters: Vector,
+    bcParameters: Broadcast[Vector],
     fitIntercept: Boolean,
-    featuresStd: Array[Double],
+    bcFeaturesStd: Broadcast[Array[Double]],
     m: Double) extends Serializable {
 
-  private val coefficients: Array[Double] = parameters.toArray.slice(2, parameters.size)
-  private val intercept: Double = parameters(1)
-  private val sigma: Double = parameters(0)
+  private val parameterLength = bcParameters.value.size
+
+  @transient private lazy val coefficients: Array[Double] =
+    bcParameters.value.toArray.slice(2, parameterLength)
+  private val intercept: Double = bcParameters.value(1)
+  private val sigma: Double = bcParameters.value(0)
+
+  @transient private lazy val featuresStd = bcFeaturesStd.value
 
   private val dim: Int = coefficients.length
 
@@ -299,7 +305,7 @@ private class HuberAggregator(
   private var weightSum: Double = 0.0
   private var lossSum = 0.0
   // Here we optimize loss function over sigma, intercept and coefficients
-  private val gradientSumArray = Array.ofDim[Double](parameters.size)
+  private val gradientSumArray = Array.ofDim[Double](parameterLength)
 
   def count: Long = totalCnt
   def loss: Double = {
@@ -417,13 +423,15 @@ private class HuberCostFun(
 
   override def calculate(parameters: BDV[Double]): (Double, BDV[Double]) = {
     val parametersVector = Vectors.fromBreeze(parameters)
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val bcParameters = instances.context.broadcast(parametersVector)
 
     val huberAggregator = {
       val seqOp = (c: HuberAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: HuberAggregator, c2: HuberAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new HuberAggregator(parametersVector, fitIntercept, featuresStd, m))(seqOp, combOp)
+        new HuberAggregator(bcParameters, fitIntercept, bcFeaturesStd, m))(seqOp, combOp)
     }
 
     val totalGradientArray = huberAggregator.gradient.toArray
