@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -353,8 +352,7 @@ class ColumnPruningSuite extends PlanTest {
     val originalQuery =
       Sample(0.0, 0.6, false, 11L, x)().select('a)
 
-    val originalQueryAnalyzed =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
+    val originalQueryAnalyzed = originalQuery.analyze
 
     val optimized = Optimize.execute(originalQueryAnalyzed)
 
@@ -366,8 +364,7 @@ class ColumnPruningSuite extends PlanTest {
     val originalQuery2 =
       Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
 
-    val originalQueryAnalyzed2 =
-      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery2))
+    val originalQueryAnalyzed2 = originalQuery2.analyze
 
     val optimized2 = Optimize.execute(originalQueryAnalyzed2)
 
