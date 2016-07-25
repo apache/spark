@@ -91,3 +91,21 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     rdd2 = null
   }
 }
+
+private[spark]
+class CartesianFilterRDD[T: ClassTag, U: ClassTag](
+    sc: SparkContext,
+    rdd1 : RDD[T],
+    rdd2 : RDD[U],
+    f: (T, U) => Boolean)
+  extends CartesianRDD[T, U](sc, rdd1, rdd2)
+  with Serializable {
+
+  val cond = sc.clean(f)
+
+  override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {
+    val currSplit = split.asInstanceOf[CartesianPartition]
+    for (x <- rdd1.iterator(currSplit.s1, context);
+         y <- rdd2.iterator(currSplit.s2, context); if cond(x, y)) yield (x, y)
+  }
+}

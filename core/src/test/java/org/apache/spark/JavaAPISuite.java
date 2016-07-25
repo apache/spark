@@ -711,6 +711,20 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void cartesianFilter() {
+    JavaRDD<Integer> doubleRDD = sc.parallelize(Arrays.asList(1, 2, 3, 5, 8));
+    JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
+    JavaPairRDD<String, Integer> cartesian =
+        stringRDD.cartesianFilter(doubleRDD, new Function<Tuple2<String, Integer>, Boolean>() {
+          @Override
+          public Boolean call(Tuple2<String, Integer> v1) throws Exception {
+            return v1._2 > 1;
+          }
+        });
+    assertEquals(new Tuple2<>("Hello", 2), cartesian.first());
+  }
+
+  @Test
   public void javaDoubleRDD() {
     JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaDoubleRDD distinct = rdd.distinct();
