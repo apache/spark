@@ -1079,7 +1079,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(ratings)
-#' model <- spark.als(df, rating ~ user + item)
+#' model <- spark.als(df, "user", "item")
 #'
 #' # get a summary of the model
 #' summary(model)
@@ -1095,10 +1095,12 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.als since 2.1.0
-setMethod("spark.als", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, ...) {
-            formula <- paste(deparse(formula), collapse = "")
+setMethod("spark.als", signature(data = "SparkDataFrame", ratingCol = "character",
+                                 userCol = "character", itemCol = "character"),
+          function(data, ratingCol = "score", userCol = "user", itemCol = "item",
+                   rank = 10, reg = 1.0, maxIter = 10) {
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
-                                "fit", formula, data@sdf)
+                                "fit", data@sdf, ratingCol, userCol, itemCol,
+                                rank, reg, maxIter)
             return(new("ALSModel", jobj = jobj))
           })
