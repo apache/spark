@@ -323,12 +323,9 @@ private[sql] class JDBCRDD(
   }
 
   // A `JDBCConversion` is responsible for converting a value from `ResultSet`
-  // to a value in a field for `InternalRow`.
+  // to a value in a field for `InternalRow`. The second argument `Int` means the index
+  // for the data to retrieve and convert from `ResultSet`.
   private type JDBCConversion = (ResultSet, Int) => Any
-
-  // This `ArrayElementConversion` is responsible for converting elements in
-  // an array from `ResultSet`.
-  private type ArrayElementConversion = (Object) => Any
 
   /**
    * Maps a StructType to conversions for each type.
@@ -343,21 +340,19 @@ private[sql] class JDBCRDD(
     case DateType =>
       (rs: ResultSet, pos: Int) =>
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
-        val dateVal = rs.getDate(pos)
-        if (dateVal != null) {
-          DateTimeUtils.fromJavaDate(dateVal)
-        } else {
-          null
-        }
+        nullSafeConvert(rs.getDate(pos), DateTimeUtils.fromJavaDate)
 
+    // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
+    // object returned by ResultSet.getBigDecimal is not correctly matched to the table
+    // schema reported by ResultSetMetaData.getPrecision and ResultSetMetaData.getScale.
+    // If inserting values like 19999 into a column with NUMBER(12, 2) type, you get through
+    // a BigDecimal object with scale as 0. But the dataframe schema has correct type as
+    // DecimalType(12, 2). Thus, after saving the dataframe into parquet file and then
+    // retrieve it, you will get wrong result 199.99.
+    // So it is needed to set precision and scale for Decimal based on JDBC metadata.
     case DecimalType.Fixed(p, s) =>
       (rs: ResultSet, pos: Int) =>
-        val decimalVal = rs.getBigDecimal(pos)
-        if (decimalVal != null) {
-          Decimal(decimalVal, p, s)
-        } else {
-          null
-        }
+        nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos), d => Decimal(d, p, s))
 
     case DoubleType =>
       (rs: ResultSet, pos: Int) => rs.getDouble(pos)
@@ -389,66 +384,51 @@ private[sql] class JDBCRDD(
 
     case TimestampType =>
       (rs: ResultSet, pos: Int) =>
-        val t = rs.getTimestamp(pos)
-        if (t != null) {
-          DateTimeUtils.fromJavaTimestamp(t)
-        } else {
-          null
-        }
+        nullSafeConvert(rs.getTimestamp(pos), DateTimeUtils.fromJavaTimestamp)
 
     case BinaryType =>
       (rs: ResultSet, pos: Int) => rs.getBytes(pos)
 
     case ArrayType(et, _) =>
-      val elementConversion: ArrayElementConversion = getArrayElementConversion(et, metadata)
+      val elementConversion = getArrayElementConversion(et, metadata)
       (rs: ResultSet, pos: Int) =>
-        val array = rs.getArray(pos).getArray
-        if (array != null) {
-          val data = elementConversion.apply(array)
-          new GenericArrayData(data)
-        } else {
-          null
-        }
+        nullSafeConvert(rs.getArray(pos).getArray, elementConversion)
 
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
   }
 
-  private def getArrayElementConversion(
-      dt: DataType,
-      metadata: Metadata): ArrayElementConversion = {
-    dt match {
-      case TimestampType =>
-        (array: Object) =>
-          array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
-            nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
-          }
+  private def getArrayElementConversion(dt: DataType, metadata: Metadata) = dt match {
+    case TimestampType =>
+      (array: Object) =>
+        array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
+          nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
+        }
 
-      case StringType =>
-        (array: Object) =>
-          array.asInstanceOf[Array[java.lang.String]]
-            .map(UTF8String.fromString)
+    case StringType =>
+      (array: Object) =>
+        array.asInstanceOf[Array[java.lang.String]]
+          .map(UTF8String.fromString)
 
-      case DateType =>
-        (array: Object) =>
-          array.asInstanceOf[Array[java.sql.Date]].map { date =>
-            nullSafeConvert(date, DateTimeUtils.fromJavaDate)
-          }
+    case DateType =>
+      (array: Object) =>
+        array.asInstanceOf[Array[java.sql.Date]].map { date =>
+          nullSafeConvert(date, DateTimeUtils.fromJavaDate)
+        }
 
-      case dt: DecimalType =>
-        (array: Object) =>
-          array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
-            nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, dt.precision, dt.scale))
-          }
+    case dt: DecimalType =>
+      (array: Object) =>
+        array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
+          nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, dt.precision, dt.scale))
+        }
 
-      case LongType if metadata.contains("binarylong") =>
-        throw new IllegalArgumentException(s"Unsupported array element " +
-          s"type ${dt.simpleString} based on binary")
+    case LongType if metadata.contains("binarylong") =>
+      throw new IllegalArgumentException(s"Unsupported array element " +
+        s"type ${dt.simpleString} based on binary")
 
-      case ArrayType(_, _) =>
-        throw new IllegalArgumentException("Nested arrays unsupported")
+    case ArrayType(_, _) =>
+      throw new IllegalArgumentException("Nested arrays unsupported")
 
-      case _ => (array: Object) => array.asInstanceOf[Array[Any]]
-    }
+    case _ => (array: Object) => array.asInstanceOf[Array[Any]]
   }
 
   /**
