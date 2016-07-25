@@ -21,7 +21,7 @@ from pyspark.streaming import DStream
 from pyspark.streaming.kafka import KafkaDStream, KafkaRDD, OffsetRange
 
 __all__ = ['Assign', 'KafkaConsumerRecord', 'KafkaUtils', 'PreferBrokers', 'PreferConsistent',
-           'PreferFixed', 'Subscribe', 'SubscribePattern', 'TopicPartition']
+           'PreferFixed', 'Subscribe', 'SubscribePattern', 'TopicPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
@@ -36,6 +36,31 @@ class KafkaUtils(object):
     @staticmethod
     def createDirectStream(ssc, locationStrategy, consumerStrategy,
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+        """
+        .. note:: Experimental
+
+        Create an input stream that directly pulls messages from Kafka 0.10 brokers with different
+        location strategy and consumer strategy.
+
+        This does not use Zookeeper to store offsets. The consumed offsets are tracked
+        by the stream itself. For interoperability with Kafka monitoring tools that depend on
+        Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+        You can access the offsets used in each batch from the generated RDDs (see
+
+        To recover from driver failures, you have to enable checkpointing in the StreamingContext.
+        The information on consumed offset can be recovered from the checkpoint.
+        See the programming guide for details (constraints, etc.).
+
+        :param ssc: StreamingContext object,
+        :param locationStrategy: Strategy to schedule consumers for a given TopicPartition on an
+               executor.
+        :param consumerStrategy: Choices of how to create and configure underlying Kafka
+               Consumers on driver and executors.
+        :param keyDecoder: A function to decode key (default is utf8_decoder).
+        :param valueDecoder: A function to decode value (default is utf8_decoder).
+        :return: A DStream object.
+        """
+
         helper = KafkaUtils._get_helper(ssc._sc)
         ser = AutoBatchedSerializer(PickleSerializer())
 
@@ -56,6 +81,20 @@ class KafkaUtils(object):
     @staticmethod
     def createRDD(sc, kafkaParams, offsetRanges, locationStrategy,
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+        """
+        .. note:: Experimental
+
+        Create a Kafka RDD using offset ranges and location strategy.
+
+        :param sc: SparkContext object.
+        :param kafkaParams: Additional params for Kafka.
+        :param offsetRanges: list of offsetRange to specify topic:partition:[start, end) to consume.
+        :param locationStrategy: Strategy to schedule consumers for a given TopicPartition on an
+               executor.
+        :param keyDecoder: A function to decode key (default is utf8_decoder).
+        :param valueDecoder: A function to decode value (default is utf8_decoder).
+        :return:  A RDD object.
+        """
 
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
@@ -78,7 +117,9 @@ class KafkaUtils(object):
     @staticmethod
     def _get_helper(sc):
         try:
-            return sc._jvm.org.apache.spark.streaming.kafka010.KafkaUtilsPythonHelper()
+            helper = sc._jvm.org.apache.spark.streaming.kafka010.KafkaUtilsPythonHelper()
+            KafkaRDD.set_helper(helper)
+            return helper
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 KafkaUtils._printErrorMsg(sc)
@@ -108,26 +149,52 @@ ________________________________________________________________________________
 
 
 class LocationStrategy(object):
+    """
+    .. note:: Experimental
+
+    A python wrapper of Scala LocationStrategy.
+    """
 
     def _jLocationStrategy(self, helper):
         pass
 
 
 class PreferBrokers(LocationStrategy):
+    """
+    .. note:: Experimental
 
+    Use this only if your executors are on the same nodes as your kafka brokers.
+
+    """
     def _jLocationStrategy(self, helper):
         return helper.createPreferBrokers()
 
 
 class PreferConsistent(LocationStrategy):
+    """
+    .. note:: Experimental
+
+    Use this in most cases, it will consistently distribute partitions across all executors.
+    """
 
     def _jLocationStrategy(self, helper):
         return helper.createPreferConsistent()
 
 
 class PreferFixed(LocationStrategy):
+    """
+    .. note:: Experimental
+
+    Use this to place particular TopicPartitions on particular hosts if your load is uneven. Any
+    TopicPartition not specified in the map will use a consistent location.
+    """
 
     def __init__(self, hostMap):
+        """
+        Python wrapper of Scala PreferFixed.
+
+        :param hostMap: A dict of TopicPartition to hostname.
+        """
         self.hostMap = hostMap
 
     def _jLocationStrategy(self, helper):
@@ -136,14 +203,33 @@ class PreferFixed(LocationStrategy):
 
 
 class ConsumerStrategy(object):
+    """
+    .. note:: Experimental
+
+    A python wrapper of Scala ConsumerStrategy.
+    """
 
     def _jConsumerStrategy(self, helper):
         pass
 
 
 class Subscribe(ConsumerStrategy):
+    """
+    .. note:: Experimental
+
+    Subscribe to a collection of topics.
+    """
 
     def __init__(self, topics, kafkaParams, offsets=None):
+        """
+        Subscribe to a collection of topics.
+
+        :param topics: List of topics to subscribe.
+        :param kafkaParams: Kafka parameters.
+        :param offsets: offsets to begin at on initial startup. If no offset is given for a
+               TopicPartition, the committed offset (if applicable) or kafka param
+               auto.offset.reset will be used.
+        """
         self.topics = set(topics)
         self.kafkaParams = kafkaParams
         self.offsets = dict() if offsets is None else offsets
@@ -154,8 +240,22 @@ class Subscribe(ConsumerStrategy):
 
 
 class SubscribePattern(ConsumerStrategy):
+    """
+    .. note:: Experimental
+
+    Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
+    """
 
     def __init__(self, pattern, kafkaParams, offsets=None):
+        """
+        Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
+
+        :param pattern: pattern to subscribe to.
+        :param kafkaParams: Kafka parameters.
+        :param offsets: offsets to begin at on initial startup. If no offset is given for a
+               TopicPartition, the committed offset (if applicable) or kafka param
+               auto.offset.reset will be used.
+        """
         self.pattern = pattern
         self.kafkaParams = kafkaParams
         self.offsets = dict() if offsets is None else offsets
@@ -166,15 +266,30 @@ class SubscribePattern(ConsumerStrategy):
 
 
 class Assign(ConsumerStrategy):
+    """
+    .. note:: Experimental
+
+    Assign a fixed collection of TopicPartitions.
+    """
 
     def __init__(self, topicPartitions, kafkaParams, offsets=None):
+        """
+        Assign a fixed collection of TopicPartitions.
+
+        :param topicPartitions: List of TopicPartitions to assign.
+        :param kafkaParams: kafka parameters.
+        :param offsets: offsets to begin at on initial startup. If no offset is given for a
+               TopicPartition, the committed offset (if applicable) or kafka param
+               auto.offset.reset will be used.
+        """
         self.topicPartitions = set(topicPartitions)
         self.kafkaParams = kafkaParams
         self.offsets = dict() if offsets is None else offsets
 
     def _jConsumerStrategy(self, helper):
+        jTopicPartitions = [i._jTopicPartition(helper) for i in self.topicPartitions]
         jOffsets = dict([k._jTopicPartition(helper), v] for (k, v) in self.offsets.items())
-        return helper.createAssign(self.topicPartitions, self.kafkaParams, jOffsets)
+        return helper.createAssign(set(jTopicPartitions), self.kafkaParams, jOffsets)
 
 
 class TopicPartition(object):
@@ -206,6 +321,9 @@ class TopicPartition(object):
 
 
 class KafkaConsumerRecord(object):
+    """
+    Kafka consumer record fetch from Kafka brokers, including metadata information and message.
+    """
 
     def __init__(self, topic, partition, offset, timestamp, timestampType, checksum,
                  serializedKeySize, serializedValueSize, key, value):
@@ -231,7 +349,7 @@ class KafkaConsumerRecord(object):
 
     def __reduce__(self):
         return (self.__class__, (self.topic, self.partition, self.offset, self.timestamp,
-            self.timestampType, self.checksum, self.serializedKeySize, self.serializedValueSize,
+                self.timestampType, self.checksum, self.serializedKeySize, self.serializedValueSize,
                 self._rawKey, self._rawValue))
 
     def _set_key_deserializer(self, decoder):

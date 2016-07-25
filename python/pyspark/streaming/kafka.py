@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer, PairDeserializer, \
@@ -192,7 +190,9 @@ class KafkaUtils(object):
     @staticmethod
     def _get_helper(sc):
         try:
-            return sc._jvm.org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper()
+            helper = sc._jvm.org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper()
+            KafkaRDD.set_helper(helper)
+            return helper
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 KafkaUtils._printErrorMsg(sc)
@@ -314,13 +314,16 @@ class KafkaRDD(RDD):
     def __init__(self, jrdd, ctx, jrdd_deserializer):
         RDD.__init__(self, jrdd, ctx, jrdd_deserializer)
 
+    @classmethod
+    def set_helper(cls, helper):
+        cls.helper = helper
+
     def offsetRanges(self):
         """
         Get the OffsetRange of specific KafkaRDD.
         :return: A list of OffsetRange
         """
-        helper = KafkaUtils._get_helper(self.ctx)
-        joffsetRanges = helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
+        joffsetRanges = self.helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
         ranges = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
                   for o in joffsetRanges]
         return ranges
