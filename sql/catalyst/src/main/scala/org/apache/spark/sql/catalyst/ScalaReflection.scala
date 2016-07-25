@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * for classes whose fields are entirely defined by constructor params but should not be
  * case classes.
  */
-private[sql] trait DefinedByConstructorParams
+trait DefinedByConstructorParams
 
 
 /**
