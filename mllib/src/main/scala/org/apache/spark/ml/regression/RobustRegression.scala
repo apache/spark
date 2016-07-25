@@ -160,11 +160,10 @@ class RobustRegression @Since("2.1.0") (@Since("2.1.0") override val uid: String
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+    val sqlContext = dataset.sqlContext
+    import sqlContext.implicits._
+    val instances: RDD[Instance] = dataset.select(col($(labelCol)).as("label"),
+      w.as("weight"), col($(featuresCol)).as("features")).as[Instance].rdd
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -380,7 +379,7 @@ private class HuberAggregator(
   }
 
   /**
-   * Merge another HuberAggregator, and update the loss and gradient
+   * Merge another [[HuberAggregator]], and update the loss and gradient
    * of the objective function.
    * (Note that it's in place merging; as a result, `this` object will be modified.)
    *
