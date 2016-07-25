@@ -497,4 +497,61 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
     }
   }
+
+  test("ORC conversion when metastore schema does not match schema stored in ORC files") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+        withTable("dummy_orc") {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+
+            // Create a Metastore ORC table and insert data into it.
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc(value STRING)
+                 |PARTITIONED BY (key INT)
+                 |STORED AS ORC
+                 |LOCATION '$path'
+               """.stripMargin)
+
+            spark.sql(
+              s"""
+                 |INSERT INTO TABLE dummy_orc
+                 |PARTITION(key=0)
+                 |SELECT value FROM single
+               """.stripMargin)
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc WHERE key=0")
+            checkAnswer(df, singleRowDF)
+
+            // Create a Metastore ORC table with different schema.
+            spark.sql(
+              s"""
+                 |CREATE EXTERNAL TABLE dummy_orc2(value2 STRING)
+                 |PARTITIONED BY (key INT)
+                 |STORED AS ORC
+                 |LOCATION '$path'
+               """.stripMargin)
+
+            spark.sql("ALTER TABLE dummy_orc2 ADD PARTITION(key=0)")
+
+            // The output of the relation is the schema from the Metastore, not the file.
+            val df2 = spark.sql("SELECT key, value2 FROM dummy_orc2 WHERE key=0 AND value2='foo'")
+            checkAnswer(df2, singleRowDF)
+
+            val queryExecution = df2.queryExecution
+            queryExecution.analyzed.collectFirst {
+              case _: LogicalRelation => ()
+            }.getOrElse {
+              fail(s"Expecting the query plan to convert orc to data sources, " +
+                s"but got:\n$queryExecution")
+            }
+          }
+        }
+      }
+    }
+  }
 }

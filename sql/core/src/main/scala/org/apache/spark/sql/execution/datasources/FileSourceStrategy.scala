@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.DataSourceScanExec.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.StructType
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -85,11 +86,22 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
-      val dataColumns =
+      // Transform data schema to the schema in catalog if any.
+      val relationSchema = StructType(fsRelation.dataSchema.flatMap { field =>
+        fsRelation.lookForFieldFromDataField(field)
+      })
+
+      val dataColumns = if (relationSchema.length != fsRelation.dataSchema.length) {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+      } else {
+        l.resolve(relationSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+      }
 
       // Partition keys are not available in the statistics of the files.
+      // Data filters are based on the schema stored in files which might be different with the
+      // relation's output schema. We need to transform the filters.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
+        .map (filter => fsRelation.transformExpressionToUseDataSchema(filter))
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters
@@ -105,7 +117,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val prunedDataSchema = readDataColumns.toStructType
+      val prunedDataSchema = StructType(readDataColumns.toStructType.map { field =>
+        fsRelation.lookForFieldFromCatalogField(field).getOrElse(field)
+      })
       logInfo(s"Pruned Data Schema: ${prunedDataSchema.simpleString(5)}")
 
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)

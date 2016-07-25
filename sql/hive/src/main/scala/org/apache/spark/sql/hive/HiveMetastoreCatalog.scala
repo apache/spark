@@ -246,6 +246,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileFormatClass: Class[_ <: FileFormat],
       fileType: String): LogicalRelation = {
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
     val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
@@ -308,7 +309,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           dataSchema = inferredSchema,
           bucketSpec = bucketSpec,
           fileFormat = defaultSource,
-          options = options)
+          options = options,
+          catalogSchema = metastoreSchema)
 
         val created = LogicalRelation(
           relation,

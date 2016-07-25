@@ -32,9 +32,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.{FileRelation, SchemaMapping}
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, Filter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -132,6 +132,7 @@ abstract class OutputWriter {
  * @param bucketSpec Describes the bucketing (hash-partitioning of the files by some column values).
  * @param fileFormat A file format that can be used to read and write the data in files.
  * @param options Configuration used when reading / writing data.
+ * @param catalogSchema The schema fetched from the catalog such as Metastore if any.
  */
 case class HadoopFsRelation(
     sparkSession: SparkSession,
@@ -140,14 +141,24 @@ case class HadoopFsRelation(
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    options: Map[String, String]) extends BaseRelation with FileRelation {
+    options: Map[String, String],
+    catalogSchema: StructType = new StructType())
+    extends BaseRelation with FileRelation with SchemaMapping {
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
   val schema: StructType = {
-    val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
-    StructType(dataSchema ++ partitionSchema.filterNot { column =>
-      dataSchemaColumnNames.contains(column.name.toLowerCase)
+    // If there is given catalog schema, we should use it as relation output instead of the schema
+    // inferred from the files.
+    val schemaColumns = if (catalogSchema.fields.length == 0) {
+      dataSchema
+    } else {
+      catalogSchema
+    }
+
+    val schemaColumnNames = schemaColumns.map(_.name.toLowerCase).toSet
+    StructType(schemaColumns ++ partitionSchema.filterNot { column =>
+      schemaColumnNames.contains(column.name.toLowerCase)
     })
   }
 
