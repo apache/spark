@@ -320,14 +320,14 @@ case class AlterTableSerDePropertiesCommand(
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(
         serde = serdeClassName.orElse(table.storage.serde),
-        serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+        serdeProperties = table.storage.properties ++ serdeProperties.getOrElse(Map()))
       catalog.alterTable(newTable)
     } else {
       val spec = partSpec.get
       val part = catalog.getPartition(tableName, spec)
       val newPart = part.copy(storage = part.storage.copy(
         serde = serdeClassName.orElse(part.storage.serde),
-        serdeProperties = part.storage.serdeProperties ++ serdeProperties.getOrElse(Map())))
+        properties = part.storage.properties ++ serdeProperties.getOrElse(Map())))
       catalog.alterPartitions(tableName, Seq(newPart))
     }
     Seq.empty[Row]
@@ -466,7 +466,7 @@ case class AlterTableSetLocationCommand(
           if (DDLUtils.isDatasourceTable(table)) {
             table.withNewStorage(
               locationUri = Some(location),
-              serdeProperties = table.storage.serdeProperties ++ Map("path" -> location))
+              serdeProperties = table.storage.properties ++ Map("path" -> location))
           } else {
             table.withNewStorage(locationUri = Some(location))
           }

@@ -17,6 +17,7 @@
 .idea/
 .idea_modules/
 .project
+.pydevproject
 .scala_dependencies
 .settings
 /lib/
@@ -78,3 +79,6 @@ spark-warehouse/
 .RData
 .RHistory
 .Rhistory
+*.Rproj
+*.Rproj.*
+

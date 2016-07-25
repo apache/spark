@@ -131,7 +131,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
     try {
       // In case this NM was killed while there were running spark applications, we need to restore
-      // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
+      // lost state for the existing executors. We look for an existing file in the NM's local dirs.
       // If we don't find one, then we choose a file to use to save the state next time.  Even if
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back

@@ -100,7 +100,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns == Seq.empty[CatalogColumn])
-    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
     assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
     assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
@@ -118,7 +118,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
@@ -154,7 +154,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
+    assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
@@ -305,7 +305,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
     assert(desc.storage.serde.isEmpty)
-    assert(desc.storage.serdeProperties.isEmpty)
+    assert(desc.storage.properties.isEmpty)
     assert(desc.properties.isEmpty)
     assert(desc.comment.isEmpty)
   }
@@ -391,10 +391,10 @@ class HiveDDLCommandSuite extends PlanTest {
     val (desc2, _) = extractTableDesc(query2)
     val (desc3, _) = extractTableDesc(query3)
     assert(desc1.storage.serde == Some("org.apache.poof.serde.Baff"))
-    assert(desc1.storage.serdeProperties.isEmpty)
+    assert(desc1.storage.properties.isEmpty)
     assert(desc2.storage.serde == Some("org.apache.poof.serde.Baff"))
-    assert(desc2.storage.serdeProperties == Map("k1" -> "v1"))
-    assert(desc3.storage.serdeProperties == Map(
+    assert(desc2.storage.properties == Map("k1" -> "v1"))
+    assert(desc3.storage.properties == Map(
       "field.delim" -> "x",
       "escape.delim" -> "y",
       "serialization.format" -> "x",
@@ -463,7 +463,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.inputFormat == Some("winput"))
     assert(desc.storage.outputFormat == Some("wowput"))
     assert(desc.storage.serde == Some("org.apache.poof.serde.Baff"))
-    assert(desc.storage.serdeProperties == Map("k1" -> "v1"))
+    assert(desc.storage.properties == Map("k1" -> "v1"))
     assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
     assert(desc.comment == Some("no comment"))
   }
@@ -479,7 +479,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == Option("SELECT * FROM tab1"))
     assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
-    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat.isEmpty)
     assert(desc.storage.outputFormat.isEmpty)
     assert(desc.storage.serde.isEmpty)
@@ -505,7 +505,7 @@ class HiveDDLCommandSuite extends PlanTest {
         CatalogColumn("col3", null, nullable = true, None) :: Nil)
     assert(desc.viewText == Option("SELECT * FROM tab1"))
     assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
-    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat.isEmpty)
     assert(desc.storage.outputFormat.isEmpty)
     assert(desc.storage.serde.isEmpty)

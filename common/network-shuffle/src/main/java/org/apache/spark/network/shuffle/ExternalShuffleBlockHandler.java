@@ -113,7 +113,8 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       }
 
     } else if (msgObj instanceof RegisterExecutor) {
-      final Timer.Context responseDelayContext = metrics.registerExecutorRequestLatencyMillis.time();
+      final Timer.Context responseDelayContext =
+        metrics.registerExecutorRequestLatencyMillis.time();
       try {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);

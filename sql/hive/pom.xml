@@ -26,7 +26,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-hive_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive</name>
