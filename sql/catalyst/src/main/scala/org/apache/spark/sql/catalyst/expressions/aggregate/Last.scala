@@ -40,18 +40,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression) extends Declarat
       throw new AnalysisException("The second argument of First should be a boolean literal.")
   }
 
-  override def children: Seq[Expression] = child :: Nil
-
-  // SPARK-16648: Default `TreeNode.withNewChildren` implementation doesn't work for `Last` when
-  // both constructor arguments are the same, e.g.:
-  //
-  //   LAST_VALUE(FALSE) // The 2nd argument defaults to FALSE
-  //   LAST_VALUE(FALSE, FALSE)
-  //   LAST_VALUE(TRUE, TRUE)
-  override def withNewChildren(newChildren: Seq[Expression]): Expression = {
-    val Seq(newChild) = newChildren
-    copy(child = newChild)
-  }
+  override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
   override def nullable: Boolean = true
 
@@ -62,7 +51,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression) extends Declarat
   override def dataType: DataType = child.dataType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
 
   private lazy val last = AttributeReference("last", child.dataType)()
 
