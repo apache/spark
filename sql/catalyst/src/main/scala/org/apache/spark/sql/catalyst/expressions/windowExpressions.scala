@@ -82,16 +82,16 @@ case class WindowSpecDefinition(
     val partition = if (partitionSpec.isEmpty) {
       ""
     } else {
-      "PARTITION BY " + partitionSpec.map(_.sql).mkString(", ")
+      "PARTITION BY " + partitionSpec.map(_.sql).mkString(", ") + " "
     }
 
     val order = if (orderSpec.isEmpty) {
       ""
     } else {
-      "ORDER BY " + orderSpec.map(_.sql).mkString(", ")
+      "ORDER BY " + orderSpec.map(_.sql).mkString(", ") + " "
     }
 
-    s"($partition $order ${frameSpecification.toString})"
+    s"($partition$order${frameSpecification.toString})"
   }
 }
 
