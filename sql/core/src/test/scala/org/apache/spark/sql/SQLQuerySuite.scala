@@ -2991,9 +2991,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .format("parquet")
         .partitionBy("part.col1", "part.col2")
         .save(path.getCanonicalPath)
-      val copyData = spark.read.format("parquet").load(path.getCanonicalPath)
+      val readBack = spark.read.format("parquet").load(path.getCanonicalPath)
       checkAnswer(
-        copyData.selectExpr("`part.col1`", "`col.1`"),
+        readBack.selectExpr("`part.col1`", "`col.1`"),
         data.selectExpr("`part.col1`", "`col.1`"))
     }
   }
