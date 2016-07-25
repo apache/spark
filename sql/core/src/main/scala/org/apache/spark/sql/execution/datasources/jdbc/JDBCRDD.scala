@@ -322,18 +322,18 @@ private[sql] class JDBCRDD(
     }
   }
 
-  // A `JDBCConversion` is responsible for converting and setting a value from `ResultSet`
+  // A `JDBCValueSetter` is responsible for converting and setting a value from `ResultSet`
   // into a field for `MutableRow`. The last argument `Int` means the index for the
   // value to be set in the row and also used for the value to retrieve from `ResultSet`.
-  private type JDBCConversion = (ResultSet, MutableRow, Int) => Unit
+  private type ValueSetter = (ResultSet, MutableRow, Int) => Unit
 
   /**
-   * Maps a StructType to conversions for each type.
+   * Creates a StructType to setters for each type.
    */
-  def getConversions(schema: StructType): Array[JDBCConversion] =
-    schema.fields.map(sf => getConversions(sf.dataType, sf.metadata))
+  def makeSetters(schema: StructType): Array[ValueSetter] =
+    schema.fields.map(sf => makeSetters(sf.dataType, sf.metadata))
 
-  private def getConversions(dt: DataType, metadata: Metadata): JDBCConversion = dt match {
+  private def makeSetters(dt: DataType, metadata: Metadata): ValueSetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: MutableRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
@@ -408,45 +408,45 @@ private[sql] class JDBCRDD(
         row.update(pos, rs.getBytes(pos + 1))
 
     case ArrayType(et, _) =>
-      val elementConversion = getArrayElementConversion(et, metadata)
+      val elementConversion = et match {
+        case TimestampType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
+              nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
+            }
+
+        case StringType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.lang.String]]
+              .map(UTF8String.fromString)
+
+        case DateType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.sql.Date]].map { date =>
+              nullSafeConvert(date, DateTimeUtils.fromJavaDate)
+            }
+
+        case dt: DecimalType =>
+          (array: Object) =>
+            array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
+              nullSafeConvert[java.math.BigDecimal](
+                decimal, d => Decimal(d, dt.precision, dt.scale))
+            }
+
+        case LongType if metadata.contains("binarylong") =>
+          throw new IllegalArgumentException(s"Unsupported array element " +
+            s"type ${dt.simpleString} based on binary")
+
+        case ArrayType(_, _) =>
+          throw new IllegalArgumentException("Nested arrays unsupported")
+
+        case _ => (array: Object) => array.asInstanceOf[Array[Any]]
+      }
+
       (rs: ResultSet, row: MutableRow, pos: Int) =>
         row.update(pos, nullSafeConvert(rs.getArray(pos + 1).getArray, elementConversion))
 
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
-  }
-
-  private def getArrayElementConversion(dt: DataType, metadata: Metadata) = dt match {
-    case TimestampType =>
-      (array: Object) =>
-        array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
-          nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
-        }
-
-    case StringType =>
-      (array: Object) =>
-        array.asInstanceOf[Array[java.lang.String]]
-          .map(UTF8String.fromString)
-
-    case DateType =>
-      (array: Object) =>
-        array.asInstanceOf[Array[java.sql.Date]].map { date =>
-          nullSafeConvert(date, DateTimeUtils.fromJavaDate)
-        }
-
-    case dt: DecimalType =>
-      (array: Object) =>
-        array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
-          nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, dt.precision, dt.scale))
-        }
-
-    case LongType if metadata.contains("binarylong") =>
-      throw new IllegalArgumentException(s"Unsupported array element " +
-        s"type ${dt.simpleString} based on binary")
-
-    case ArrayType(_, _) =>
-      throw new IllegalArgumentException("Nested arrays unsupported")
-
-    case _ => (array: Object) => array.asInstanceOf[Array[Any]]
   }
 
   /**
@@ -485,15 +485,15 @@ private[sql] class JDBCRDD(
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
-    val conversions: Array[JDBCConversion] = getConversions(schema)
+    val setters: Array[ValueSetter] = makeSetters(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
     def getNext(): InternalRow = {
       if (rs.next()) {
         inputMetrics.incRecordsRead(1)
         var i = 0
-        while (i < conversions.length) {
-          conversions(i).apply(rs, mutableRow, i)
+        while (i < setters.length) {
+          setters(i).apply(rs, mutableRow, i)
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
         }
