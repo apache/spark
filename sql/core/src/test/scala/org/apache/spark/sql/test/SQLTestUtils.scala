@@ -253,7 +253,7 @@ private[sql] trait SQLTestUtils
   protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
     (body: => Unit): Unit = {
     val timeoutMillis = 10000
-    var ex: Throwable = null
+    @transient var ex: Throwable = null
 
     def runOnThread(): Unit = {
       val thread = new UninterruptibleThread(s"Testing thread for test $name") {

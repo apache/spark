@@ -101,9 +101,9 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
    * potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622). If the thread
    * running "Shell.runCommand" is interrupted, then the thread can get deadlocked. In our
    * case, `writeBatch` creates a file using HDFS API and calls "Shell.runCommand" to set the
-   * file permissions, and can get deadlocked is the stream execution thread is stopped by
-   * interrupt. Hence, we make sure that this method is called on UninterruptibleThread which
-   * allows use disable interrupts. Also see SPARK-14131.
+   * file permissions, and can get deadlocked if the stream execution thread is stopped by
+   * interrupt. Hence, we make sure that this method is called on [[UninterruptibleThread]] which
+   * allows us to disable interrupts here. Also see SPARK-14131.
    */
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
