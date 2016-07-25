@@ -273,7 +273,7 @@ object JdbcUtils extends Logging {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
-      val valueGetters: Array[JDBCValueGetter] = rddSchema.fields.map(_.dataType)
+      val getters: Array[JDBCValueGetter] = rddSchema.fields.map(_.dataType)
           .map(makeGetter(conn, dialect, _)).toArray
 
       try {
@@ -286,7 +286,7 @@ object JdbcUtils extends Logging {
             if (row.isNullAt(i)) {
               stmt.setNull(i + 1, nullTypes(i))
             } else {
-              valueGetters(i).apply(stmt, row, i)
+              getters(i).apply(stmt, row, i)
             }
             i = i + 1
           }
