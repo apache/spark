@@ -28,8 +28,8 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -322,10 +322,10 @@ private[sql] class JDBCRDD(
     }
   }
 
-  // A `JDBCConversion` is responsible for converting a value from `ResultSet`
-  // to a value in a field for `InternalRow`. The second argument `Int` means the index
-  // for the data to retrieve and convert from `ResultSet`.
-  private type JDBCConversion = (ResultSet, Int) => Any
+  // A `JDBCConversion` is responsible for converting and setting a value from `ResultSet`
+  // into a field for `MutableRow`. The last argument `Int` means the index for the
+  // value to be set in the row and also used for the value to retrieve from `ResultSet`.
+  private type JDBCConversion = (ResultSet, MutableRow, Int) => Unit
 
   /**
    * Maps a StructType to conversions for each type.
@@ -335,12 +335,18 @@ private[sql] class JDBCRDD(
 
   private def getConversions(dt: DataType, metadata: Metadata): JDBCConversion = dt match {
     case BooleanType =>
-      (rs: ResultSet, pos: Int) => rs.getBoolean(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setBoolean(pos, rs.getBoolean(pos + 1))
 
     case DateType =>
-      (rs: ResultSet, pos: Int) =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
-        nullSafeConvert(rs.getDate(pos), DateTimeUtils.fromJavaDate)
+        val dateVal = rs.getDate(pos + 1)
+        if (dateVal != null) {
+          row.setInt(pos, DateTimeUtils.fromJavaDate(dateVal))
+        } else {
+          row.update(pos, null)
+        }
 
     // When connecting with Oracle DB through JDBC, the precision and scale of BigDecimal
     // object returned by ResultSet.getBigDecimal is not correctly matched to the table
@@ -351,48 +357,60 @@ private[sql] class JDBCRDD(
     // retrieve it, you will get wrong result 199.99.
     // So it is needed to set precision and scale for Decimal based on JDBC metadata.
     case DecimalType.Fixed(p, s) =>
-      (rs: ResultSet, pos: Int) =>
-        nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos), d => Decimal(d, p, s))
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val decimal =
+          nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos + 1), d => Decimal(d, p, s))
+        row.update(pos, decimal)
 
     case DoubleType =>
-      (rs: ResultSet, pos: Int) => rs.getDouble(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setDouble(pos, rs.getDouble(pos + 1))
 
     case FloatType =>
-      (rs: ResultSet, pos: Int) => rs.getFloat(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setFloat(pos, rs.getFloat(pos + 1))
 
     case IntegerType =>
-      (rs: ResultSet, pos: Int) => rs.getInt(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setInt(pos, rs.getInt(pos + 1))
 
     case LongType if metadata.contains("binarylong") =>
-      (rs: ResultSet, pos: Int) =>
-        val bytes = rs.getBytes(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val bytes = rs.getBytes(pos + 1)
         var ans = 0L
         var j = 0
         while (j < bytes.size) {
           ans = 256 * ans + (255 & bytes(j))
           j = j + 1
         }
-        ans
+        row.setLong(pos, ans)
 
     case LongType =>
-      (rs: ResultSet, pos: Int) => rs.getLong(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.setLong(pos, rs.getLong(pos + 1))
 
     case StringType =>
-      (rs: ResultSet, pos: Int) =>
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-        UTF8String.fromString(rs.getString(pos))
+        row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
 
     case TimestampType =>
-      (rs: ResultSet, pos: Int) =>
-        nullSafeConvert(rs.getTimestamp(pos), DateTimeUtils.fromJavaTimestamp)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        val t = rs.getTimestamp(pos + 1)
+        if (t != null) {
+          row.setLong(pos, DateTimeUtils.fromJavaTimestamp(t))
+        } else {
+          row.update(pos, null)
+        }
 
     case BinaryType =>
-      (rs: ResultSet, pos: Int) => rs.getBytes(pos)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.update(pos, rs.getBytes(pos + 1))
 
     case ArrayType(et, _) =>
       val elementConversion = getArrayElementConversion(et, metadata)
-      (rs: ResultSet, pos: Int) =>
-        nullSafeConvert(rs.getArray(pos).getArray, elementConversion)
+      (rs: ResultSet, row: MutableRow, pos: Int) =>
+        row.update(pos, nullSafeConvert(rs.getArray(pos + 1).getArray, elementConversion))
 
     case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
   }
@@ -475,9 +493,7 @@ private[sql] class JDBCRDD(
         inputMetrics.incRecordsRead(1)
         var i = 0
         while (i < conversions.length) {
-          val pos = i + 1
-          val value = conversions(i).apply(rs, pos)
-          mutableRow.update(i, value)
+          conversions(i).apply(rs, mutableRow, i)
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
         }
