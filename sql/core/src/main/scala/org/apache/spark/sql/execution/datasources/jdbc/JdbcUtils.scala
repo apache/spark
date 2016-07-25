@@ -138,63 +138,76 @@ object JdbcUtils extends Logging {
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
 
-  // A `ValueSetter` is responsible for setting a field of a `Row`
-  // to the `PreparedStatement`.
-  private type ValueSetter = (Row, Int) => Unit
+  // A `JDBCValueGetter` is responsible for converting, getting a value from `Row`
+  // and then setting into a field for `PreparedStatement`. The last argument
+  // `Int` means the index for the value to be set in the SQL statement and also used
+  // for the value to retrieve from `Row`.
+  private type JDBCValueGetter = (PreparedStatement, Row, Int) => Unit
 
-  private def makeSetter(
-      stmt: PreparedStatement,
+  private def makeGetter(
       conn: Connection,
       dialect: JdbcDialect,
-      dataType: DataType): ValueSetter = dataType match {
+      dataType: DataType): JDBCValueGetter = dataType match {
     case IntegerType =>
-      (row: Row, pos: Int) => stmt.setInt(pos + 1, row.getInt(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getInt(pos))
 
     case LongType =>
-      (row: Row, pos: Int) => stmt.setLong(pos + 1, row.getLong(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setLong(pos + 1, row.getLong(pos))
 
     case DoubleType =>
-      (row: Row, pos: Int) => stmt.setDouble(pos + 1, row.getDouble(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setDouble(pos + 1, row.getDouble(pos))
 
     case FloatType =>
-      (row: Row, pos: Int) => stmt.setFloat(pos + 1, row.getFloat(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setFloat(pos + 1, row.getFloat(pos))
 
     case ShortType =>
-      (row: Row, pos: Int) => stmt.setInt(pos + 1, row.getShort(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getShort(pos))
 
     case ByteType =>
-      (row: Row, pos: Int) => stmt.setInt(pos + 1, row.getByte(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setInt(pos + 1, row.getByte(pos))
 
     case BooleanType =>
-      (row: Row, pos: Int) => stmt.setBoolean(pos + 1, row.getBoolean(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setBoolean(pos + 1, row.getBoolean(pos))
 
     case StringType =>
-      (row: Row, pos: Int) => stmt.setString(pos + 1, row.getString(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setString(pos + 1, row.getString(pos))
 
     case BinaryType =>
-      (row: Row, pos: Int) => stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
 
     case TimestampType =>
-      (row: Row, pos: Int) => stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
 
     case DateType =>
-      (row: Row, pos: Int) => stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
 
     case t: DecimalType =>
-      (row: Row, pos: Int) => stmt.setBigDecimal(pos + 1, row.getDecimal(pos))
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setBigDecimal(pos + 1, row.getDecimal(pos))
 
     case ArrayType(et, _) =>
       // remove type length parameters from end of type name
       val typeName = getJdbcType(et, dialect).databaseTypeDefinition
         .toLowerCase.split("\\(")(0)
-      (row: Row, pos: Int) =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
         val array = conn.createArrayOf(
           typeName,
           row.getSeq[AnyRef](pos).toArray)
         stmt.setArray(pos + 1, array)
 
     case _ =>
-      (row: Row, pos: Int) =>
+      (_: PreparedStatement, _: Row, pos: Int) =>
         throw new IllegalArgumentException(
           s"Can't translate non-null value for field $pos")
   }
@@ -260,8 +273,8 @@ object JdbcUtils extends Logging {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
-      val fieldSetters: Array[ValueSetter] = rddSchema.fields.map(_.dataType)
-          .map(makeSetter(stmt, conn, dialect, _)).toArray
+      val valueGetters: Array[JDBCValueGetter] = rddSchema.fields.map(_.dataType)
+          .map(makeGetter(conn, dialect, _)).toArray
 
       try {
         var rowCount = 0
@@ -273,7 +286,7 @@ object JdbcUtils extends Logging {
             if (row.isNullAt(i)) {
               stmt.setNull(i + 1, nullTypes(i))
             } else {
-              fieldSetters(i).apply(row, i)
+              valueGetters(i).apply(stmt, row, i)
             }
             i = i + 1
           }
