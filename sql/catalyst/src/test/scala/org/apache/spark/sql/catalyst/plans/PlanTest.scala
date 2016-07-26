@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation, Sample}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Provides helper methods for comparing plans.
@@ -83,4 +85,35 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
     comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation))
   }
+
+  /**
+   * Tests the behavior of the given rule on a specific expression.
+   * @param rule rule to run
+   * @param initial the initial expression
+   * @param transformed the expected expression after rule execution.
+   */
+  protected def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
+    ruleTest(Seq(rule), initial, transformed)
+  }
+
+  /**
+   * Tests the behavior of the given batch of rules on a specific expression.
+   * @param rules a batch of rules to run
+   * @param initial the initial expression
+   * @param transformed the expected expression after rule execution.
+   */
+  protected def ruleTest(
+      rules: Seq[Rule[LogicalPlan]],
+      initial: Expression,
+      transformed: Expression): Unit = {
+    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", FixedPoint(3), rules: _*))
+    }
+
+    comparePlans(
+      analyzer.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
+      Project(Seq(Alias(transformed, "a")()), testRelation))
+  }
+
 }

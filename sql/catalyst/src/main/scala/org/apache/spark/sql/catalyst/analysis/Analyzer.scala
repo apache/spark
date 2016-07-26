@@ -84,7 +84,8 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions),
+      EliminateUnions,
+      SubstituteFunctionAliases),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
