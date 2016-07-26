@@ -25,10 +25,11 @@
 #' Users can specify a desired Hadoop version, the remote site, and
 #' the directory where the package is installed locally.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is without, Spark's "Hadoop free"
+#' @param hadoopVersion Version of Hadoop to install. Default is "without", Spark's "Hadoop free"
 #'                      build. See
 #'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
-#'                      "Hadoop Free" Build} for more information.
+#'                      "Hadoop Free" Build} for more information. It can be in format of
+#'                      "int.int" (for example, "2.7") or "cdh4"
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
 #'                  \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
 #' @param localDir a local directory where Spark is installed. Default path to the cache directory:
@@ -55,13 +56,12 @@
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
 #' \href{http://spark.apache.org/downloads.html}{Apache Spark}
-install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
+install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   version <- paste0("spark-", packageVersion("SparkR"))
-  hadoopVersion <- match.arg(hadoopVersion, supported_versions_hadoop())
-  packageName <- ifelse(hadoopVersion == "without",
-                        paste0(version, "-bin-without-hadoop"),
-                        paste0(version, "-bin-hadoop", hadoopVersion))
+  hadoopVersion <- tolower(hadoopVersion)
+  hadoopVersionName <- hadoop_version_name(hadoopVersion)
+  packageName <- paste(version, "bin", hadoopVersionName, sep = "-")
   localDir <- ifelse(is.null(localDir), spark_cache_path(),
                      normalizePath(localDir, mustWork = FALSE))
 
@@ -72,15 +72,13 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
   packageLocalDir <- file.path(localDir, packageName)
 
   if (overwrite) {
-    message("Overwrite = TRUE: download and overwrite the Spark directory if
-            it exists.")
+    message("Overwrite = TRUE: download and overwrite the Spark directory if it exists.")
   }
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
     fmt <- "Spark %s for Hadoop %s has been installed."
-    msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without",
-                                        "Free build", hadoopVersion))
+    msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion))
     message(msg)
     return(invisible(packageLocalDir))
   }
@@ -92,8 +90,8 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
     message("Tar file found. Installing...")
   } else {
     if (is.null(mirrorUrl)) {
-      message("Remote URL not provided. Use Apache default.")
       mirrorUrl <- default_mirror_url()
+      message(sprintf("Remote URL not provided. Use Apache default: %s", mirrorUrl))
     }
 
     version <- "spark-2.0.0-rc4-bin"
@@ -104,14 +102,15 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n- %s",
                  "Installing to:\n- %s", sep = "\n")
-    msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without",
-                                        "Free build", hadoopVersion),
+    msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                    packageRemotePath, packageLocalDir)
     message(msg)
     
     tryCatch(download.file(packageRemotePath, packageLocalPath),
              error = function(e) {
-               msg <- paste0("Fetch failed from ", mirrorUrl, ".")
+               msg <- paste0("Fetch failed from ", mirrorUrl, ".",
+                             "Please check the Hadoop version,",
+                             "retry or provide another mirror site.")
                stop(msg)
              })
   }
@@ -130,13 +129,19 @@ default_mirror_url <- function() {
   "http://people.apache.org/~pwendell"
 }
 
-supported_versions_hadoop <- function() {
-  c("without", "2.7", "2.6", "2.4")
+hadoop_version_name <- function(hadoopVersion) {
+  if (hadoopVersion == "without") {
+    "without-hadoop"
+  }
+  if (grepl("^[0-9]+\\.[0-9]+$", hadoopVersion, perl = TRUE)) {
+    paste0("hadoop", hadoopVersion)
+  } else {
+    hadoopVersion
+  }
 }
 
-# This function adapts the implementation of the cache function in
-# https://github.com/hadley/rappdirs/blob/master/R/cache.r
-# to Spark context.
+# The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and adapt
+# to Spark context
 spark_cache_path <- function() {
   if (.Platform$OS.type == "windows") {
     winAppPath <- Sys.getenv("%LOCALAPPDATA%", unset = NA)
@@ -153,8 +158,7 @@ spark_cache_path <- function() {
       path <- file.path(Sys.getenv("HOME"), "Library/Caches", "spark")
     } else {
       path <- file.path(
-        Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")),
-        "spark")
+        Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")), "spark")
     }
   } else {
     stop(sprintf("Unknown OS: %s", .Platform$OS.type))
