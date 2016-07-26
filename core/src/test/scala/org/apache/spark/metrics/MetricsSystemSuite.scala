@@ -206,7 +206,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === s"$appName.$executorId.${source.sourceName}")
   }
 
-  test("MetricsSystem with Executor instance and custom namespace which is not set") {
+  test("MetricsSystem with Executor instance, custom namespace which is not set") {
     val source = new Source {
       override val sourceName = "dummySource"
       override val metricRegistry = new MetricRegistry()
@@ -227,8 +227,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === s"$namespaceToResolve.$executorId.${source.sourceName}")
   }
 
-  test("MetricsSystem with Executor instance and custom namespace and spark.executor.id is not " +
-    "set") {
+  test("MetricsSystem with Executor instance, custom namespace, spark.executor.id not set") {
     val source = new Source {
       override val sourceName = "dummySource"
       override val metricRegistry = new MetricRegistry()
@@ -245,7 +244,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
-  test("MetricsSystem with instance which is neither Driver nor Executor and custom namespace") {
+  test("MetricsSystem with non-driver, non-executor instance with custom namespace") {
     val source = new Source {
       override val sourceName = "dummySource"
       override val metricRegistry = new MetricRegistry()
