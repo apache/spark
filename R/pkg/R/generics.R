@@ -1273,7 +1273,7 @@ setGeneric("fitted")
 
 #' @rdname spark.multilayerPerceptronClassifier
 #' @export
-setGeneric("spark.monmlp", function(data, formula, ...) { standardGeneric("spark.monmlp") })
+setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.mlp") })
 
 #' @rdname spark.naiveBayes
 #' @export

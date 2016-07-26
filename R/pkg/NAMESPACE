@@ -23,7 +23,7 @@ exportMethods("glm",
               "summary",
               "spark.kmeans",
               "fitted",
-              "spark.monmlp",
+              "spark.mlp",
               "spark.naiveBayes",
               "spark.survreg")
 
