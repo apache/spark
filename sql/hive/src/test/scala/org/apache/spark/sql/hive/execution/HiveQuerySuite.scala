@@ -825,8 +825,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Row("a", "int", ""),
-        Row("b", "string", ""))
+        Row("a", "int", null),
+        Row("b", "string", null))
     ) {
       sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)

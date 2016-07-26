@@ -748,7 +748,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       assert(schema === actualSchema)
 
       // Checks the DESCRIBE output.
-      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", "") :: Nil)
+      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", null) :: Nil)
     }
   }
 

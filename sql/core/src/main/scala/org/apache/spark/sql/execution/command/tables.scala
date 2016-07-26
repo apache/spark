@@ -436,11 +436,12 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(table)) {
-      val partCols = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      if (partCols.nonEmpty) {
+      val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
+      val partColNames = DDLUtils.getPartitionColumnsFromTableProperties(table)
+      for (schema <- userSpecifiedSchema if partColNames.nonEmpty) {
         append(buffer, "# Partition Information", "", "")
-        append(buffer, s"# ${output.head.name}", "", "")
-        partCols.foreach(col => append(buffer, col, "", ""))
+        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+        describeSchema(StructType(partColNames.map(schema(_))), buffer)
       }
     } else {
       if (table.partitionColumns.nonEmpty) {
@@ -527,7 +528,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
       val comment =
-        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+        if (column.metadata.contains("comment")) column.metadata.getString("comment") else null
       append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }
