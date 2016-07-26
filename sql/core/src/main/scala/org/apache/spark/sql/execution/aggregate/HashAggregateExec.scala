@@ -652,6 +652,10 @@ case class HashAggregateExec(
              |  if (${vectorizedRowKeys.map("!" + _.isNull).mkString(" && ")}) {
              |    $vectorizedRowBuffer = $vectorizedHashMapTerm.findOrInsert(
              |        ${vectorizedRowKeys.map(_.value).mkString(", ")});
+             |  } else {
+             |    $vectorizedRowBuffer = $vectorizedHashMapTerm.findOrInsert(
+             |        ${vectorizedRowKeys.map(_.value).mkString(", ")},
+             |        ${vectorizedRowKeys.map(_.isNull).mkString(", ")});
              |  }
              |}
          """.stripMargin)
