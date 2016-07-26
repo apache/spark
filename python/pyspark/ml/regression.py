@@ -88,6 +88,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     True
     >>> model.intercept == model2.intercept
     True
+    >>> model.numFeatures
+    1
 
     .. versionadded:: 1.4.0
     """
@@ -126,7 +128,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
