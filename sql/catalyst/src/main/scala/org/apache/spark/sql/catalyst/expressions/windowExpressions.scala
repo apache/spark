@@ -321,8 +321,7 @@ abstract class OffsetWindowFunction
   val input: Expression
 
   /**
-   * Default result value for the function when the input expression returns NULL. The default will
-   * evaluated against the current row instead of the offset row.
+   * Default result value for the function when the 'offset'th row does not exist.
    */
   val default: Expression
 
