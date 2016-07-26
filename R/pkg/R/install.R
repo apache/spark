@@ -20,32 +20,34 @@
 
 #' Download and Install Apache Spark to a Local Directory
 #' 
-#' \code{install.spark} downloads and installs Spark to local directory if
+#' \code{install.spark} downloads and installs Spark to a local directory if
 #' it is not found. The Spark version we use is the same as the SparkR version.
-#' Users can specify a desired Hadoop version, the remote site, and
+#' Users can specify a desired Hadoop version, the remote mirror site, and
 #' the directory where the package is installed locally.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is "without", Spark's "Hadoop free"
-#'                      build. See
+#' @param hadoopVersion Version of Hadoop to install. Default is \code{"without"}, Spark's
+#'                      "Hadoop free" build. See
 #'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
-#'                      "Hadoop Free" Build} for more information. It can be in format of
-#'                      "int.int" (for example, "2.7") or "cdh4"
+#'                      "Hadoop Free" Build} for more information. It can also be version number
+#'                      in the format of "int.int", e.g. "2.7", or other patched version names, e.g.
+#'                      "cdh4"
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
 #'                  \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
-#' @param localDir a local directory where Spark is installed. Default path to the cache directory:
+#' @param localDir a local directory where Spark is installed. The directory contains
+#'                 version-specific folders of Spark packages. Default is path to
+#'                 the cache directory:
 #'                 \itemize{
 #'                   \item Mac OS X: \file{~/Library/Caches/spark}
 #'                   \item Unix: \env{$XDG_CACHE_HOME} if defined, otherwise \file{~/.cache/spark}
 #'                   \item Win XP:
-#                          \file{C:\\Documents and Settings\\<username>\\Local Settings\\Application
+#'                         \file{C:\\Documents and Settings\\<username>\\Local Settings\\Application
 #'                         Data\\spark\\spark\\Cache}
 #'                   \item Win Vista:
 #'                         \file{C:\\Users\\<username>\\AppData\\Local\\spark\\spark\\Cache}
 #'                 }
-#' @param overwrite If \code{TRUE}, download and overwrite the existing tar file and force
-#'                  re-install Spark (in case the local directory or file is corrupted)
-#' @return \code{install.spark} returns the local directory
-#'         where Spark is found or installed
+#' @param overwrite If \code{TRUE}, download and overwrite the existing tar file in localDir
+#'                  and force re-install Spark (in case the local directory or file is corrupted)
+#' @return \code{install.spark} returns the local directory where Spark is found or installed
 #' @rdname install.spark
 #' @name install.spark
 #' @export
@@ -72,7 +74,8 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
   packageLocalDir <- file.path(localDir, packageName)
 
   if (overwrite) {
-    message("Overwrite = TRUE: download and overwrite the Spark directory if it exists.")
+    message("Overwrite = TRUE: download and overwrite the tar file and Spark package directory
+            if they exist.")
   }
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
@@ -87,7 +90,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
   tarExists <- file.exists(packageLocalPath)
 
   if (tarExists && !overwrite) {
-    message("Tar file found. Installing...")
+    message("tar file found. Installing...")
   } else {
     if (is.null(mirrorUrl)) {
       mirrorUrl <- default_mirror_url()
@@ -132,8 +135,7 @@ default_mirror_url <- function() {
 hadoop_version_name <- function(hadoopVersion) {
   if (hadoopVersion == "without") {
     "without-hadoop"
-  }
-  if (grepl("^[0-9]+\\.[0-9]+$", hadoopVersion, perl = TRUE)) {
+  } else if (grepl("^[0-9]+\\.[0-9]+$", hadoopVersion, perl = TRUE)) {
     paste0("hadoop", hadoopVersion)
   } else {
     hadoopVersion
