@@ -528,6 +528,25 @@ object ExternalMapToCatalyst {
   }
 }
 
+/**
+ * Converts a Scala/Java map object into catalyst format, by applying the key/value converter when
+ * iterate the map.
+ *
+ * @param key the name of the map key variable that used when iterate the map, and used as input for
+ *            the `keyConverter`
+ * @param keyType the data type of the map key variable that used when iterate the map, and used as
+ *                input for the `keyConverter`
+ * @param keyConverter A function that take the `key` as input, and converts it to catalyst format.
+ * @param value the name of the map value variable that used when iterate the map, and used as input
+ *              for the `valueConverter`
+ * @param valueIsNull the nullability of the map value variable that used when iterate the map, and
+ *                    used as input for the `valueConverter`
+ * @param valueType the data type of the map value variable that used when iterate the map, and
+ *                  used as input for the `valueConverter`
+ * @param valueConverter A function that take the `value` as input, and converts it to catalyst
+ *                       format.
+ * @param child An expression that when evaluated returns the input map object.
+ */
 case class ExternalMapToCatalyst private(
     key: String,
     keyType: DataType,

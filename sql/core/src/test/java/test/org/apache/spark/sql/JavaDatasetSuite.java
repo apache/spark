@@ -498,6 +498,7 @@ public class JavaDatasetSuite implements Serializable {
     private List<String> e;
     private List<Long> f;
     private Map<Integer, String> g;
+    private Map<List<Long>, Map<String, String>> h;
 
     public boolean isA() {
       return a;
@@ -555,6 +556,14 @@ public class JavaDatasetSuite implements Serializable {
       this.g = g;
     }
 
+    public Map<List<Long>, Map<String, String>> getH() {
+      return h;
+    }
+
+    public void setH(Map<List<Long>, Map<String, String>> h) {
+      this.h = h;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -568,7 +577,8 @@ public class JavaDatasetSuite implements Serializable {
       if (!Arrays.equals(d, that.d)) return false;
       if (!e.equals(that.e)) return false;
       if (!f.equals(that.f)) return false;
-      return g.equals(that.g);
+      if (!g.equals(that.g)) return false;
+      return h.equals(that.h);
 
     }
 
@@ -581,6 +591,7 @@ public class JavaDatasetSuite implements Serializable {
       result = 31 * result + e.hashCode();
       result = 31 * result + f.hashCode();
       result = 31 * result + g.hashCode();
+      result = 31 * result + h.hashCode();
       return result;
     }
   }
@@ -664,6 +675,12 @@ public class JavaDatasetSuite implements Serializable {
     map1.put(1, "a");
     map1.put(2, "b");
     obj1.setG(map1);
+    Map<String, String> nestedMap1 = new HashMap<String, String>();
+    nestedMap1.put("x", "1");
+    nestedMap1.put("y", "2");
+    Map<List<Long>, Map<String, String>> complexMap1 = new HashMap<>();
+    complexMap1.put(Arrays.asList(1L, 2L), nestedMap1);
+    obj1.setH(complexMap1);
 
     SimpleJavaBean obj2 = new SimpleJavaBean();
     obj2.setA(false);
@@ -676,6 +693,12 @@ public class JavaDatasetSuite implements Serializable {
     map2.put(3, "c");
     map2.put(4, "d");
     obj2.setG(map2);
+    Map<String, String> nestedMap2 = new HashMap<String, String>();
+    nestedMap2.put("q", "1");
+    nestedMap2.put("w", "2");
+    Map<List<Long>, Map<String, String>> complexMap2 = new HashMap<>();
+    complexMap2.put(Arrays.asList(3L, 4L), nestedMap2);
+    obj2.setH(complexMap2);
 
     List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
     Dataset<SimpleJavaBean> ds = spark.createDataset(data, Encoders.bean(SimpleJavaBean.class));
@@ -695,7 +718,8 @@ public class JavaDatasetSuite implements Serializable {
       new String[]{"hello", null},
       Arrays.asList("a", "b"),
       Arrays.asList(100L, null, 200L),
-      map1});
+      map1,
+      complexMap1});
     Row row2 = new GenericRow(new Object[]{
       false,
       30,
@@ -703,7 +727,8 @@ public class JavaDatasetSuite implements Serializable {
       new String[]{null, "world"},
       Arrays.asList("x", "y"),
       Arrays.asList(300L, null, 400L),
-      map2});
+      map2,
+      complexMap2});
     StructType schema = new StructType()
       .add("a", BooleanType, false)
       .add("b", IntegerType, false)
@@ -711,7 +736,8 @@ public class JavaDatasetSuite implements Serializable {
       .add("d", createArrayType(StringType))
       .add("e", createArrayType(StringType))
       .add("f", createArrayType(LongType))
-      .add("g", createMapType(IntegerType, StringType));
+      .add("g", createMapType(IntegerType, StringType))
+      .add("h",createMapType(createArrayType(LongType), createMapType(StringType, StringType)));
     Dataset<SimpleJavaBean> ds3 = spark.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds3.collectAsList());
