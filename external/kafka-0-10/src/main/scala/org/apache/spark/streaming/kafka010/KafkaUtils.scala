@@ -23,13 +23,14 @@ import java.lang.{Integer => JInt, Long => JLong}
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
@@ -191,7 +192,7 @@ private[kafka010] class KafkaUtilsPythonHelper extends Logging {
       locationStrategy: LocationStrategy,
       consumerStrategy: ConsumerStrategy[Array[Byte], Array[Byte]]
     ): JavaDStream[Array[Byte]] = {
-    fixKafkaParams(consumerStrategy.executorKafkaParams)
+    validateKafkaParams(consumerStrategy.executorKafkaParams)
     val stream = KafkaUtils.createDirectStream(jssc.ssc, locationStrategy, consumerStrategy)
       .map { r =>
         PythonConsumerRecord(r.topic(), r.partition(), r.offset(), r.timestamp(),
@@ -207,7 +208,7 @@ private[kafka010] class KafkaUtilsPythonHelper extends Logging {
       offsetRanges: ju.List[OffsetRange],
       locationStrategy: LocationStrategy
     ): JavaRDD[Array[Byte]] = {
-    fixKafkaParams(kafkaParams)
+    validateKafkaParams(kafkaParams)
     val rdd = KafkaUtils.createRDD[Array[Byte], Array[Byte]](
       jsc.sc,
       kafkaParams,
@@ -221,22 +222,20 @@ private[kafka010] class KafkaUtilsPythonHelper extends Logging {
     new JavaRDD(rdd)
   }
 
-  private def fixKafkaParams(kafkaParams: ju.Map[String, Object]): Unit = {
+  private def validateKafkaParams(kafkaParams: ju.Map[String, Object]): Unit = {
     val decoder = classOf[ByteArrayDeserializer].getCanonicalName
 
     val keyDecoder = kafkaParams.get(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG)
-    if (keyDecoder != null && keyDecoder != decoder) {
-      logWarning(s"${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG} $keyDecoder is not supported " +
-        s"for python Kafka API, overriding with $decoder")
+    if (keyDecoder == null || keyDecoder != decoder) {
+      throw new SparkException(s"${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG} $keyDecoder " +
+        s"is not supported for python Kafka API, please configured with $decoder")
     }
-    kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, decoder)
 
     val valueDecoder = kafkaParams.get(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG)
-    if (valueDecoder != null && valueDecoder != decoder) {
-      logWarning(s"${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG} $valueDecoder is not " +
-        s"supported for python Kafka API, overriding with $decoder")
+    if (valueDecoder == null || valueDecoder != decoder) {
+      throw new SparkException(s"${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG} $valueDecoder " +
+        s"is not supported for python Kafka API, please configured with $decoder")
     }
-    kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, decoder)
   }
 
   // Helper functions to convert Python object to Java object
@@ -285,6 +284,30 @@ private[kafka010] class KafkaUtilsPythonHelper extends Logging {
 
     val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _]]
     kafkaRDD.offsetRanges.toSeq.asJava
+  }
+
+  def commitAsyncForKafkaDStream(dstream: DStream[_], offsetRanges: ju.List[OffsetRange]): Unit = {
+    val dstreams = new mutable.HashSet[DStream[_]]()
+
+    def visit(parent: DStream[_]): Unit = {
+      val parents = parent.dependencies
+      parents.filterNot(dstreams.contains).foreach { p =>
+        dstreams.add(p)
+        visit(p)
+      }
+    }
+    visit(dstream)
+
+    val kafkaDStreams = dstreams.filter(s => s.isInstanceOf[DirectKafkaInputDStream[_, _]])
+    require(
+      kafkaDStreams.size == 1,
+      "Cannot commit offset ranges to DirectKafkaInputDStream, as there may be multiple Kafka " +
+        "DStreams or no Kafka DStream associated with this DStream, please call this method only " +
+        "on a Kafka DStream."
+    )
+
+    val kafkaDStream = kafkaDStreams.head.asInstanceOf[DirectKafkaInputDStream[_, _]]
+    kafkaDStream.commitAsync(offsetRanges.asScala.toArray)
   }
 }
 

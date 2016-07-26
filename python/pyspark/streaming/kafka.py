@@ -252,8 +252,11 @@ class OffsetRange(object):
         return not self.__eq__(other)
 
     def __str__(self):
-        return "OffsetRange(topic: %s, partition: %d, range: [%d -> %d]" \
+        return "OffsetRange(topic: %s, partition: %d, range: [%d -> %d])" \
                % (self.topic, self.partition, self.fromOffset, self.untilOffset)
+
+    def __repr__(self):
+        return self.__str__()
 
     def _jOffsetRange(self, helper):
         return helper.createOffsetRange(self.topic, self.partition, self.fromOffset,
@@ -262,7 +265,7 @@ class OffsetRange(object):
 
 class TopicAndPartition(object):
     """
-    Represents a specific top and partition for Kafka.
+    Represents a specific topic and partition for Kafka.
     """
 
     def __init__(self, topic, partition):

@@ -245,6 +245,31 @@ class Kafka010StreamTests(PySparkStreamingTestCase):
 
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
 
+    def test_kafka_direct_stream_commit_offsets(self):
+        """Test the Python direct kafka stream commit offsets"""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"bootstrap.servers": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "earliest",
+                       "group.id": self._randomGroupId()}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, PreferConsistent(),
+                                               Subscribe([topic], kafkaParams))
+
+        offsetRanges = []
+        def commitOffsets(rdd):
+            stream.commitAsync(rdd.offsetRanges())
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+
+        stream.foreachRDD(commitOffsets)
+        self.ssc.start()
+        self.wait_for(offsetRanges, 1)
+        self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
     def test_topic_partition_equality(self):
         topic_partition_a = TopicPartition("foo", 0)
         topic_partition_b = TopicPartition("foo", 0)

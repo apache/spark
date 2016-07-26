@@ -42,18 +42,14 @@ class KafkaUtils(object):
         Create an input stream that directly pulls messages from Kafka 0.10 brokers with different
         location strategy and consumer strategy.
 
-        This does not use Zookeeper to store offsets. The consumed offsets are tracked
-        by the stream itself. For interoperability with Kafka monitoring tools that depend on
-        Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
-        You can access the offsets used in each batch from the generated RDDs (see
-
         To recover from driver failures, you have to enable checkpointing in the StreamingContext.
         The information on consumed offset can be recovered from the checkpoint.
         See the programming guide for details (constraints, etc.).
 
         :param ssc: StreamingContext object,
         :param locationStrategy: Strategy to schedule consumers for a given TopicPartition on an
-               executor.
+               executor. In most cases, pass in PreferConsistent, use PreferBrokers if your
+               executors are on same nodes as brokers.
         :param consumerStrategy: Choices of how to create and configure underlying Kafka
                Consumers on driver and executors.
         :param keyDecoder: A function to decode key (default is utf8_decoder).
@@ -76,7 +72,7 @@ class KafkaUtils(object):
 
         stream = DStream(jstream, ssc, ser).map(func)
 
-        return KafkaDStream(stream._jdstream, ssc, stream._jrdd_deserializer)
+        return Kafka010DStream(stream._jdstream, ssc, stream._jrdd_deserializer)
 
     @staticmethod
     def createRDD(sc, kafkaParams, offsetRanges, locationStrategy,
@@ -90,7 +86,8 @@ class KafkaUtils(object):
         :param kafkaParams: Additional params for Kafka.
         :param offsetRanges: list of offsetRange to specify topic:partition:[start, end) to consume.
         :param locationStrategy: Strategy to schedule consumers for a given TopicPartition on an
-               executor.
+               executor. In most cases, pass in PreferConsistent, use PreferBrokers if your
+               executors are on same nodes as brokers.
         :param keyDecoder: A function to decode key (default is utf8_decoder).
         :param valueDecoder: A function to decode value (default is utf8_decoder).
         :return:  A RDD object.
@@ -103,6 +100,7 @@ class KafkaUtils(object):
         joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
         jlocationStrategy = locationStrategy._jLocationStrategy(helper)
 
+        KafkaUtils._update_kafka_configs(kafkaParams)
         jrdd = helper.createRDD(sc._jsc, kafkaParams, joffsetRanges, jlocationStrategy)
 
         def func(m):
@@ -119,11 +117,19 @@ class KafkaUtils(object):
         try:
             helper = sc._jvm.org.apache.spark.streaming.kafka010.KafkaUtilsPythonHelper()
             KafkaRDD.set_helper(helper)
+            Kafka010DStream.set_helper(helper)
             return helper
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 KafkaUtils._printErrorMsg(sc)
             raise
+
+    @staticmethod
+    def _update_kafka_configs(kafkaParams):
+        kafkaParams.update({
+            "key.deserializer": "org.apache.kafka.common.serialization.ByteArrayDeserializer",
+            "value.deserializer": "org.apache.kafka.common.serialization.ByteArrayDeserializer"
+        })
 
     @staticmethod
     def _printErrorMsg(sc):
@@ -232,6 +238,7 @@ class Subscribe(ConsumerStrategy):
         """
         self.topics = set(topics)
         self.kafkaParams = kafkaParams
+        KafkaUtils._update_kafka_configs(self.kafkaParams)
         self.offsets = dict() if offsets is None else offsets
 
     def _jConsumerStrategy(self, helper):
@@ -258,6 +265,7 @@ class SubscribePattern(ConsumerStrategy):
         """
         self.pattern = pattern
         self.kafkaParams = kafkaParams
+        KafkaUtils._update_kafka_configs(self.kafkaParams)
         self.offsets = dict() if offsets is None else offsets
 
     def _jConsumerStrategy(self, helper):
@@ -284,6 +292,7 @@ class Assign(ConsumerStrategy):
         """
         self.topicPartitions = set(topicPartitions)
         self.kafkaParams = kafkaParams
+        KafkaUtils._update_kafka_configs(self.kafkaParams)
         self.offsets = dict() if offsets is None else offsets
 
     def _jConsumerStrategy(self, helper):
@@ -294,7 +303,7 @@ class Assign(ConsumerStrategy):
 
 class TopicPartition(object):
     """
-    Represents a specific top and partition for Kafka.
+    Represents a specific topic and partition for Kafka.
     """
 
     def __init__(self, topic, partition):
@@ -344,7 +353,7 @@ class KafkaConsumerRecord(object):
         self._valueDecoder = utf8_decoder
 
     def __str__(self):
-        return "Kafka ConsumerRecords(topic: %s, partition: %d, offset: %d, timestamp: %d, " \
+        return "Kafka ConsumerRecord(topic: %s, partition: %d, offset: %d, timestamp: %d, " \
                "key and value...)" % (self.topic, self.partition, self.offset, self.timestamp)
 
     def __repr__(self):
@@ -368,3 +377,20 @@ class KafkaConsumerRecord(object):
     @property
     def value(self):
         return self._valueDecoder(self._rawValue)
+
+
+class Kafka010DStream(KafkaDStream):
+    def __init__(self, jdstream, ssc, jrdd_deserializer):
+        KafkaDStream.__init__(self, jdstream, ssc, jrdd_deserializer)
+
+    @classmethod
+    def set_helper(cls, helper):
+        cls.helper = helper
+
+    def commitAsync(self, offsetRanges):
+        """
+        Commit the offsets to Kafka.
+        :param offsetRanges: A list of offset ranges to commit.
+        """
+        joffsetRanges = [o._jOffsetRange(self.helper) for o in offsetRanges]
+        self.helper.commitAsyncForKafkaDStream(self._jdstream.dstream(), joffsetRanges)
