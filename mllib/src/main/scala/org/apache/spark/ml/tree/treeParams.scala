@@ -539,9 +539,11 @@ private[ml] object GBTRegressorParams {
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
   private final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
     case "gaussian" | "squared" => OldVariance
-    case "laplace" | "absolute" => ApproxLaplaceImpurity
+    case "laplace" | "absolute" => throw new RuntimeException(
+      "GBTRegressor does not yet support loss-based impurity")
+      // TODO(vlad17) use ApproxLaplaceImpurity here once it is implemented.
     case _ => throw new RuntimeException(
-      s"GBTClassifier does not have loss-based impurity for loss ${loss}")
+      s"GBTRegressor does not have loss-based impurity for loss ${loss}")
 }
 
 private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {

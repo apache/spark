@@ -101,8 +101,6 @@ class GBTClassifier @Since("1.4.0") (
   @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
-  override def setImpurity(value: String): this.type = super.setImpurity(value)
-
   // Parameters from TreeEnsembleParams:
 
   @Since("1.4.0")

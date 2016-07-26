@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.tree.impurity._
 
 /**
- * [[ApproxBernoulliImpurity]] currently uses variance as a (proxy) impurity measure
+ * [[ApproxLaplaceImpurity]] currently uses variance as a (proxy) impurity measure
  * during tree construction. The main purpose of the class is to have an alternative
  * leaf prediction calculation.
  *
@@ -30,7 +30,7 @@ import org.apache.spark.mllib.tree.impurity._
  * Class for calculating variance during regression.
  */
 @Since("2.1")
-object ApproxBernoulliImpurity extends Impurity {
+object ApproxLaplaceImpurity extends Impurity {
 
   /**
    * :: DeveloperApi ::
@@ -42,7 +42,7 @@ object ApproxBernoulliImpurity extends Impurity {
   @Since("2.1")
   @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double =
-    throw new UnsupportedOperationException("ApproxBernoulliImpurity.calculate")
+    throw new UnsupportedOperationException("ApproxLaplaceImpurity.calculate")
 
   /**
    * :: DeveloperApi ::
@@ -71,8 +71,8 @@ object ApproxBernoulliImpurity extends Impurity {
  * in order to compute impurity from a sample.
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  */
-private[spark] class ApproxBernoulliAggregator
-  extends ImpurityAggregator(statsSize = 4) with Serializable {
+private[spark] class ApproxLaplaceAggregator
+  extends ImpurityAggregator(statsSize = 3) with Serializable {
 
   /**
    * Update stats for one (node, feature, bin) with the given label.
@@ -80,11 +80,10 @@ private[spark] class ApproxBernoulliAggregator
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
-    assert(instanceWeight == 1.0, "ApproxBernoulliImpurity only allows unweighted data")
+    assert(instanceWeight == 1.0)
     allStats(offset) += instanceWeight
     allStats(offset + 1) += instanceWeight * label
     allStats(offset + 2) += instanceWeight * label * label
-    allStats(offset + 3) += instanceWeight * Math.abs(label)
   }
 
   /**
@@ -92,8 +91,8 @@ private[spark] class ApproxBernoulliAggregator
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def getCalculator(allStats: Array[Double], offset: Int): ApproxBernoulliCalculator = {
-    new ApproxBernoulliCalculator(allStats.view(offset, offset + statsSize).toArray)
+  def getCalculator(allStats: Array[Double], offset: Int): ApproxLaplaceCalculator = {
+    new ApproxLaplaceCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
 }
 
@@ -103,22 +102,22 @@ private[spark] class ApproxBernoulliAggregator
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
  */
-private[spark] class ApproxBernoulliCalculator(stats: Array[Double])
+private[spark] class ApproxLaplaceCalculator(stats: Array[Double])
   extends ImpurityCalculator(stats) {
 
-  require(stats.length == 4,
-    s"ApproxBernoulliCalculator requires sufficient statistics array stats to be of length 4," +
+  require(stats.length == 1,
+    s"ApproxLaplaceCalculator requires sufficient statistics array stats to be of length 1," +
       s" but was given array of length ${stats.length}.")
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */
-  def copy: ApproxBernoulliCalculator = new ApproxBernoulliCalculator(stats.clone())
+  def copy: ApproxLaplaceCalculator = new ApproxLaplaceCalculator(stats.clone())
 
   /**
    * Calculate the impurity from the stored sufficient statistics.
    */
-  def calculate(): Double = ApproxBernoulliImpurity.calculate(stats(0), stats(1), stats(2))
+  def calculate(): Double = ApproxLaplaceImpurity.calculate(stats(0), stats(1), stats(2))
 
   /**
    * Number of data points accounted for in the sufficient statistics.
@@ -128,19 +127,12 @@ private[spark] class ApproxBernoulliCalculator(stats: Array[Double])
   /**
    * Prediction which should be made based on the sufficient statistics.
    */
-  def predict: Double = if (count == 0) {
-    0
-  } else {
-    // Per Friedman 1999, we use a single Newton-Raphson step to find the optimal leaf
-    // prediction, the solution gamma to the minimization problem:
-    // sum((p_i, y_i) in leaf) log(1 + exp(-2 y_i (p_i + gamma)))
-    // Where p_i is the previous GBT model's prediction for point i. Even though our LogLoss
-    // is twice the above, the optimization problem is unchanged.
-    stats(1) / (2 * stats(3) - stats(2))
-  }
+  def predict: Double = 0.0
+  // TODO: LaplaceImpurity is currently unsupported.
+  // We should use QuantileSummaries to compute the median in an online fashion.
 
   override def toString: String = {
-    s"ApproxBernoulliAggregator(cnt = ${stats(0)}, sum = ${stats(1)}," +
+    s"ApproxLaplaceAggregator(cnt = ${stats(0)}, sum = ${stats(1)}," +
       s"sum2 = ${stats(2)}, sumAbs = ${stats(3)})"
   }
 

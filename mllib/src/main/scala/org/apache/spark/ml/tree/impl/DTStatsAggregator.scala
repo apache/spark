@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
+import org.apache.spark.ml.tree.impurity._
 import org.apache.spark.mllib.tree.impurity._
 
 
@@ -35,10 +36,12 @@ private[spark] class DTStatsAggregator(
    * [[ImpurityAggregator]] instance specifying the impurity type.
   */
   val impurityAggregator: ImpurityAggregator = metadata.impurity match {
-    // TODO: this is a ridiculous coupling. Impurity should have a getAggregator(numClasses) method
+    // TODO(vlad17): this is a ridiculous coupling. Impurity should have a getAggregator() method
     case Gini => new GiniAggregator(metadata.numClasses)
     case Entropy => new EntropyAggregator(metadata.numClasses)
     case Variance => new VarianceAggregator()
+    case ApproxBernoulliImpurity => new ApproxBernoulliAggregator()
+    case ApproxLaplaceImpurity => new ApproxLaplaceAggregator()
     case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
   }
 
