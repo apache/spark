@@ -41,6 +41,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * Maximum depth of the tree (>= 0).
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
+   *
    * @group param
    */
   final val maxDepth: IntParam =
@@ -53,6 +54,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * on features at each node.  More bins give higher granularity.
    * Must be >= 2 and >= number of categories in any categorical feature.
    * (default = 32)
+   *
    * @group param
    */
   final val maxBins: IntParam = new IntParam(this, "maxBins", "Max number of bins for" +
@@ -65,6 +67,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * the split will be discarded as invalid.
    * Should be >= 1.
    * (default = 1)
+   *
    * @group param
    */
   final val minInstancesPerNode: IntParam = new IntParam(this, "minInstancesPerNode", "Minimum" +
@@ -75,6 +78,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   /**
    * Minimum information gain for a split to be considered at a tree node.
    * (default = 0.0)
+   *
    * @group param
    */
   final val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
@@ -84,6 +88,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
    * split per iteration, and its aggregates may exceed this size.
    * (default = 256 MB)
+   *
    * @group expertParam
    */
   final val maxMemoryInMB: IntParam = new IntParam(this, "maxMemoryInMB",
@@ -96,6 +101,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * Caching can speed up training of deeper trees. Users can set how often should the
    * cache be checkpointed or disable it by setting checkpointInterval.
    * (default = false)
+   *
    * @group expertParam
    */
   final val cacheNodeIds: BooleanParam = new BooleanParam(this, "cacheNodeIds", "If false, the" +
@@ -152,6 +158,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * [[org.apache.spark.SparkContext]].
    * Must be >= 1.
    * (default = 10)
+   *
    * @group setParam
    */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
@@ -182,26 +189,20 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 /**
  * Parameters for Decision Tree-based classification algorithms.
  */
-private[ml] trait TreeClassifierParams extends Params {
+private[ml] trait TreeClassifierParamsNoDefault extends Params {
 
+  // Impurity should be overriden when setting a default. This should be a def, but has
+  // to be a val to maintain the proper documentation.
   /**
-   * Criterion used for information gain calculation (case-insensitive).
-   * Also used for terminal leaf value prediction.
-   * Supported: "gini" (default) and "entropy"
    * @group param
    */
-  val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
-    " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
-
-  setDefault(impurity -> "gini")
+  val impurity: Param[String] = new Param(this, "", "")
 
   /** @group setParam */
-  final def setImpurity(value: String): this.type = set(impurity, value)
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase
+  def getImpurity: String = $(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -221,32 +222,42 @@ private[ml] object TreeClassifierParams {
   final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
 }
 
+private[ml] trait TreeClassifierParams extends TreeClassifierParamsNoDefault {
+  /**
+   * Criterion used for information gain calculation (case-insensitive).
+   * Also used for terminal leaf value prediction.
+   * Supported: "gini" (default) and "entropy"
+   *
+   * @group param
+   */
+  override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
+    " information gain calculation (case-insensitive). Supported options:" +
+    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
+    (value: String) => TreeClassifierParams.supportedImpurities.contains(value.toLowerCase))
+
+  setDefault(impurity -> "gini")
+}
+
 private[ml] trait DecisionTreeClassifierParams
   extends DecisionTreeParams with TreeClassifierParams
 
 /**
  * Parameters for Decision Tree-based regression algorithms.
  */
-private[ml] trait TreeRegressorParams extends Params {
+private[ml] trait TreeRegressorParamsNoDefault extends Params {
 
+  // Impurity should be overriden when setting a default. This should be a def, but has
+  // to be a val to maintain the proper documentation.
   /**
-   * Criterion used for information gain calculation (case-insensitive).
-   * Supported: "variance".
-   * (default = variance)
    * @group param
    */
-  val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
-    " information gain calculation (case-insensitive). Supported options:" +
-    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
-
-  setDefault(impurity -> "variance")
+  val impurity: Param[String] = new Param(this, "", "")
 
   /** @group setParam */
-  final def setImpurity(value: String): this.type = set(impurity, value)
+  def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
-  final def getImpurity: String = $(impurity).toLowerCase
+  def getImpurity: String = $(impurity).toLowerCase
 
   /** Convert new impurity to old impurity. */
   private[ml] def getOldImpurity: OldImpurity = {
@@ -263,6 +274,21 @@ private[ml] trait TreeRegressorParams extends Params {
 private[ml] object TreeRegressorParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
+}
+
+private[ml] trait TreeRegressorParams extends TreeRegressorParamsNoDefault {
+  /**
+   * Criterion used for information gain calculation (case-insensitive).
+   * Supported: "variance" (default)
+   *
+   * @group param
+   */
+  override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
+    " information gain calculation (case-insensitive). Supported options:" +
+    s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
+    (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
+
+  setDefault(impurity -> "variance")
 }
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
@@ -291,6 +317,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].
    * (default = 1.0)
+   *
    * @group param
    */
   final val subsamplingRate: DoubleParam = new DoubleParam(this, "subsamplingRate",
@@ -341,10 +368,10 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - sqrt: recommended by Breiman manual for random forests
    *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
    *    package.
+   *
    * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
    * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
    *     random forests]]
-   *
    * @group param
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
@@ -377,6 +404,7 @@ private[ml] trait HasNumTrees extends Params {
    * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
    * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
    * (default = 20)
+   *
    * @group param
    */
   final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
@@ -442,6 +470,7 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
    * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
    * estimator.
    * (default = 0.1)
+   *
    * @group setParam
    */
   def setStepSize(value: Double): this.type = set(stepSize, value)
@@ -455,8 +484,9 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
       categoricalFeatures: Map[Int, Int],
-      oldAlgo: OldAlgo.Algo): OldBoostingStrategy = {
-    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, OldVariance)
+      oldAlgo: OldAlgo.Algo,
+      oldImpurity: OldImpurity): OldBoostingStrategy = {
+    val strategy = super.getOldStrategy(categoricalFeatures, numClasses = 2, oldAlgo, oldImpurity)
     // NOTE: The old API does not support "seed" so we ignore it.
     new OldBoostingStrategy(strategy, getOldLossType, getMaxIter, getStepSize)
   }
@@ -471,19 +501,20 @@ private[ml] object GBTClassifierParams {
   final val supportedLossTypes: Array[String] = Array("logistic", "bernoulli")
   /** Accessor for support entropy settings: loss-based or variance */
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
-  private final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
+  final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
     case "logistic" | "bernoulli" => ApproxBernoulliImpurity
     case _ => throw new RuntimeException(
       s"GBTClassifier does not have loss-based impurity for loss ${loss}")
   }
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParamsNoDefault {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Also used for terminal leaf value prediction.
    * Supported: "loss-based" (default) and "variance"
+   *
    * @group param
    */
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
@@ -506,6 +537,7 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
    * Supported: "bernoulli" (default), "logistic" (alias for "bernoulli")
+   *
    * @group param
    */
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
@@ -537,21 +569,24 @@ private[ml] object GBTRegressorParams {
     "squared", "absolute", "gaussian", "laplace")
   /** Accessor for support entropy settings: loss-based or variance */
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
-  private final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
+
+  final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
     case "gaussian" | "squared" => OldVariance
     case "laplace" | "absolute" => throw new RuntimeException(
       "GBTRegressor does not yet support loss-based impurity")
-      // TODO(vlad17) use ApproxLaplaceImpurity here once it is implemented.
+    // TODO(vlad17) use ApproxLaplaceImpurity here once it is implemented.
     case _ => throw new RuntimeException(
       s"GBTRegressor does not have loss-based impurity for loss ${loss}")
+  }
 }
 
-private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
+private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParamsNoDefault {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Also used for terminal leaf value prediction.
    * Supported: "loss-based" (default) and "variance"
+   *
    * @group param
    */
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
@@ -562,7 +597,7 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
   /** (private[ml]) convert new impurity to old impurity */
   override private[ml] def getOldImpurity: OldImpurity = {
     getImpurity match {
-      case "loss-based" => GBTClassifierParams.getLossBasedImpurity($(lossType))
+      case "loss-based" => GBTRegressorParams.getLossBasedImpurity($(lossType))
       case "variance" => OldVariance
       case _ =>
         // Should never happen because of check in setter method.
@@ -575,6 +610,7 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
    * Loss function which GBT tries to minimize. (case-insensitive)
    * Supported: "gaussian" (default), "squared" (alias for "gaussian"), "laplace",
    * "absolute" (alias for "laplace").
+   *
    * @group param
    */
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
@@ -598,3 +634,4 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
     }
   }
 }
+

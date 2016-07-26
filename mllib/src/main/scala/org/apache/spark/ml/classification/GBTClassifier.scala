@@ -137,7 +137,8 @@ class GBTClassifier @Since("1.4.0") (
           LabeledPoint(label, features)
       }
     val numFeatures = oldDataset.first().features.size
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+    val boostingStrategy = super.getOldBoostingStrategy(
+      categoricalFeatures, OldAlgo.Classification, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)

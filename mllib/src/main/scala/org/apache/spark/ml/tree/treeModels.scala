@@ -336,24 +336,31 @@ private[ml] object DecisionTreeModelReadWrite {
     import sparkSession.implicits._
     implicit val format = DefaultFormats
 
+    val dataPath = new Path(path, "data").toString
+    val data = sparkSession.read.parquet(dataPath).as[NodeData]
+    buildTreeFromNodes(data.collect(), metadata)
+  }
+
+  /**
+   * Given all data for all nodes in a tree, rebuild the tree.
+   * @param data  Unsorted node data
+   * @param metadata  metadata for this tree
+   * @return Root node of reconstructed tree
+   */
+  def buildTreeFromNodes(data: Array[NodeData], metadata: DefaultParamsReader.Metadata): Node = {
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
       val impurityJson: JValue = metadata.getParamValue("impurity")
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 
-    val dataPath = new Path(path, "data").toString
-    val data = sparkSession.read.parquet(dataPath).as[NodeData]
-    buildTreeFromNodes(data.collect(), impurityType)
-  }
+    val loss: String = if (impurityType == "loss-based") {
+      val lossJson: JValue = metadata.getParamValue("lossType")
+      Param.jsonDecode[String](compact(render(lossJson)))
+    } else {
+      ""
+    }
 
-  /**
-   * Given all data for all nodes in a tree, rebuild the tree.
-   * @param data  Unsorted node data
-   * @param impurityType  Impurity type for this tree
-   * @return Root node of reconstructed tree
-   */
-  def buildTreeFromNodes(data: Array[NodeData], impurityType: String): Node = {
     // Load all nodes, sorted by ID.
     val nodes = data.sortBy(_.id)
     // Sanity checks; could remove
@@ -365,7 +372,7 @@ private[ml] object DecisionTreeModelReadWrite {
     // traversal, this guarantees that child nodes will be built before parent nodes.
     val finalNodes = new Array[Node](nodes.length)
     nodes.reverseIterator.foreach { case n: NodeData =>
-      val impurityStats = ImpurityCalculator.getCalculator(impurityType, n.impurityStats)
+      val impurityStats = ImpurityCalculator.getCalculator(impurityType, loss, n.impurityStats)
       val node = if (n.leftChild != -1) {
         val leftChild = finalNodes(n.leftChild)
         val rightChild = finalNodes(n.rightChild)
@@ -431,12 +438,6 @@ private[ml] object EnsembleModelReadWrite {
     implicit val format = DefaultFormats
     val metadata = DefaultParamsReader.loadMetadata(path, sql.sparkContext, className)
 
-    // Get impurity to construct ImpurityCalculator for each node
-    val impurityType: String = {
-      val impurityJson: JValue = metadata.getParamValue("impurity")
-      Param.jsonDecode[String](compact(render(impurityJson)))
-    }
-
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
       .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
@@ -454,7 +455,7 @@ private[ml] object EnsembleModelReadWrite {
     val rootNodesRDD: RDD[(Int, Node)] =
       nodeData.rdd.map(d => (d.treeID, d.nodeData)).groupByKey().map {
         case (treeID: Int, nodeData: Iterable[NodeData]) =>
-          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
+          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, metadata)
       }
     val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
     (metadata, treesMetadata.zip(rootNodes), treesWeights)

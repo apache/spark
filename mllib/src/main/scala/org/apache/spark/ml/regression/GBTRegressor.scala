@@ -23,7 +23,6 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
@@ -131,7 +130,8 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
-    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
+    val boostingStrategy = super.getOldBoostingStrategy(
+      categoricalFeatures, OldAlgo.Regression, getOldImpurity)
 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
@@ -176,7 +176,7 @@ class GBTRegressionModel private[ml](
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
     override val numFeatures: Int)
-  extends PredictionModel[Vector, GBTRegressionModel]
+  extends RegressionModel[Vector, GBTRegressionModel]
   with GBTRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 

@@ -131,17 +131,30 @@ private[spark] class ApproxBernoulliCalculator(stats: Array[Double])
   def predict: Double = if (count == 0) {
     0
   } else {
-    // Per Friedman 1999, we use a single Newton-Raphson step to find the optimal leaf
-    // prediction, the solution gamma to the minimization problem:
-    // sum((p_i, y_i) in leaf) log(1 + exp(-2 y_i (p_i + gamma)))
-    // Where p_i is the previous GBT model's prediction for point i. Even though our LogLoss
-    // is twice the above, the optimization problem is unchanged.
-    stats(1) / (2 * stats(3) - stats(2))
+    // Per Friedman 1999, we use a single Newton-Raphson step from gamma = 0 to find the
+    // optimal leaf prediction, the solution gamma to the minimization problem:
+    // L = sum((p_i, y_i) in leaf) 2 log(1 + exp(-2 y_i (p_i + gamma)))
+    // Where p_i is the previous GBT model's prediction for point i. The above with the factor of
+    // 2 is equivalent to the LogLoss defined in Spark.
+    //
+    // The single NR step from 0 yields the solution H^{-1} s, where H is the Hessian
+    // and s is the gradient for L wrt gamma above at gamma = 0.
+    //
+    // The derivative of the i-th term wrt gamma is
+    // - 4 y_i / (1 + E), where E = exp(2 y_i (p_i + gamma))
+    // At gamma = 0 it's equivalent to the gradient of LogLoss for i, the sum of which is
+    // stored in stats(1).
+    //
+    // The Hessian of the i-th term wrt to gamma is
+    // 8 y_i^2 E / (1 + E)^2 = 8 y_i^2 / (1 + E) - 8 y_i^2 / (1 + E)^2
+    // At gamma = 0, the latter term is the half of the square of the gradient of the LogLoss for i.
+    // Since y_i is one of {-1, +1}, the first term is the absolute value of the gradient of the
+    // LogLoss for i times 2. These statistics are stored in stats(2) and stats(3), respectively.
+    stats(1) / (2 * stats(3) - stats(2) / 2)
   }
 
   override def toString: String = {
     s"ApproxBernoulliAggregator(cnt = ${stats(0)}, sum = ${stats(1)}," +
       s"sum2 = ${stats(2)}, sumAbs = ${stats(3)})"
   }
-
 }

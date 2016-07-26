@@ -23,6 +23,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -77,6 +78,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
         val gbt = new GBTClassifier()
           .setMaxDepth(2)
           .setSubsamplingRate(subsamplingRate)
+          .setImpurity("variance")
           .setLossType("logistic")
           .setMaxIter(maxIter)
           .setStepSize(learningRate)
@@ -84,6 +86,10 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
   }
+  // categorical features + compareAPIs
+  // categorical + continuous features + compare to variance-based (should be better)
+  // compare to gbm test logisitic.
+  // Continuous and categorical features
 
   test("Checkpointing") {
     val tempDir = Utils.createTempDir()
@@ -176,7 +182,6 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   test("Feature importance with toy data") {
     val numClasses = 2
     val gbt = new GBTClassifier()
-      .setImpurity("Gini")
       .setMaxDepth(3)
       .setMaxIter(5)
       .setSubsamplingRate(1.0)
@@ -223,15 +228,18 @@ private object GBTClassifierSuite extends SparkFunSuite {
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
    * Convert the old model to the new format, compare them, and fail if they are not exactly equal.
+   *
+   * The old API only supports variance-based impurity, so gbt should have that setting.
    */
   def compareAPIs(
       data: RDD[LabeledPoint],
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTClassifier,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    assert(gbt.getImpurity == "variance")
     val numFeatures = data.first().features.size
     val oldBoostingStrategy =
-      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification, OldVariance)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)
