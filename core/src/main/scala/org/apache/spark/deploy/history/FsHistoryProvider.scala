@@ -204,7 +204,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         if (logDir == DEFAULT_LOG_DIR) {
           msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
         }
-        throw new IllegalArgumentException(msg)
+        throw new IllegalArgumentException(msg, f)
     }
 
     // Disable the background thread during tests.

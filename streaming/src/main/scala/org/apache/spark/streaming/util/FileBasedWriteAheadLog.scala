@@ -241,7 +241,7 @@ private[streaming] class FileBasedWriteAheadLog(
         logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
       }
     } catch {
-      case f: FileNotFoundException =>
+      case _: FileNotFoundException =>
     }
   }
 

@@ -285,7 +285,7 @@ private[state] class HDFSBackedStateStoreProvider(
               s"$baseDir already exists and is not a directory")
       }
     } catch {
-      case f: FileNotFoundException =>
+      case _: FileNotFoundException =>
         fs.mkdirs(baseDir)
     }
   }
@@ -348,7 +348,7 @@ private[state] class HDFSBackedStateStoreProvider(
       } catch {
         case f: FileNotFoundException =>
           throw new IllegalStateException(
-            s"Error reading delta file $fileToRead of $this: $fileToRead does not exist")
+            s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
       }
       var eof = false
 
@@ -411,7 +411,7 @@ private[state] class HDFSBackedStateStoreProvider(
     val in = try {
       fs.open(fileToRead)
     } catch {
-      case f: FileNotFoundException =>
+      case _: FileNotFoundException =>
         return None
     }
     val map = new MapType()

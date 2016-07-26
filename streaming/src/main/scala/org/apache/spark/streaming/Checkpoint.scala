@@ -128,7 +128,7 @@ object Checkpoint extends Logging {
         Seq.empty
       }
     } catch {
-      case fnfe: FileNotFoundException =>
+      case _: FileNotFoundException =>
         logWarning(s"Checkpoint directory $path does not exist")
         Seq.empty
     }

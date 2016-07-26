@@ -166,7 +166,6 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val tempOutputPath =
       new Path(outputDir, s".$finalOutputName-attempt-${ctx.attemptNumber()}")
 
-
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
 
     val fileOutputStream = try {
@@ -261,7 +260,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         logDebug(s"Read partitioner from $partitionerFilePath")
         Some(partitioner)
       } catch {
-        case f: FileNotFoundException =>
+        case _: FileNotFoundException =>
           logDebug("No partitioner file")
           None
       }
