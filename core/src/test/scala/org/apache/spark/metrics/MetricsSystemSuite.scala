@@ -222,7 +222,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
     // If the user set the spark.metrics.namespace property to an expansion of another property
-    // (say ${spark.doesnotexist}, the unresolved name (i.e. litterally ${spark.doesnot})
+    // (say ${spark.doesnotexist}, the unresolved name (i.e. literally ${spark.doesnotexist})
     // is used as the root logger name.
     assert(metricName === s"$namespaceToResolve.$executorId.${source.sourceName}")
   }

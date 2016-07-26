@@ -126,8 +126,7 @@ private[spark] class MetricsSystem private (
    *         application, executor/driver and metric source.
    */
   private[spark] def buildRegistryName(source: Source): String = {
-    val metricsNamespace = conf.get(METRICS_NAMESPACE).map(Some(_))
-      .getOrElse(conf.getOption("spark.app.id"))
+    val metricsNamespace = conf.get(METRICS_NAMESPACE).orElse(conf.getOption("spark.app.id"))
 
     val executorId = conf.getOption("spark.executor.id")
     val defaultName = MetricRegistry.name(source.sourceName)
