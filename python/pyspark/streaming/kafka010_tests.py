@@ -245,6 +245,7 @@ class Kafka010StreamTests(PySparkStreamingTestCase):
 
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
 
+    @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_direct_stream_commit_offsets(self):
         """Test the Python direct kafka stream commit offsets"""
         topic = self._randomTopic()
