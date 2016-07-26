@@ -74,8 +74,8 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
   packageLocalDir <- file.path(localDir, packageName)
 
   if (overwrite) {
-    message("Overwrite = TRUE: download and overwrite the tar file and Spark package directory
-            if they exist.")
+    message(paste0("Overwrite = TRUE: download and overwrite the tar file",
+                   "and Spark package directory if they exist."))
   }
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
