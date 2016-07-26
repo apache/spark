@@ -165,7 +165,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   def resolveQuoted(
       name: String,
       resolver: Resolver): Option[NamedExpression] = {
-    resolve(UnresolvedAttribute.parseAttributeName(name), output, resolver)
+    resolve(UnresolvedAttribute(name).nameParts, output, resolver)
   }
 
   /**

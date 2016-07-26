@@ -23,6 +23,7 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
@@ -37,6 +38,11 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
     // TODO add this to the parser interface.
     astBuilder.visitSingleDataType(parser.singleDataType())
+  }
+
+  /** Creates UnresolvedAttribute for a given SQL string */
+  def parseColumnName(sqlText: String): UnresolvedAttribute = parse(sqlText) { parser =>
+    astBuilder.visitSingleColumnName(parser.singleColumnName())
   }
 
   /** Creates Expression for a given SQL string. */

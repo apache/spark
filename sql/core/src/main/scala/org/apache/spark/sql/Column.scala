@@ -126,9 +126,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
     case _ if name.endsWith(".*") =>
-      val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+      val parts = UnresolvedAttribute(name.substring(0, name.length - 2)).nameParts
       UnresolvedStar(Some(parts))
-    case _ => UnresolvedAttribute.quotedString(name)
+    case _ => UnresolvedAttribute(name)
   })
 
   override def toString: String = usePrettyExpression(expr).sql
