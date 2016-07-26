@@ -70,7 +70,6 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
 
   packageLocalDir <- file.path(localDir, packageName)
 
-
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir)) {
     fmt <- "Spark %s for Hadoop %s has been installed."
@@ -108,19 +107,6 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
                             message(msg)
                             TRUE
                           })
-    if (fetchFail) {
-      message("Try the backup option.")
-      mirror_sites <- tryCatch(read.csv(mirror_url_csv()),
-                               error = function(e) stop("No csv file found."))
-      mirrorUrl <- mirror_sites$url[1]
-      packageRemotePath <- paste0(file.path(mirrorUrl, version, packageName),
-                                  ".tgz")
-      message(sprintf("Downloading from:\n- %s", packageRemotePath))
-      tryCatch(download.file(packageRemotePath, packageLocalPath),
-               error = function(e) {
-                 stop("Download failed. Please provide a valid mirrorUrl.")
-               })
-    }
   }
 
   untar(tarfile = packageLocalPath, exdir = localDir)
@@ -139,7 +125,7 @@ mirror_url_default <- function() {
 }
 
 supported_versions_hadoop <- function() {
-  c("2.7", "2.6", "2.4", "without")
+  c("without", "2.7", "2.6", "2.4")
 }
 
 spark_cache_path <- function() {
@@ -164,8 +150,4 @@ spark_cache_path <- function() {
     stop("Unknown OS")
   }
   normalizePath(path, mustWork = FALSE)
-}
-
-mirror_url_csv <- function() {
-  system.file("extdata", "spark_download.csv", package = "SparkR")
 }
