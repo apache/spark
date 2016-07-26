@@ -436,13 +436,12 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(table)) {
-      val schema = DDLUtils.getSchemaFromTableProperties(table)
+      val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
       val partColNames = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      if (partColNames.nonEmpty && schema.isDefined) {
+      for (schema <- userSpecifiedSchema if partColNames.nonEmpty) {
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        val partCols = partColNames.map(n => schema.get.find(_.name == n).get)
-        describeSchema(StructType(partCols), buffer)
+        describeSchema(StructType(partColNames.map(schema(_))), buffer)
       }
     } else {
       if (table.partitionColumns.nonEmpty) {
@@ -522,14 +521,13 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      append(buffer, column.name, column.dataType.toLowerCase, column.comment.getOrElse(""))
+      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
   }
 
   private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      val comment = column.getComment().getOrElse("")
-      append(buffer, column.name, column.dataType.simpleString, comment)
+      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }
 

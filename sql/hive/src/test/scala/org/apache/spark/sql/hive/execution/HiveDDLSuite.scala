@@ -437,11 +437,11 @@ class HiveDDLSuite
 
       assert(sql("DESC tbl").collect().containsSlice(
         Seq(
-          Row("a", "int", ""),
-          Row("b", "int", ""),
+          Row("a", "int", null),
+          Row("b", "int", null),
           Row("# Partition Information", "", ""),
           Row("# col_name", "data_type", "comment"),
-          Row("b", "int", "")
+          Row("b", "int", null)
         )
       ))
     }
@@ -637,7 +637,7 @@ class HiveDDLSuite
 
           val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-          assert(desc.contains(Row("id", "bigint", "")))
+          assert(desc.contains(Row("id", "bigint", null)))
         }
       }
     }
@@ -654,13 +654,13 @@ class HiveDDLSuite
 
       assert(formattedDesc.containsSlice(
         Seq(
-          Row("a", "bigint", ""),
-          Row("b", "bigint", ""),
-          Row("c", "bigint", ""),
-          Row("d", "bigint", ""),
+          Row("a", "bigint", null),
+          Row("b", "bigint", null),
+          Row("c", "bigint", null),
+          Row("d", "bigint", null),
           Row("# Partition Information", "", ""),
           Row("# col_name", "data_type", "comment"),
-          Row("d", "bigint", ""),
+          Row("d", "bigint", null),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Database:", "default", "")
