@@ -200,66 +200,68 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
-
-    val featuresSummarizer = {
-      val seqOp = (c: MultivariateOnlineSummarizer, v: AFTPoint) => c.add(v.features)
-      val combOp = (c1: MultivariateOnlineSummarizer, c2: MultivariateOnlineSummarizer) => {
-        c1.merge(c2)
+    try {
+      val featuresSummarizer = {
+        val seqOp = (c: MultivariateOnlineSummarizer, v: AFTPoint) => c.add(v.features)
+        val combOp = (c1: MultivariateOnlineSummarizer, c2: MultivariateOnlineSummarizer) => {
+          c1.merge(c2)
+        }
+        instances.treeAggregate(new MultivariateOnlineSummarizer)(seqOp, combOp)
       }
-      instances.treeAggregate(new MultivariateOnlineSummarizer)(seqOp, combOp)
-    }
 
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
-    val numFeatures = featuresStd.size
+      val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+      val numFeatures = featuresStd.size
 
-    if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
-        featuresStd(i) == 0.0 && featuresSummarizer.mean(i) != 0.0 }) {
-      logWarning("Fitting AFTSurvivalRegressionModel without intercept on dataset with " +
-        "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
-        "columns. This behavior is different from R survival::survreg.")
-    }
-
-    val costFun = new AFTCostFun(instances, $(fitIntercept), featuresStd)
-    val optimizer = new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
-
-    /*
-       The parameters vector has three parts:
-       the first element: Double, log(sigma), the log of scale parameter
-       the second element: Double, intercept of the beta parameter
-       the third to the end elements: Doubles, regression coefficients vector of the beta parameter
-     */
-    val initialParameters = Vectors.zeros(numFeatures + 2)
-
-    val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialParameters.asBreeze.toDenseVector)
-
-    val parameters = {
-      val arrayBuilder = mutable.ArrayBuilder.make[Double]
-      var state: optimizer.State = null
-      while (states.hasNext) {
-        state = states.next()
-        arrayBuilder += state.adjustedValue
+      if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
+          featuresStd(i) == 0.0 && featuresSummarizer.mean(i) != 0.0 }) {
+        logWarning("Fitting AFTSurvivalRegressionModel without intercept on dataset with " +
+          "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
+          "columns. This behavior is different from R survival::survreg.")
       }
-      if (state == null) {
-        val msg = s"${optimizer.getClass.getName} failed."
-        throw new SparkException(msg)
+
+      val costFun = new AFTCostFun(instances, $(fitIntercept), featuresStd)
+      val optimizer = new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+
+      /*
+         The parameters vector has three parts:
+         the first element: Double, log(sigma), the log of scale parameter
+         the second element: Double, intercept of the beta parameter
+         the third to the end elements: Doubles, regression coefficients vector of the beta
+         parameter
+       */
+      val initialParameters = Vectors.zeros(numFeatures + 2)
+
+      val states = optimizer.iterations(new CachedDiffFunction(costFun),
+        initialParameters.asBreeze.toDenseVector)
+
+      val parameters = {
+        val arrayBuilder = mutable.ArrayBuilder.make[Double]
+        var state: optimizer.State = null
+        while (states.hasNext) {
+          state = states.next()
+          arrayBuilder += state.adjustedValue
+        }
+        if (state == null) {
+          val msg = s"${optimizer.getClass.getName} failed."
+          throw new SparkException(msg)
+        }
+        state.x.toArray.clone()
       }
-      state.x.toArray.clone()
-    }
 
-    if (handlePersistence) instances.unpersist()
-
-    val rawCoefficients = parameters.slice(2, parameters.length)
-    var i = 0
-    while (i < numFeatures) {
-      rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
-      i += 1
+      val rawCoefficients = parameters.slice(2, parameters.length)
+      var i = 0
+      while (i < numFeatures) {
+        rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
+        i += 1
+      }
+      val coefficients = Vectors.dense(rawCoefficients)
+      val intercept = parameters(1)
+      val scale = math.exp(parameters(0))
+      val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
+      copyValues(model.setParent(this))
+    } finally {
+      if (handlePersistence) instances.unpersist()
     }
-    val coefficients = Vectors.dense(rawCoefficients)
-    val intercept = parameters(1)
-    val scale = math.exp(parameters(0))
-    val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
-    copyValues(model.setParent(this))
   }
 
   @Since("1.6.0")
