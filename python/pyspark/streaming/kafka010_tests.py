@@ -260,6 +260,7 @@ class Kafka010StreamTests(PySparkStreamingTestCase):
                                                Subscribe([topic], kafkaParams))
 
         offsetRanges = []
+
         def commitOffsets(rdd):
             stream.commitAsync(rdd.offsetRanges())
             for o in rdd.offsetRanges():
