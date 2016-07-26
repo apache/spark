@@ -39,13 +39,16 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
  */
-class SQLBuilder(
+class SQLBuilder private (
     logicalPlan: LogicalPlan,
-    nextSubqueryId: AtomicLong = new AtomicLong(0),
-    nextGenAttrId: AtomicLong = new AtomicLong(0),
-    exprIdMap: Map[Long, Long] = Map.empty[Long, Long]) extends Logging {
+    nextSubqueryId: AtomicLong,
+    nextGenAttrId: AtomicLong,
+    exprIdMap: Map[Long, Long]) extends Logging {
   require(logicalPlan.resolved,
     "SQLBuilder only supports resolved logical query plans. Current plan:\n" + logicalPlan)
+
+  def this(logicalPlan: LogicalPlan) =
+    this(logicalPlan, new AtomicLong(0), new AtomicLong(0), Map.empty[Long, Long])
 
   def this(df: Dataset[_]) = this(df.queryExecution.analyzed)
 
