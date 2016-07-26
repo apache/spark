@@ -134,26 +134,29 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
   }
 
+  private def interlace(keys: Seq[Literal], values: Seq[Literal]): Seq[Literal] = {
+    keys.zip(values).flatMap { case (k, v) => Seq(k, v) }
+  }
+
+  private def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
+    // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
+    scala.collection.immutable.ListMap(keys.zip(values): _*)
+  }
+
   test("SPARK-16715: CreateMap with Decimals") {
-    val map1 = CreateMap(Seq(Literal(Decimal(0.02)), Literal(Decimal(0.001)),
-      Literal(Decimal(0.001)), Literal(Decimal(0.03))))
+    val keys = Seq(0.02, 0.004)
+    val values = Seq(0.001, 0.5)
+    val keys1 = Seq(0.020, 0.004)
+    val values1 = Seq(0.001, 0.500)
+    val map1 = CreateMap(interlace(keys.map(Literal(_)), values.map(Literal(_))))
 
     assert(map1.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
 
-    checkEvaluation(map1, Seq(Decimal(0.020), Decimal(0.001),
-      Literal(Decimal(0.001)), Literal(Decimal(0.030))))
+    checkEvaluation(map1, createMap(keys1, values1))
+    checkEvaluation(map1, createMap(keys, values))
   }
 
   test("CreateMap") {
-    def interlace(keys: Seq[Literal], values: Seq[Literal]): Seq[Literal] = {
-      keys.zip(values).flatMap { case (k, v) => Seq(k, v) }
-    }
-
-    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
-      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
-      scala.collection.immutable.ListMap(keys.zip(values): _*)
-    }
-
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
     val strSeq = intSeq.map(_.toString)
