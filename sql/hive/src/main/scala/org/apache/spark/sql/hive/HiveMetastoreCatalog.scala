@@ -119,7 +119,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
 
-        val options = table.storage.serdeProperties
+        val options = table.storage.properties
         val dataSource =
           DataSource(
             sparkSession,
@@ -171,8 +171,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
-        // because hive use things like `_c0` to build the expanded text
-        // currently we cannot support view from "create view v1(c1) as ..."
         case None =>
           SubqueryAlias(table.identifier.table,
             sparkSession.sessionState.sqlParser.parsePlan(viewText))
@@ -180,8 +178,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText))
       }
     } else {
-      MetastoreRelation(
-        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client, sparkSession)
+      val qualifiedTable =
+        MetastoreRelation(
+          qualifiedTableName.database, qualifiedTableName.name)(table, client, sparkSession)
+      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
     }
   }
 
@@ -385,7 +385,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
           val parquetRelation = convertToParquetRelation(relation)
-          SubqueryAlias(relation.alias.getOrElse(relation.tableName), parquetRelation)
+          SubqueryAlias(relation.tableName, parquetRelation)
       }
     }
   }
@@ -423,7 +423,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
           val orcRelation = convertToOrcRelation(relation)
-          SubqueryAlias(relation.alias.getOrElse(relation.tableName), orcRelation)
+          SubqueryAlias(relation.tableName, orcRelation)
       }
     }
   }

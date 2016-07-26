@@ -153,7 +153,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
           serde = Some(classOf[LazySimpleSerDe].getName()),
           compressed = false,
-          serdeProperties = Map.empty
+          properties = Map.empty
         ))
     }
 
@@ -249,7 +249,19 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: dropTable") {
-      client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false)
+      val versionsWithoutPurge = versions.takeWhile(_ != "0.14")
+      // First try with the purge option set. This should fail if the version is < 0.14, in which
+      // case we check the version and try without it.
+      try {
+        client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
+          purge = true)
+        assert(!versionsWithoutPurge.contains(version))
+      } catch {
+        case _: UnsupportedOperationException =>
+          assert(versionsWithoutPurge.contains(version))
+          client.dropTable("default", tableName = "temporary", ignoreIfNotExists = false,
+            purge = false)
+      }
       assert(client.listTables("default") === Seq("src"))
     }
 
@@ -263,7 +275,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       outputFormat = None,
       serde = None,
       compressed = false,
-      serdeProperties = Map.empty)
+      properties = Map.empty)
 
     test(s"$version: sql create partitioned table") {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
@@ -366,7 +378,20 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: dropPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "3")
-      client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true)
+      val versionsWithoutPurge = versions.takeWhile(_ != "1.2")
+      // Similar to dropTable; try with purge set, and if it fails, make sure we're running
+      // with a version that is older than the minimum (1.2 in this case).
+      try {
+        client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
+          purge = true)
+        assert(!versionsWithoutPurge.contains(version))
+      } catch {
+        case _: UnsupportedOperationException =>
+          assert(versionsWithoutPurge.contains(version))
+          client.dropPartitions("default", "src_part", Seq(spec), ignoreIfNotExists = true,
+            purge = false)
+      }
+
       assert(client.getPartitionOption("default", "src_part", spec).isEmpty)
     }
 

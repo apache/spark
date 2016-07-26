@@ -19,8 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
@@ -115,11 +114,9 @@ private[feature] trait Word2VecBase extends Params
 }
 
 /**
- * :: Experimental ::
  * Word2Vec trains a model of `Map(String, Vector)`, i.e. transforms a word into a code for further
  * natural language processing or machine learning process.
  */
-@Experimental
 @Since("1.4.0")
 final class Word2Vec @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
@@ -202,10 +199,8 @@ object Word2Vec extends DefaultParamsReadable[Word2Vec] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[Word2Vec]].
  */
-@Experimental
 @Since("1.4.0")
 class Word2VecModel private[ml] (
     @Since("1.4.0") override val uid: String,

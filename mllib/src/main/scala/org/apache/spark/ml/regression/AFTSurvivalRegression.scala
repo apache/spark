@@ -244,7 +244,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         val msg = s"${optimizer.getClass.getName} failed."
         throw new SparkException(msg)
       }
-
       state.x.toArray.clone()
     }
 

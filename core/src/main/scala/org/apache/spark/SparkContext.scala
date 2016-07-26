@@ -556,6 +556,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Make sure the context is stopped if the user forgets about it. This avoids leaving
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
+    logDebug("Adding shutdown hook") // force eager creation of logger
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
       ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
       logInfo("Invoking stop() from shutdown hook")
@@ -2011,13 +2012,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     dagScheduler.cancelAllJobs()
   }
 
-  /** Cancel a given job if it's scheduled or running */
-  private[spark] def cancelJob(jobId: Int) {
+  /**
+   * Cancel a given job if it's scheduled or running.
+   *
+   * @param jobId the job ID to cancel
+   * @throws InterruptedException if the cancel message cannot be sent
+   */
+  def cancelJob(jobId: Int) {
     dagScheduler.cancelJob(jobId)
   }
 
-  /** Cancel a given stage and all jobs associated with it */
-  private[spark] def cancelStage(stageId: Int) {
+  /**
+   * Cancel a given stage and all jobs associated with it.
+   *
+   * @param stageId the stage ID to cancel
+   * @throws InterruptedException if the cancel message cannot be sent
+   */
+  def cancelStage(stageId: Int) {
     dagScheduler.cancelStage(stageId)
   }
 
