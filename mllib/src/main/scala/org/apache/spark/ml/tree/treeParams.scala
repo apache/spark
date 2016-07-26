@@ -533,8 +533,8 @@ private[ml] object GBTRegressorParams {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: squared (L2), absolute (L1), gaussian (squared),
    * laplace (absolute) */
-  final val supportedLossTypes: Array[String] = Array("squared", "absolute",
-    "gaussian", "laplace").map(_.toLowerCase)
+  final val supportedLossTypes: Array[String] = Array(
+    "squared", "absolute", "gaussian", "laplace")
   /** Accessor for support entropy settings: loss-based or variance */
   final val supportedImpurities: Array[String] = Array("loss-based", "variance")
   private final def getLossBasedImpurity(loss: String): OldImpurity = loss match {

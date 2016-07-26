@@ -150,11 +150,14 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
 @Since("1.4.0")
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
-
   /** Accessor for supported loss settings: squared (L2), absolute (L1), gaussian (squared),
    * laplace (absolute) */
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTRegressorParams.supportedLossTypes
+
+  /** Accessor for support entropy settings: loss-based or variance */
+  @Since("2.1")
+  final val supportedImpurities: Array[String] = GBTRegressorParams.supportedImpurities
 
   @Since("2.0.0")
   override def load(path: String): GBTRegressor = super.load(path)

@@ -157,10 +157,13 @@ class GBTClassifier @Since("1.4.0") (
 
 @Since("1.4.0")
 object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
-
-  /** Accessor for supported loss settings: logistic */
+  /** Accessor for supported loss settings: logistic, bernoulli */
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTClassifierParams.supportedLossTypes
+
+  /** Accessor for support entropy settings: loss-based or variance */
+  @Since("2.1")
+  final val supportedImpurities: Array[String] = GBTClassifierParams.supportedImpurities
 
   @Since("2.0.0")
   override def load(path: String): GBTClassifier = super.load(path)
