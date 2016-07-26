@@ -935,8 +935,14 @@ private[spark] object JsonProtocol {
     val executorHost = (json \ "Host").extract[String]
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
-    val worker = mapFromJson(json \ "Worker").toMap
-    new ExecutorInfo(executorHost, totalCores, logUrls, worker)
+    val workerOption = Utils.jsonOption(json \ "Worker")
+    workerOption match {
+      case Some(workerJson) =>
+        val worker = mapFromJson(workerJson).toMap
+        new ExecutorInfo(executorHost, totalCores, logUrls, worker)
+      case None =>
+        new ExecutorInfo(executorHost, totalCores, logUrls)
+    }
   }
 
   /** -------------------------------- *

@@ -365,6 +365,16 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
   }
 
+  test("ExecutorInfo backward compatibility") {
+    // "workerUrl" property of ExecutorInfo was added in 2.1.0
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
+    val executorInfo = new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap)
+    val oldExecutorInfoJson = JsonProtocol.executorInfoToJson(executorInfo)
+      .removeField({ _._1 == "Worker" })
+    val oldExecutorInfo = JsonProtocol.executorInfoFromJson(oldExecutorInfoJson)
+    assertEquals(executorInfo, oldExecutorInfo)
+  }
+
   test("AccumulableInfo backward compatibility") {
     // "Internal" property of AccumulableInfo was added in 1.5.1
     val accumulableInfo = makeAccumulableInfo(1, internal = true, countFailedValues = true)
@@ -603,6 +613,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private def assertEquals(info1: ExecutorInfo, info2: ExecutorInfo) {
     assert(info1.executorHost == info2.executorHost)
     assert(info1.totalCores == info2.totalCores)
+    assertEquals(info1.logUrlMap, info2.logUrlMap)
+    assertEquals(info1.workerUrl, info2.workerUrl)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -683,6 +695,17 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
         assert(key1 === key2)
         values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
+    }
+  }
+
+  case class MapStringToString(m: Map[String, String])
+  implicit private def mapStringtoString(m: Map[String, String]): MapStringToString =
+    MapStringToString(m)
+  private def assertEquals(details1: MapStringToString, details2: MapStringToString) {
+    details1.m.zip(details2.m).foreach {
+      case ((key1, values1), (key2, values2)) =>
+        assert(key1 === key2)
+        assert(values1 === values2)
     }
   }
 
