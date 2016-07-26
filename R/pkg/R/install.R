@@ -86,7 +86,7 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
   } else {
     if (is.null(mirrorUrl)) {
       message("Remote URL not provided. Use Apache default.")
-      mirrorUrl <- mirror_url_default()
+      mirrorUrl <- default_mirror_url()
     }
 
     version <- "spark-2.0.0-rc4-bin"
@@ -117,7 +117,7 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
   invisible(packageLocalDir)
 }
 
-mirror_url_default <- function() {
+default_mirror_url <- function() {
   # change to http://www.apache.org/dyn/closer.lua
   # when released
 

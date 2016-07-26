@@ -365,7 +365,7 @@ sparkR.session <- function(
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
-  if (!nzchar(master) || master_is_local(master)) {
+  if (!nzchar(master) || is_master_local(master)) {
     if (!is.na(file.info(sparkHome)$isdir)) {
       fmt <- paste0("Spark not found in SPARK_HOME: %s.\n",
                    "Search in the cache directory. ",
