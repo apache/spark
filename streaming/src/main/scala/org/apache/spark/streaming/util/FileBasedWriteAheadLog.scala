@@ -16,6 +16,7 @@
  */
 package org.apache.spark.streaming.util
 
+import java.io.FileNotFoundException
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.RejectedExecutionException
@@ -231,13 +232,16 @@ private[streaming] class FileBasedWriteAheadLog(
     val logDirectoryPath = new Path(logDirectory)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
-    if (fileSystem.exists(logDirectoryPath) &&
-        fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
-      val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
-      pastLogs.clear()
-      pastLogs ++= logFileInfo
-      logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
-      logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
+    try {
+      if (fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
+        val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
+        pastLogs.clear()
+        pastLogs ++= logFileInfo
+        logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")
+        logDebug(s"Recovered files are:\n${logFileInfo.map(_.path).mkString("\n")}")
+      }
+    } catch {
+      case f: FileNotFoundException =>
     }
   }
 
