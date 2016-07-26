@@ -132,12 +132,16 @@ supported_versions_hadoop <- function() {
   c("without", "2.7", "2.6", "2.4")
 }
 
+# This function adapts the implementation of the cache function in
+# https://github.com/hadley/rappdirs/blob/master/R/cache.r
+# to Spark context.
 spark_cache_path <- function() {
   if (.Platform$OS.type == "windows") {
     winAppPath <- Sys.getenv("%LOCALAPPDATA%", unset = NA)
     if (is.null(winAppPath)) {
       msg <- paste("%LOCALAPPDATA% not found.",
-                    "Please define or enter an installation path in loc_dir.")
+                    "Please define the environment variable",
+                    "or restart and enter an installation path in localDir.")
       stop(msg)
     } else {
       path <- file.path(winAppPath, "spark", "spark", "Cache")
