@@ -25,7 +25,6 @@ import java.util.List;
 // $example on:basic_parquet_example$
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Encoders;
-// import org.apache.spark.sql.Encoders;
 // $example on:schema_merging$
 // $example on:json_dataset$
 import org.apache.spark.sql.Dataset;
@@ -92,7 +91,7 @@ public class JavaSQLDataSourceExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
-      .appName("Java Spark SQL Data Sources Example")
+      .appName("Java Spark SQL data sources example")
       .config("spark.some.config.option", "some-value")
       .getOrCreate();
 
@@ -100,6 +99,7 @@ public class JavaSQLDataSourceExample {
     runBasicParquetExample(spark);
     runParquetSchemaMergingExample(spark);
     runJsonDatasetExample(spark);
+    runJdbcDatasetExample(spark);
 
     spark.stop();
   }
@@ -183,10 +183,10 @@ public class JavaSQLDataSourceExample {
     // The final schema consists of all 3 columns in the Parquet files together
     // with the partitioning column appeared in the partition directory paths
     // root
-    // |-- value: int (nullable = true)
-    // |-- square: int (nullable = true)
-    // |-- cube: int (nullable = true)
-    // |-- key : int (nullable = true)
+    //  |-- value: int (nullable = true)
+    //  |-- square: int (nullable = true)
+    //  |-- cube: int (nullable = true)
+    //  |-- key: int (nullable = true)
     // $example off:schema_merging$
   }
 
@@ -216,4 +216,15 @@ public class JavaSQLDataSourceExample {
     // $example off:json_dataset$
   }
 
+  private static void runJdbcDatasetExample(SparkSession spark) {
+    // $example on:jdbc_dataset$
+    Dataset<Row> jdbcDF = spark.read()
+      .format("jdbc")
+      .option("url", "jdbc:postgresql:dbserver")
+      .option("dbtable", "schema.tablename")
+      .option("user", "username")
+      .option("password", "password")
+      .load();
+    // $example off:jdbc_dataset$
+  }
 }
