@@ -63,7 +63,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("compilation should respect func size hints") {
-    def genCode(loc: Int) =
+    def genCode(loc: Int): String =
       s"""
         public Object generate(Object[] references) { return null; }
         public static void inc() {
