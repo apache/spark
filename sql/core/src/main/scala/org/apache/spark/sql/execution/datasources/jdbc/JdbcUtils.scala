@@ -138,16 +138,15 @@ object JdbcUtils extends Logging {
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
 
-  // A `JDBCValueGetter` is responsible for converting, getting a value from `Row`
-  // and then setting into a field for `PreparedStatement`. The last argument
-  // `Int` means the index for the value to be set in the SQL statement and also used
-  // for the value to retrieve from `Row`.
-  private type JDBCValueGetter = (PreparedStatement, Row, Int) => Unit
+  // A `JDBCValueSetter` is responsible for converting and setting a value from `Row` into
+  // a field for `PreparedStatement`. The last argument `Int` means the index for the
+  // value to be set in the SQL statement and also used for the value in `Row`.
+  private type JDBCValueSetter = (PreparedStatement, Row, Int) => Unit
 
-  private def makeGetter(
+  private def makeSetter(
       conn: Connection,
       dialect: JdbcDialect,
-      dataType: DataType): JDBCValueGetter = dataType match {
+      dataType: DataType): JDBCValueSetter = dataType match {
     case IntegerType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setInt(pos + 1, row.getInt(pos))
@@ -273,8 +272,8 @@ object JdbcUtils extends Logging {
         conn.setTransactionIsolation(finalIsolationLevel)
       }
       val stmt = insertStatement(conn, table, rddSchema, dialect)
-      val getters: Array[JDBCValueGetter] = rddSchema.fields.map(_.dataType)
-          .map(makeGetter(conn, dialect, _)).toArray
+      val setters: Array[JDBCValueSetter] = rddSchema.fields.map(_.dataType)
+          .map(makeSetter(conn, dialect, _)).toArray
 
       try {
         var rowCount = 0
@@ -286,7 +285,7 @@ object JdbcUtils extends Logging {
             if (row.isNullAt(i)) {
               stmt.setNull(i + 1, nullTypes(i))
             } else {
-              getters(i).apply(stmt, row, i)
+              setters(i).apply(stmt, row, i)
             }
             i = i + 1
           }
