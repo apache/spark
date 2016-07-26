@@ -190,7 +190,7 @@ private[spark] object RandomForest extends Logging {
       assert(nodesForGroup.nonEmpty,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
 
-      // Avoid passing trees
+      // Only send trees to worker if they contain nodes being split this iteration.
       val topNodesForGroup: Map[Int, LearningNode] =
         nodesForGroup.keys.map(treeIdx => treeIdx -> topNodes(treeIdx)).toMap
 
@@ -1124,20 +1124,27 @@ private[spark] object RandomForest extends Logging {
     }
   }
 
+  /**
+   * Class for queueing nodes to split on each iteration.
+   * This is a FILO queue.
+   */
   private[impl] class NodeQueue {
     private var q: mutable.MutableList[(Int, LearningNode)] =
       mutable.MutableList.empty[(Int, LearningNode)]
 
+    /** Put (treeIndex, node) into queue. Constant time. */
     def put(treeIndex: Int, node: LearningNode): Unit = {
       q += ((treeIndex, node))
     }
 
+    /** Remove and return last inserted element.  Linear time (unclear in Scala docs though) */
     def pop(): (Int, LearningNode) = {
       val (treeIndex: Int, node: LearningNode) = peek()
       q = q.dropRight(1)
       (treeIndex, node)
     }
 
+    /** Peek at last inserted element.  Constant time. */
     def peek(): (Int, LearningNode) = {
       if (q.isEmpty) {
         throw new NoSuchElementException(
