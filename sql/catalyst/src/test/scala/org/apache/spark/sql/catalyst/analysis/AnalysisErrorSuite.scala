@@ -266,6 +266,11 @@ class AnalysisErrorSuite extends AnalysisTest {
       testRelation.output.length.toString :: Nil)
 
   errorTest(
+    "union with incompatible column types",
+    testRelation.union(nestedRelation),
+    "union" :: "the compatible column types" :: Nil)
+
+  errorTest(
     "intersect with unequal number of columns",
     testRelation.intersect(testRelation2),
     "intersect" :: "number of columns" :: testRelation2.output.length.toString ::

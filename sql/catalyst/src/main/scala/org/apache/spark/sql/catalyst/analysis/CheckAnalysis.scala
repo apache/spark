@@ -266,6 +266,13 @@ trait CheckAnalysis extends PredicateHelper {
                 s"but one table has '${firstError.output.length}' columns and another table has " +
                 s"'${s.children.head.output.length}' columns")
 
+          case Union(c) if c.exists(_.output.map(_.dataType) != c.head.output.map(_.dataType)) =>
+            val firstError = c.find(_.output.map(_.dataType) != c.head.output.map(_.dataType)).get
+            failAnalysis(
+              s"Unions can only be performed on tables with the compatible column types, " +
+                s"but one table has '[${c.head.output.map(_.dataType).mkString(", ")}]' " +
+                s"and another table has '[${firstError.output.map(_.dataType).mkString(", ")}]'")
+
           case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
