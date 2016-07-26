@@ -65,7 +65,11 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
   if (is.null(localDir)) {
     localDir <- getOption("spark.install.dir", spark_cache_path())
   } else {
-    localDir <- normalizePath(localDir)
+    localDir <- normalizePath(localDir, mustWork = FALSE)
+  }
+
+  if (is.na(file.info(localDir)$isdir)) {
+    dir.create(localDir, recursive = TRUE)
   }
 
   packageLocalDir <- file.path(localDir, packageName)
