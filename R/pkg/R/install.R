@@ -151,7 +151,7 @@ spark_cache_path <- function() {
         "spark")
     }
   } else {
-    stop("Unknown OS")
+    stop(sprintf("Unknown OS: %s", .Platform$OS.type))
   }
   normalizePath(path, mustWork = FALSE)
 }
