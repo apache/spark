@@ -25,24 +25,24 @@
 #' Users can specify a desired Hadoop version, the remote site, and
 #' the directory where the package is installed locally.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is without,
-#'        Spark's "Hadoop free" build. See
-#'        \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
-#'        "Hadoop Free" Build} for more information.
-#' @param mirrorUrl base URL of the repositories to use. The directory
-#'        layout should follow
-#'        \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
-#' @param localDir a local directory where Spark is installed. Default path to
-#'        the cache directory:
-#'        \itemize{
-#'          \item Mac OS X: \file{~/Library/Caches/spark}
-#'          \item Unix: \env{$XDG_CACHE_HOME} if defined,
-#'                otherwise \file{~/.cache/spark}
-#'          \item Win XP: \file{C:\\Documents and Settings\\< username
-#'                >\\Local Settings\\Application Data\\spark\\spark\\Cache}
-#'          \item Win Vista: \file{C:\\Users\\< username
-#'                >\\AppData\\Local\\spark\\spark\\Cache}
-#'        }
+#' @param hadoopVersion Version of Hadoop to install. Default is without, Spark's "Hadoop free"
+#'                      build. See
+#'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
+#'                      "Hadoop Free" Build} for more information.
+#' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
+#'                  \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
+#' @param localDir a local directory where Spark is installed. Default path to the cache directory:
+#'                 \itemize{
+#'                   \item Mac OS X: \file{~/Library/Caches/spark}
+#'                   \item Unix: \env{$XDG_CACHE_HOME} if defined, otherwise \file{~/.cache/spark}
+#'                   \item Win XP:
+#                          \file{C:\\Documents and Settings\\<username>\\Local Settings\\Application
+#'                         Data\\spark\\spark\\Cache}
+#'                   \item Win Vista:
+#'                         \file{C:\\Users\\<username>\\AppData\\Local\\spark\\spark\\Cache}
+#'                 }
+#' @param overwrite If \code{TRUE}, download and overwrite the existing tar file and force
+#'                  re-install Spark (in case the local directory or file is corrupted)
 #' @return \code{install.spark} returns the local directory
 #'         where Spark is found or installed
 #' @rdname install.spark
@@ -56,7 +56,7 @@
 #' @seealso See available Hadoop versions:
 #' \href{http://spark.apache.org/downloads.html}{Apache Spark}
 install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
-                          localDir = NULL) {
+                          localDir = NULL, overwrite = FALSE) {
   version <- paste0("spark-", packageVersion("SparkR"))
   hadoopVersion <- match.arg(hadoopVersion, supported_versions_hadoop())
   packageName <- ifelse(hadoopVersion == "without",
@@ -71,12 +71,16 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
 
   packageLocalDir <- file.path(localDir, packageName)
 
+  if (overwrite) {
+    message("Overwrite = TRUE: download and overwrite the Spark directory if
+            it exists.")
+  }
+
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
-  if (!is.na(file.info(packageLocalDir)$isdir)) {
+  if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
     fmt <- "Spark %s for Hadoop %s has been installed."
     msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without",
-                                        "Free build", hadoopVersion)
-                  )
+                                        "Free build", hadoopVersion))
     message(msg)
     return(invisible(packageLocalDir))
   }
@@ -84,7 +88,7 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
   packageLocalPath <- paste0(packageLocalDir, ".tgz")
   tarExists <- file.exists(packageLocalPath)
 
-  if (tarExists) {
+  if (tarExists && !overwrite) {
     message("Tar file found. Installing...")
   } else {
     if (is.null(mirrorUrl)) {
@@ -104,17 +108,16 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
                                         "Free build", hadoopVersion),
                    packageRemotePath, packageLocalDir)
     message(msg)
-
-    fetchFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
-                          error = function(e) {
-                            msg <- paste0("Fetch failed from ", mirrorUrl, ".")
-                            message(msg)
-                            TRUE
-                          })
+    
+    tryCatch(download.file(packageRemotePath, packageLocalPath),
+             error = function(e) {
+               msg <- paste0("Fetch failed from ", mirrorUrl, ".")
+               stop(msg)
+             })
   }
 
   untar(tarfile = packageLocalPath, exdir = localDir)
-  if (!tarExists) {
+  if (!tarExists || overwrite) {
     unlink(packageLocalPath)
   }
   message("Installation done.")
@@ -124,7 +127,6 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
 default_mirror_url <- function() {
   # change to http://www.apache.org/dyn/closer.lua
   # when released
-
   "http://people.apache.org/~pwendell"
 }
 
