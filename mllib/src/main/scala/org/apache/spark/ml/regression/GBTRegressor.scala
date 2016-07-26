@@ -96,6 +96,11 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
+  /**
+   * Note that the default loss-based impurity is currently NOT compatible with absolute loss.
+   * @param value new impurity value
+   * @return this
+   */
   @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
@@ -115,7 +120,9 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   // Parameters from GBTRegressorParams:
 
-  /** @group setParam */
+  /**
+   * Note that the default loss-based impurity is currently NOT compatible with absolute loss.
+   * @group setParam */
   @Since("1.4.0")
   def setLossType(value: String): this.type = set(lossType, value)
 
@@ -144,7 +151,8 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 @Since("1.4.0")
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 
-  /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  /** Accessor for supported loss settings: squared (L2), absolute (L1), gaussian (squared),
+   * laplace (absolute) */
   @Since("1.4.0")
   final val supportedLossTypes: Array[String] = GBTRegressorParams.supportedLossTypes
 
