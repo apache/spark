@@ -24,9 +24,7 @@ import scala.collection.mutable.{HashMap, HashSet}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.util.Clock
-import org.apache.spark.util.SystemClock
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * BlacklistTracker is designed to track problematic executors and nodes.  It supports blacklisting
