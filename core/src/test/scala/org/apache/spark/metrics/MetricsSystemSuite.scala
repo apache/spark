@@ -255,7 +255,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val executorId = "dummyExecutorId"
     conf.set("spark.app.id", appId)
     conf.set("spark.app.name", appName)
-    conf.set("spark.metrics.namespace", "${spark.app.name}")
+    conf.set(METRICS_NAMESPACE, "${spark.app.name}")
     conf.set("spark.executor.id", executorId)
 
     val instanceName = "testInstance"
