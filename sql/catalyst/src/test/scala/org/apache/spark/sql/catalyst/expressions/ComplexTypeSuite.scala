@@ -143,7 +143,7 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     scala.collection.immutable.ListMap(keys.zip(values): _*)
   }
 
-  test("SPARK-16715: CreateMap with Decimals") {
+  test("SPARK-16735: CreateMap with Decimals") {
     val keys = Seq(0.02, 0.004)
     val values = Seq(0.001, 0.5)
     val keys1 = Seq(0.020, 0.004)
