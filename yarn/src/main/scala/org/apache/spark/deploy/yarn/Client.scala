@@ -810,7 +810,7 @@ private[spark] class Client(
     sparkConf.getAll
       .filter { case (k, v) => k.startsWith(amEnvPrefix) }
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
-      .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
+      .foreach { case (k, v) => env.put(k, v) }
 
     env
   }
