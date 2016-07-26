@@ -408,8 +408,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .addAllResources(memResourcesToUse.asJava)
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-            MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, taskBuilder.getContainerBuilder)
+            MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
+              image,
+              sc.conf.getOption,
+              taskBuilder.getContainerBuilder
+            )
           }
 
           tasks(offer.getId) ::= taskBuilder.build()

@@ -537,16 +537,10 @@ private[spark] class MesosClusterScheduler(
           .addAllResources(memResourcesToUse.asJava)
         offer.resources = finalResources.asJava
         submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
-          val container = taskInfo.getContainerBuilder()
-          val volumes = submission.schedulerProperties
-            .get("spark.mesos.executor.docker.volumes")
-            .map(MesosSchedulerBackendUtil.parseVolumesSpec)
-          val portmaps = submission.schedulerProperties
-            .get("spark.mesos.executor.docker.portmaps")
-            .map(MesosSchedulerBackendUtil.parsePortMappingsSpec)
-          MesosSchedulerBackendUtil.addDockerInfo(
-            container, image, volumes = volumes, portmaps = portmaps)
-          taskInfo.setContainer(container.build())
+          MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
+            image,
+            submission.schedulerProperties.get,
+            taskInfo.getContainerBuilder())
         }
         val queuedTasks = tasks.getOrElseUpdate(offer.offerId, new ArrayBuffer[TaskInfo])
         queuedTasks += taskInfo.build()
