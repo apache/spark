@@ -365,19 +365,21 @@ sparkR.session <- function(
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
-  if (!nzchar(master) || is_master_local(master)) {
-    if (!is.na(file.info(sparkHome)$isdir)) {
-      fmt <- paste0("Spark not found in SPARK_HOME: %s.\n",
-                   "Search in the cache directory. ",
-                   "It will be installed if not found.")
-      msg <- sprintf(fmt, sparkHome)
-      message(msg)
-      packageLocalDir <- install.spark()
-      sparkHome <- packageLocalDir
-    } else {
-      fmt <- "Make sure that Spark is installed in SPARK_HOME: %s"
-      msg <- sprintf(fmt, sparkHome)
-      message(msg)
+  if (!grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)) {
+    if (!nzchar(master) || is_master_local(master)) {
+      if (is.na(file.info(sparkHome)$isdir)) {
+        fmt <- paste0("Spark not found in SPARK_HOME: %s.\n",
+                      "Search in the cache directory. ",
+                      "It will be installed if not found.")
+        msg <- sprintf(fmt, sparkHome)
+        message(msg)
+        packageLocalDir <- install.spark()
+        sparkHome <- packageLocalDir
+      } else {
+        fmt <- "Spark package is found in SPARK_HOME: %s"
+        msg <- sprintf(fmt, sparkHome)
+        message(msg)
+      }
     }
   }
 
