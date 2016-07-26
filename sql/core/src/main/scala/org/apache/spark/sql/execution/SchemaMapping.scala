@@ -36,7 +36,7 @@ private[sql] trait SchemaMapping {
   val catalogSchema: StructType
 
   require(catalogSchema.length == 0 ||
-    dataSchema.length + partitionSchema.length == catalogSchema.length,
+    dataSchema.merge(partitionSchema).length == catalogSchema.length,
     s"The data schema in files: $dataSchema plus the partition schema: $partitionSchema " +
       s"should have the same number of fields with the schema in catalog: $catalogSchema.")
 
