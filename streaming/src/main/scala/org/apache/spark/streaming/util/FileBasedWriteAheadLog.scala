@@ -234,7 +234,8 @@ private[streaming] class FileBasedWriteAheadLog(
 
     try {
       if (fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
-        val logFileInfo = logFilesTologInfo(fileSystem.listStatus(logDirectoryPath).map { _.getPath })
+        val logFileInfo = logFilesTologInfo(
+          fileSystem.listStatus(logDirectoryPath).map { _.getPath })
         pastLogs.clear()
         pastLogs ++= logFileInfo
         logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")

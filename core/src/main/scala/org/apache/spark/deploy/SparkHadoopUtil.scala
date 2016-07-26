@@ -387,7 +387,7 @@ class SparkHadoopUtil extends Logging {
    * @param recursive recursive flag
    * @return true if there is no file/directory at the end of the path. That is: the delete worked.
    */
-  def delete(fs:FileSystem, path: Path, recursive: Boolean): Boolean = {
+  def delete(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
     if (!fs.delete(path, recursive)) {
       if (fs.exists(path)) {
         logWarning(s"Error deleting $path")
