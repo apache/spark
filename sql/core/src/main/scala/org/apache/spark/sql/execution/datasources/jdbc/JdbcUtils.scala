@@ -154,9 +154,9 @@ object JdbcUtils extends Logging {
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
   }
 
-  // A `JDBCValueSetter` is responsible for converting and setting a value from `Row` into
-  // a field for `PreparedStatement`. The last argument `Int` means the index for the
-  // value to be set in the SQL statement and also used for the value in `Row`.
+  // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
+  // `PreparedStatement`. The last argument `Int` means the index for the value to be set
+  // in the SQL statement and also used for the value in `Row`.
   private type JDBCValueSetter = (PreparedStatement, Row, Int) => Unit
 
   private def makeSetter(

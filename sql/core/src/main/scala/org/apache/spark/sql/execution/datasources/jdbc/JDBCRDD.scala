@@ -322,9 +322,9 @@ private[sql] class JDBCRDD(
     }
   }
 
-  // A `JDBCValueGetter` is responsible for converting, getting a value from `ResultSet`
-  // into a field for `MutableRow`. The last argument `Int` means the index for the value
-  // to be set in the row and also used for the value in `ResultSet`.
+  // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
+  // for `MutableRow`. The last argument `Int` means the index for the value to be set in
+  // the row and also used for the value in `ResultSet`.
   private type JDBCValueGetter = (ResultSet, MutableRow, Int) => Unit
 
   /**
