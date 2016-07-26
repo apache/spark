@@ -25,7 +25,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-flume-assembly_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project External Flume Assembly</name>

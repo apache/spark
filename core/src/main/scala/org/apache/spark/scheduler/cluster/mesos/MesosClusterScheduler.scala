@@ -353,38 +353,60 @@ private[spark] class MesosClusterScheduler(
     }
   }
 
-  private def buildDriverCommand(desc: MesosDriverDescription): CommandInfo = {
-    val appJar = CommandInfo.URI.newBuilder()
-      .setValue(desc.jarUrl.stripPrefix("file:").stripPrefix("local:")).build()
-    val builder = CommandInfo.newBuilder().addUris(appJar)
-    val entries = conf.getOption("spark.executor.extraLibraryPath")
-      .map(path => Seq(path) ++ desc.command.libraryPathEntries)
-      .getOrElse(desc.command.libraryPathEntries)
-
-    val prefixEnv = if (!entries.isEmpty) {
-      Utils.libraryPathEnvPrefix(entries)
-    } else {
-      ""
-    }
-    val envBuilder = Environment.newBuilder()
-    desc.command.environment.foreach { case (k, v) =>
-      envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v).build())
-    }
-    // Pass all spark properties to executor.
-    val executorOpts = desc.schedulerProperties.map { case (k, v) => s"-D$k=$v" }.mkString(" ")
-    envBuilder.addVariables(
-      Variable.newBuilder().setName("SPARK_EXECUTOR_OPTS").setValue(executorOpts))
-    val dockerDefined = desc.schedulerProperties.contains("spark.mesos.executor.docker.image")
-    val executorUri = desc.schedulerProperties.get("spark.executor.uri")
+  private def getDriverExecutorURI(desc: MesosDriverDescription) = {
+    desc.schedulerProperties.get("spark.executor.uri")
       .orElse(desc.command.environment.get("SPARK_EXECUTOR_URI"))
+  }
+
+  private def getDriverEnvironment(desc: MesosDriverDescription): Environment = {
+    val env = {
+      val executorOpts = desc.schedulerProperties.map { case (k, v) => s"-D$k=$v" }.mkString(" ")
+      val executorEnv = Map("SPARK_EXECUTOR_OPTS" -> executorOpts)
+
+      val prefix = "spark.mesos.driverEnv."
+      val driverEnv = desc.schedulerProperties.filterKeys(_.startsWith(prefix))
+        .map { case (k, v) => (k.substring(prefix.length), v) }
+
+      driverEnv ++ executorEnv ++ desc.command.environment
+    }
+
+    val envBuilder = Environment.newBuilder()
+    env.foreach { case (k, v) =>
+      envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
+    }
+    envBuilder.build()
+  }
+
+  private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
+    val confUris = List(conf.getOption("spark.mesos.uris"),
+      desc.schedulerProperties.get("spark.mesos.uris"),
+      desc.schedulerProperties.get("spark.submit.pyFiles")).flatMap(
+      _.map(_.split(",").map(_.trim))
+    ).flatten
+
+    val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
+
+    ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
+      CommandInfo.URI.newBuilder().setValue(uri.trim()).build())
+  }
+
+  private def getDriverCommandValue(desc: MesosDriverDescription): String = {
+    val dockerDefined = desc.schedulerProperties.contains("spark.mesos.executor.docker.image")
+    val executorUri = getDriverExecutorURI(desc)
     // Gets the path to run spark-submit, and the path to the Mesos sandbox.
     val (executable, sandboxPath) = if (dockerDefined) {
       // Application jar is automatically downloaded in the mounted sandbox by Mesos,
       // and the path to the mounted volume is stored in $MESOS_SANDBOX env variable.
       ("./bin/spark-submit", "$MESOS_SANDBOX")
     } else if (executorUri.isDefined) {
-      builder.addUris(CommandInfo.URI.newBuilder().setValue(executorUri.get).build())
       val folderBasename = executorUri.get.split('/').last.split('.').head
+
+      val entries = conf.getOption("spark.executor.extraLibraryPath")
+        .map(path => Seq(path) ++ desc.command.libraryPathEntries)
+        .getOrElse(desc.command.libraryPathEntries)
+
+      val prefixEnv = if (!entries.isEmpty) Utils.libraryPathEnvPrefix(entries) else ""
+
       val cmdExecutable = s"cd $folderBasename*; $prefixEnv bin/spark-submit"
       // Sandbox path points to the parent folder as we chdir into the folderBasename.
       (cmdExecutable, "..")
@@ -399,20 +421,18 @@ private[spark] class MesosClusterScheduler(
       // Sandbox points to the current directory by default with Mesos.
       (cmdExecutable, ".")
     }
-    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
     val cmdOptions = generateCmdOption(desc, sandboxPath).mkString(" ")
+    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
     val appArguments = desc.command.arguments.mkString(" ")
-    builder.setValue(s"$executable $cmdOptions $primaryResource $appArguments")
-    builder.setEnvironment(envBuilder.build())
-    conf.getOption("spark.mesos.uris").map { uris =>
-      setupUris(uris, builder)
-    }
-    desc.schedulerProperties.get("spark.mesos.uris").map { uris =>
-      setupUris(uris, builder)
-    }
-    desc.schedulerProperties.get("spark.submit.pyFiles").map { pyFiles =>
-      setupUris(pyFiles, builder)
-    }
+
+    s"$executable $cmdOptions $primaryResource $appArguments"
+  }
+
+  private def buildDriverCommand(desc: MesosDriverDescription): CommandInfo = {
+    val builder = CommandInfo.newBuilder()
+    builder.setValue(getDriverCommandValue(desc))
+    builder.setEnvironment(getDriverEnvironment(desc))
+    builder.addAllUris(getDriverUris(desc).asJava)
     builder.build()
   }
 
@@ -517,16 +537,10 @@ private[spark] class MesosClusterScheduler(
           .addAllResources(memResourcesToUse.asJava)
         offer.resources = finalResources.asJava
         submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
-          val container = taskInfo.getContainerBuilder()
-          val volumes = submission.schedulerProperties
-            .get("spark.mesos.executor.docker.volumes")
-            .map(MesosSchedulerBackendUtil.parseVolumesSpec)
-          val portmaps = submission.schedulerProperties
-            .get("spark.mesos.executor.docker.portmaps")
-            .map(MesosSchedulerBackendUtil.parsePortMappingsSpec)
-          MesosSchedulerBackendUtil.addDockerInfo(
-            container, image, volumes = volumes, portmaps = portmaps)
-          taskInfo.setContainer(container.build())
+          MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
+            image,
+            submission.schedulerProperties.get,
+            taskInfo.getContainerBuilder())
         }
         val queuedTasks = tasks.getOrElseUpdate(offer.offerId, new ArrayBuffer[TaskInfo])
         queuedTasks += taskInfo.build()

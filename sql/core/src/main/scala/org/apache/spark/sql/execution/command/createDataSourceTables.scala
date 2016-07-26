@@ -392,7 +392,7 @@ object CreateDataSourceTableUtils extends Logging {
           outputFormat = None,
           serde = None,
           compressed = false,
-          serdeProperties = options
+          properties = options
         ),
         properties = tableProperties.toMap)
     }
@@ -412,7 +412,7 @@ object CreateDataSourceTableUtils extends Logging {
           outputFormat = serde.outputFormat,
           serde = serde.serde,
           compressed = false,
-          serdeProperties = options
+          properties = options
         ),
         schema = relation.schema.map { f =>
           CatalogColumn(f.name, f.dataType.catalogString)

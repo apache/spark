@@ -325,11 +325,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         throw new SparkException(msg)
       }
 
-      if (!state.actuallyConverged) {
-        logWarning("LinearRegression training fininshed but the result " +
-          s"is not converged because: ${state.convergedReason.get.reason}")
-      }
-
       /*
          The coefficients are trained in the scaled space; we're converting them back to
          the original space.
@@ -794,16 +789,16 @@ class LinearRegressionSummary private[regression] (
  *
  * Now, the first derivative of the objective function in scaled space is
  * {{{
- * \frac{\partial L}{\partial\w_i} = diff/N (x_i - \bar{x_i}) / \hat{x_i}
+ * \frac{\partial L}{\partial w_i} = diff/N (x_i - \bar{x_i}) / \hat{x_i}
  * }}}
  * However, ($x_i - \bar{x_i}$) will densify the computation, so it's not
  * an ideal formula when the training dataset is sparse format.
  *
- * This can be addressed by adding the dense \bar{x_i} / \har{x_i} terms
+ * This can be addressed by adding the dense \bar{x_i} / \hat{x_i} terms
  * in the end by keeping the sum of diff. The first derivative of total
  * objective function from all the samples is
  * {{{
- * \frac{\partial L}{\partial\w_i} =
+ * \frac{\partial L}{\partial w_i} =
  *     1/N \sum_j diff_j (x_{ij} - \bar{x_i}) / \hat{x_i}
  *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) - diffSum \bar{x_i}) / \hat{x_i})
  *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) + correction_i)
@@ -822,7 +817,7 @@ class LinearRegressionSummary private[regression] (
  * the training dataset, which can be easily computed in distributed fashion, and is
  * sparse format friendly.
  * {{{
- * \frac{\partial L}{\partial\w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
+ * \frac{\partial L}{\partial w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
  * }}},
  *
  * @param coefficients The coefficients corresponding to the features.

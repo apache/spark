@@ -512,8 +512,13 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
           ScalarSubquery(rewrite, Seq.empty, exprId)
 
         case PredicateSubquery(query, conditions, false, exprId) =>
-          val plan = Project(Seq(Alias(Literal(1), "1")()),
-            Filter(conditions.reduce(And), addSubqueryIfNeeded(query)))
+          val subquery = addSubqueryIfNeeded(query)
+          val plan = if (conditions.isEmpty) {
+            subquery
+          } else {
+            Project(Seq(Alias(Literal(1), "1")()),
+              Filter(conditions.reduce(And), subquery))
+          }
           Exists(plan, exprId)
 
         case PredicateSubquery(query, conditions, true, exprId) =>

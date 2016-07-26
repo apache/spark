@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 
 /**
@@ -49,12 +50,12 @@ case class CatalogStorageFormat(
     outputFormat: Option[String],
     serde: Option[String],
     compressed: Boolean,
-    serdeProperties: Map[String, String]) {
+    properties: Map[String, String]) {
 
   override def toString: String = {
     val serdePropsToString =
-      if (serdeProperties.nonEmpty) {
-        s"Properties: " + serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+      if (properties.nonEmpty) {
+        s"Properties: " + properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
       } else {
         ""
       }
@@ -73,7 +74,7 @@ case class CatalogStorageFormat(
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
   val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, serdeProperties = Map.empty)
+    outputFormat = None, serde = None, compressed = false, properties = Map.empty)
 }
 
 /**
@@ -81,9 +82,9 @@ object CatalogStorageFormat {
  */
 case class CatalogColumn(
     name: String,
-    // This may be null when used to create views. TODO: make this type-safe; this is left
-    // as a string due to issues in converting Hive varchars to and from SparkSQL strings.
-    @Nullable dataType: String,
+    // TODO: make this type-safe; this is left as a string due to issues in converting Hive
+    // varchars to and from SparkSQL strings.
+    dataType: String,
     nullable: Boolean = true,
     comment: Option[String] = None) {
 
@@ -110,6 +111,24 @@ case class CatalogTablePartition(
 
 
 /**
+ * A container for bucketing information.
+ * Bucketing is a technology for decomposing data sets into more manageable parts, and the number
+ * of buckets is fixed so it does not fluctuate with data.
+ *
+ * @param numBuckets number of buckets.
+ * @param bucketColumnNames the names of the columns that used to generate the bucket id.
+ * @param sortColumnNames the names of the columns that used to sort data in each bucket.
+ */
+case class BucketSpec(
+    numBuckets: Int,
+    bucketColumnNames: Seq[String],
+    sortColumnNames: Seq[String]) {
+  if (numBuckets <= 0) {
+    throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
+  }
+}
+
+/**
  * A table defined in the catalog.
  *
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
@@ -124,9 +143,7 @@ case class CatalogTable(
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
     partitionColumnNames: Seq[String] = Seq.empty,
-    sortColumnNames: Seq[String] = Seq.empty,
-    bucketColumnNames: Seq[String] = Seq.empty,
-    numBuckets: Int = -1,
+    bucketSpec: Option[BucketSpec] = None,
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
@@ -143,8 +160,8 @@ case class CatalogTable(
       s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
   }
   requireSubsetOfSchema(partitionColumnNames, "partition")
-  requireSubsetOfSchema(sortColumnNames, "sort")
-  requireSubsetOfSchema(bucketColumnNames, "bucket")
+  requireSubsetOfSchema(bucketSpec.map(_.sortColumnNames).getOrElse(Nil), "sort")
+  requireSubsetOfSchema(bucketSpec.map(_.bucketColumnNames).getOrElse(Nil), "bucket")
 
   /** Columns this table is partitioned by. */
   def partitionColumns: Seq[CatalogColumn] =
@@ -165,16 +182,26 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
+      serdeProperties: Map[String, String] = storage.properties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
       locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
   }
 
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    val partitionColumns = partitionColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
-    val sortColumns = sortColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
-    val bucketColumns = bucketColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+    val bucketStrings = bucketSpec match {
+      case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
+        val bucketColumnsString = bucketColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+        val sortColumnsString = sortColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+        Seq(
+          s"Num Buckets: $numBuckets",
+          if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumnsString" else "",
+          if (sortColumnNames.nonEmpty) s"Sort Columns: $sortColumnsString" else ""
+        )
+
+      case _ => Nil
+    }
 
     val output =
       Seq(s"Table: ${identifier.quotedString}",
@@ -183,10 +210,8 @@ case class CatalogTable(
         s"Last Access: ${new Date(lastAccessTime).toString}",
         s"Type: ${tableType.name}",
         if (schema.nonEmpty) s"Schema: ${schema.mkString("[", ", ", "]")}" else "",
-        if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else "",
-        if (numBuckets != -1) s"Num Buckets: $numBuckets" else "",
-        if (bucketColumnNames.nonEmpty) s"Bucket Columns: $bucketColumns" else "",
-        if (sortColumnNames.nonEmpty) s"Sort Columns: $sortColumns" else "",
+        if (partitionColumnNames.nonEmpty) s"Partition Columns: $partitionColumns" else ""
+      ) ++ bucketStrings ++ Seq(
         viewOriginalText.map("Original View: " + _).getOrElse(""),
         viewText.map("View: " + _).getOrElse(""),
         comment.map("Comment: " + _).getOrElse(""),
