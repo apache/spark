@@ -147,7 +147,7 @@ spark_cache_path <- function() {
   } else {
     stop("Unknown OS")
   }
-  normalizePath(path, mustWork = TRUE)
+  normalizePath(path, mustWork = FALSE)
 }
 
 mirror_url_csv <- function() {
