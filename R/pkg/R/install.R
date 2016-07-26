@@ -77,7 +77,8 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir)) {
     fmt <- "Spark %s for Hadoop %s has been installed."
-    msg <- sprintf(fmt, version, hadoopVersion)
+    msg <- sprintf(fmt, ifelse(version == "without", "Free build", version),
+                   hadoopVersion)
     message(msg)
     return(invisible(packageLocalDir))
   }
@@ -101,8 +102,8 @@ install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n- %s",
                  "Installing to:\n- %s", sep = "\n")
-    msg <- sprintf(fmt, version, hadoopVersion, packageRemotePath,
-                   packageLocalDir)
+    msg <- sprintf(fmt, ifelse(version == "without", "Free build", version),
+                   hadoopVersion, packageRemotePath, packageLocalDir)
     message(msg)
 
     fetchFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
