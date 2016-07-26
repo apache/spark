@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
@@ -924,6 +925,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     withTable("parquet_t") {
       sql("create table parquet_t stored as parquet as select 1 as c1, 'abc' as c2")
       checkSQL("select * from parquet_t", "select_parquet_table")
+    }
+  }
+
+  test("predicate subquery") {
+    withTable("t1") {
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        sql("CREATE TABLE t1(a int)")
+        checkSQL("select * from t1 b where exists (select * from t1 a)", "predicate_subquery")
+      }
     }
   }
 
