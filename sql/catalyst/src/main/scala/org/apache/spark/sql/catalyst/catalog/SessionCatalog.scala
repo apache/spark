@@ -443,12 +443,12 @@ class SessionCatalog(
   }
 
   /**
-   * Return whether a table with the specified name exists.
+   * Return whether a table/view with the specified name exists.
    *
-   * Note: If a database is explicitly specified, then this will return whether the table
+   * Note: If a database is explicitly specified, then this will return whether the table/view
    * exists in that particular database instead. In that case, even if there is a temporary
    * table with the same name, we will return false if the specified database does not
-   * contain the table.
+   * contain the table/view.
    */
   def tableExists(name: TableIdentifier): Boolean = synchronized {
     val db = formatDatabaseName(name.database.getOrElse(currentDb))

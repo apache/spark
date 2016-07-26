@@ -113,9 +113,14 @@ case class CreateViewCommand(
       val qualifiedName = name.copy(database = Option(database))
 
       if (sessionState.catalog.tableExists(qualifiedName)) {
+        val tableMetadata = sessionState.catalog.getTableMetadata(qualifiedName)
         if (allowExisting) {
           // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
           // already exists.
+        } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
+          throw new AnalysisException(
+            "Existing table is not a view. The following is an existing table, " +
+              s"not a view: $qualifiedName")
         } else if (replace) {
           // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
           sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
