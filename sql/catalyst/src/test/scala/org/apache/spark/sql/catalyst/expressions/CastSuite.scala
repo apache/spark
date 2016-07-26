@@ -54,7 +54,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     // follow [[org.apache.spark.sql.catalyst.expressions.Cast.canCast]] logic
     // to ensure we test every possible cast situation here
     atomicTypes.zip(atomicTypes).foreach { case (from, to) =>
-      checkNullCast(from, to)
+      if (Cast.canCast(from, to)) {
+        checkNullCast(from, to)
+      }
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
@@ -70,7 +72,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(DateType, TimestampType)
     numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
 
-    atomicTypes.foreach(dt => checkNullCast(dt, DateType))
+    checkNullCast(StringType, DateType)
+    checkNullCast(TimestampType, DateType)
 
     checkNullCast(StringType, CalendarIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
@@ -365,7 +368,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("23", ShortType), 23.toShort)
     checkEvaluation(cast("2012-12-11", DoubleType), null)
     checkEvaluation(cast(123, IntegerType), 123)
-
 
     checkEvaluation(cast(Literal.create(null, IntegerType), ShortType), null)
   }
@@ -782,5 +784,17 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(cast("abc", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
+  }
+
+  test("SPARK-16729 type checking for casting to date type") {
+    assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
+    assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
+    assert(cast(false, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.toByte, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.toShort, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1L, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
   }
 }
