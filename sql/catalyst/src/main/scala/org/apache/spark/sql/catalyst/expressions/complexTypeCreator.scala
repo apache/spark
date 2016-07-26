@@ -93,20 +93,45 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     if (children.size % 2 != 0) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
     } else if (keys.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
-        "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      if (keys.map(_.dataType).forall(_.isInstanceOf[DecimalType])) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
+          "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      }
     } else if (values.map(_.dataType).distinct.length > 1) {
-      TypeCheckResult.TypeCheckFailure("The given values of function map should all be the same " +
-        "type, but they are " + values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      if (values.map(_.dataType).forall(_.isInstanceOf[DecimalType])) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        TypeCheckResult.TypeCheckFailure("The given values of function map should all be the " +
+          "same type, but they are " + values.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+      }
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
+  private def checkDecimalType(colType: Seq[Expression]): DataType = {
+    val elementType = colType.headOption.map(_.dataType).getOrElse(NullType)
+    elementType match {
+      case _ if elementType.isInstanceOf[DecimalType] =>
+        var tighter: DataType = elementType
+        colType.foreach { child =>
+          if (elementType.asInstanceOf[DecimalType].isTighterThan(child.dataType)) {
+            tighter = child.dataType
+          }
+        }
+
+        tighter
+      case _ =>
+        elementType
+    }
+  }
+
   override def dataType: DataType = {
     MapType(
-      keyType = keys.headOption.map(_.dataType).getOrElse(NullType),
-      valueType = values.headOption.map(_.dataType).getOrElse(NullType),
+      keyType = checkDecimalType(keys),
+      valueType = checkDecimalType(values),
       valueContainsNull = values.exists(_.nullable))
   }
 
