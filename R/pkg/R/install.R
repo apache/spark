@@ -18,47 +18,63 @@
 # Functions to install Spark in case the user directly downloads SparkR
 # from CRAN.
 
-#' Download and Install Spark Core to Local Directory
+#' Download and Install Apache Spark to a Local Directory
 #' 
-#' \code{install_spark} downloads and installs Spark to local directory if
-#' it is not found. The Spark version we use is 2.0.0 (preview). Users can
-#' specify a desired Hadoop version, the remote site, and the directory where
-#' the package is installed locally.
+#' \code{install.spark} downloads and installs Spark to local directory if
+#' it is not found. The Spark version we use is the same as the SparkR version.
+#' Users can specify a desired Hadoop version, the remote site, and
+#' the directory where the package is installed locally.
 #'
-#' @param hadoop_version Version of Hadoop to install, 2.4, 2.6,
-#'        2.7 (default) and without
-#' @param mirror_url the base URL of the repositories to use
-#' @param local_dir local directory that Spark is installed to
-#' @return \code{install_spark} returns the local directory 
+#' @param hadoopVersion Version of Hadoop to install. Default is without,
+#'        Spark's "Hadoop free" build. See
+#'        \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
+#'        "Hadoop Free" Build} for more information.
+#' @param mirrorUrl base URL of the repositories to use. The directory
+#'        layout should follow
+#'        \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
+#' @param localDir a local directory where Spark is installed. Default path to
+#'        the cache directory:
+#'        \itemize{
+#'          \item Mac OS X: \file{~/Library/Caches/spark}
+#'          \item Unix: \env{$XDG_CACHE_HOME} if defined,
+#'                otherwise \file{~/.cache/spark}
+#'          \item Win XP: \file{C:\\Documents and Settings\\< username
+#'                >\\Local Settings\\Application Data\\spark\\spark\\Cache}
+#'          \item Win Vista: \file{C:\\Users\\< username
+#'                >\\AppData\\Local\\spark\\spark\\Cache}
+#'        }
+#' @return \code{install.spark} returns the local directory
 #'         where Spark is found or installed
-#' @rdname install_spark
-#' @name install_spark
+#' @rdname install.spark
+#' @name install.spark
 #' @export
 #' @examples
 #'\dontrun{
-#' install_spark()
+#' install.spark()
 #'}
-#' @note install_spark since 2.1.0
-install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
-                          local_dir = NULL) {
+#' @note install.spark since 2.1.0
+#' @seealso See available Hadoop versions:
+#' \href{http://spark.apache.org/downloads.html}{Apache Spark}
+install.spark <- function(hadoopVersion = NULL, mirrorUrl = NULL,
+                          localDir = NULL) {
   version <- paste0("spark-", packageVersion("SparkR"))
-  hadoop_version <- match.arg(hadoop_version, supported_versions_hadoop())
-  packageName <- ifelse(hadoop_version == "without",
+  hadoopVersion <- match.arg(hadoopVersion, supported_versions_hadoop())
+  packageName <- ifelse(hadoopVersion == "without",
                         paste0(version, "-bin-without-hadoop"),
-                        paste0(version, "-bin-hadoop", hadoop_version))
-  if (is.null(local_dir)) {
-    local_dir <- getOption("spark.install.dir", spark_cache_path())
+                        paste0(version, "-bin-hadoop", hadoopVersion))
+  if (is.null(localDir)) {
+    localDir <- getOption("spark.install.dir", spark_cache_path())
   } else {
-    local_dir <- normalizePath(local_dir)
+    localDir <- normalizePath(localDir)
   }
 
-  packageLocalDir <- file.path(local_dir, packageName)
+  packageLocalDir <- file.path(localDir, packageName)
 
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir)) {
     fmt <- "Spark %s for Hadoop %s has been installed."
-    msg <- sprintf(fmt, version, hadoop_version)
+    msg <- sprintf(fmt, version, hadoopVersion)
     message(msg)
     return(invisible(packageLocalDir))
   }
@@ -69,26 +85,26 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
   if (tarExists) {
     message("Tar file found. Installing...")
   } else {
-    if (is.null(mirror_url)) {
+    if (is.null(mirrorUrl)) {
       message("Remote URL not provided. Use Apache default.")
-      mirror_url <- mirror_url_default()
+      mirrorUrl <- mirror_url_default()
     }
 
     version <- "spark-2.0.0-rc4-bin"
     # When 2.0 released, remove the above line and
     # change spark-releases to spark in the statement below
     packageRemotePath <- paste0(
-      file.path(mirror_url, "spark-releases", version, packageName), ".tgz")
+      file.path(mirrorUrl, "spark-releases", version, packageName), ".tgz")
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n- %s",
                  "Installing to:\n- %s", sep = "\n")
-    msg <- sprintf(fmt, version, hadoop_version, packageRemotePath,
+    msg <- sprintf(fmt, version, hadoopVersion, packageRemotePath,
                    packageLocalDir)
     message(msg)
 
     fetchFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
                           error = function(e) {
-                            msg <- paste0("Fetch failed from ", mirror_url, ".")
+                            msg <- paste0("Fetch failed from ", mirrorUrl, ".")
                             message(msg)
                             TRUE
                           })
@@ -96,18 +112,18 @@ install_spark <- function(hadoop_version = NULL, mirror_url = NULL,
       message("Try the backup option.")
       mirror_sites <- tryCatch(read.csv(mirror_url_csv()),
                                error = function(e) stop("No csv file found."))
-      mirror_url <- mirror_sites$url[1]
-      packageRemotePath <- paste0(file.path(mirror_url, version, packageName),
+      mirrorUrl <- mirror_sites$url[1]
+      packageRemotePath <- paste0(file.path(mirrorUrl, version, packageName),
                                   ".tgz")
       message(sprintf("Downloading from:\n- %s", packageRemotePath))
       tryCatch(download.file(packageRemotePath, packageLocalPath),
                error = function(e) {
-                 stop("Download failed. Please provide a valid mirror_url.")
+                 stop("Download failed. Please provide a valid mirrorUrl.")
                })
     }
   }
 
-  untar(tarfile = packageLocalPath, exdir = local_dir)
+  untar(tarfile = packageLocalPath, exdir = localDir)
   if (!tarExists) {
     unlink(packageLocalPath)
   }

@@ -372,7 +372,7 @@ sparkR.session <- function(
                    "It will be installed if not found.")
       msg <- sprintf(fmt, sparkHome)
       message(msg)
-      packageLocalDir <- install_spark()
+      packageLocalDir <- install.spark()
       sparkHome <- packageLocalDir
     } else {
       fmt <- "Make sure that Spark is installed in SPARK_HOME: %s"

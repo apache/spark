@@ -353,4 +353,4 @@ S3method(structField, jobj)
 S3method(structType, jobj)
 S3method(structType, structField)
 
-export("install_spark")
+export("install.spark")
