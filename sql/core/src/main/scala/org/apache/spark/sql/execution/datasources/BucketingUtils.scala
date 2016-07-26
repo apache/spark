@@ -17,26 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.AnalysisException
-
-/**
- * A container for bucketing information.
- * Bucketing is a technology for decomposing data sets into more manageable parts, and the number
- * of buckets is fixed so it does not fluctuate with data.
- *
- * @param numBuckets number of buckets.
- * @param bucketColumnNames the names of the columns that used to generate the bucket id.
- * @param sortColumnNames the names of the columns that used to sort data in each bucket.
- */
-private[sql] case class BucketSpec(
-    numBuckets: Int,
-    bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String]) {
-  if (numBuckets <= 0) {
-    throw new AnalysisException(s"Expected positive number of buckets, but got `$numBuckets`.")
-  }
-}
-
 private[sql] object BucketingUtils {
   // The file name of bucketed data should have 3 parts:
   //   1. some other information in the head of file name

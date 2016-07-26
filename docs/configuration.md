@@ -1174,7 +1174,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.quantile</code></td>
   <td>0.75</td>
   <td>
-    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
+    Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
 </tr>
 <tr>

@@ -153,7 +153,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
           serde = Some(classOf[LazySimpleSerDe].getName()),
           compressed = false,
-          serdeProperties = Map.empty
+          properties = Map.empty
         ))
     }
 
@@ -275,7 +275,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       outputFormat = None,
       serde = None,
       compressed = false,
-      serdeProperties = Map.empty)
+      properties = Map.empty)
 
     test(s"$version: sql create partitioned table") {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")

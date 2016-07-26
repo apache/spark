@@ -15,28 +15,21 @@
  * limitations under the License.
  */
 
-import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
+package org.apache.spark.sql.catalyst.expressions
 
-public class SimpleApp {
-  public static void main(String[] args) {
-    String logFile = "input.txt";
-    JavaSparkContext sc = new JavaSparkContext("local", "Simple App");
-    JavaRDD<String> logData = sc.textFile(logFile).cache();
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.types.{IntegerType, ObjectType}
 
-    long numAs = logData.filter(new Function<String, Boolean>() {
-      public Boolean call(String s) { return s.contains("a"); }
-    }).count();
 
-    long numBs = logData.filter(new Function<String, Boolean>() {
-      public Boolean call(String s) { return s.contains("b"); }
-    }).count();
+class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-   if (numAs != 2 || numBs != 2) {
-     System.out.println("Failed to parse log files with Spark");
-     System.exit(-1);
-   }
-   System.out.println("Test succeeded");
-   sc.stop();
+  test("SPARK-16622: The returned value of the called method in Invoke can be null") {
+    val inputRow = InternalRow.fromSeq(Seq((false, null)))
+    val cls = classOf[Tuple2[Boolean, java.lang.Integer]]
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
+    val invoke = Invoke(inputObject, "_2", IntegerType)
+    checkEvaluationWithGeneratedMutableProjection(invoke, null, inputRow)
   }
 }

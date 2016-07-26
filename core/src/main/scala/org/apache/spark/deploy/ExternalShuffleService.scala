@@ -128,6 +128,7 @@ object ExternalShuffleService extends Logging {
     server = newShuffleService(sparkConf, securityManager)
     server.start()
 
+    logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook { () =>
       logInfo("Shutting down shuffle service.")
       server.stop()
