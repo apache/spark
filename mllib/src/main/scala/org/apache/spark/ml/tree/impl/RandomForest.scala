@@ -1129,18 +1129,18 @@ private[spark] object RandomForest extends Logging {
    * This is a FILO queue.
    */
   private[impl] class NodeQueue {
-    private var q: mutable.MutableList[(Int, LearningNode)] =
-      mutable.MutableList.empty[(Int, LearningNode)]
+    private var q: List[(Int, LearningNode)] =
+      List.empty[(Int, LearningNode)]
 
     /** Put (treeIndex, node) into queue. Constant time. */
     def put(treeIndex: Int, node: LearningNode): Unit = {
-      q += ((treeIndex, node))
+      q = (treeIndex, node) +: q
     }
 
-    /** Remove and return last inserted element.  Linear time (unclear in Scala docs though) */
+    /** Remove and return last inserted element. Constant time. */
     def pop(): (Int, LearningNode) = {
       val (treeIndex: Int, node: LearningNode) = peek()
-      q = q.dropRight(1)
+      q = q.tail
       (treeIndex, node)
     }
 
@@ -1150,7 +1150,7 @@ private[spark] object RandomForest extends Logging {
         throw new NoSuchElementException(
           s"Attempted to get node from tree node queue, but queue is empty.")
       }
-      q.last
+      q.head
     }
 
     def size: Int = q.size
