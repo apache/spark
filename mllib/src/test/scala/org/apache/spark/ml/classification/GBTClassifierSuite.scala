@@ -131,6 +131,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     GBTClassifier.supportedLossTypes.foreach { loss =>
       val gbt = new GBTClassifier()
         .setMaxIter(maxIter)
+        .setImpurity("variance")
         .setMaxDepth(2)
         .setLossType(loss)
         .setValidationTol(0.0)
@@ -215,11 +216,16 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     val gbt = new GBTClassifier()
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "logistic")
+    // Test for all different impurity types.
+    for (impurity <- Seq(Some("loss-based"), Some("variance"), None)) {
+      val allParamSettings = TreeTests.allParamSettings ++
+        Map("lossType" -> "logistic") ++
+        impurity.map("impurity" -> _).toMap
 
-    val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+      val continuousData: DataFrame =
+        TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+      testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    }
   }
 }
 

@@ -137,6 +137,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     GBTRegressor.supportedLossTypes.foreach { loss =>
       val gbt = new GBTRegressor()
         .setMaxIter(maxIter)
+        .setImpurity("variance")
         .setMaxDepth(2)
         .setLossType(loss)
         .setValidationTol(0.0)
@@ -184,10 +185,15 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val gbt = new GBTRegressor()
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
-    val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "squared")
-    val continuousData: DataFrame =
-      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
-    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    // Test for all different impurity types.
+    for (impurity <- Seq(Some("loss-based"), Some("variance"), None)) {
+      val allParamSettings = TreeTests.allParamSettings ++
+        Map("lossType" -> "squared") ++
+        impurity.map("impurity" -> _).toMap
+      val continuousData: DataFrame =
+        TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+      testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    }
   }
 }
 
