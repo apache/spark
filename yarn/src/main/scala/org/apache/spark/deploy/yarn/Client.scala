@@ -810,7 +810,13 @@ private[spark] class Client(
     sparkConf.getAll
       .filter { case (k, v) => k.startsWith(amEnvPrefix) }
       .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
-      .foreach { case (k, v) => env.put(k, v) }
+      .foreach { case (k, v) =>
+        if (k == "PYSPARK_PYTHON" || k == "PYSPARK_DRIVER_PYTHON") {
+          env.put(k, v)
+        } else {
+          YarnSparkHadoopUtil.addPathToEnvironment(env, k, v)
+        }
+      }
 
     env
   }
