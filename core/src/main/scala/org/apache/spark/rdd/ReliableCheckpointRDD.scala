@@ -168,23 +168,12 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
 
-    val fileOutputStream = try {
-      if (blockSize < 0) {
-        fs.create(tempOutputPath, false, bufferSize)
-      } else {
-        // This is mainly for testing purpose
-        fs.create(tempOutputPath, false, bufferSize,
-          fs.getDefaultReplication(fs.getWorkingDirectory), blockSize)
-      }
-    } catch {
-      case e: IOException =>
-        // could be FileAlreadyExistsException, or a more fundamental create failure
-        if (fs.exists(tempOutputPath)) {
-          throw new IOException(s"Checkpoint failed: temporary path $tempOutputPath already exists")
-        } else {
-          // some other failure
-          throw e
-        }
+    val fileOutputStream = if (blockSize < 0) {
+      fs.create(tempOutputPath, false, bufferSize)
+    } else {
+      // This is mainly for testing purpose
+      fs.create(tempOutputPath, false, bufferSize,
+        fs.getDefaultReplication(fs.getWorkingDirectory), blockSize)
     }
     val serializer = env.serializer.newInstance()
     val serializeStream = serializer.serializeStream(fileOutputStream)
@@ -248,23 +237,20 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
-      try {
-        val fileInputStream = fs.open(partitionerFilePath, bufferSize)
-        val serializer = SparkEnv.get.serializer.newInstance()
-        val deserializeStream = serializer.deserializeStream(fileInputStream)
-        val partitioner = Utils.tryWithSafeFinally[Partitioner] {
-          deserializeStream.readObject[Partitioner]
-        } {
-          deserializeStream.close()
-        }
-        logDebug(s"Read partitioner from $partitionerFilePath")
-        Some(partitioner)
-      } catch {
-        case _: FileNotFoundException =>
-          logDebug("No partitioner file")
-          None
+      val fileInputStream = fs.open(partitionerFilePath, bufferSize)
+      val serializer = SparkEnv.get.serializer.newInstance()
+      val deserializeStream = serializer.deserializeStream(fileInputStream)
+      val partitioner = Utils.tryWithSafeFinally[Partitioner] {
+        deserializeStream.readObject[Partitioner]
+      } {
+        deserializeStream.close()
       }
+      logDebug(s"Read partitioner from $partitionerFilePath")
+      Some(partitioner)
     } catch {
+      case e: FileNotFoundException =>
+        logDebug("No partitioner file", e)
+        None
       case NonFatal(e) =>
         logWarning(s"Error reading partitioner from $checkpointDirPath, " +
             s"partitioner will not be recovered which may lead to performance loss", e)

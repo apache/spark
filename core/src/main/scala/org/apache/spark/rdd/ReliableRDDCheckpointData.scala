@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 
 /**
@@ -81,7 +80,7 @@ private[spark] object ReliableRDDCheckpointData extends Logging {
   /** Clean up the files associated with the checkpoint data for this RDD. */
   def cleanCheckpoint(sc: SparkContext, rddId: Int): Unit = {
     checkpointPath(sc, rddId).foreach { path =>
-      SparkHadoopUtil.get.delete(path.getFileSystem(sc.hadoopConfiguration), path, true)
+      path.getFileSystem(sc.hadoopConfiguration).delete(path, true)
     }
   }
 }

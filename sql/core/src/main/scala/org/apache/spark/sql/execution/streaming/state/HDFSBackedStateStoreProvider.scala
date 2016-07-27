@@ -282,7 +282,7 @@ private[state] class HDFSBackedStateStoreProvider(
       if (!fs.getFileStatus(baseDir).isDirectory()) {
         throw new IllegalStateException(
           s"Cannot use ${id.checkpointLocation} for storing state data for $this as " +
-              s"$baseDir already exists and is not a directory")
+            s"$baseDir already exists and is not a directory")
       }
     } catch {
       case _: FileNotFoundException =>
@@ -342,14 +342,15 @@ private[state] class HDFSBackedStateStoreProvider(
   private def updateFromDeltaFile(version: Long, map: MapType): Unit = {
     val fileToRead = deltaFile(version)
     var input: DataInputStream = null
+    val sourceStream = try {
+      fs.open(fileToRead)
+    } catch {
+      case f: FileNotFoundException =>
+        throw new IllegalStateException(
+          s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
+    }
     try {
-      try {
-        input = decompressStream(fs.open(fileToRead))
-      } catch {
-        case f: FileNotFoundException =>
-          throw new IllegalStateException(
-            s"Error reading delta file $fileToRead of $this: $fileToRead does not exist", f)
-      }
+      input = decompressStream(sourceStream)
       var eof = false
 
       while(!eof) {
@@ -408,17 +409,11 @@ private[state] class HDFSBackedStateStoreProvider(
 
   private def readSnapshotFile(version: Long): Option[MapType] = {
     val fileToRead = snapshotFile(version)
-    val in = try {
-      fs.open(fileToRead)
-    } catch {
-      case _: FileNotFoundException =>
-        return None
-    }
     val map = new MapType()
     var input: DataInputStream = null
 
     try {
-      input = decompressStream(in)
+      input = decompressStream(fs.open(fileToRead))
       var eof = false
 
       while (!eof) {
@@ -450,6 +445,9 @@ private[state] class HDFSBackedStateStoreProvider(
       }
       logInfo(s"Read snapshot file for version $version of $this from $fileToRead")
       Some(map)
+    } catch {
+      case _: FileNotFoundException =>
+        return None
     } finally {
       if (input != null) input.close()
     }

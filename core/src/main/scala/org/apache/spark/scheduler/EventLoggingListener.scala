@@ -90,13 +90,8 @@ private[spark] class EventLoggingListener(
    * Creates the log file in the configured log directory.
    */
   def start() {
-    try {
-      if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
-        throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
-      }
-    } catch {
-      case f: FileNotFoundException =>
-        throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.", f)
+    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
+      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
     }
 
     val workingPath = logPath + IN_PROGRESS
@@ -303,22 +298,7 @@ private[spark] object EventLoggingListener extends Logging {
    * @return input stream that holds one JSON record per line.
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
-    val in = {
-      try {
-        new BufferedInputStream(fs.open(log))
-      } catch {
-        // It's not clear whether FileSystem.open() throws FileNotFoundException or just plain
-        // IOException when a file does not exist, so try our best to throw a proper exception.
-        case f: FileNotFoundException =>
-          throw f
-        case e: IOException =>
-          if (!fs.exists(log)) {
-            throw new FileNotFoundException(s"File $log does not exist.").initCause(e)
-          } else {
-            throw e;
-          }
-      }
-    }
+    val in = new BufferedInputStream(fs.open(log))
 
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
