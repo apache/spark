@@ -431,12 +431,12 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(table)) {
-      val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
       val partColNames = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      for (schema <- userSpecifiedSchema if partColNames.nonEmpty) {
+      if (partColNames.nonEmpty) {
+        val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(StructType(partColNames.map(schema(_))), buffer)
+        describeSchema(StructType(partColNames.map(userSpecifiedSchema(_))), buffer)
       }
     } else {
       if (table.partitionColumns.nonEmpty) {
