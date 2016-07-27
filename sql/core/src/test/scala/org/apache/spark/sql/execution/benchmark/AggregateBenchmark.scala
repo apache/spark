@@ -1084,7 +1084,7 @@ class AggregateBenchmark extends BenchmarkBase {
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
 
     agg_doAggregateWithKey() runtime (ms) for TPCDS queries with scale factor = 1
-    
+
     query   skip         vectorized          rowbased
 
     q46      293        298  (0.9x)       296  (0.9x)
