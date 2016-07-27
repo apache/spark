@@ -220,6 +220,21 @@ trait FileFormat {
   }
 
   /**
+   * Allow FileFormats to have a pluggable way to utilize pushed filters to eliminate partitions
+   * before execution. By default no pruning is performed and the original partitioning is
+   * preserved.
+   */
+  def filterPartitions(
+      filters: Seq[Filter],
+      schema: StructType,
+      conf: Configuration,
+      allFiles: Seq[FileStatus],
+      root: Path,
+      partitions: Seq[Partition]): Seq[Partition] = {
+    partitions
+  }
+
+  /**
    * Returns whether a file with `path` could be splitted or not.
    */
   def isSplitable(
