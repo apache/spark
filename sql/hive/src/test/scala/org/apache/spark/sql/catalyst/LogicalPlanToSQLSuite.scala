@@ -1063,6 +1063,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "subquery_not_exists_having_2")
   }
 
+  test("subquery using IN on where clause") {
+    checkSQL(
+      """
+        |SELECT key
+        |FROM src
+        |WHERE key in (SELECT max(key) FROM src)
+      """.stripMargin,
+      "subquery_in")
+  }
+
   test("subquery using IN on having clause") {
     checkSQL(
       """
