@@ -1121,11 +1121,13 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
             numItemBlocks <- args$numItemBlocks %||% 10
             implicitPrefs <- args$implicitPrefs %||% FALSE
             alpha <- args$alpha %||% 1.0
+            nonnegative <- args$nonnegative %||% FALSE
             checkpointInterval <- args$checkpointInterval %||% 10
             seed <- args$seed %||% 0
 
-            features <- c(ratingCol, userCol, itemCol)
-            distParams <- as.integer(c(numUserBlocks, numItemBlocks, checkpointInterval, seed))
+            features <- array(c(ratingCol, userCol, itemCol))
+            distParams <- array(as.integer(c(numUserBlocks, numItemBlocks,
+                                             checkpointInterval, seed)))
 
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
                                 "fit", data@sdf, features, as.integer(rank),
