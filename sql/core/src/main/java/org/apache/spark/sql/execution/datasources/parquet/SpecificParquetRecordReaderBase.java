@@ -59,6 +59,8 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter;
+import org.apache.spark.sql.execution.datasources.parquet.ParquetStruct;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
 
@@ -75,6 +77,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  protected ParquetStruct parquetSchema;
 
   /**
    * The total number of rows this RecordReader will eventually read. The sum of the
@@ -140,6 +143,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    this.parquetSchema =
+      new ParquetSchemaConverter(configuration).getParquetStruct(requestedSchema);
     this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
