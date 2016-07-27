@@ -4,4 +4,4 @@ FROM (SELECT id tid FROM parquet_t0) T
 JOIN (SELECT key uid FROM parquet_t1) U
 ON tid=uid
 --------------------------------------------------------------------------------
-SELECT `gen_attr` AS `tid`, `gen_attr` AS `uid` FROM (SELECT `gen_attr`, `gen_attr` FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr` AS `gen_attr` FROM (SELECT `id` AS `gen_attr` FROM `default`.`parquet_t0`) AS gen_subquery_0) AS T INNER JOIN (SELECT `gen_attr` AS `gen_attr` FROM (SELECT `key` AS `gen_attr`, `value` AS `gen_attr` FROM `default`.`parquet_t1`) AS gen_subquery_1) AS U ON (`gen_attr` = `gen_attr`)) AS gen_subquery_2
+SELECT `gen_attr_0` AS `tid`, `gen_attr_1` AS `uid` FROM (SELECT `gen_attr_0`, `gen_attr_1` FROM (SELECT /*+ MAPJOIN(parquet_t0) */ `gen_attr_2` AS `gen_attr_0` FROM (SELECT `id` AS `gen_attr_2` FROM `default`.`parquet_t0`) AS gen_subquery_0) AS T INNER JOIN (SELECT `gen_attr_3` AS `gen_attr_1` FROM (SELECT `key` AS `gen_attr_3`, `value` AS `gen_attr_4` FROM `default`.`parquet_t1`) AS gen_subquery_1) AS U ON (`gen_attr_0` = `gen_attr_1`)) AS gen_subquery_2
