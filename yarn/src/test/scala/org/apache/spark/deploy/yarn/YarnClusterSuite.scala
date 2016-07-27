@@ -202,9 +202,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "ORIGINAL")
   }
 
-  private def testPySpark(clientMode: Boolean,
-                          extraConf: Map[String, String] = Map(),
-                          extraEnv: Map[String, String] = Map()): Unit = {
+  private def testPySpark(
+      clientMode: Boolean,
+      extraConf: Map[String, String] = Map(),
+      extraEnv: Map[String, String] = Map()): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
 
