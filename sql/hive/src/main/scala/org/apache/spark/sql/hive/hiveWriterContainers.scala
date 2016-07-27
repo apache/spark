@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableJobConf
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -52,8 +53,7 @@ import org.apache.spark.util.SerializableJobConf
 private[hive] class SparkHiveWriterContainer(
     @transient private val jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
-    inputSchema: Seq[Attribute],
-    table: MetastoreRelation)
+    inputSchema: Seq[Attribute])
   extends Logging
   with HiveInspectors
   with Serializable {
@@ -216,9 +216,8 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String],
-    inputSchema: Seq[Attribute],
-    table: MetastoreRelation)
-  extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema, table) {
+    inputSchema: Seq[Attribute])
+  extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema) {
 
   import SparkHiveDynamicPartitionWriterContainer._
 
@@ -280,7 +279,9 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
         StructType.fromAttributes(dataOutput),
         SparkEnv.get.blockManager,
         SparkEnv.get.serializerManager,
-        TaskContext.get().taskMemoryManager().pageSizeBytes)
+        TaskContext.get().taskMemoryManager().pageSizeBytes,
+        SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+          UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD))
 
       while (iterator.hasNext) {
         val inputRow = iterator.next()

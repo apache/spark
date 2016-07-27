@@ -20,7 +20,6 @@ package org.apache.spark.scheduler.cluster.mesos
 import org.apache.mesos.Protos.{ContainerInfo, Volume}
 import org.apache.mesos.Protos.ContainerInfo.DockerInfo
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
 /**
@@ -105,11 +104,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   def addDockerInfo(
       container: ContainerInfo.Builder,
       image: String,
+      forcePullImage: Boolean = false,
       volumes: Option[List[Volume]] = None,
       network: Option[ContainerInfo.DockerInfo.Network] = None,
       portmaps: Option[List[ContainerInfo.DockerInfo.PortMapping]] = None): Unit = {
 
-    val docker = ContainerInfo.DockerInfo.newBuilder().setImage(image)
+    val docker = ContainerInfo.DockerInfo.newBuilder()
+      .setImage(image)
+      .setForcePullImage(forcePullImage)
 
     network.foreach(docker.setNetwork)
     portmaps.foreach(_.foreach(docker.addPortMappings))
@@ -119,21 +121,23 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   /**
-   * Setup a docker containerizer
+   * Setup a docker containerizer from MesosDriverDescription scheduler properties
    */
   def setupContainerBuilderDockerInfo(
     imageName: String,
-    conf: SparkConf,
+    conf: String => Option[String],
     builder: ContainerInfo.Builder): Unit = {
-    val volumes = conf
-      .getOption("spark.mesos.executor.docker.volumes")
+    val forcePullImage = conf("spark.mesos.executor.docker.forcePullImage")
+      .exists(_.equals("true"))
+    val volumes = conf("spark.mesos.executor.docker.volumes")
       .map(parseVolumesSpec)
-    val portmaps = conf
-      .getOption("spark.mesos.executor.docker.portmaps")
+    val portmaps = conf("spark.mesos.executor.docker.portmaps")
       .map(parsePortMappingsSpec)
+
     addDockerInfo(
       builder,
       imageName,
+      forcePullImage = forcePullImage,
       volumes = volumes,
       portmaps = portmaps)
     logDebug("setupContainerDockerInfo: using docker image: " + imageName)

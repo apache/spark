@@ -18,7 +18,8 @@
 context("the textFile() function")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
@@ -159,3 +160,5 @@ test_that("Pipelined operations on RDDs created using textFile", {
 
   unlink(fileName)
 })
+
+sparkR.session.stop()

@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.command
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResource}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.FunctionResourceType
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsing}
+import org.apache.spark.sql.execution.datasources.CreateTableUsing
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -349,10 +349,13 @@ class DDLCommandSuite extends PlanTest {
   }
 
   test("create table using - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
+    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
+      "USING parquet PARTITIONED BY (a)"
     val expected = CreateTableUsing(
       TableIdentifier("my_tab"),
-      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Some(new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType)),
       "parquet",
       false,
       Map.empty,
@@ -609,8 +612,7 @@ class DDLCommandSuite extends PlanTest {
 
     val parsed1_table = parser.parsePlan(sql1_table)
     val parsed2_table = parser.parsePlan(sql2_table)
-    assertUnsupported(sql1_table + " PURGE")
-    assertUnsupported(sql2_table + " PURGE")
+    val parsed1_purge = parser.parsePlan(sql1_table + " PURGE")
     assertUnsupported(sql1_view)
     assertUnsupported(sql2_view)
 
@@ -620,11 +622,14 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true)
+      ifExists = true,
+      purge = false)
     val expected2_table = expected1_table.copy(ifExists = false)
+    val expected1_purge = expected1_table.copy(purge = true)
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)
+    comparePlans(parsed1_purge, expected1_purge)
   }
 
   test("alter table: archive partition (not supported)") {
@@ -769,25 +774,30 @@ class DDLCommandSuite extends PlanTest {
     val tableName1 = "db.tab"
     val tableName2 = "tab"
 
-    val parsed1 = parser.parsePlan(s"DROP TABLE $tableName1")
-    val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
-    val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
-    val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
-    assertUnsupported(s"DROP TABLE IF EXISTS $tableName2 PURGE")
+    val parsed = Seq(
+        s"DROP TABLE $tableName1",
+        s"DROP TABLE IF EXISTS $tableName1",
+        s"DROP TABLE $tableName2",
+        s"DROP TABLE IF EXISTS $tableName2",
+        s"DROP TABLE $tableName2 PURGE",
+        s"DROP TABLE IF EXISTS $tableName2 PURGE"
+      ).map(parser.parsePlan)
 
-    val expected1 =
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false)
-    val expected2 =
-      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false)
-    val expected3 =
-      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false)
-    val expected4 =
-      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false)
+    val expected = Seq(
+      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = false, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", Option("db")), ifExists = true, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
+        purge = false),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = false, isView = false,
+        purge = true),
+      DropTableCommand(TableIdentifier("tab", None), ifExists = true, isView = false,
+        purge = true))
 
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
+    parsed.zip(expected).foreach { case (p, e) => comparePlans(p, e) }
   }
 
   test("drop view") {
@@ -800,13 +810,17 @@ class DDLCommandSuite extends PlanTest {
     val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
 
     val expected1 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = false, isView = true)
+      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = false, isView = true,
+        purge = false)
     val expected2 =
-      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = true, isView = true)
+      DropTableCommand(TableIdentifier("view", Option("db")), ifExists = true, isView = true,
+        purge = false)
     val expected3 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = false, isView = true)
+      DropTableCommand(TableIdentifier("view", None), ifExists = false, isView = true,
+        purge = false)
     val expected4 =
-      DropTableCommand(TableIdentifier("view", None), ifExists = true, isView = true)
+      DropTableCommand(TableIdentifier("view", None), ifExists = true, isView = true,
+        purge = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -852,5 +866,66 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
+  }
+
+  test("support for other types in DBPROPERTIES") {
+    val sql =
+      """
+        |CREATE DATABASE database_name
+        |LOCATION '/home/user/db'
+        |WITH DBPROPERTIES ('a'=1, 'b'=0.1, 'c'=TRUE)
+      """.stripMargin
+    val parsed = parser.parsePlan(sql)
+    val expected = CreateDatabaseCommand(
+      "database_name",
+      ifNotExists = false,
+      Some("/home/user/db"),
+      None,
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
+
+    comparePlans(parsed, expected)
+  }
+
+  test("support for other types in TBLPROPERTIES") {
+    val sql =
+      """
+        |ALTER TABLE table_name
+        |SET TBLPROPERTIES ('a' = 1, 'b' = 0.1, 'c' = TRUE)
+      """.stripMargin
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableSetPropertiesCommand(
+      TableIdentifier("table_name"),
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      isView = false)
+
+    comparePlans(parsed, expected)
+  }
+
+  test("support for other types in OPTIONS") {
+    val sql =
+      """
+        |CREATE TABLE table_name USING json
+        |OPTIONS (a 1, b 0.1, c TRUE)
+      """.stripMargin
+    val expected = CreateTableUsing(
+      TableIdentifier("table_name"),
+      None,
+      "json",
+      false,
+      Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+      null,
+      None,
+      false,
+      true)
+
+    parser.parsePlan(sql) match {
+      case ct: CreateTableUsing =>
+        // We can't compare array in `CreateTableUsing` directly, so here we explicitly
+        // set partitionColumns to `null` and then compare it.
+        comparePlans(ct.copy(partitionColumns = null), expected)
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTableCommand].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $sql")
+    }
   }
 }

@@ -36,11 +36,12 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
    */
   // This needs to be a lazy val at here because TestHiveSharedState is overriding it.
   lazy val metadataHive: HiveClient = {
-    HiveUtils.newClientForMetadata(sparkContext.conf, hadoopConf)
+    HiveUtils.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 
   /**
    * A catalog that interacts with the Hive metastore.
    */
-  override lazy val externalCatalog = new HiveExternalCatalog(metadataHive, hadoopConf)
+  override lazy val externalCatalog =
+    new HiveExternalCatalog(metadataHive, sparkContext.hadoopConfiguration)
 }
