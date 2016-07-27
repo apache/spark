@@ -84,6 +84,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
     msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                    packageLocalDir)
     message(msg)
+    Sys.setenv(SPARK_HOME = packageLocalDir)
     return(invisible(packageLocalDir))
   }
 
@@ -124,6 +125,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
     unlink(packageLocalPath)
   }
   message("Installation done.")
+  Sys.setenv(SPARK_HOME = packageLocalDir)
   invisible(packageLocalDir)
 }
 
