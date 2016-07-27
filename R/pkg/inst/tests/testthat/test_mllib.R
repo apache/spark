@@ -639,6 +639,45 @@ test_that("spark.lda with text input", {
   expect_equal(vocabSize, stats2$vocabSize)
   expect_true(all.equal(vocabulary, stats2$vocabulary))
 
+test_that("spark.als", {
+  # R code to reproduce the result.
+  #
+  #' data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
+  #'              list(2, 1, 1.0), list(2, 2, 5.0))
+  #' df <- createDataFrame(data, c("user", "item", "rating"))
+  #' model <- spark.als(df, ratingCol = "rating", userCol = "user", itemCol = "item",
+  #'                    rank = 10, maxIter = 5, seed = 0)
+  #' test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
+  #' predict(model, test)
+  #
+  # -- output of 'predict(model, data)'
+  #
+  #     user     item       prediction
+  #       0         2       -0.1380762
+  #       1         0       2.6258414
+  #       2         0       -1.5018409
+  #
+  data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
+               list(2, 1, 1.0), list(2, 2, 5.0))
+  df <- createDataFrame(data, c("user", "item", "rating"))
+  model <- spark.als(df, ratingCol = "rating", userCol = "user", itemCol = "item",
+                     rank = 10, maxIter = 5, seed = 0, reg = 0.1)
+  test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
+  predictions <- collect(predict(model, test))
+
+  expect_equal(predictions$prediction, c(-0.1380762, 2.6258414, -1.5018409),
+               tolerance = 1e-4)
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-als", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  model2 <- read.ml(modelPath)
+  stats <- summary(model)
+  stats2 <- summary(model2)
+  expect_equal(collect(stats$userFactors), collect(stats2$userFactors))
+  expect_equal(collect(stats$itemFactors), collect(stats2$itemFactors))
+
   unlink(modelPath)
 })
 

@@ -46,7 +46,7 @@ private[r] class ALSWrapper private (
 private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
   def fit(data: DataFrame, ratingCol: String, userCol: String, itemCol: String,
-          rank: Int, regParam: Double, maxIter: Int): ALSWrapper = {
+          rank: Int, regParam: Double, maxIter: Int, seed: Int): ALSWrapper = {
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -54,6 +54,7 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       .setRatingCol(ratingCol)
       .setUserCol(userCol)
       .setItemCol(itemCol)
+      .setSeed(seed.toLong)
 
     val alsm: ALSModel = als.fit(data)
 
@@ -71,9 +72,9 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val modelPath = new Path(path, "model").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("ratingCol" -> instance.rRatingCol) ~
-        ("userCol" -> instance.rUserCol) ~
-        ("itemCol" -> instance.rItemCol)
+        ("rRatingCol" -> instance.rRatingCol) ~
+        ("rUserCol" -> instance.rUserCol) ~
+        ("rItemCol" -> instance.rItemCol)
 
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)

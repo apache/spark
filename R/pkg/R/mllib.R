@@ -1099,10 +1099,10 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 1.0, maxIter = 10) {
+                   rank = 10, reg = 1.0, maxIter = 10, seed = 0) {
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
                                 "fit", data@sdf, ratingCol, userCol, itemCol,
-                                as.integer(rank), reg, as.integer(maxIter))
+                                as.integer(rank), reg, as.integer(maxIter), as.integer(seed))
             return(new("ALSModel", jobj = jobj))
           })
 
@@ -1116,8 +1116,8 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 setMethod("summary", signature(object = "ALSModel"),
 function(object, ...) {
     jobj <- object@jobj
-    userFactors <- dataFrame(callJMethod(jobj, "userFactors"))
-    itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
+    userFactors <- dataFrame(callJMethod(jobj, "rUserFactors"))
+    itemFactors <- dataFrame(callJMethod(jobj, "rItemFactors"))
     return(list(userFactors = userFactors, itemFactors = itemFactors))
 })
 
