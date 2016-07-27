@@ -25,7 +25,7 @@
 #' Users can specify a desired Hadoop version, the remote mirror site, and
 #' the directory where the package is installed locally.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is \code{"without"}, Spark's
+#' @param hadoopVersion Version of Hadoop to install. Default is "without", Spark's
 #'                      "Hadoop free" build. See
 #'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
 #'                      "Hadoop Free" Build} for more information. It can also be version number
