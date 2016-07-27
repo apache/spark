@@ -269,6 +269,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+            def ordinalTable(i: Int): String = (if (i == 0) "second" else (i + 2) + "th") + " table"
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns
@@ -277,8 +278,7 @@ trait CheckAnalysis extends PredicateHelper {
                   s"""
                     |${operator.nodeName} can only be performed on tables with the same number
                     |of columns, but the first table has ${ref.length} columns and
-                    |the ${if (ti == 0) "second" else (ti + 2) + "th"} table has
-                    |${child.output.length} columns
+                    |the ${ordinalTable(ti)} has ${child.output.length} columns
                   """.stripMargin.replace("\n", " ").trim())
               }
               // Check if the data types match.
@@ -287,8 +287,7 @@ trait CheckAnalysis extends PredicateHelper {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. $dt1 <> $dt2 at ${ci + 1}th column of
-                      |${if (ti == 0) "second" else (ti + 2) + "th"} table
+                      |column types. $dt1 <> $dt2 at ${ci + 1}th column of ${ordinalTable(ti)}
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
