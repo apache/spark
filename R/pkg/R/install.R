@@ -99,11 +99,8 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
       message(sprintf("Remote URL not provided. Use Apache default: %s", mirrorUrl))
     }
 
-    version <- "spark-2.0.0-rc4-bin"
-    # When 2.0 released, remove the above line and
-    # change spark-releases to spark in the statement below
     packageRemotePath <- paste0(
-      file.path(mirrorUrl, "spark-releases", version, packageName), ".tgz")
+      file.path(mirrorUrl, "spark", version, packageName), ".tgz")
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n- %s",
                  "Installing to:\n- %s", sep = "\n")
@@ -130,9 +127,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
 }
 
 default_mirror_url <- function() {
-  # change to http://www.apache.org/dyn/closer.lua
-  # when released
-  "http://people.apache.org/~pwendell"
+  "http://www.apache.org/dyn/closer.lua"
 }
 
 hadoop_version_name <- function(hadoopVersion) {
