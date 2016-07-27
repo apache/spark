@@ -125,7 +125,7 @@ object SQLConf {
   val DEFAULT_SIZE_IN_BYTES = SQLConfigBuilder("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
-      "which is more than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. " +
+      "which is larger than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. " +
       "That is to say by default the optimizer will not choose to broadcast a table unless it " +
       "knows for sure its size is small enough.")
     .longConf
