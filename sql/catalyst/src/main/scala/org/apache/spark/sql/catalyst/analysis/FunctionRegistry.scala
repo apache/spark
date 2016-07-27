@@ -470,13 +470,14 @@ object FunctionRegistry {
   }
 
   /**
-   * Creates a function lookup registry for cast aliases (SPARK-16730).
+   * Creates a function registry lookup entry for cast aliases (SPARK-16730).
    * For example, if name is "int", and dataType is IntegerType, this means int(x) would become
    * an alias for cast(x as IntegerType).
    * See usage above.
    */
-  private def castAlias(name: String, dataType: DataType)
-    : (String, (ExpressionInfo, FunctionBuilder)) = {
+  private def castAlias(
+      name: String,
+      dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
     val builder = (args: Seq[Expression]) => {
       if (args.size != 1) {
         throw new AnalysisException(s"Function $name accepts only one argument")
