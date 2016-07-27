@@ -31,7 +31,6 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 
 private [r] class IsotonicRegressionWrapper private (
     val pipeline: PipelineModel,
-    val labels: Array[String],
     val features: Array[String]) extends MLWritable {
 
   private val isotonicRegressionModel: IsotonicRegressionModel =
@@ -74,9 +73,6 @@ private[r] object IsotonicRegressionWrapper
 
     // get feature names from output schema
     val schema = rFormulaModel.transform(data).schema
-    val labelAttr = Attribute.fromStructField(schema(rFormulaModel.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
@@ -90,7 +86,7 @@ private[r] object IsotonicRegressionWrapper
       .setStages(Array(rFormulaModel, isotonicRegression))
       .fit(data)
 
-    new IsotonicRegressionWrapper(pipeline, labels, features)
+    new IsotonicRegressionWrapper(pipeline, features)
   }
 
   override def read: MLReader[IsotonicRegressionWrapper] = new IsotonicRegressionWrapperReader
@@ -104,7 +100,6 @@ private[r] object IsotonicRegressionWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labels" -> instance.labels.toSeq) ~
         ("features" -> instance.features.toSeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
@@ -122,11 +117,10 @@ private[r] object IsotonicRegressionWrapper
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
-      val labels = (rMetadata \ "labels").extract[Array[String]]
       val features = (rMetadata \ "features").extract[Array[String]]
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new IsotonicRegressionWrapper(pipeline, labels, features)
+      new IsotonicRegressionWrapper(pipeline, features)
     }
   }
 }
