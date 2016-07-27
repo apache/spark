@@ -92,6 +92,7 @@ class SQLCompatibilityFunctionSuite extends QueryTest with SharedSQLContext {
       Row("1"))
 
     // Error handling: only one argument
-    assert(intercept[AnalysisException](sql("SELECT string(1, 2)")).getMessage.contains("one arg"))
+    val errorMsg = intercept[AnalysisException](sql("SELECT string(1, 2)")).getMessage
+    assert(errorMsg.contains("Function string accepts only one argument"))
   }
 }
