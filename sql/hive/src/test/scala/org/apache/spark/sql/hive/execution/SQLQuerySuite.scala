@@ -1774,6 +1774,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   def testCommandAvailable(command: String): Boolean = {
+    import scala.language.postfixOps
     Try(Process(command) !!).isSuccess
   }
 }
