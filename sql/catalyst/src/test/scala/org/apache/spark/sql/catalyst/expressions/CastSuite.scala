@@ -54,9 +54,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     // follow [[org.apache.spark.sql.catalyst.expressions.Cast.canCast]] logic
     // to ensure we test every possible cast situation here
     atomicTypes.zip(atomicTypes).foreach { case (from, to) =>
-      if (Cast.canCast(from, to)) {
-        checkNullCast(from, to)
-      }
+      checkNullCast(from, to)
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
