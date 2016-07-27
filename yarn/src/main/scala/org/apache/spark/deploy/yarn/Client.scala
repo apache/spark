@@ -731,6 +731,13 @@ private[spark] class Client(
       sparkConf.set(TOKEN_RENEWAL_INTERVAL, renewalInterval)
     }
 
+    // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
+    val amEnvPrefix = "spark.yarn.appMasterEnv."
+    sparkConf.getAll
+      .filter { case (k, v) => k.startsWith(amEnvPrefix) }
+      .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
+      .foreach { case (k, v) => YarnSparkHadoopUtil.addPathToEnvironment(env, k, v) }
+
     // Keep this for backwards compatibility but users should move to the config
     sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
     // Allow users to specify some environment variables.
@@ -797,26 +804,16 @@ private[spark] class Client(
         env("SPARK_JAVA_OPTS") = value
       }
       // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
-      sys.env.get("PYSPARK_DRIVER_PYTHON").foreach(env("PYSPARK_DRIVER_PYTHON") = _)
-      sys.env.get("PYSPARK_PYTHON").foreach(env("PYSPARK_PYTHON") = _)
+      Seq("PYSPARK_DRIVER_PYTHON", "PYSPARK_PYTHON").foreach { envname =>
+        if (!env.contains(envname)) {
+          sys.env.get(envname).foreach(env(envname) = _)
+        }
+      }
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
       env(ENV_DIST_CLASSPATH) = dcp
     }
-
-    // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
-    val amEnvPrefix = "spark.yarn.appMasterEnv."
-    sparkConf.getAll
-      .filter { case (k, v) => k.startsWith(amEnvPrefix) }
-      .map { case (k, v) => (k.substring(amEnvPrefix.length), v) }
-      .foreach { case (k, v) =>
-        if (k == "PYSPARK_PYTHON" || k == "PYSPARK_DRIVER_PYTHON") {
-          env.put(k, v)
-        } else {
-          YarnSparkHadoopUtil.addPathToEnvironment(env, k, v)
-        }
-      }
 
     env
   }
