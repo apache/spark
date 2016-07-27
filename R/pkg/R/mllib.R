@@ -74,6 +74,13 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @note GaussianMixtureModel since 2.1.0
 setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 
+#' S4 class that represents an ALSModel
+#'
+#' @param jobj a Java object reference to the backing Scala ALSWrapper
+#' @export
+#' @note ALSModel since 2.1.0
+setClass("ALSModel", representation(jobj = "jobj"))
+
 #' Saves the MLlib model to the input path
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
@@ -82,8 +89,8 @@ setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 #' @name write.ml
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
-#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.lda}
-#' @seealso \link{spark.isoreg}
+#' @seealso \link{spark.als}, \link{spark.kmeans}, \link{spark.lda}, \link{spark.naiveBayes},
+#' @seealso \link{spark.survreg}, \link{spark.isoreg}
 #' @seealso \link{read.ml}
 NULL
 
@@ -95,16 +102,9 @@ NULL
 #' @name predict
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
-#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.als}, \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{spark.isoreg}
 NULL
-
-#' S4 class that represents an ALSModel
-#'
-#' @param jobj a Java object reference to the backing Scala ALSWrapper
-#' @export
-#' @note ALSModel since 2.1.0
-setClass("ALSModel", representation(jobj = "jobj"))
 
 
 #' Generalized Linear Models
@@ -1068,7 +1068,22 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' Alternating Least Squares (ALS) for Collaborative Filtering
 #'
 #' \code{spark.als} learns latent factors in collaborative filtering via alternating least
-#' squares.
+#' squares. Users can call \code{summary} to obtain fitted latent factors, \code{predict}
+#' to make predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#'
+#' For more details, see
+#' \href{http://spark.apache.org/docs/latest/ml-collaborative-filtering.html}{MLlib:
+#' Collaborative Filtering}.
+#' Additional arguments can be passed to the methods.
+#' \describe{
+#'    \item{nonnegative}{logical value indicating whether to apply nonnegativity constraints}
+#'    \item{implicitPrefs}{logical value indicating whether to use implicit preference}
+#'    \item{alpha}{alpha parameter in the implicit preference formulation (>= 0)}
+#'    \item{seed}{seed for random number generation}
+#'    \item{numUserBlocks}{number of user blocks used to parallelize computation (> 0)}
+#'    \item{numItemBlocks}{number of item blocks used to parallelize computation (> 0)}
+#'    \item{checkpointInterval}{number of checkpoint intervals (>= 1) or disable checkpoint (-1)}
+#'    }
 #'
 #' @param data A SparkDataFrame for training
 #' @param ratingCol column name for ratings
@@ -1076,17 +1091,8 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param itemCol column name for item ids. Ids must be (or can be cast into) integers
 #' @param rank rank of the matrix factorization (> 0)
 #' @param reg regularization parameter (>= 0)
-#' @param nonnegative logical value indicating whether to apply nonnegativity constraints
 #' @param maxIter maximum number of iterations (>= 0)
-#' @param ... additional arguments to be passed to the method
-#'        \describe{
-#'          \item{implicitPrefs}{logical value indicating whether to use implicit preference}
-#'          \item{alpha}{alpha parameter in the implicit preference formulation (>= 0)}
-#'          \item{seed}{seed for random number generation}
-#'          \item{numUserBlocks}{number of user blocks used to parallelize computation (> 0)}
-#'          \item{numItemBlocks}{number of item blocks used to parallelize computation (> 0)}
-#'          \item{checkpointInterval}{number of checkpoint intervals (>= 1) or disable checkpoint (-1)}
-#'        }
+
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @name spark.als
@@ -1096,8 +1102,10 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' df <- createDataFrame(ratings)
 #' model <- spark.als(df, "rating", "user", "item")
 #'
-#' # get a summary of the model
-#' summary(model)
+#' # extract latent factors
+#' stats <- summary(model)
+#' userFactors <- stats$userFactors
+#' itemFactors <- stats$itemFactors
 #'
 #' # make predictions
 #' predicted <- predict(model, df)
@@ -1139,7 +1147,8 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 # Returns a summary of the ALS model produced by spark.als.
 
 #' @param object A fitted ALS model
-#' @return \code{summary} returns a list containing the estimated user and item factors
+#' @return \code{summary} returns a list containing the estimated user and item factors,
+#'         rank, regularization parameter and maximum number of iterations used in training
 #' @rdname spark.als
 #' @export
 #' @note summary(ALSModel) since 2.0.0

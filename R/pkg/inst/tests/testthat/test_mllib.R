@@ -638,6 +638,7 @@ test_that("spark.lda with text input", {
   expect_equal(logPerplexity, stats2$logPerplexity)
   expect_equal(vocabSize, stats2$vocabSize)
   expect_true(all.equal(vocabulary, stats2$vocabulary))
+})
 
 test_that("spark.als", {
   # R code to reproduce the result.
