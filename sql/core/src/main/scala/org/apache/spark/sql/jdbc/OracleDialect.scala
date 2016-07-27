@@ -26,30 +26,38 @@ private case object OracleDialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
 
-  override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+  override def getCatalystType(sqlType: Int, typeName: String, size: Int, md: MetadataBuilder):
+  Option[DataType] = sqlType match {
     // Handle NUMBER fields that have no precision/scale in special way
     // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
     // For more details, please see
     // https://github.com/apache/spark/pull/8780#issuecomment-145598968
     // and
     // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-    if (sqlType == Types.NUMERIC && size == 0) {
-      // This is sub-optimal as we have to pick a precision/scale in advance whereas the data
-      //  in Oracle is allowed to have different precision/scale for each value.
+    case Types.NUMERIC if size == 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+    // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
+    // this to NUMERIC with -127 scale
+    // Not sure if there is a more robust way to identify the field as a float (or other
+    // numeric types that do not specify a scale.
+    case Types.NUMERIC if md.build().getLong("scale") == -127 =>
       Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-    } else if (sqlType == Types.NUMERIC && md.build().getLong("scale") == -127) {
-      // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
-      // this to NUMERIC with -127 scale
-      // Not sure if there is a more robust way to identify the field as a float (or other
-      // numeric types that do not specify a scale.
-      Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-    } else {
-      None
-    }
+    case Types.NUMERIC if size == 1 => Option(BooleanType)
+    case Types.NUMERIC if size == 3 || size == 5 || size == 10 => Option(IntegerType)
+    case Types.NUMERIC if size == 19 && md.build().getLong("scale") == 0L => Option(LongType)
+    case Types.NUMERIC if size == 19 && md.build().getLong("scale") == 4L => Option(FloatType)
+    case _ => None
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
+    // For more details, please see
+    // https://docs.oracle.com/cd/E19501-01/819-3659/gcmaz/
+    case BooleanType => Some(JdbcType("NUMBER(1)", java.sql.Types.BOOLEAN))
+    case IntegerType => Some(JdbcType("NUMBER(10)", java.sql.Types.INTEGER))
+    case LongType => Some(JdbcType("NUMBER(19)", java.sql.Types.BIGINT))
+    case FloatType => Some(JdbcType("NUMBER(19, 4)", java.sql.Types.FLOAT))
+    case DoubleType => Some(JdbcType("NUMBER(19, 4)", java.sql.Types.DOUBLE))
+    case ByteType => Some(JdbcType("NUMBER(3)", java.sql.Types.SMALLINT))
+    case ShortType => Some(JdbcType("NUMBER(5)", java.sql.Types.SMALLINT))
     case StringType => Some(JdbcType("VARCHAR2(255)", java.sql.Types.VARCHAR))
     case _ => None
   }
