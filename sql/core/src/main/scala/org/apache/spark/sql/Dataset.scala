@@ -2421,13 +2421,7 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    val tableDesc = CatalogTable(
-      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      tableType = CatalogTableType.VIEW,
-      schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.empty)
-    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
-      isTemporary = true)
+    createViewCommand(viewName, replace = false)
   }
 
   /**
@@ -2438,12 +2432,19 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    val tableDesc = CatalogTable(
-      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
-      tableType = CatalogTableType.VIEW,
-      schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.empty)
-    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
+    createViewCommand(viewName, replace = true)
+  }
+
+  private def createViewCommand(viewName: String, replace: Boolean): CreateViewCommand = {
+    CreateViewCommand(
+      name = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      userSpecifiedColumns = Nil,
+      comment = None,
+      properties = Map.empty,
+      originalText = None,
+      child = logicalPlan,
+      allowExisting = false,
+      replace = replace,
       isTemporary = true)
   }
 
@@ -2489,12 +2490,12 @@ class Dataset[T] private[sql](
     val rdd: RDD[String] = queryExecution.toRdd.mapPartitions { iter =>
       val writer = new CharArrayWriter()
       // create the Generator without separator inserted between 2 records
-      val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+      val gen = new JacksonGenerator(rowSchema, writer)
 
       new Iterator[String] {
         override def hasNext: Boolean = iter.hasNext
         override def next(): String = {
-          JacksonGenerator(rowSchema, gen)(iter.next())
+          gen.write(iter.next())
           gen.flush()
 
           val json = writer.toString

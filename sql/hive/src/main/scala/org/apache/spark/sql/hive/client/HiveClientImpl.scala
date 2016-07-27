@@ -293,7 +293,7 @@ private[hive] class HiveClientImpl(
         database.name,
         database.description,
         database.locationUri,
-        database.properties.asJava),
+        Option(database.properties).map(_.asJava).orNull),
         ignoreIfExists)
   }
 
@@ -311,7 +311,7 @@ private[hive] class HiveClientImpl(
         database.name,
         database.description,
         database.locationUri,
-        database.properties.asJava))
+        Option(database.properties).map(_.asJava).orNull))
   }
 
   override def getDatabaseOption(name: String): Option[CatalogDatabase] = withHiveState {
@@ -320,7 +320,7 @@ private[hive] class HiveClientImpl(
         name = d.getName,
         description = d.getDescription,
         locationUri = d.getLocationUri,
-        properties = d.getParameters.asScala.toMap)
+        properties = Option(d.getParameters).map(_.asScala.toMap).orNull)
     }
   }
 
@@ -353,7 +353,7 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "bucketing"
       }
 
-      val properties = h.getParameters.asScala.toMap
+      val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -365,9 +365,9 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
-        sortColumnNames = Seq(), // TODO: populate this
-        bucketColumnNames = h.getBucketCols.asScala,
-        numBuckets = h.getNumBuckets,
+        // We can not populate bucketing information for Hive tables as Spark SQL has a different
+        // implementation of hash function from Hive.
+        bucketSpec = None,
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -390,7 +390,8 @@ private[hive] class HiveClientImpl(
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
-          serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
+          properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
+            .map(_.asScala.toMap).orNull
         ),
         properties = properties,
         viewOriginalText = Option(h.getViewOriginalText),
@@ -763,10 +764,7 @@ private[hive] class HiveClientImpl(
       hiveTable.setFields(schema.asJava)
     }
     hiveTable.setPartCols(partCols.asJava)
-    // TODO: set sort columns here too
-    hiveTable.setBucketCols(table.bucketColumnNames.asJava)
     hiveTable.setOwner(conf.getUser)
-    hiveTable.setNumBuckets(table.numBuckets)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
     hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
     table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
@@ -774,7 +772,7 @@ private[hive] class HiveClientImpl(
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-    table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
+    table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
     table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
@@ -798,7 +796,7 @@ private[hive] class HiveClientImpl(
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
-    serdeInfo.setParameters(p.storage.serdeProperties.asJava)
+    serdeInfo.setParameters(p.storage.properties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
     tpart.setDbName(ht.getDbName)
     tpart.setTableName(ht.getTableName)
@@ -817,6 +815,7 @@ private[hive] class HiveClientImpl(
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
-        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
+        properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
+          .map(_.asScala.toMap).orNull))
   }
 }

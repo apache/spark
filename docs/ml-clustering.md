@@ -1,10 +1,12 @@
 ---
 layout: global
-title: Clustering - spark.ml
-displayTitle: Clustering - spark.ml
+title: Clustering
+displayTitle: Clustering
 ---
 
-In this section, we introduce the pipeline API for [clustering in mllib](mllib-clustering.html).
+This page describes clustering algorithms in MLlib.
+The [guide for clustering in the RDD-based API](mllib-clustering.html) also has relevant information
+about these algorithms.
 
 **Table of Contents**
 

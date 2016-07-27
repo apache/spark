@@ -18,7 +18,7 @@
 context("partitionBy, groupByKey, reduceByKey etc.")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
@@ -220,3 +220,5 @@ test_that("test partitionBy with string keys", {
   expect_equal(sortKeyValueList(actual_first), sortKeyValueList(expected_first))
   expect_equal(sortKeyValueList(actual_second), sortKeyValueList(expected_second))
 })
+
+sparkR.session.stop()

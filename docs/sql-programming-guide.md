@@ -65,21 +65,21 @@ Throughout this document, we will often refer to Scala/Java Datasets of `Row`s a
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
 
-{% include_example init_session scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example init_session scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/java/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
 
-{% include_example init_session java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example init_session java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
 
-{% include_example init_session python/sql.py %}
+{% include_example init_session python/sql/basic.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -105,7 +105,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% include_example create_df scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example create_df scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -114,7 +114,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% include_example create_df java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example create_df java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -123,14 +123,7 @@ from a Hive table, or from [Spark data sources](#data-sources).
 
 As an example, the following creates a DataFrame based on the content of a JSON file:
 
-{% highlight python %}
-# spark is an existing SparkSession
-df = spark.read.json("examples/src/main/resources/people.json")
-
-# Displays the content of the DataFrame to stdout
-df.show()
-{% endhighlight %}
-
+{% include_example create_df python/sql/basic.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -155,7 +148,7 @@ Here we include some basic examples of structured data processing using Datasets
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example untyped_ops scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example untyped_ops scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
 For a complete list of the types of operations that can be performed on a Dataset refer to the [API Documentation](api/scala/index.html#org.apache.spark.sql.Dataset).
 
@@ -164,7 +157,7 @@ In addition to simple column references and expressions, Datasets also have a ri
 
 <div data-lang="java" markdown="1">
 
-{% include_example untyped_ops java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example untyped_ops java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 
 For a complete list of the types of operations that can be performed on a Dataset refer to the [API Documentation](api/java/org/apache/spark/sql/Dataset.html).
 
@@ -178,53 +171,7 @@ interactive data exploration, users are highly encouraged to use the
 latter form, which is future proof and won't break with column names that
 are also attributes on the DataFrame class.
 
-{% highlight python %}
-# spark is an existing SparkSession
-
-# Create the DataFrame
-df = spark.read.json("examples/src/main/resources/people.json")
-
-# Show the content of the DataFrame
-df.show()
-## age  name
-## null Michael
-## 30   Andy
-## 19   Justin
-
-# Print the schema in a tree format
-df.printSchema()
-## root
-## |-- age: long (nullable = true)
-## |-- name: string (nullable = true)
-
-# Select only the "name" column
-df.select("name").show()
-## name
-## Michael
-## Andy
-## Justin
-
-# Select everybody, but increment the age by 1
-df.select(df['name'], df['age'] + 1).show()
-## name    (age + 1)
-## Michael null
-## Andy    31
-## Justin  20
-
-# Select people older than 21
-df.filter(df['age'] > 21).show()
-## age name
-## 30  Andy
-
-# Count people by age
-df.groupBy("age").count().show()
-## age  count
-## null 1
-## 19   1
-## 30   1
-
-{% endhighlight %}
-
+{% include_example untyped_ops python/sql/basic.py %}
 For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
 
 In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/pyspark.sql.html#module-pyspark.sql.functions).
@@ -255,16 +202,13 @@ The `sql` function on a `SparkSession` enables applications to run SQL queries p
 <div data-lang="java" markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `Dataset<Row>`.
 
-{% include_example run_sql java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example run_sql java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 The `sql` function on a `SparkSession` enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
 
-{% highlight python %}
-# spark is an existing SparkSession
-df = spark.sql("SELECT * FROM table")
-{% endhighlight %}
+{% include_example run_sql python/sql/basic.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -287,11 +231,11 @@ the bytes back into an object.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example create_ds scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example create_ds scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% include_example create_ds java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example create_ds java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 </div>
 
@@ -318,7 +262,7 @@ reflection and become the names of the columns. Case classes can also be nested 
 types such as `Seq`s or `Array`s. This RDD can be implicitly converted to a DataFrame and then be
 registered as a table. Tables can be used in subsequent SQL statements.
 
-{% include_example schema_inferring scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example schema_inferring scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -330,7 +274,7 @@ does not support JavaBeans that contain `Map` field(s). Nested JavaBeans and `Li
 fields are supported though. You can create a JavaBean by creating a class that implements
 Serializable and has getters and setters for all of its fields.
 
-{% include_example schema_inferring java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example schema_inferring java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -339,29 +283,7 @@ Spark SQL can convert an RDD of Row objects to a DataFrame, inferring the dataty
 key/value pairs as kwargs to the Row class. The keys of this list define the column names of the table,
 and the types are inferred by sampling the whole datase, similar to the inference that is performed on JSON files.
 
-{% highlight python %}
-# spark is an existing SparkSession.
-from pyspark.sql import Row
-sc = spark.sparkContext
-
-# Load a text file and convert each line to a Row.
-lines = sc.textFile("examples/src/main/resources/people.txt")
-parts = lines.map(lambda l: l.split(","))
-people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
-
-# Infer the schema, and register the DataFrame as a table.
-schemaPeople = spark.createDataFrame(people)
-schemaPeople.createOrReplaceTempView("people")
-
-# SQL can be run over DataFrames that have been registered as a table.
-teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-# The results of SQL queries are RDDs and support all the normal RDD operations.
-teenNames = teenagers.map(lambda p: "Name: " + p.name)
-for teenName in teenNames.collect():
-  print(teenName)
-{% endhighlight %}
-
+{% include_example schema_inferring python/sql/basic.py %}
 </div>
 
 </div>
@@ -385,7 +307,7 @@ by `SparkSession`.
 
 For example:
 
-{% include_example programmatic_schema scala/org/apache/spark/examples/sql/SparkSqlExample.scala %}
+{% include_example programmatic_schema scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -403,7 +325,7 @@ by `SparkSession`.
 
 For example:
 
-{% include_example programmatic_schema java/org/apache/spark/examples/sql/JavaSparkSqlExample.java %}
+{% include_example programmatic_schema java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -419,39 +341,8 @@ tuples or lists in the RDD created in the step 1.
 3. Apply the schema to the RDD via `createDataFrame` method provided by `SparkSession`.
 
 For example:
-{% highlight python %}
-# Import SparkSession and data types
-from pyspark.sql.types import *
 
-# spark is an existing SparkSession.
-sc = spark.sparkContext
-
-# Load a text file and convert each line to a tuple.
-lines = sc.textFile("examples/src/main/resources/people.txt")
-parts = lines.map(lambda l: l.split(","))
-people = parts.map(lambda p: (p[0], p[1].strip()))
-
-# The schema is encoded in a string.
-schemaString = "name age"
-
-fields = [StructField(field_name, StringType(), True) for field_name in schemaString.split()]
-schema = StructType(fields)
-
-# Apply the schema to the RDD.
-schemaPeople = spark.createDataFrame(people, schema)
-
-# Creates a temporary view using the DataFrame
-schemaPeople.createOrReplaceTempView("people")
-
-# SQL can be run over DataFrames that have been registered as a table.
-results = spark.sql("SELECT name FROM people")
-
-# The results of SQL queries are RDDs and support all the normal RDD operations.
-names = results.map(lambda p: "Name: " + p.name)
-for name in names.collect():
-  print(name)
-{% endhighlight %}
-
+{% include_example programmatic_schema python/sql/basic.py %}
 </div>
 
 </div>
@@ -472,22 +363,16 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example generic_load_save_functions scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example generic_load_save_functions scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example generic_load_save_functions java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example generic_load_save_functions java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-
-df = spark.read.load("examples/src/main/resources/users.parquet")
-df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
-
-{% endhighlight %}
-
+{% include_example generic_load_save_functions python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -507,22 +392,16 @@ using this syntax.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example manual_load_options scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example manual_load_options java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example manual_load_options java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-
-df = spark.read.load("examples/src/main/resources/people.json", format="json")
-df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
-
-{% endhighlight %}
-
+{% include_example manual_load_options python/sql/datasource.py %}
 </div>
 <div data-lang="r"  markdown="1">
 
@@ -538,19 +417,16 @@ file directly with SQL.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
-{% include_example direct_sql scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example direct_sql scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example direct_sql java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example direct_sql java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-df = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
-{% endhighlight %}
-
+{% include_example direct_sql python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -633,35 +509,16 @@ Using the data from the above example:
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
-{% include_example basic_parquet_example scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example basic_parquet_example scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example basic_parquet_example java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example basic_parquet_example java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-# spark from the previous example is used in this example.
-
-schemaPeople # The DataFrame from the previous example.
-
-# DataFrames can be saved as Parquet files, maintaining the schema information.
-schemaPeople.write.parquet("people.parquet")
-
-# Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
-# The result of loading a parquet file is also a DataFrame.
-parquetFile = spark.read.parquet("people.parquet")
-
-# Parquet files can also be used to create a temporary view and then used in SQL statements.
-parquetFile.createOrReplaceTempView("parquetFile");
-teenagers = spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-teenNames = teenagers.map(lambda p: "Name: " + p.name)
-for teenName in teenNames.collect():
-  print(teenName)
-{% endhighlight %}
-
+{% include_example basic_parquet_example python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -766,42 +623,16 @@ turned it off by default starting from 1.5.0. You may enable it by
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
-{% include_example schema_merging scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example schema_merging scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-{% include_example schema_merging java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example schema_merging java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
-{% highlight python %}
-# spark from the previous example is used in this example.
-
-# Create a simple DataFrame, stored into a partition directory
-df1 = spark.createDataFrame(sc.parallelize(range(1, 6))\
-                                   .map(lambda i: Row(single=i, double=i * 2)))
-df1.write.parquet("data/test_table/key=1")
-
-# Create another DataFrame in a new partition directory,
-# adding a new column and dropping an existing column
-df2 = spark.createDataFrame(sc.parallelize(range(6, 11))
-                                   .map(lambda i: Row(single=i, triple=i * 3)))
-df2.write.parquet("data/test_table/key=2")
-
-# Read the partitioned table
-df3 = spark.read.option("mergeSchema", "true").parquet("data/test_table")
-df3.printSchema()
-
-# The final schema consists of all 3 columns in the Parquet files together
-# with the partitioning column appeared in the partition directory paths.
-# root
-# |-- single: int (nullable = true)
-# |-- double: int (nullable = true)
-# |-- triple: int (nullable = true)
-# |-- key : int (nullable = true)
-{% endhighlight %}
-
+{% include_example schema_merging python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -869,8 +700,8 @@ spark.catalog().refreshTable("my_table");
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-# spark is an existing HiveContext
-spark.refreshTable("my_table")
+# spark is an existing SparkSession
+spark.catalog.refreshTable("my_table")
 {% endhighlight %}
 
 </div>
@@ -918,7 +749,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
-  <td>gzip</td>
+  <td>snappy</td>
   <td>
     Sets the compression codec use when writing Parquet files. Acceptable values include:
     uncompressed, snappy, gzip, lzo.
@@ -973,7 +804,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% include_example json_dataset scala/org/apache/spark/examples/sql/SqlDataSourceExample.scala %}
+{% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -985,7 +816,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% include_example json_dataset java/org/apache/spark/examples/sql/JavaSqlDataSourceExample.java %}
+{% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
@@ -996,31 +827,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
-{% highlight python %}
-# spark is an existing SparkSession.
-
-# A JSON dataset is pointed to by path.
-# The path can be either a single text file or a directory storing text files.
-people = spark.read.json("examples/src/main/resources/people.json")
-
-# The inferred schema can be visualized using the printSchema() method.
-people.printSchema()
-# root
-#  |-- age: long (nullable = true)
-#  |-- name: string (nullable = true)
-
-# Creates a temporary view using the DataFrame.
-people.createOrReplaceTempView("people")
-
-# SQL statements can be run by using the sql methods provided by `spark`.
-teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-
-# Alternatively, a DataFrame can be created for a JSON dataset represented by
-# an RDD[String] storing one JSON object per string.
-anotherPeopleRDD = sc.parallelize([
-  '{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}'])
-anotherPeople = spark.jsonRDD(anotherPeopleRDD)
-{% endhighlight %}
+{% include_example json_dataset python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -1110,17 +917,7 @@ the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated sin
 Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
 You may need to grant write privilege to the user who starts the spark application.
 
-{% highlight python %}
-# spark is an existing SparkSession
-
-spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
-
-# Queries can be expressed in HiveQL.
-results = spark.sql("FROM src SELECT key, value").collect()
-
-{% endhighlight %}
-
+{% include_example spark_hive python/sql/hive.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -1879,9 +1676,8 @@ Spark SQL and DataFrames support the following data types:
 
 All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
 You can access them by doing
-{% highlight scala %}
-import  org.apache.spark.sql.types._
-{% endhighlight %}
+
+{% include_example data_types scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 
 <table class="table">
 <tr>

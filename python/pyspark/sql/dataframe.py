@@ -613,15 +613,15 @@ class DataFrame(object):
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
-        The following performs a full outer join between ``df1`` and ``df2``.
-
         :param other: Right side of the join
-        :param on: a string for join column name, a list of column names,
-            , a join expression (Column) or a list of Columns.
-            If `on` is a string or a list of string indicating the name of the join column(s),
+        :param on: a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+
+        The following performs a full outer join between ``df1`` and ``df2``.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
@@ -1388,6 +1388,7 @@ class DataFrame(object):
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
@@ -1399,11 +1400,12 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, col):
+    def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
+        This is a no-op if schema doesn't contain the given column name(s).
 
-        :param col: a string name of the column to drop, or a
-            :class:`Column` to drop.
+        :param cols: a string name of the column to drop, or a
+            :class:`Column` to drop, or a list of string name of the columns to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
@@ -1416,13 +1418,24 @@ class DataFrame(object):
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
         [Row(age=5, name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name', 'inner').drop('age', 'height').collect()
+        [Row(name=u'Bob')]
         """
-        if isinstance(col, basestring):
-            jdf = self._jdf.drop(col)
-        elif isinstance(col, Column):
-            jdf = self._jdf.drop(col._jc)
+        if len(cols) == 1:
+            col = cols[0]
+            if isinstance(col, basestring):
+                jdf = self._jdf.drop(col)
+            elif isinstance(col, Column):
+                jdf = self._jdf.drop(col._jc)
+            else:
+                raise TypeError("col should be a string or a Column")
         else:
-            raise TypeError("col should be a string or a Column")
+            for col in cols:
+                if not isinstance(col, basestring):
+                    raise TypeError("each col in the param list should be a string")
+            jdf = self._jdf.drop(self._jseq(cols))
+
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix

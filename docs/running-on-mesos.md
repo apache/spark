@@ -260,6 +260,10 @@ have Mesos download Spark via the usual methods.
 
 Requires Mesos version 0.20.1 or later.
 
+Note that by default Mesos agents will not pull the image if it already exists on the agent. If you use mutable image
+tags you can set `spark.mesos.executor.docker.forcePullImage` to `true` in order to force the agent to always pull the
+image before running the executor. Force pulling images is only available in Mesos version 0.22 and above.
+
 # Running Alongside Hadoop
 
 You can run Spark and Mesos alongside your existing Hadoop cluster by just launching them as a
@@ -332,6 +336,14 @@ See the [configuration page](configuration.html) for information on Spark config
     image must have Spark installed, as well as a compatible version of the Mesos library.
     The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
     the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_JAVA_LIBRARY</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.docker.forcePullImage</code></td>
+  <td>false</td>
+  <td>
+    Force Mesos agents to pull the image specified in <code>spark.mesos.executor.docker.image</code>.
+    By default Mesos agents will not pull images they already have cached.
   </td>
 </tr>
 <tr>
@@ -426,6 +438,16 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Set the Spark Mesos driver webui_url for interacting with the framework.
     If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    This only affects drivers submitted in cluster mode.  Add the
+    environment variable specified by EnvironmentVariableName to the
+    driver process. The user can specify multiple of these to set
+    multiple environment variables.
   </td>
 </tr>
 <tr>

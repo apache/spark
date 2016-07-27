@@ -110,7 +110,11 @@ class StreamExecution(
   /* Get the call site in the caller thread; will pass this into the micro batch thread */
   private val callSite = Utils.getCallSite()
 
-  /** The thread that runs the micro-batches of this stream. */
+  /**
+   * The thread that runs the micro-batches of this stream. Note that this thread must be
+   * [[org.apache.spark.util.UninterruptibleThread]] to avoid potential deadlocks in using
+   * [[HDFSMetadataLog]]. See SPARK-14131 for more details.
+   */
   private[sql] val microBatchThread =
     new UninterruptibleThread(s"stream execution thread for $name") {
       override def run(): Unit = {
@@ -269,19 +273,11 @@ class StreamExecution(
    * batchId counter is incremented and a new log entry is written with the newest offsets.
    */
   private def constructNextBatch(): Unit = {
-    // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
-    // If we interrupt some thread running Shell.runCommand, we may hit this issue.
-    // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
-    // to set the file permission, we should not interrupt "microBatchThread" when running this
-    // method. See SPARK-14131.
-    //
     // Check to see what new data is available.
     val hasNewData = {
       awaitBatchLock.lock()
       try {
-        val newData = microBatchThread.runUninterruptibly {
-          uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
-        }
+        val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
         availableOffsets ++= newData
 
         if (dataAvailable) {
@@ -295,16 +291,8 @@ class StreamExecution(
       }
     }
     if (hasNewData) {
-      // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
-      // If we interrupt some thread running Shell.runCommand, we may hit this issue.
-      // As "offsetLog.add" will create a file using HDFS API and call "Shell.runCommand" to set
-      // the file permission, we should not interrupt "microBatchThread" when running this method.
-      // See SPARK-14131.
-      microBatchThread.runUninterruptibly {
-        assert(
-          offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
-          s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
-      }
+      assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
+        s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
       logInfo(s"Committed offsets for batch $currentBatchId.")
     } else {
       awaitBatchLock.lock()

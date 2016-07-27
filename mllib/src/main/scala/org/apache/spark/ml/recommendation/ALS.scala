@@ -99,7 +99,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   with HasPredictionCol with HasCheckpointInterval with HasSeed {
 
   /**
-   * Param for rank of the matrix factorization (>= 1).
+   * Param for rank of the matrix factorization (positive).
    * Default: 10
    * @group param
    */
@@ -109,7 +109,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getRank: Int = $(rank)
 
   /**
-   * Param for number of user blocks (>= 1).
+   * Param for number of user blocks (positive).
    * Default: 10
    * @group param
    */
@@ -120,7 +120,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNumUserBlocks: Int = $(numUserBlocks)
 
   /**
-   * Param for number of item blocks (>= 1).
+   * Param for number of item blocks (positive).
    * Default: 10
    * @group param
    */
@@ -141,7 +141,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getImplicitPrefs: Boolean = $(implicitPrefs)
 
   /**
-   * Param for the alpha parameter in the implicit preference formulation (>= 0).
+   * Param for the alpha parameter in the implicit preference formulation (nonnegative).
    * Default: 1.0
    * @group param
    */
@@ -174,7 +174,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * [[StorageLevel]]. Cannot be "NONE".
+   * `StorageLevel`. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
@@ -188,7 +188,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /**
    * Param for StorageLevel for ALS model factors. Pass in a string representation of
-   * [[StorageLevel]].
+   * `StorageLevel`.
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
@@ -351,11 +351,11 @@ object ALSModel extends MLReadable[ALSModel] {
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * [[http://dx.doi.org/10.1109/ICDM.2008.22]], adapted for the blocked approach used here.
+ * http://dx.doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
- * r > 0 and 0 if r <= 0. The ratings then act as 'confidence' values related to strength of
+ * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
