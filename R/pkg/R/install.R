@@ -138,7 +138,7 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
 }
 
 default_mirror_url <- function() {
-  "http://www.apache.org/dyn/closer.lua/spark"
+  "http://apache.osuosl.org/spark"
 }
 
 hadoop_version_name <- function(hadoopVersion) {
