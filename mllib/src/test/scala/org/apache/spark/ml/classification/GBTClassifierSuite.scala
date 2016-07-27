@@ -86,6 +86,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
         compareAPIs(data, None, gbt, categoricalFeatures)
     }
   }
+  // TODO: the following, for this and gbtregressorsuite
   // categorical features + compareAPIs
   // categorical + continuous features + compare to variance-based (should be better)
   // compare to gbm test logisitic.
