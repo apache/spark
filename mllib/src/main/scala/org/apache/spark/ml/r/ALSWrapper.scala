@@ -18,10 +18,10 @@
 package org.apache.spark.ml.r
 
 import org.apache.hadoop.fs.Path
+import org.apache.spark.ml.param.shared.HasCheckpointInterval
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -30,11 +30,15 @@ private[r] class ALSWrapper private (
     val alsm: ALSModel,
     val rRatingCol: String,
     val rUserCol: String,
-    val rItemCol: String) extends MLWritable {
+    val rItemCol: String,
+    val rRegParam: Double,
+    val rMaxIter: Int) extends MLWritable {
 
   lazy val rUserFactors: DataFrame = alsm.userFactors
 
   lazy val rItemFactors: DataFrame = alsm.itemFactors
+
+  lazy val rRank: Int = alsm.rank
 
   def transform(dataset: Dataset[_]): DataFrame = {
     alsm.transform(dataset)
@@ -45,20 +49,32 @@ private[r] class ALSWrapper private (
 
 private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
-  def fit(data: DataFrame, ratingCol: String, userCol: String, itemCol: String,
-          rank: Int, regParam: Double, maxIter: Int, seed: Int): ALSWrapper = {
+  def fit(data: DataFrame, features: Array[String], rank: Int, regParam: Double, maxIter: Int,
+          implicitPrefs: Boolean, alpha: Double, nonnegative: Boolean,
+          distParams: Array[Int]): ALSWrapper = {
+
+    val ratingCol = features(0)
+    val userCol = features(1)
+    val itemCol = features(2)
+
     val als = new ALS()
-      .setRank(rank)
-      .setRegParam(regParam)
-      .setMaxIter(maxIter)
       .setRatingCol(ratingCol)
       .setUserCol(userCol)
       .setItemCol(itemCol)
-      .setSeed(seed.toLong)
+      .setRank(rank)
+      .setRegParam(regParam)
+      .setMaxIter(maxIter)
+      .setImplicitPrefs(implicitPrefs)
+      .setAlpha(alpha)
+      .setNonnegative(nonnegative)
+      .setNumBlocks(distParams(0))
+      .setNumItemBlocks(distParams(1))
+      .setCheckpointInterval(distParams(2))
+      .setSeed(distParams(3).toLong)
 
     val alsm: ALSModel = als.fit(data)
 
-    new ALSWrapper(alsm, ratingCol, userCol, itemCol)
+    new ALSWrapper(alsm, ratingCol, userCol, itemCol, regParam, maxIter)
   }
 
   override def read: MLReader[ALSWrapper] = new ALSWrapperReader
@@ -74,7 +90,9 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("rRatingCol" -> instance.rRatingCol) ~
         ("rUserCol" -> instance.rUserCol) ~
-        ("rItemCol" -> instance.rItemCol)
+        ("rItemCol" -> instance.rItemCol) ~
+        ("rRegParam" -> instance.rRegParam) ~
+        ("rMaxIter" -> instance.rMaxIter)
 
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
@@ -94,10 +112,12 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val rRatingCol = (rMetadata \ "rRatingCol").extract[String]
       val rUserCol = (rMetadata \ "rUserCol").extract[String]
       val rItemCol = (rMetadata \ "rItemCol").extract[String]
+      val rRegParam = (rMetadata \ "rRegParam").extract[Double]
+      val rMaxIter = (rMetadata \ "rMaxIter").extract[Int]
 
       val alsm = ALSModel.load(modelPath)
 
-      new ALSWrapper(alsm, rRatingCol, rUserCol, rItemCol)
+      new ALSWrapper(alsm, rRatingCol, rUserCol, rItemCol, rRegParam, rMaxIter)
     }
   }
 

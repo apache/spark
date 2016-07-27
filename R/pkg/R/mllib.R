@@ -1071,9 +1071,22 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' squares.
 #'
 #' @param data A SparkDataFrame for training
-#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', ':', '+', and '-'.
-#'                Note that operator '.' is not supported currently
+#' @param ratingCol column name for ratings
+#' @param userCol column name for user ids. Ids must be (or can be cast into) integers
+#' @param itemCol column name for item ids. Ids must be (or can be cast into) integers
+#' @param rank rank of the matrix factorization (> 0)
+#' @param reg regularization parameter (>= 0)
+#' @param nonnegative logical value indicating whether to apply nonnegativity constraints
+#' @param maxIter maximum number of iterations (>= 0)
+#' @param ... additional arguments to be passed to the method
+#'        \describe{
+#'          \item{implicitPrefs}{logical value indicating whether to use implicit preference}
+#'          \item{alpha}{alpha parameter in the implicit preference formulation (>= 0)}
+#'          \item{seed}{seed for random number generation}
+#'          \item{numUserBlocks}{number of user blocks used to parallelize computation (> 0)}
+#'          \item{numItemBlocks}{number of item blocks used to parallelize computation (> 0)}
+#'          \item{checkpointInterval}{number of checkpoint intervals (>= 1) or disable checkpoint (-1)}
+#'        }
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @name spark.als
@@ -1099,10 +1112,25 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 1.0, maxIter = 10, seed = 0) {
+                   rank = 10, reg = 1.0, maxIter = 10, ...) {
+
+            `%||%` <- function(a, b) if (!is.null(a)) a else b
+
+            args <- list(...)
+            numUserBlocks <- args$numUserBlocks %||% 10
+            numItemBlocks <- args$numItemBlocks %||% 10
+            implicitPrefs <- args$implicitPrefs %||% FALSE
+            alpha <- args$alpha %||% 1.0
+            checkpointInterval <- args$checkpointInterval %||% 10
+            seed <- args$seed %||% 0
+
+            features <- c(ratingCol, userCol, itemCol)
+            distParams <- as.integer(c(numUserBlocks, numItemBlocks, checkpointInterval, seed))
+
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
-                                "fit", data@sdf, ratingCol, userCol, itemCol,
-                                as.integer(rank), reg, as.integer(maxIter), as.integer(seed))
+                                "fit", data@sdf, features, as.integer(rank),
+                                reg, as.integer(maxIter), implicitPrefs, alpha, nonnegative,
+                                distParams)
             return(new("ALSModel", jobj = jobj))
           })
 
@@ -1118,7 +1146,11 @@ function(object, ...) {
     jobj <- object@jobj
     userFactors <- dataFrame(callJMethod(jobj, "rUserFactors"))
     itemFactors <- dataFrame(callJMethod(jobj, "rItemFactors"))
-    return(list(userFactors = userFactors, itemFactors = itemFactors))
+    rank <- callJMethod(jobj, "rRank")
+    regParam <- callJMethod(jobj, "rRegParam")
+    maxIter <- callJMethod(jobj, "rMaxIter")
+    return(list(userFactors = userFactors, itemFactors = itemFactors, rank = rank,
+                regParam = regParam, maxIter = maxIter))
 })
 
 

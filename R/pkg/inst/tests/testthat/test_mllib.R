@@ -662,6 +662,8 @@ test_that("spark.als", {
   df <- createDataFrame(data, c("user", "item", "rating"))
   model <- spark.als(df, ratingCol = "rating", userCol = "user", itemCol = "item",
                      rank = 10, maxIter = 5, seed = 0, reg = 0.1)
+  stats <- summary(model)
+  expect_equal(stats$rank, 10)
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
   predictions <- collect(predict(model, test))
 
@@ -673,8 +675,8 @@ test_that("spark.als", {
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   model2 <- read.ml(modelPath)
-  stats <- summary(model)
   stats2 <- summary(model2)
+  expect_equal(stats2$maxIter, 5)
   expect_equal(collect(stats$userFactors), collect(stats2$userFactors))
   expect_equal(collect(stats$itemFactors), collect(stats2$itemFactors))
 
