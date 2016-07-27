@@ -477,7 +477,7 @@ import org.apache.spark.*;
 import org.apache.spark.streaming.api.java.*;
 
 SparkConf conf = new SparkConf().setAppName(appName).setMaster(master);
-JavaStreamingContext ssc = new JavaStreamingContext(conf, Duration(1000));
+JavaStreamingContext ssc = new JavaStreamingContext(conf, new Duration(1000));
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
