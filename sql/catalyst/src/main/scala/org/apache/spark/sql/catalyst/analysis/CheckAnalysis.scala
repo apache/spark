@@ -267,32 +267,28 @@ trait CheckAnalysis extends PredicateHelper {
           case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
 
-          case _: Union | _: SetOperation =>
-            if (operator.children.length > 1) {
-              val dataTypes = operator.children.head.output.map(_.dataType)
-              val firstError = operator.children.find(_.output.map(_.dataType) != dataTypes)
-              if (firstError.isDefined) {
-                val tableIndex = operator.children.indexOf(firstError.get) + 1
-                if (dataTypes.length != firstError.get.output.length) {
-                  failAnalysis(
-                    s"""
-                      |${operator.nodeName} can only be performed on tables with the same number
-                      |of columns, but the first table has ${dataTypes.length} columns and
-                      |the ${if (tableIndex == 2) "second" else tableIndex + "th"} table has
-                      |${firstError.get.output.length} columns
-                    """.stripMargin.replace("\n", " ").trim())
-                } else {
-                  val columnIndex = firstError.get.output.map(_.dataType).zipWithIndex.find {
-                    case (dataType, i) => dataType != dataTypes(i)
-                  }.get._2 + 1
+          case _: Union | _: SetOperation if operator.children.length > 1 =>
+            def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
+            val ref = dataTypes(operator.children.head)
+            operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
+              // Check the number of columns
+              if (child.output.length != ref.length) {
+                failAnalysis(
+                  s"""
+                    |${operator.nodeName} can only be performed on tables with the same number
+                    |of columns, but the first table has ${ref.length} columns and
+                    |the ${if (ti == 0) "second" else (ti + 2) + "th"} table has
+                    |${child.output.length} columns
+                  """.stripMargin.replace("\n", " ").trim())
+              }
+              // Check if the data types match.
+              dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
+                if (dt1 != dt2) {
                   failAnalysis(
                     s"""
                       |${operator.nodeName} can only be performed on tables with the compatible
-                      |column types. The first table has '[${dataTypes.mkString(", ")}]'
-                      |and ${if (tableIndex == 2) "second" else tableIndex + "th"} table has
-                      |'[${firstError.get.output.map(_.dataType).mkString(", ")}]'. The
-                      |${if (columnIndex == 1) "first" else columnIndex + "th"} column is
-                      |incompatible
+                      |column types. $dt1 <> $dt2 at ${ci + 1}th column of
+                      |${if (ti == 0) "second" else (ti + 2) + "th"} table
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
