@@ -111,7 +111,7 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
-    transformSchema(dataset.schema, logging = true)
+    transformSchema(dataset.schema)
     val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
@@ -170,6 +170,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema)
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
 
