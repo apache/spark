@@ -25,12 +25,23 @@
 #' Users can specify a desired Hadoop version, the remote mirror site, and
 #' the directory where the package is installed locally.
 #'
-#' @param hadoopVersion Version of Hadoop to install. Default is "without", Spark's
-#'                      "Hadoop free" build. See
-#'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
-#'                      "Hadoop Free" Build} for more information. It can also be version number
-#'                      in the format of "int.int", e.g. "2.7", or other patched version names, e.g.
-#'                      "cdh4"
+#' The full url of remote file is inferred from \code{mirrorUrl} and \code{hadoopVersion}.
+#' \code{mirrorUrl} specifies the remote path to a Spark folder. It is followed by a subfolder
+#' named after the Spark version (that corresponds to SparkR), and then the tar filename.
+#' The filename is composed of four parts, i.e. [Spark version]-bin-[Hadoop version].tgz.
+#' For example, the full path for a Spark 2.0.0 package for Hadoop 2.7 from
+#' \code{http://apache.osuosl.org} has path:
+#' \code{http://apache.osuosl.org/spark/spark-2.0.0/spark-2.0.0-bin-hadoop2.7.tgz}.
+#' For \code{hadoopVersion = "without"}, [Hadoop version] in the filename is then
+#' \code{without-hadoop}.
+#'
+#' @param hadoopVersion Version of Hadoop to install. Default is \code{"2.7"}. It can take other
+#'                      version number in the format of "int.int".
+#'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
+#'                      See
+#'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}
+#'                      {"Hadoop Free" Build} for more information.
+#'                      Other patched version names can also be used, e.g. \code{"cdh4"}
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
 #'                  \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
 #' @param localDir a local directory where Spark is installed. The directory contains
@@ -58,7 +69,7 @@
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
 #' \href{http://spark.apache.org/downloads.html}{Apache Spark}
-install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
+install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   version <- paste0("spark-", packageVersion("SparkR"))
   hadoopVersion <- tolower(hadoopVersion)
@@ -100,7 +111,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
     }
 
     packageRemotePath <- paste0(
-      file.path(mirrorUrl, "spark", version, packageName), ".tgz")
+      file.path(mirrorUrl, version, packageName), ".tgz")
     fmt <- paste("Installing Spark %s for Hadoop %s.",
                  "Downloading from:\n- %s",
                  "Installing to:\n- %s", sep = "\n")
@@ -127,7 +138,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
 }
 
 default_mirror_url <- function() {
-  "http://www.apache.org/dyn/closer.lua"
+  "http://www.apache.org/dyn/closer.lua/spark"
 }
 
 hadoop_version_name <- function(hadoopVersion) {
