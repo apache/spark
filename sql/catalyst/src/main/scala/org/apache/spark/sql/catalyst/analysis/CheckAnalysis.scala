@@ -253,26 +253,6 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case s @ SetOperation(left, right) if left.output.length != right.output.length =>
-            failAnalysis(
-              s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-                s"but the left table has ${left.output.length} columns and the right has " +
-                s"${right.output.length}")
-
-          case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
-            val firstError = s.children.find(_.output.length != s.children.head.output.length).get
-            failAnalysis(
-              s"Unions can only be performed on tables with the same number of columns, " +
-                s"but one table has '${firstError.output.length}' columns and another table has " +
-                s"'${s.children.head.output.length}' columns")
-
-          case Union(c) if c.exists(_.output.map(_.dataType) != c.head.output.map(_.dataType)) =>
-            val firstError = c.find(_.output.map(_.dataType) != c.head.output.map(_.dataType)).get
-            failAnalysis(
-              s"Unions can only be performed on tables with the compatible column types, " +
-                s"but one table has '[${c.head.output.map(_.dataType).mkString(", ")}]' " +
-                s"and another table has '[${firstError.output.map(_.dataType).mkString(", ")}]'")
-
           case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
 
           case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
@@ -286,6 +266,37 @@ trait CheckAnalysis extends PredicateHelper {
 
           case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+
+          case _: Union | _: SetOperation =>
+            if (operator.children.length > 1) {
+              val dataTypes = operator.children.head.output.map(_.dataType)
+              val firstError = operator.children.find(_.output.map(_.dataType) != dataTypes)
+              if (firstError.isDefined) {
+                val tableIndex = operator.children.indexOf(firstError.get) + 1
+                if (dataTypes.length != firstError.get.output.length) {
+                  failAnalysis(
+                    s"""
+                      |${operator.nodeName} can only be performed on tables with the same number
+                      |of columns, but the first table has ${dataTypes.length} columns and
+                      |the ${if (tableIndex == 2) "second" else tableIndex + "th"} table has
+                      |${firstError.get.output.length} columns
+                    """.stripMargin.replace("\n", " ").trim())
+                } else {
+                  val columnIndex = firstError.get.output.map(_.dataType).zipWithIndex.find {
+                    case (dataType, i) => dataType != dataTypes(i)
+                  }.get._2 + 1
+                  failAnalysis(
+                    s"""
+                      |${operator.nodeName} can only be performed on tables with the compatible
+                      |column types. The first table has '[${dataTypes.mkString(", ")}]'
+                      |and ${if (tableIndex == 2) "second" else tableIndex + "th"} table has
+                      |'[${firstError.get.output.map(_.dataType).mkString(", ")}]'. The
+                      |${if (columnIndex == 1) "first" else columnIndex + "th"} column is
+                      |incompatible
+                    """.stripMargin.replace("\n", " ").trim())
+                }
+              }
+            }
 
           case _ => // Fallbacks to the following checks
         }
