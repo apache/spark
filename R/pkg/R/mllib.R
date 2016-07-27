@@ -809,6 +809,8 @@ read.ml <- function(path) {
       return(new("IsotonicRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GaussianMixtureWrapper")) {
       return(new("GaussianMixtureModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.ALSWrapper")) {
+      return(new("ALSModel", jobj = jobj))
   } else {
     stop(paste("Unsupported model: ", jobj))
   }
@@ -1079,7 +1081,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(ratings)
-#' model <- spark.als(df, "user", "item")
+#' model <- spark.als(df, "rating", "user", "item")
 #'
 #' # get a summary of the model
 #' summary(model)
@@ -1096,13 +1098,28 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' }
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
-          function(data, ratingCol = "score", userCol = "user", itemCol = "item",
+          function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
                    rank = 10, reg = 1.0, maxIter = 10) {
             jobj <- callJStatic("org.apache.spark.ml.r.ALSWrapper",
                                 "fit", data@sdf, ratingCol, userCol, itemCol,
-                                rank, reg, maxIter)
+                                as.integer(rank), reg, as.integer(maxIter))
             return(new("ALSModel", jobj = jobj))
           })
+
+# Returns a summary of the ALS model produced by spark.als.
+
+#' @param object A fitted ALS model
+#' @return \code{summary} returns a list containing the estimated user and item factors
+#' @rdname spark.als
+#' @export
+#' @note summary(ALSModel) since 2.0.0
+setMethod("summary", signature(object = "ALSModel"),
+function(object, ...) {
+    jobj <- object@jobj
+    userFactors <- dataFrame(callJMethod(jobj, "userFactors"))
+    itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
+    return(list(userFactors = userFactors, itemFactors = itemFactors))
+})
 
 
 # Makes predictions from an ALS model or a model produced by spark.als.
