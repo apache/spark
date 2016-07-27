@@ -110,7 +110,7 @@ install.spark <- function(hadoopVersion = "without", mirrorUrl = NULL,
     msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                    packageRemotePath, packageLocalDir)
     message(msg)
-    
+
     tryCatch(download.file(packageRemotePath, packageLocalPath),
              error = function(e) {
                msg <- paste0("Fetch failed from ", mirrorUrl, ".",
