@@ -200,24 +200,6 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
   }
 
-  private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
-    ruleTest(Seq(rule), initial, transformed)
-  }
-
-  private def ruleTest(
-      rules: Seq[Rule[LogicalPlan]],
-      initial: Expression,
-      transformed: Expression): Unit = {
-    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-    val analyzer = new RuleExecutor[LogicalPlan] {
-      override val batches = Seq(Batch("Resolution", FixedPoint(3), rules: _*))
-    }
-
-    comparePlans(
-      analyzer.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
-      Project(Seq(Alias(transformed, "a")()), testRelation))
-  }
-
   test("cast NullType for expressions that implement ExpectsInputTypes") {
     import TypeCoercionSuite._
 
