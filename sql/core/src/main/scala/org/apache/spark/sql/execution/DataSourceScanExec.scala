@@ -187,7 +187,13 @@ case class FileSourceScanExec(
     "InputPaths" -> relation.location.paths.mkString(", "))
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val selectedPartitions = relation.location.listFiles(partitionFilters)
+    val filteredPartitions = relation.fileFormat.filterPartitions(
+      dataFilters,
+      outputSchema,
+      relation.sparkSession.sparkContext.hadoopConfiguration,
+      relation.location.allFiles(),
+      relation.location.paths.head,
+      relation.location.listFiles(partitionFilters))
 
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
@@ -201,9 +207,9 @@ case class FileSourceScanExec(
 
     relation.bucketSpec match {
       case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
-        createBucketedReadRDD(bucketing, readFile, selectedPartitions, relation)
+        createBucketedReadRDD(bucketing, readFile, filteredPartitions, relation)
       case _ =>
-        createNonBucketedReadRDD(readFile, selectedPartitions, relation)
+        createNonBucketedReadRDD(readFile, filteredPartitions, relation)
     }
   }
 
