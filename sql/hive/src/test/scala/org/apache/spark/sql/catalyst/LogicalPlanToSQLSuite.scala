@@ -934,19 +934,19 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
-  test("mapjoin_subquery") {
+  test("broadcast join") {
     checkSQL(
       """
-        |SELECT subq.key1, z.value
+        |SELECT /*+ MAPJOIN(srcpart) */ subq.key1, z.value
         |FROM (SELECT x.key as key1, x.value as value1, y.key as key2, y.value as value2
         |      FROM src1 x JOIN src y ON (x.key = y.key)) subq
         |JOIN srcpart z ON (subq.key1 = z.key and z.ds='2008-04-08' and z.hr=11)
         |ORDER BY subq.key1, z.value
       """.stripMargin,
-      "mapjoin_subquery")
+      "broadcast_join_subquery")
   }
 
-  test("subq2") {
+  test("subquery using single table") {
     checkSQL(
       """
         |SELECT a.k, a.c
@@ -958,7 +958,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "subq2")
   }
 
-  test("subquery_exists") {
+  test("correlated subqueries using EXISTS on where clause") {
     checkSQL(
       """
         |select *
@@ -981,7 +981,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "subquery_exists_2")
   }
 
-  test("subquery_exists_having") {
+  test("correlated subqueries using EXISTS on having clause") {
     checkSQL(
       """
         |select b.key, count(*)
@@ -1017,7 +1017,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "subquery_exists_having_3")
   }
 
-  test("subquery_notexists") {
+  test("correlated subqueries using NOT EXISTS on where clause") {
     checkSQL(
       """
         |select *
@@ -1026,7 +1026,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |                  from src a
         |                  where b.value = a.value  and a.key = b.key and a.value > 'val_2')
       """.stripMargin,
-      "subquery_notexists_1")
+      "subquery_not_exists_1")
 
     checkSQL(
       """
@@ -1036,10 +1036,10 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |                  from src a
         |                  where b.value = a.value and a.value > 'val_2')
       """.stripMargin,
-      "subquery_notexists_2")
+      "subquery_not_exists_2")
   }
 
-  test("subquery_notexists_having") {
+  test("correlated subqueries using NOT EXISTS on having clause") {
     checkSQL(
       """
         |select *
@@ -1049,7 +1049,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |                   from src a
         |                   where b.value = a.value  and a.key = b.key and a.value > 'val_12')
       """.stripMargin,
-      "subquery_notexists_having_1")
+      "subquery_not_exists_having_1")
 
     checkSQL(
       """
@@ -1060,10 +1060,10 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |                   from src a
         |                   where b.value = a.value and a.value > 'val_12')
       """.stripMargin,
-      "subquery_notexists_having_2")
+      "subquery_not_exists_having_2")
   }
 
-  test("subquery_in_having") {
+  test("subquery using IN on having clause") {
     checkSQL(
       """
         |select key, count(*)
