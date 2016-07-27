@@ -1271,7 +1271,7 @@ setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark
 #' @export
 setGeneric("fitted")
 
-#' @rdname spark.multilayerPerceptronClassifier
+#' @rdname spark.mlp
 #' @export
 setGeneric("spark.mlp", function(data, formula, ...) { standardGeneric("spark.mlp") })
 
