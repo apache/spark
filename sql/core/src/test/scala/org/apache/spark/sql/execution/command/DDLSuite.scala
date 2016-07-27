@@ -252,10 +252,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  private def createDataSourceTable(
+  private def checkSchemaInCreatedDataSourceTable(
       path: File,
       userSpecifiedSchema: Option[String],
-      userSpecifiedPartitionCols: Option[String]): (StructType, Seq[String]) = {
+      userSpecifiedPartitionCols: Option[String],
+      expectedSchema: StructType,
+      expectedPartitionCols: Seq[String]): Unit = {
     var tableSchema = StructType(Nil)
     var partCols = Seq.empty[String]
 
@@ -278,7 +280,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
       partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
     }
-    (tableSchema, partCols)
+    assert(tableSchema == expectedSchema)
+    assert(partCols == expectedPartitionCols)
   }
 
   test("Create partitioned data source table without user specified schema") {
@@ -291,13 +294,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTempPath { pathToPartitionedTable =>
         df.write.format("parquet").partitionBy("num")
           .save(pathToPartitionedTable.getCanonicalPath)
-        val (tableSchema, partCols) =
-          createDataSourceTable(
-            pathToPartitionedTable,
-            userSpecifiedSchema = None,
-            userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema == new StructType().add("str", StringType).add("num", IntegerType))
-        assert(partCols == Seq("num"))
+        checkSchemaInCreatedDataSourceTable(
+          pathToPartitionedTable,
+          userSpecifiedSchema = None,
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("str", StringType).add("num", IntegerType),
+          expectedPartitionCols = Seq("num"))
       }
     }
   }
@@ -312,13 +314,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTempPath { pathToPartitionedTable =>
         df.write.format("parquet").partitionBy("num")
           .save(pathToPartitionedTable.getCanonicalPath)
-        val (tableSchema, partCols) =
-          createDataSourceTable(
-            pathToPartitionedTable,
-            userSpecifiedSchema = Option("num int, str string"),
-            userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema == new StructType().add("num", IntegerType).add("str", StringType))
-        assert(partCols.mkString(", ") == partitionCols.getOrElse(""))
+        checkSchemaInCreatedDataSourceTable(
+          pathToPartitionedTable,
+          userSpecifiedSchema = Option("num int, str string"),
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
   }
@@ -332,13 +333,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
         df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
-        val (tableSchema, partCols) =
-          createDataSourceTable(
-            pathToNonPartitionedTable,
-            userSpecifiedSchema = None,
-            userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema == new StructType().add("num", IntegerType).add("str", StringType))
-        assert(partCols.isEmpty)
+        checkSchemaInCreatedDataSourceTable(
+          pathToNonPartitionedTable,
+          userSpecifiedSchema = None,
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedPartitionCols = Seq.empty[String])
       }
     }
   }
@@ -352,13 +352,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     Seq(Option("num"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
         df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
-        val (tableSchema, partCols) =
-          createDataSourceTable(
-            pathToNonPartitionedTable,
-            userSpecifiedSchema = Option("num int, str string"),
-            userSpecifiedPartitionCols = partitionCols)
-        assert(tableSchema == new StructType().add("num", IntegerType).add("str", StringType))
-        assert(partCols.mkString(", ") == partitionCols.getOrElse(""))
+        checkSchemaInCreatedDataSourceTable(
+          pathToNonPartitionedTable,
+          userSpecifiedSchema = Option("num int, str string"),
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
   }
