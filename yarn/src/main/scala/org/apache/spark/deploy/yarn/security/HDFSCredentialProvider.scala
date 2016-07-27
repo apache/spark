@@ -33,7 +33,7 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
-private[yarn] class HDFSCredentialProvider extends ServiceCredentialProvider with Logging {
+private[security] class HDFSCredentialProvider extends ServiceCredentialProvider with Logging {
 
   private val sparkConf = new SparkConf()
 

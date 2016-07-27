@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 /**
- * A credential provider for a service. A user must implement this if they need to access a
+ * A credential provider for a service. User must implement this if they need to access a
  * secure service from Spark.
  */
 trait ServiceCredentialProvider {

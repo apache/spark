@@ -311,7 +311,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Start a thread to periodically update the current user's credentials with new credentails so
+   * Start a thread to periodically update the current user's credentials with new credentials so
    * that access to security service do not fail.
    */
   private[spark] def startCredentialUpdater(conf: SparkConf) {}

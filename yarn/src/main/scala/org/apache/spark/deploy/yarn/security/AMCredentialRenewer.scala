@@ -34,8 +34,8 @@ import org.apache.spark.util.ThreadUtils
 /**
  * The following methods are primarily meant to make sure long-running apps like Spark
  * Streaming apps can run without interruption while access security services. The
- * scheduleLoginFromKeytab method is called on the driver when the
- * CoarseGrainedScheduledBackend starts up. This method wakes up a thread that logs into the KDC
+ * scheduleLoginFromKeytab method is called on the AM to get the new credentials.
+ * This method wakes up a thread that logs into the KDC
  * once 75% of the renewal interval of the original credentials used for the container
  * has elapsed. It then obtain new credentials and writes them to HDFS in a
  * pre-specified location - the prefix of which is specified in the sparkConf by
@@ -44,10 +44,10 @@ import org.apache.spark.util.ThreadUtils
  * timestamp1, timestamp2 here indicates the time of next update for CredentialUpdater.
  * After this, the credentials are renewed once 75% of the new tokens renewal interval has elapsed.
  *
- * On the executor side, the updateCredentialsIfRequired method is called once 80% of the
- * validity of the original credentials has elapsed. At that time the executor finds the
- * credentials file with the latest timestamp and checks if it has read those credentials
- * before (by keeping track of the suffix of the last file it read). If a new file has
+ * On the executor and driver (yarn client mode) side, the updateCredentialsIfRequired method is
+ * called once 80% of the validity of the original credentials has elapsed. At that time the
+ * executor finds the credentials file with the latest timestamp and checks if it has read those
+ * credentials before (by keeping track of the suffix of the last file it read). If a new file has
  * appeared, it will read the credentials and update the currently running UGI with it. This
  * process happens again once 80% of the validity of this has expired.
  */
@@ -185,6 +185,9 @@ private[yarn] class AMCredentialRenewer(
       // time, this will trigger next renewal immediately. Also set next update time to current
       // time. There still has a gap between token renewal and update will potentially introduce
       // issue.
+      logWarning(s"Next credential renewal time ($nearestNextRenewalTime) is earlier than " +
+        s"current time ($currTime), which is unexpected, please check your credential renewal " +
+        "related configurations in the target services.")
       timeOfNextRenewal = currTime
       currTime
     } else {

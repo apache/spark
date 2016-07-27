@@ -34,9 +34,9 @@ import org.apache.spark.util.Utils
  * [[HDFSCredentialProvider]], [[HiveCredentialProvider]] and [[HBaseCredentialProvider]] will
  * be loaded in if not explicitly disabled, any plugged-in credential provider wants to be
  * managed by ConfigurableCredentialManager needs to implement [[ServiceCredentialProvider]]
- * interface and put into resources to be loaded by ServiceLoader.
+ * interface and put into resources/META-INF/services to be loaded by ServiceLoader.
  *
- * Also the specific credential provider is controlled by
+ * Also each credential provider is controlled by
  * spark.yarn.security.credentials.{service}.enabled, it will not be loaded in if set to false.
  */
 private[yarn] final class ConfigurableCredentialManager (

@@ -400,7 +400,7 @@ private[spark] class Client(
     }
 
     // If we use principal and keytab to login, also credentials can be renewed some time
-    // after current time, we should pass the next renewal and updating time to delegation token
+    // after current time, we should pass the next renewal and updating time to credential
     // renewer and updater.
     if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
       nearestTimeOfNextRenewal != Long.MaxValue) {

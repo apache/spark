@@ -26,12 +26,11 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.internal.Logging
 
-private[yarn] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
+private[security] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
 
   override def serviceName: String = "hbase"
 
   override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long] = {
-
     try {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
       val obtainToken = mirror.classLoader.
