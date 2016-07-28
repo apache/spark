@@ -145,7 +145,7 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
   mirrorUrl <- default_mirror_url()
   success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                  packageName, packageLocalPath)
-  if (sucess) {
+  if (success) {
     return(packageLocalPath)
   } else {
     msg <- sprintf(paste("Unable to download Spark %s for Hadoop %s.",
@@ -163,10 +163,11 @@ get_preferred_mirror <- function() {
   linePreferred <- textLines[rowNum]
   matchInfo <- regexpr("\"[A-Za-z][A-Za-z0-9+-.]*://.+\"", linePreferred)
   if (matchInfo != -1) {
-    message(sprintf("Preferred mirror site found: %s", mirrorPreferred))
     startPos <- matchInfo + 1
-    endPos <- startPos + attr(matchInfo, "match.length") - 2
-    mirrorPreferred <- linePreferred[startPos:endPos]
+    endPos <- matchInfo + attr(matchInfo, "match.length") - 2
+    mirrorPreferred <- base::substr(linePreferred, startPos, endPos)
+    mirrorPreferred <- paste0(mirrorPreferred, "spark")
+    message(sprintf("Preferred mirror site found: %s", mirrorPreferred))
   } else {
     mirrorPreferred <- NULL
   }
