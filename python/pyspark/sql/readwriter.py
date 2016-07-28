@@ -96,7 +96,7 @@ class DataFrameReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        :param schema: a StructType object
+        :param schema: a :class:`pyspark.sql.types.StructType` object
         """
         if not isinstance(schema, StructType):
             raise TypeError("schema should be StructType")

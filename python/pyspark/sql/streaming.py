@@ -269,7 +269,7 @@ class DataStreamReader(OptionUtils):
 
         .. note:: Experimental.
 
-        :param schema: a StructType object
+        :param schema: a :class:`pyspark.sql.types.StructType` object
 
         >>> s = spark.readStream.schema(sdf_schema)
         """

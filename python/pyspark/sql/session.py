@@ -47,7 +47,7 @@ def _monkey_patch_RDD(sparkSession):
 
         This is a shorthand for ``spark.createDataFrame(rdd, schema, sampleRatio)``
 
-        :param schema: a StructType or list of names of columns
+        :param schema: a :class:`pyspark.sql.types.StructType` or list of names of columns
         :param samplingRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
@@ -307,7 +307,7 @@ class SparkSession(object):
         Infer schema from list of Row or tuple.
 
         :param data: list of Row or tuple
-        :return: StructType
+        :return: :class:`pyspark.sql.types.StructType`
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
@@ -326,7 +326,7 @@ class SparkSession(object):
 
         :param rdd: an RDD of Row or tuple
         :param samplingRatio: sampling ratio, or no sampling (default)
-        :return: StructType
+        :return: :class:`pyspark.sql.types.StructType`
         """
         first = rdd.first()
         if not first:
@@ -415,8 +415,9 @@ class SparkSession(object):
         or :class:`namedtuple`, or :class:`dict`.
 
         When ``schema`` is :class:`pyspark.sql.types.DataType` or datatype string, it must match the
-        real data, or an exception will be thrown at runtime. If the given schema is not StructType,
-        it will be wrapped into a StructType as its only field, and the field name will be "value",
+        real data, or an exception will be thrown at runtime. If the given schema is not
+        :class:`pyspark.sql.types.StructType`, it will be wrapped into a
+        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
         each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
@@ -434,8 +435,9 @@ class SparkSession(object):
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.0
-           The schema parameter can be a DataType or a datatype string after 2.0. If it's not a
-           StructType, it will be wrapped into a StructType and each record will also be wrapped
+           The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a datatype
+           string after 2.0. If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped
+           into a :class:`pyspark.sql.types.StructType` and each record will also be wrapped
            into a tuple.
 
         >>> l = [('Alice', 1)]

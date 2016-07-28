@@ -958,7 +958,8 @@ def months_between(date1, date2):
 @since(1.5)
 def to_date(col):
     """
-    Converts the column of StringType or TimestampType into DateType.
+    Converts the column of :class:`pyspark.sql.types.StringType` or
+    :class:`pyspark.sql.types.TimestampType` into :class:`pyspark.sql.types.DateType`.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(to_date(df.t).alias('date')).collect()
@@ -1074,18 +1075,18 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
     the order of months are not supported.
 
-    The time column must be of TimestampType.
+    The time column must be of :class:`pyspark.sql.types.TimestampType`.
 
     Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
-    If the `slideDuration` is not provided, the windows will be tumbling windows.
+    If the ``slideDuration`` is not provided, the windows will be tumbling windows.
 
     The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
     window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
     past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
 
     The output column will be a struct called 'window' by default with the nested columns 'start'
-    and 'end', where 'start' and 'end' will be of `TimestampType`.
+    and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
 
     >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
     >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
@@ -1367,7 +1368,7 @@ def locate(substr, str, pos=1):
     could not be found in str.
 
     :param substr: a string
-    :param str: a Column of StringType
+    :param str: a Column of :class:`pyspark.sql.types.StringType`
     :param pos: start position (zero based)
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
@@ -1506,7 +1507,7 @@ def bin(col):
 @ignore_unicode_prefix
 @since(1.5)
 def hex(col):
-    """Computes hex value of the given column, which could be StringType,
+    """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
     BinaryType, IntegerType or LongType.
 
     >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
