@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Encoder, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -279,7 +280,16 @@ private[sql] case class RowDataSourceScanExec(
   }
 }
 
-/** Physical plan node for scanning data from HadoopFsRelations. */
+/**
+ * Physical plan node for scanning data from HadoopFsRelations.
+ *
+ * @param relation The file-based relation to scan.
+ * @param output Output attributes of the scan.
+ * @param outputSchema Output schema of the scan.
+ * @param partitionFilters Predicates to use for partition pruning.
+ * @param dataFilters Data source filters to use for filtering data within partitions.
+ * @param metastoreTableIdentifier
+ */
 private[sql] case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
@@ -298,7 +308,7 @@ private[sql] case class FileSourceScanExec(
     false
   }
 
-  override val outputPartitioning = {
+  override val outputPartitioning: Partitioning = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
