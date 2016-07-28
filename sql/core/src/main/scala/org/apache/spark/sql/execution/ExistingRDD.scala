@@ -279,7 +279,7 @@ private[sql] case class RowDataSourceScanExec(
   }
 }
 
-/** Physical plan node for scanning data from files. */
+/** Physical plan node for scanning data from HadoopFsRelations. */
 private[sql] case class FileSourceScanExec(
     @transient relation: HadoopFsRelation,
     output: Seq[Attribute],
@@ -321,7 +321,7 @@ private[sql] case class FileSourceScanExec(
 
   override val metadata: Map[String, String] = Map(
     "Format" -> relation.fileFormat.toString,
-    "ReadSchema" -> outputSchema.simpleString,
+    "ReadSchema" -> outputSchema.catalogString,
     DataSourceScanExec.PUSHED_FILTERS -> dataFilters.mkString("[", ", ", "]"),
     DataSourceScanExec.INPUT_PATHS -> relation.location.paths.mkString(", "))
 
