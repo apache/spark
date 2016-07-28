@@ -209,6 +209,7 @@ case class WindowExec(
               new OffsetWindowFunctionFrame(
                 target,
                 ordinal,
+                // OFFSET frame functions are guaranteed be OffsetWindowFunctions.
                 functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
