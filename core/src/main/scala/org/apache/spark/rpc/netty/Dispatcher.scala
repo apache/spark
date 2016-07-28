@@ -41,9 +41,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val inbox = new Inbox(ref, endpoint)
   }
 
-  private val endpoints: ConcurrentMap[String, EndpointData] = 
+  private val endpoints: ConcurrentMap[String, EndpointData] =
     new ConcurrentHashMap[String, EndpointData]
-  private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] = 
+  private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
     new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
   // Track the receivers whose inboxes may contain messages.

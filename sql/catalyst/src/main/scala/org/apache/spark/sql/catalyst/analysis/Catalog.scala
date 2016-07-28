@@ -80,7 +80,7 @@ trait Catalog {
 }
 
 class SimpleCatalog(val conf: CatalystConf) extends Catalog {
-  private[this] val tables: ConcurrentMap[String, LogicalPlan] = 
+  private[this] val tables: ConcurrentMap[String, LogicalPlan] =
     new ConcurrentHashMap[String, LogicalPlan]
 
   override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
