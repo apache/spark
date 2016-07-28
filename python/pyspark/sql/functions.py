@@ -1781,6 +1781,9 @@ def udf(f, returnType=StringType()):
     duplicate invocations may be eliminated or the function may even be invoked more times than
     it is present in the query.
 
+    :param f: python function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
+
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
     >>> df.select(slen(df.name).alias('slen')).collect()
