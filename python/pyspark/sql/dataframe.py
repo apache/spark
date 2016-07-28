@@ -196,7 +196,7 @@ class DataFrame(object):
     @property
     @since(1.3)
     def schema(self):
-        """Returns the schema of this :class:`DataFrame` as a :class:`types.StructType`.
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
         >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
