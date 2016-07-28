@@ -101,4 +101,25 @@ class SubstituteHintsSuite extends AnalysisTest {
           .join(Hint("MAPJOIN", Seq("TaBlE2"), table("TaBlE2").as("u").select(b))).select(a)),
       BroadcastHint(testRelation).join(BroadcastHint(testRelation2).select(b)).select(a))
   }
+
+  test("deep self join") {
+    checkAnalysis(
+      Hint("MAPJOIN", Seq("TaBlE"),
+        table("TaBlE").join(table("TaBlE")).join(table("TaBlE")).join(table("TaBlE")).select(a)),
+      BroadcastHint(testRelation).join(testRelation).join(testRelation).join(testRelation)
+        .select(a))
+  }
+
+  test("subquery should be ignored") {
+    checkAnalysis(
+      Hint("MAPJOIN", Seq("TaBlE"),
+        table("TaBlE").select(a).as("x").join(table("TaBlE")).select(a)),
+      testRelation.select(a).join(BroadcastHint(testRelation)).select(a))
+
+    checkAnalysis(
+      Hint("MAPJOIN", Seq("TaBlE"),
+        table("TaBlE").as("t").select(a).as("x")
+          .join(table("TaBlE2").as("t2")).select(a)),
+      testRelation.select(a).join(testRelation2).select(a))
+  }
 }

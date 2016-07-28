@@ -1114,15 +1114,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       "SELECT /*+ MAPJOIN(parquet_t0) */ * FROM parquet_t0 as a",
       "broadcast_hint_single_table_3")
-
-    checkSQL(
-      """
-        |SELECT /*+ MAPJOIN(parquet_t0) */ *
-        |FROM (SELECT id tid FROM parquet_t0) T
-        |JOIN (SELECT id uid FROM parquet_t0) U
-        |ON tid=uid
-      """.stripMargin,
-      "broadcast_hint_single_4")
   }
 
   test("broadcast hint on multiple tables") {
@@ -1132,28 +1123,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       "SELECT /*+ MAPJOIN(parquet_t1) */ * FROM parquet_t0, parquet_t1",
       "broadcast_hint_multiple_table_2")
-  }
-
-  test("broadcast hint on nested query 1") {
-    checkSQL(
-      """
-        |SELECT /*+ MAPJOIN(parquet_t0) */ *
-        |FROM (SELECT id tid FROM parquet_t0) T
-        |JOIN (SELECT key uid FROM parquet_t1) U
-        |ON tid=uid
-      """.stripMargin,
-      "broadcast_hint_nested_query_1")
-  }
-
-  test("broadcast hint on nested query 2") {
-    checkSQL(
-      """
-        |SELECT /*+ MAPJOIN(parquet_t1) */ tid
-        |FROM (SELECT id tid FROM parquet_t0) T
-        |JOIN (SELECT key uid FROM parquet_t1) U
-        |ON tid=uid
-      """.stripMargin,
-      "broadcast_hint_nested_query_2")
   }
 
   test("multiple broadcast hints on multiple tables") {
@@ -1218,8 +1187,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSQL(
       s"""
          |SELECT /*+ MAPJOIN(parquet_t1) */
-         |       count(*) AS cnt, key % 5 AS k1, key - 5 AS k2,grouping_id() AS k3
-         |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
+         |       count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id() AS k3
+         |FROM parquet_t1
+         |GROUP BY key % 5, key - 5
          |GROUPING SETS (key % 5, key - 5)
       """.stripMargin,
       "broadcast_hint_groupingset")

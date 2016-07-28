@@ -1801,15 +1801,30 @@ class Analyzer(
    */
   object SubstituteHints extends Rule[LogicalPlan] {
     val BROADCAST_HINT_NAMES = Set("BROADCAST", "BROADCASTJOIN", "MAPJOIN")
+
+    import scala.collection.mutable.Set
+    private def appendAllDescendant(set: Set[LogicalPlan], plan: LogicalPlan): Unit = {
+      set += plan
+      plan.children.foreach { child => appendAllDescendant(set, child) }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformDown {
         case h @ Hint(name, parameters, child) if BROADCAST_HINT_NAMES.contains(name.toUpperCase) =>
           var resolvedChild = child
           for (table <- parameters) {
             var stop = false
+            val skipNodeSet = scala.collection.mutable.Set.empty[LogicalPlan]
             resolvedChild = resolvedChild.transformDown {
+              case n if skipNodeSet.contains(n) =>
+                skipNodeSet -= n
+                n
+              case p @ Project(_, _) if p != resolvedChild =>
+                appendAllDescendant(skipNodeSet, p)
+                skipNodeSet -= p
+                p
               case r @ BroadcastHint(UnresolvedRelation(t, _))
-                if !stop && resolver(t.table, table) =>
+                  if !stop && resolver(t.table, table) =>
                 stop = true
                 r
               case r @ UnresolvedRelation(t, alias) if !stop && resolver(t.table, table) =>
