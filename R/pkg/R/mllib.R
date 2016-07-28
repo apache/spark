@@ -342,10 +342,9 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.isotonicRegression since 2.1.0
-#' @seealso \link{transform}, \link{read.ml}, \link{write.ml}
 setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, isotonic = TRUE, featureIndex = 0) {
-            formula <- paste(deparse(formula), collapse = "")
+            formula <- paste0(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
             data@sdf, formula, as.logical(isotonic), as.integer(featureIndex))
             return(new("IsotonicRegressionModel", jobj = jobj))
