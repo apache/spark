@@ -307,6 +307,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
           })
 
 #' Isotonic Regression Model
+#'
 #' Fits an Isotonic Regression model against a Spark DataFrame, similarly to R's isoreg().
 #' Users can print, make predictions on the produced model and save the model to the input path.
 #'
@@ -317,6 +318,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'                 antitonic/decreasing (false)
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
 #'                     no effect otherwise
+#' @aliases spark.isotonicRegression,SparkDataFrame,formula-method
 #' @return \code{spark.isotonicRegression} returns a fitted Isotonic Regression model
 #' @rdname spark.isotonicRegression
 #' @name spark.isotonicRegression
@@ -611,6 +613,15 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
+#  Save fitted isotonicRegressionModel to the input path
+
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname spark.isotonicRegression
+#' @export
+#' @note write.ml(IsotonicRegression, character) since 2.0.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
