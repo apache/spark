@@ -39,8 +39,8 @@
 #'                      version number in the format of "int.int".
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
 #'                      See
-#'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}
-#'                      {"Hadoop Free" Build} for more information.
+#'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
+#'                      "Hadoop Free" Build} for more information.
 #'                      Other patched version names can also be used, e.g. \code{"cdh4"}
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
 #'                  \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
@@ -68,7 +68,7 @@
 #'}
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
-#' \href{http://spark.apache.org/downloads.html}{Apache Spark}
+#'          \href{http://spark.apache.org/downloads.html}{Apache Spark}
 install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   version <- paste0("spark-", packageVersion("SparkR"))
@@ -117,12 +117,12 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   invisible(packageLocalDir)
 }
 
-robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
+robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
   # step 1: use user-provided url
   if (!is.null(mirrorUrl)) {
     msg <- sprintf("Use user-provided mirror site: %s.", mirrorUrl)
     message(msg)
-    success <- direct_download_url(mirrorUrl, version, hadoopVersion,
+    success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
     if (success) return()
   } else {
@@ -133,7 +133,7 @@ robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocal
   message("Looking for site suggested from apache website...")
   mirrorUrl <- get_preferred_mirror()
   if (!is.null(mirrorUrl)) {
-    success <- direct_download_url(mirrorUrl, version, hadoopVersion,
+    success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
     if (success) return()
   } else {
@@ -143,7 +143,7 @@ robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocal
   # step 3: use backup option
   message("To use backup site...")
   mirrorUrl <- default_mirror_url()
-  success <- direct_download_url(mirrorUrl, version, hadoopVersion,
+  success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                  packageName, packageLocalPath)
   if (sucess) {
     return(packageLocalPath)
@@ -166,14 +166,14 @@ get_preferred_mirror <- function() {
     message(sprintf("Preferred mirror site found: %s", mirrorPreferred))
     startPos <- matchInfo + 1
     endPos <- startPos + attr(matchInfo, "match.length") - 2
-    mirrorPreferred <- linePreferred[startPos:endPos])
+    mirrorPreferred <- linePreferred[startPos:endPos]
   } else {
     mirrorPreferred <- NULL
   }
   mirrorPreferred
 }
 
-direct_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
+direct_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
   packageRemotePath <- paste0(
     file.path(mirrorUrl, version, packageName), ".tgz")
   fmt <- paste("Downloading Spark %s for Hadoop %s from:\n- %s")
@@ -210,8 +210,8 @@ spark_cache_path <- function() {
     winAppPath <- Sys.getenv("%LOCALAPPDATA%", unset = NA)
     if (is.null(winAppPath)) {
       msg <- paste("%LOCALAPPDATA% not found.",
-                    "Please define the environment variable",
-                    "or restart and enter an installation path in localDir.")
+                   "Please define the environment variable",
+                   "or restart and enter an installation path in localDir.")
       stop(msg)
     } else {
       path <- file.path(winAppPath, "spark", "spark", "Cache")
