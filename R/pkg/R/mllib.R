@@ -365,7 +365,6 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 
 #  Get the summary of a isotonicRegressionModel model
 
-#' @param object A fitted isotonicRegressionModel model
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
 #' @export
