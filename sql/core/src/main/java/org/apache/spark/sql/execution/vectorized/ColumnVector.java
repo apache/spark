@@ -282,13 +282,27 @@ public abstract class ColumnVector implements AutoCloseable {
     if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
       if (requiredCapacity <= newCapacity) {
-        reserveInternal(newCapacity);
+        try {
+          reserveInternal(newCapacity);
+        } catch (OutOfMemoryError outOfMemoryError) {
+          throwUnsupportedException(newCapacity, requiredCapacity, outOfMemoryError);
+        }
       } else {
-        throw new RuntimeException("Cannot reserve more than " + newCapacity +
-            " bytes in the vectorized reader (requested = " + requiredCapacity + " bytes). As a " +
-            "workaround, you can disable the vectorized reader by setting "
-            + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " to false.");
+        throwUnsupportedException(newCapacity, requiredCapacity, null);
       }
+    }
+  }
+
+  private void throwUnsupportedException(int newCapacity, int requiredCapacity, Throwable cause) {
+    String message = "Cannot reserve more than " + newCapacity +
+        " bytes in the vectorized reader (requested = " + requiredCapacity + " bytes). As a" +
+        " workaround, you can disable the vectorized reader by setting "
+        + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " to false.";
+
+    if (cause != null) {
+      throw new RuntimeException(message, cause);
+    } else {
+      throw new RuntimeException(message);
     }
   }
 
