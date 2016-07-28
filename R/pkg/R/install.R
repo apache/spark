@@ -105,11 +105,20 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   if (tarExists && !overwrite) {
     message("tar file found. Installing...")
   } else {
+    # need to download tar file first
     if (is.null(mirrorUrl)) {
-      mirrorUrl <- default_mirror_url()
-      message(sprintf("Remote URL not provided. Use Apache default: %s", mirrorUrl))
+      # find url among apache suggested mirror sites
+      message("Mirror site url not provided. Looking for one...")
+      mirrorUrl <- get_preferred_mirror()
+      message(sprintf("Found mirror site: %s", mirrorUrl))
+      if (is.null(mirrorUrl)) {
+        # not found, take the backup option
+        mirrorUrl <- default_mirror_url()
+        message(sprintf("Preferred mirror site not found. Use Apache default: %s", mirrorUrl))
+      }
     }
 
+    # construct complete remote path
     packageRemotePath <- paste0(
       file.path(mirrorUrl, version, packageName), ".tgz")
     fmt <- paste("Installing Spark %s for Hadoop %s.",
@@ -137,8 +146,23 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   invisible(packageLocalDir)
 }
 
+get_preferred_mirror <- function() {
+  jsonUrl <- "http://www.apache.org/dyn/closer.cgi?as_json=1"
+  textLines <- readLines(jsonUrl, warn = FALSE)
+  rowNum <- grep("\"preferred\"", textLines)
+  linePreferred <- textLines[rowNum]
+  matchInfo <- regexpr("\"[A-Za-z][A-Za-z0-9+-.]*://.+\"", linePreferred)
+  if (matchInfo != -1) {
+    startPos <- matchInfo + 1
+    endPos <- startPos + attr(matchInfo, "match.length") - 2
+    mirrorPreferred <- linePreferred[startPos:endPos])
+  } else {
+    mirrorPreferred <- NULL
+  }
+}
+
 default_mirror_url <- function() {
-  "http://apache.osuosl.org/spark"
+  "http://www-us.apache.org/dist/spark"
 }
 
 hadoop_version_name <- function(hadoopVersion) {
@@ -151,8 +175,8 @@ hadoop_version_name <- function(hadoopVersion) {
   }
 }
 
-# The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and adapt
-# to Spark context
+# The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and
+# adapt to Spark context
 spark_cache_path <- function() {
   if (.Platform$OS.type == "windows") {
     winAppPath <- Sys.getenv("%LOCALAPPDATA%", unset = NA)
