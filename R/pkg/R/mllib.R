@@ -318,9 +318,9 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'                 antitonic/decreasing (false)
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
 #'                     no effect otherwise
-#' @aliases spark.isotonicRegression,SparkDataFrame,formula-method
 #' @return \code{spark.isotonicRegression} returns a fitted Isotonic Regression model
 #' @rdname spark.isotonicRegression
+#' @aliases spark.isotonicRegression,SparkDataFrame,formula-method
 #' @name spark.isotonicRegression
 #' @export
 #' @examples
