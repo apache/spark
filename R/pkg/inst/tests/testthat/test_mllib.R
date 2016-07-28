@@ -477,8 +477,19 @@ test_that("spark.survreg", {
 })
 
 test_that("spark.isotonicRegression", {
+  data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
+          list(5.0, 3.0), list(1.0, 4.0))
+  df <- createDataFrame(data, c("label", "feature"))
 
+  model <- spark.isotonicRegression(df, label ~ feature, isotonic = FALSE)
+
+  result <- summary(model, df)
+
+  predict_data <- list(list(-2.0), list(-1.0), list(0.5),
+                       list(0.75), list(1.0), list(2.0), list(9.0))
+  predict_df <- createDataFrame(predict_data, c("feature"))
+
+  predict_result <- predict(model, predict_df)
 })
 
 sparkR.session.stop()
-

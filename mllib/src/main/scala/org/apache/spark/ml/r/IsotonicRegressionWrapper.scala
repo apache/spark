@@ -23,7 +23,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
+import org.apache.spark.ml.attribute.{AttributeGroup}
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.regression.{IsotonicRegression, IsotonicRegressionModel}
 import org.apache.spark.ml.util._
@@ -39,17 +39,6 @@ private [r] class IsotonicRegressionWrapper private (
   lazy val boundaries: Array[Double] = isotonicRegressionModel.boundaries.toArray
 
   lazy val predictions: Array[Double] = isotonicRegressionModel.predictions.toArray
-
-  def fitted(method: String): Array[Double] = {
-    if (method == "boundaries") {
-      boundaries
-    } else if (method == "predictions") {
-      predictions
-    } else {
-      throw new UnsupportedOperationException(
-        s"Method (boundaries or predictions) required but $method found.")
-    }
-  }
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset).drop(isotonicRegressionModel.getFeaturesCol)
@@ -69,6 +58,7 @@ private[r] object IsotonicRegressionWrapper
 
     val rFormulaModel = new RFormula()
       .setFormula(formula)
+      .setFeaturesCol("features")
       .fit(data)
 
     // get feature names from output schema

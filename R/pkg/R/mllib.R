@@ -336,11 +336,12 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-setMethod("fitted", signature(object = "IsotonicRegressionModel"),
-          function(object, method = c("boundaries", "predictions"), ...) {
-            method <- match.arg(method)
+setMethod("summary", signature(object = "IsotonicRegressionModel"),
+          function(object, ...) {
             jobj <- object@jobj
-            return(dataFrame(callJMethod(jobj, "fitted", method)))
+            boundaries <- callJMethod(jobj, "boundaries")
+            predictions <- callJMethod(jobj, "predictions")
+            return(list(boundaries = boundaries, predictions = predictions))
           })
 
 #' K-Means Clustering Model
