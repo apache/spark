@@ -105,45 +105,55 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   if (tarExists && !overwrite) {
     message("tar file found. Installing...")
   } else {
-    # need to download tar file first
-    if (is.null(mirrorUrl)) {
-      # find url among apache suggested mirror sites
-      message("Mirror site url not provided. Looking for one...")
-      mirrorUrl <- get_preferred_mirror()
-      message(sprintf("Found mirror site: %s", mirrorUrl))
-      if (is.null(mirrorUrl)) {
-        # not found, take the backup option
-        mirrorUrl <- default_mirror_url()
-        message(sprintf("Preferred mirror site not found. Use Apache default: %s", mirrorUrl))
-      }
-    }
-
-    # construct complete remote path
-    packageRemotePath <- paste0(
-      file.path(mirrorUrl, version, packageName), ".tgz")
-    fmt <- paste("Installing Spark %s for Hadoop %s.",
-                 "Downloading from:\n- %s",
-                 "Installing to:\n- %s", sep = "\n")
-    msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
-                   packageRemotePath, packageLocalDir)
-    message(msg)
-
-    tryCatch(download.file(packageRemotePath, packageLocalPath),
-             error = function(e) {
-               msg <- paste0("Fetch failed from ", mirrorUrl, ".",
-                             "Please check the Hadoop version,",
-                             "retry or provide another mirror site.")
-               stop(msg)
-             })
+    robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath)
   }
 
   untar(tarfile = packageLocalPath, exdir = localDir)
   if (!tarExists || overwrite) {
     unlink(packageLocalPath)
   }
-  message("Installation done.")
+  message("Installation Done.")
   Sys.setenv(SPARK_HOME = packageLocalDir)
   invisible(packageLocalDir)
+}
+
+robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
+  # step 1: use user-provided url
+  if (!is.null(mirrorUrl)) {
+    msg <- sprintf("Use user-provided mirror site: %s.", mirrorUrl)
+    message(msg)
+    success <- direct_download_url(mirrorUrl, version, hadoopVersion,
+                                   packageName, packageLocalPath)
+    if (success) return()
+  } else {
+    message("Mirror site not provided.")
+  }
+
+  # step 2: use url suggested from apache website
+  message("Looking for site suggested from apache website...")
+  mirrorUrl <- get_preferred_mirror()
+  if (!is.null(mirrorUrl)) {
+    success <- direct_download_url(mirrorUrl, version, hadoopVersion,
+                                   packageName, packageLocalPath)
+    if (success) return()
+  } else {
+    message("Unable to find suggested mirror site.")
+  }
+
+  # step 3: use backup option
+  message("To use backup site...")
+  mirrorUrl <- default_mirror_url()
+  success <- direct_download_url(mirrorUrl, version, hadoopVersion,
+                                 packageName, packageLocalPath)
+  if (sucess) {
+    return(packageLocalPath)
+  } else {
+    msg <- sprintf(paste("Unable to download Spark %s for Hadoop %s.",
+                         "Please network connection, Hadoop version,",
+                         "or provide other mirror sites."),
+                   version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion))
+    stop(msg)
+  }
 }
 
 get_preferred_mirror <- function() {
@@ -153,12 +163,30 @@ get_preferred_mirror <- function() {
   linePreferred <- textLines[rowNum]
   matchInfo <- regexpr("\"[A-Za-z][A-Za-z0-9+-.]*://.+\"", linePreferred)
   if (matchInfo != -1) {
+    message(sprintf("Preferred mirror site found: %s", mirrorPreferred))
     startPos <- matchInfo + 1
     endPos <- startPos + attr(matchInfo, "match.length") - 2
     mirrorPreferred <- linePreferred[startPos:endPos])
   } else {
     mirrorPreferred <- NULL
   }
+  mirrorPreferred
+}
+
+direct_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath) {
+  packageRemotePath <- paste0(
+    file.path(mirrorUrl, version, packageName), ".tgz")
+  fmt <- paste("Downloading Spark %s for Hadoop %s from:\n- %s")
+  msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
+                 packageRemotePath)
+  message(msg)
+
+  isFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
+                     error = function(e) {
+                       message("Fetch failed.")
+                       TRUE
+                     })
+  !isFail
 }
 
 default_mirror_url <- function() {
