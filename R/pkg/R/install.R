@@ -126,7 +126,6 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
     success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
     if (success) return()
-    }
   } else {
     message("Mirror site not provided.")
   }
