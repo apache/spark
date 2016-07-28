@@ -18,9 +18,11 @@ package org.apache.spark.mllib.api.python
 
 import scala.collection.JavaConverters
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.clustering.LDAModel
-import org.apache.spark.mllib.linalg.Matrix
+import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.rdd.RDD
 
 /**
  * Wrapper around LDAModel to provide helper methods in Python
@@ -42,5 +44,24 @@ private[python] class LDAModelWrapper(model: LDAModel) {
     SerDe.dumps(JavaConverters.seqAsJavaListConverter(topics).asJava)
   }
 
+  def topicDistributions(
+    data: JavaRDD[java.util.List[Any]]): JavaRDD[Array[Any]] = {
+
+    val documents = data.rdd.map(_.asScala.toArray).map { r =>
+      r(0) match {
+        case i: java.lang.Integer => (i.toLong, r(1).asInstanceOf[Vector])
+        case i: java.lang.Long => (i.toLong, r(1).asInstanceOf[Vector])
+        case _ => throw new IllegalArgumentException("input values contains invalid type value.")
+      }
+    }
+
+    val distributions = model.topicDistributions(documents)
+
+    SerDe.fromTuple2RDD( distributions.map {
+      case (id, vector) => ( id.toLong, vector.asInstanceOf[ Vector ] )
+    }.asInstanceOf[ RDD[(Any, Any)] ])
+
+  }
+  
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
 }
