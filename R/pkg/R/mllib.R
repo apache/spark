@@ -321,6 +321,24 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @rdname spark.isotonicRegression
 #' @name spark.isotonicRegression
 #' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
+#'         list(5.0, 3.0), list(1.0, 4.0))
+#' df <- createDataFrame(data, c("label", "feature"))
+#' model <- spark.isotonicRegression(df, label ~ feature, isotonic = FALSE)
+#' # return model boundaries and prediction as lists
+#' result <- summary(model, df)
+#'
+#' # save fitted model to input path
+#' path <- "path/to/model"
+#' write.ml(model, path)
+#'
+#' # can also read back the saved model and print
+#' savedModel <- read.ml(path)
+#' summary(savedModel)
+#' }
 #' @note spark.isotonicRegression since 2.1.0
 #' @seealso \link{transform}, \link{read.ml}, \link{write.ml}
 setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula = "formula"),
@@ -331,11 +349,26 @@ setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula
             return(new("IsotonicRegressionModel", jobj = jobj))
           })
 
+#  Predicted values based on an isotonicRegression model
+
+#' @param object a fitted isotonicRegressionModel
+#' @param newData A SparkDataFrame for testing
+#' @return \code{predict} returns a SparkDataFrame containing predicted values
+#' @rdname spark.isotonicRegression
+#' @export
+#' @note predict(isotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
+#  Get the summary of a isotonicRegressionModel model
+
+#' @param object A fitted isotonicRegressionModel model
+#' @return \code{summary} returns the model's boundaries and prediction as lists
+#' @rdname spark.isotonicRegression
+#' @export
+#' @note summary(isotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj

@@ -480,16 +480,26 @@ test_that("spark.isotonicRegression", {
   data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
           list(5.0, 3.0), list(1.0, 4.0))
   df <- createDataFrame(data, c("label", "feature"))
-
   model <- spark.isotonicRegression(df, label ~ feature, isotonic = FALSE)
-
   result <- summary(model, df)
+  expect_equal(result$predictions, list(7, 5, 4, 4, 1))
 
+  # Test model prediction
   predict_data <- list(list(-2.0), list(-1.0), list(0.5),
                        list(0.75), list(1.0), list(2.0), list(9.0))
   predict_df <- createDataFrame(predict_data, c("feature"))
+  predict_result <- collect(select(predict(model, predict_df), "prediction"))
+  expect_equal(predict_result$prediction, c(7.0, 7.0, 6.0, 5.5, 5.0, 4.0, 1.0))
 
-  predict_result <- predict(model, predict_df)
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-isotonicRegression", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  expect_equal(result, summary(model2, df))
+
+  unlink(modelPath)
 })
 
 sparkR.session.stop()
