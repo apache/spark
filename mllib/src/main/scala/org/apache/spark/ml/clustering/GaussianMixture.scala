@@ -95,7 +95,7 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val predUDF = udf((vector: Vector) => predict(vector))
     val probUDF = udf((vector: Vector) => predictProbability(vector))
     dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
@@ -318,7 +318,7 @@ class GaussianMixture @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
