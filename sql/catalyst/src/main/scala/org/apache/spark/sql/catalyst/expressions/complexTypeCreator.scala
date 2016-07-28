@@ -111,13 +111,25 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     }
   }
 
+  private def isDecimalTypeTighterThan(src: DecimalType, other: DataType): Boolean = other match {
+    case dt: DecimalType =>
+      (src.precision - src.scale) <= (dt.precision - dt.scale) && src.scale <= dt.scale
+    case _ => false
+  }
+
+  /**
+    * only check decimal type contains by the coltypes
+    * @param colType
+    * @return
+    */
   private def checkDecimalType(colType: Seq[Expression]): DataType = {
     val elementType = colType.headOption.map(_.dataType).getOrElse(NullType)
+
     elementType match {
       case _ if elementType.isInstanceOf[DecimalType] =>
         var tighter: DataType = elementType
         colType.foreach { child =>
-          if (elementType.asInstanceOf[DecimalType].isTighterThan(child.dataType)) {
+          if (isDecimalTypeTighterThan(tighter.asInstanceOf[DecimalType], child.dataType)) {
             tighter = child.dataType
           }
         }
