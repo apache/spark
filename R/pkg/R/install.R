@@ -103,16 +103,17 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   tarExists <- file.exists(packageLocalPath)
 
   if (tarExists && !overwrite) {
-    message("tar file found. Installing...")
+    message("tar file found.")
   } else {
     robust_download_tar(mirrorUrl, version, hadoopVersion, packageName, packageLocalPath)
   }
 
+  message(sprintf("Installing to %s", localDir))
   untar(tarfile = packageLocalPath, exdir = localDir)
   if (!tarExists || overwrite) {
     unlink(packageLocalPath)
   }
-  message("Installation Done.")
+  message("DONE.")
   Sys.setenv(SPARK_HOME = packageLocalDir)
   invisible(packageLocalDir)
 }
@@ -149,7 +150,7 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
     return(packageLocalPath)
   } else {
     msg <- sprintf(paste("Unable to download Spark %s for Hadoop %s.",
-                         "Please network connection, Hadoop version,",
+                         "Please check network connection, Hadoop version,",
                          "or provide other mirror sites."),
                    version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion))
     stop(msg)
