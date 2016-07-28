@@ -483,7 +483,7 @@ object DDLUtils {
   }
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
-    isDatasourceTable(table.properties)
+    table.provider.isDefined && table.provider.get != "hive"
   }
 
   /**
@@ -517,13 +517,8 @@ object DDLUtils {
     }
   }
 
-  def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumnNames.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
-  }
-
   // A persisted data source table always store its schema in the catalog.
   def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
-    require(isDatasourceTable(metadata))
     val msgSchemaCorrupted = "Could not read schema from the metastore because it is corrupted."
     val props = metadata.properties
     props.get(DATASOURCE_SCHEMA).map { schema =>
@@ -549,8 +544,6 @@ object DDLUtils {
 
   private def getColumnNamesByType(
       props: Map[String, String], colType: String, typeName: String): Seq[String] = {
-    require(isDatasourceTable(props))
-
     for {
       numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
       index <- 0 until numCols.toInt
@@ -567,15 +560,11 @@ object DDLUtils {
   }
 
   def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
-    if (isDatasourceTable(metadata)) {
-      metadata.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { numBuckets =>
-        BucketSpec(
-          numBuckets.toInt,
-          getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
-          getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
-      }
-    } else {
-      None
+    metadata.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { numBuckets =>
+      BucketSpec(
+        numBuckets.toInt,
+        getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
+        getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
     }
   }
 }

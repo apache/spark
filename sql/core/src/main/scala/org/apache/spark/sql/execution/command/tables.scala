@@ -415,8 +415,8 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
       describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
       val metadata = catalog.getTableMetadata(table)
+      describeSchema(metadata.schema, result)
 
-      describeSchema(metadata, result)
       if (isExtended) {
         describeExtended(metadata, result)
       } else if (isFormatted) {
@@ -430,20 +430,10 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    if (DDLUtils.isDatasourceTable(table)) {
-      val partColNames = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      if (partColNames.nonEmpty) {
-        val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
-        append(buffer, "# Partition Information", "", "")
-        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(StructType(partColNames.map(userSpecifiedSchema(_))), buffer)
-      }
-    } else {
-      if (table.partitionColumnNames.nonEmpty) {
-        append(buffer, "# Partition Information", "", "")
-        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(table.partitionSchema, buffer)
-      }
+    if (table.partitionColumnNames.nonEmpty) {
+      append(buffer, "# Partition Information", "", "")
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+      describeSchema(table.partitionSchema, buffer)
     }
   }
 
@@ -494,30 +484,13 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   }
 
   private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    def appendBucketInfo(bucketSpec: Option[BucketSpec]) = bucketSpec match {
+    metadata.bucketSpec match {
       case Some(BucketSpec(numBuckets, bucketColumnNames, sortColumnNames)) =>
         append(buffer, "Num Buckets:", numBuckets.toString, "")
         append(buffer, "Bucket Columns:", bucketColumnNames.mkString("[", ", ", "]"), "")
         append(buffer, "Sort Columns:", sortColumnNames.mkString("[", ", ", "]"), "")
 
       case _ =>
-    }
-
-    if (DDLUtils.isDatasourceTable(metadata)) {
-      appendBucketInfo(DDLUtils.getBucketSpecFromTableProperties(metadata))
-    } else {
-      appendBucketInfo(metadata.bucketSpec)
-    }
-  }
-
-  private def describeSchema(
-      tableDesc: CatalogTable,
-      buffer: ArrayBuffer[Row]): Unit = {
-    if (DDLUtils.isDatasourceTable(tableDesc)) {
-      val schema = DDLUtils.getSchemaFromTableProperties(tableDesc)
-      describeSchema(schema, buffer)
-    } else {
-      describeSchema(tableDesc.schema, buffer)
     }
   }
 
@@ -679,7 +652,7 @@ case class ShowPartitionsCommand(
         s"SHOW PARTITIONS is not allowed on a view or index table: ${tab.qualifiedName}")
     }
 
-    if (!DDLUtils.isTablePartitioned(tab)) {
+    if (tab.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${tab.qualifiedName}")
     }
@@ -730,6 +703,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
     val tableMetadata = catalog.getTableMetadata(table)
 
+    // TODO: unify this after we unify the CREATE TABLE syntax for hive serde and data source table.
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       showCreateDataSourceTable(tableMetadata)
     } else {
@@ -873,8 +847,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val schema = DDLUtils.getSchemaFromTableProperties(metadata)
-    val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+    val columns = metadata.schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
     builder ++= columns.mkString("(", ", ", ")\n")
   }
 
@@ -901,12 +874,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableNonDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val partCols = DDLUtils.getPartitionColumnsFromTableProperties(metadata)
+    val partCols = metadata.partitionColumnNames
     if (partCols.nonEmpty) {
       builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
     }
 
-    DDLUtils.getBucketSpecFromTableProperties(metadata).foreach { spec =>
+    metadata.bucketSpec.foreach { spec =>
       if (spec.bucketColumnNames.nonEmpty) {
         builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
 

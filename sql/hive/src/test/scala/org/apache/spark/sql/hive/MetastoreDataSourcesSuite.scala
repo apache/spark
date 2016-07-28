@@ -26,9 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -48,6 +48,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     super.beforeAll()
     jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
   }
+
+  private def hiveClient: HiveClient = sharedState.asInstanceOf[HiveSharedState].metadataHive
 
   test("persistent JSON table") {
     withTable("jsonTable") {
@@ -697,18 +699,18 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       withTable("wide_schema") {
         withTempDir { tempDir =>
           // We will need 80 splits for this schema if the threshold is 4000.
-          val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
+          val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType)))
 
-          // Manually create a metastore data source table.
-          createDataSourceTable(
-            sparkSession = spark,
-            tableIdent = TableIdentifier("wide_schema"),
+          val tableDef = CatalogTable(
+            identifier = TableIdentifier("wide_schema", Some("default")),
+            tableType = CatalogTableType.EXTERNAL,
+            storage = CatalogStorageFormat.empty.copy(
+              properties = Map("path" -> tempDir.getCanonicalPath)
+            ),
             schema = schema,
-            partitionColumns = Array.empty[String],
-            bucketSpec = None,
-            provider = "json",
-            options = Map("path" -> tempDir.getCanonicalPath),
-            isExternal = false)
+            provider = Some("json")
+          )
+          sharedState.externalCatalog.createTable("default", tableDef, ignoreIfExists = false)
 
           sessionState.refreshTable("wide_schema")
 
@@ -741,7 +743,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           DATASOURCE_SCHEMA -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
-      sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
+      hiveClient.createTable(hiveTable, ignoreIfExists = false)
 
       sessionState.refreshTable(tableName)
       val actualSchema = table(tableName).schema
@@ -985,35 +987,37 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTempDir { tempPath =>
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
-      createDataSourceTable(
-        sparkSession = spark,
-        tableIdent = TableIdentifier("not_skip_hive_metadata"),
+      val tableDef1 = CatalogTable(
+        identifier = TableIdentifier("not_skip_hive_metadata", Some("default")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty.copy(
+          properties = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false")
+        ),
         schema = schema,
-        partitionColumns = Array.empty[String],
-        bucketSpec = None,
-        provider = "parquet",
-        options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false"),
-        isExternal = false)
+        provider = Some("parquet")
+      )
+      sharedState.externalCatalog.createTable("default", tableDef1, ignoreIfExists = false)
 
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
-      assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
+      assert(hiveClient.getTable("default", "not_skip_hive_metadata").schema
         .forall(_.dataType == StringType))
 
-      createDataSourceTable(
-        sparkSession = spark,
-        tableIdent = TableIdentifier("skip_hive_metadata"),
+      val tableDef2 = CatalogTable(
+        identifier = TableIdentifier("skip_hive_metadata", Some("default")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty.copy(
+          properties = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true")
+        ),
         schema = schema,
-        partitionColumns = Array.empty[String],
-        bucketSpec = None,
-        provider = "parquet",
-        options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true"),
-        isExternal = false)
+        provider = Some("parquet")
+      )
+      sharedState.externalCatalog.createTable("default", tableDef2, ignoreIfExists = false)
 
       // As a proxy for verifying that the table was stored in SparkSQL format,
       // we verify that the table has a column type as array of StringType.
-      assert(sharedState.externalCatalog.getTable("default", "skip_hive_metadata")
-        .schema.forall(_.dataType == ArrayType(StringType)))
+      assert(hiveClient.getTable("default", "skip_hive_metadata").schema
+        .forall(_.dataType == ArrayType(StringType)))
     }
   }
 
@@ -1186,6 +1190,30 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sql("DROP TABLE t")
         sql(s"CREATE TABLE t USING json AS SELECT 1 AS c")
       }
+    }
+  }
+
+  test("read table with corrupted schema") {
+    try {
+      val schema = StructType(StructField("int", IntegerType, true) :: Nil)
+      val hiveTable = CatalogTable(
+        identifier = TableIdentifier("t", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        schema = new StructType,
+        storage = CatalogStorageFormat.empty,
+        properties = Map(
+          DATASOURCE_PROVIDER -> "json",
+          // no DATASOURCE_SCHEMA_NUMPARTS
+          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
+
+      hiveClient.createTable(hiveTable, ignoreIfExists = false)
+
+      val e = intercept[AnalysisException] {
+        sharedState.externalCatalog.getTable("default", "t")
+      }.getMessage
+      assert(e.contains(s"Could not read schema from the metastore because it is corrupted"))
+    } finally {
+      hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
     }
   }
 }

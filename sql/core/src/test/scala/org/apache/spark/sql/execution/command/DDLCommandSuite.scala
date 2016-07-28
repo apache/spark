@@ -244,7 +244,7 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab STORED AS $s"
       val ct = parseAs[CreateTableCommand](query)
-      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s)
       assert(hiveSerde.isDefined)
       assert(ct.table.storage.serde == hiveSerde.get.serde)
       assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -277,7 +277,7 @@ class DDLCommandSuite extends PlanTest {
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
         val ct = parseAs[CreateTableCommand](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
         assert(ct.table.storage.serde == Some("anything"))
         assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
@@ -296,7 +296,7 @@ class DDLCommandSuite extends PlanTest {
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
         val ct = parseAs[CreateTableCommand](query)
-        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s)
         assert(hiveSerde.isDefined)
         assert(ct.table.storage.serde == hiveSerde.get.serde)
         assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
