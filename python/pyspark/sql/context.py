@@ -152,9 +152,9 @@ class SQLContext(object):
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
         """
-        Create a :class:`DataFrame` with single LongType column named `id`,
-        containing elements in a range from `start` to `end` (exclusive) with
-        step value `step`.
+        Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
+        ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
+        step value ``step``.
 
         :param start: the start value
         :param end: the end value (exclusive)
@@ -226,7 +226,8 @@ class SQLContext(object):
         from ``data``, which should be an RDD of :class:`Row`,
         or :class:`namedtuple`, or :class:`dict`.
 
-        When ``schema`` is :class:`pyspark.sql.types.DataType` or datatype string, it must match the
+        When ``schema`` is :class:`pyspark.sql.types.DataType` or
+        :class:`pyspark.sql.types.StringType`, it must match the
         real data, or an exception will be thrown at runtime. If the given schema is not
         :class:`pyspark.sql.types.StructType`, it will be wrapped into a
         :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
@@ -238,7 +239,8 @@ class SQLContext(object):
         :param data: an RDD of any kind of SQL data representation(e.g. :class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
             :class:`pandas.DataFrame`.
-        :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+        :param schema: a :class:`pyspark.sql.types.DataType` or a
+            :class:`pyspark.sql.types.StringType` or a list of
             column names, default is None.  The data type string format equals to
             :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
@@ -248,10 +250,10 @@ class SQLContext(object):
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.0
-           The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a datatype
-           string after 2.0. If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped
-           into a :class:`pyspark.sql.types.StructType` and each record will also be wrapped
-           into a tuple.
+           The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a
+           :class:`pyspark.sql.types.StringType` after 2.0.
+           If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
+           :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
 
         >>> l = [('Alice', 1)]
         >>> sqlContext.createDataFrame(l).collect()

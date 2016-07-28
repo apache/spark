@@ -1508,7 +1508,8 @@ def bin(col):
 @since(1.5)
 def hex(col):
     """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
-    BinaryType, IntegerType or LongType.
+    :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
+    :class:`pyspark.sql.types.LongType`.
 
     >>> spark.createDataFrame([('ABC', 3)], ['a', 'b']).select(hex('a'), hex('b')).collect()
     [Row(hex(a)=u'414243', hex(b)=u'3')]
