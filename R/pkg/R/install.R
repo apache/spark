@@ -126,6 +126,7 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
     success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
     if (success) return()
+    }
   } else {
     message("Mirror site not provided.")
   }
@@ -185,7 +186,7 @@ direct_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
 
   isFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
                      error = function(e) {
-                       message("Fetch failed.")
+                       message(sprintf("Fetch failed from %s", mirrorUrl))
                        TRUE
                      })
   !isFail
