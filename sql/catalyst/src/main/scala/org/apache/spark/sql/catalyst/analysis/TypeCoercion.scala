@@ -49,7 +49,7 @@ object TypeCoercion {
       InConversion ::
       WidenSetOperationTypes ::
       PromoteStrings ::
-      DecimalPrecision ::
+      DecimalPrecision ::  // DecimalPrecision must happen before ImplicitTypeCasts.
       BooleanEquality ::
       StringToIntegralCasts ::
       FunctionArgumentConversion ::
@@ -440,7 +440,7 @@ object TypeCoercion {
 
       case a @ CreateArray(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonTypeAndPromoteToString(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
         }
@@ -451,7 +451,7 @@ object TypeCoercion {
           m.keys
         } else {
           val types = m.keys.map(_.dataType)
-          findTightestCommonTypeAndPromoteToString(types) match {
+          findWiderCommonType(types) match {
             case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
             case None => m.keys
           }
@@ -461,7 +461,7 @@ object TypeCoercion {
           m.values
         } else {
           val types = m.values.map(_.dataType)
-          findTightestCommonTypeAndPromoteToString(types) match {
+          findWiderCommonType(types) match {
             case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
             case None => m.values
           }
