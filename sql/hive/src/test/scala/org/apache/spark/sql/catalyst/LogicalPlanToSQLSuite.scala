@@ -934,6 +934,169 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
+  test("broadcast join") {
+    checkSQL(
+      """
+        |SELECT /*+ MAPJOIN(srcpart) */ subq.key1, z.value
+        |FROM (SELECT x.key as key1, x.value as value1, y.key as key2, y.value as value2
+        |      FROM src1 x JOIN src y ON (x.key = y.key)) subq
+        |JOIN srcpart z ON (subq.key1 = z.key and z.ds='2008-04-08' and z.hr=11)
+        |ORDER BY subq.key1, z.value
+      """.stripMargin,
+      "broadcast_join_subquery")
+  }
+
+  test("subquery using single table") {
+    checkSQL(
+      """
+        |SELECT a.k, a.c
+        |FROM (SELECT b.key as k, count(1) as c
+        |      FROM src b
+        |      GROUP BY b.key) a
+        |WHERE a.k >= 90
+      """.stripMargin,
+      "subq2")
+  }
+
+  test("correlated subqueries using EXISTS on where clause") {
+    checkSQL(
+      """
+        |select *
+        |from src b
+        |where exists (select a.key
+        |              from src a
+        |              where b.value = a.value and a.key = b.key and a.value > 'val_9')
+      """.stripMargin,
+      "subquery_exists_1")
+
+    checkSQL(
+      """
+        |select *
+        |from (select *
+        |      from src b
+        |      where exists (select a.key
+        |                    from src a
+        |                    where b.value = a.value and a.key = b.key and a.value > 'val_9')) a
+      """.stripMargin,
+      "subquery_exists_2")
+  }
+
+  test("correlated subqueries using EXISTS on having clause") {
+    checkSQL(
+      """
+        |select b.key, count(*)
+        |from src b
+        |group by b.key
+        |having exists (select a.key
+        |               from src a
+        |               where a.key = b.key and a.value > 'val_9')
+      """.stripMargin,
+      "subquery_exists_having_1")
+
+    checkSQL(
+      """
+        |select *
+        |from (select b.key, count(*)
+        |      from src b
+        |      group by b.key
+        |      having exists (select a.key
+        |                     from src a
+        |                     where a.key = b.key and a.value > 'val_9')) a
+      """.stripMargin,
+      "subquery_exists_having_2")
+
+    checkSQL(
+      """
+        |select b.key, min(b.value)
+        |from src b
+        |group by b.key
+        |having exists (select a.key
+        |               from src a
+        |               where a.value > 'val_9' and a.value = min(b.value))
+      """.stripMargin,
+      "subquery_exists_having_3")
+  }
+
+  test("correlated subqueries using NOT EXISTS on where clause") {
+    checkSQL(
+      """
+        |select *
+        |from src b
+        |where not exists (select a.key
+        |                  from src a
+        |                  where b.value = a.value  and a.key = b.key and a.value > 'val_2')
+      """.stripMargin,
+      "subquery_not_exists_1")
+
+    checkSQL(
+      """
+        |select *
+        |from src b
+        |where not exists (select a.key
+        |                  from src a
+        |                  where b.value = a.value and a.value > 'val_2')
+      """.stripMargin,
+      "subquery_not_exists_2")
+  }
+
+  test("correlated subqueries using NOT EXISTS on having clause") {
+    checkSQL(
+      """
+        |select *
+        |from src b
+        |group by key, value
+        |having not exists (select a.key
+        |                   from src a
+        |                   where b.value = a.value  and a.key = b.key and a.value > 'val_12')
+      """.stripMargin,
+      "subquery_not_exists_having_1")
+
+    checkSQL(
+      """
+        |select *
+        |from src b
+        |group by key, value
+        |having not exists (select distinct a.key
+        |                   from src a
+        |                   where b.value = a.value and a.value > 'val_12')
+      """.stripMargin,
+      "subquery_not_exists_having_2")
+  }
+
+  test("subquery using IN on where clause") {
+    checkSQL(
+      """
+        |SELECT key
+        |FROM src
+        |WHERE key in (SELECT max(key) FROM src)
+      """.stripMargin,
+      "subquery_in")
+  }
+
+  test("subquery using IN on having clause") {
+    checkSQL(
+      """
+        |select key, count(*)
+        |from src
+        |group by key
+        |having count(*) in (select count(*) from src s1 where s1.key = '90' group by s1.key)
+        |order by key
+      """.stripMargin,
+      "subquery_in_having_1")
+
+    checkSQL(
+      """
+        |select b.key, min(b.value)
+        |from src b
+        |group by b.key
+        |having b.key in (select a.key
+        |                 from src a
+        |                 where a.value > 'val_9' and a.value = min(b.value))
+        |order by b.key
+      """.stripMargin,
+      "subquery_in_having_2")
+  }
+
   test("SPARK-14933 - select orc table") {
     withTable("orc_t") {
       sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
