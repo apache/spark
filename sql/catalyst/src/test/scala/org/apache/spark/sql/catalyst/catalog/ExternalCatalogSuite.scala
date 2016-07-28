@@ -399,11 +399,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       // alter other storage information
       catalog.alterPartitions("db2", "tbl2", Seq(
         oldPart1.copy(storage = storageFormat.copy(serde = Some(newSerde))),
-        oldPart2.copy(storage = storageFormat.copy(serdeProperties = newSerdeProps))))
+        oldPart2.copy(storage = storageFormat.copy(properties = newSerdeProps))))
       val newPart1b = catalog.getPartition("db2", "tbl2", part1.spec)
       val newPart2b = catalog.getPartition("db2", "tbl2", part2.spec)
       assert(newPart1b.storage.serde == Some(newSerde))
-      assert(newPart2b.storage.serdeProperties == newSerdeProps)
+      assert(newPart2b.storage.properties == newSerdeProps)
       // alter but change spec, should fail because new partition specs do not exist yet
       val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
       val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
@@ -634,7 +634,7 @@ abstract class CatalogTestUtils {
     outputFormat = Some(tableOutputFormat),
     serde = None,
     compressed = false,
-    serdeProperties = Map.empty)
+    properties = Map.empty)
   lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
   lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
   lazy val part3 = CatalogTablePartition(Map("a" -> "5", "b" -> "6"), storageFormat)
@@ -692,7 +692,7 @@ abstract class CatalogTestUtils {
         CatalogColumn("a", "int"),
         CatalogColumn("b", "string")),
       partitionColumnNames = Seq("a", "b"),
-      bucketColumnNames = Seq("col1"))
+      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

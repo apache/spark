@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{If, Literal}
-
+import org.apache.spark.sql.catalyst.expressions.{If, Literal, SpecifiedWindowFrame, WindowSpecDefinition}
 
 class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("literal") {
@@ -78,5 +77,37 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
 
     checkSQL(-'a.int, "(-`a`)")
     checkSQL(-('a.int + 'b.int), "(-(`a` + `b`))")
+  }
+
+  test("window specification") {
+    val frame = SpecifiedWindowFrame.defaultWindowFrame(
+      hasOrderSpecification = true,
+      acceptWindowFrame = true
+    )
+
+    checkSQL(
+      WindowSpecDefinition('a.int :: Nil, Nil, frame),
+      s"(PARTITION BY `a` $frame)"
+    )
+
+    checkSQL(
+      WindowSpecDefinition('a.int :: 'b.string :: Nil, Nil, frame),
+      s"(PARTITION BY `a`, `b` $frame)"
+    )
+
+    checkSQL(
+      WindowSpecDefinition(Nil, 'a.int.asc :: Nil, frame),
+      s"(ORDER BY `a` ASC $frame)"
+    )
+
+    checkSQL(
+      WindowSpecDefinition(Nil, 'a.int.asc :: 'b.string.desc :: Nil, frame),
+      s"(ORDER BY `a` ASC, `b` DESC $frame)"
+    )
+
+    checkSQL(
+      WindowSpecDefinition('a.int :: 'b.string :: Nil, 'c.int.asc :: 'd.string.desc :: Nil, frame),
+      s"(PARTITION BY `a`, `b` ORDER BY `c` ASC, `d` DESC $frame)"
+    )
   }
 }

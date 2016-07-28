@@ -139,7 +139,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for spark temporary table - empty row") {
-    withTempTable("parquet_temp") {
+    withTempView("parquet_temp") {
       sql(
         """
           |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)
@@ -397,7 +397,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show partitions - empty row") {
-    withTempTable("parquet_temp") {
+    withTempView("parquet_temp") {
       sql(
         """
           |CREATE TEMPORARY TABLE parquet_temp (c1 INT, c2 STRING)

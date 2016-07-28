@@ -35,7 +35,7 @@ setOldClass("structType")
 #' @slot env An R environment that stores bookkeeping states of the SparkDataFrame
 #' @slot sdf A Java object reference to the backing Scala DataFrame
 #' @seealso \link{createDataFrame}, \link{read.json}, \link{table}
-#' @seealso \url{https://spark.apache.org/docs/latest/sparkr.html#sparkdataframe}
+#' @seealso \url{https://spark.apache.org/docs/latest/sparkr.html#sparkr-dataframes}
 #' @export
 #' @examples
 #'\dontrun{
