@@ -1310,7 +1310,10 @@ setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark
 
 #' @rdname spark.mvnormalmixEM
 #' @export
-setGeneric("spark.mvnormalmixEM", function(data, formula, ...) { standardGeneric("spark.mvnormalmixEM") })
+setGeneric("spark.mvnormalmixEM",
+           function(data, formula, ...) {
+             standardGeneric("spark.mvnormalmixEM")
+           })
 
 #' @rdname write.ml
 #' @export

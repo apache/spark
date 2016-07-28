@@ -74,7 +74,7 @@ setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 #' @rdname write.ml
 #' @name write.ml
 #' @export
-#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.glm}, \link{glm}, \link{spark.mvnormalmixEM}
 #' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{spark.isoreg}
 #' @seealso \link{read.ml}
@@ -87,7 +87,7 @@ NULL
 #' @rdname predict
 #' @name predict
 #' @export
-#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.glm}, \link{glm}, \link{spark.mvnormalmixEM}
 #' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{spark.isoreg}
 NULL
@@ -788,9 +788,10 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 
 #' Multivariate Gaussian Mixture Model (GMM)
 #'
-#' Fits multivariate gaussian mixture model against a Spark DataFrame.
-#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
-#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
+#' Fits multivariate gaussian mixture model against a Spark DataFrame, similarly to R's
+#' mvnormalmixEM(). Users can call \code{summary} to print a summary of the fitted model,
+#' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml}
+#' to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -830,11 +831,12 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' }
 #' @note spark.mvnormalmixEM since 2.1.0
 #' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
+#' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.mvnormalmixEM", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 100, tol = 0.01) {
             formula <- paste(deparse(formula), collapse = "")
-            jobj <- callJStatic("org.apache.spark.ml.r.GaussianMixtureWrapper", "fit", data@sdf, formula,
-                                as.integer(k), as.integer(maxIter), tol)
+            jobj <- callJStatic("org.apache.spark.ml.r.GaussianMixtureWrapper", "fit", data@sdf,
+                                formula, as.integer(k), as.integer(maxIter), tol)
             return(new("GaussianMixtureModel", jobj = jobj))
           })
 
