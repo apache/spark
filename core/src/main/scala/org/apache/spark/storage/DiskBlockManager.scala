@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.{File, IOException}
-import java.util.UUID
 
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
@@ -105,18 +104,18 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    var blockId = new TempLocalBlockId(StorageUtils.newNonSecureRandomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempLocalBlockId(UUID.randomUUID())
+      blockId = new TempLocalBlockId(StorageUtils.newNonSecureRandomUUID())
     }
     (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    var blockId = new TempShuffleBlockId(StorageUtils.newNonSecureRandomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempShuffleBlockId(UUID.randomUUID())
+      blockId = new TempShuffleBlockId(StorageUtils.newNonSecureRandomUUID())
     }
     (blockId, getFile(blockId))
   }

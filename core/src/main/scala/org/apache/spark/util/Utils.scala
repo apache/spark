@@ -55,6 +55,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.storage.StorageUtils
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -282,7 +283,8 @@ private[spark] object Utils extends Logging {
           maxAttempts + " attempts!")
       }
       try {
-        dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
+        dir = new File(root, namePrefix + "-" +
+            StorageUtils.newNonSecureRandomUUID().toString)
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
         }
@@ -2370,7 +2372,26 @@ private[spark] object Utils extends Logging {
    * Returns a path of temporary file which is in the same directory with `path`.
    */
   def tempFileWith(path: File): File = {
-    new File(path.getAbsolutePath + "." + UUID.randomUUID())
+    var temp: File = null
+    do {
+      temp = new File(path.getAbsolutePath + "." +
+          StorageUtils.newNonSecureRandomUUID())
+    } while (temp.exists())
+  }
+
+  /**
+   * Returns a path of temporary file which is in the same directory with `path`.
+   */
+  def tempFileWith(parent: String, prefix: String): File = {
+    var temp: File = null
+    do {
+      val name = if (prefix == null) {
+        StorageUtils.newNonSecureRandomUUID().toString
+      } else {
+        prefix + '.' + StorageUtils.newNonSecureRandomUUID().toString
+      }
+      temp = new File(parent, name)
+    } while (temp.exists())
   }
 
   /**

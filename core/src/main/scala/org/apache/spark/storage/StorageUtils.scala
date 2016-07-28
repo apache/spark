@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
+import java.util.UUID
 
 import scala.collection.Map
 import scala.collection.mutable
@@ -282,4 +283,52 @@ private[spark] object StorageUtils extends Logging {
     blockLocations
   }
 
+  /** static random number generator for UUIDs */
+  private val uuidRnd = new java.util.Random
+
+  /**
+   * Generate a random UUID for file names etc. Uses non-secure version
+   * of random number generator to be more efficient given that its not
+   * critical to have this unique.
+   *
+   * Adapted from Android's java.util.UUID source.
+   */
+  final def newNonSecureRandomUUID(): UUID = {
+    val randomBytes: Array[Byte] = new Array[Byte](16)
+    uuidRnd.nextBytes(randomBytes)
+
+    var msb = getLong(randomBytes, 0)
+    var lsb = getLong(randomBytes, 8)
+    // Set the version field to 4.
+    msb &= ~(0xfL << 12)
+    msb |= (4L << 12)
+    // Set the variant field to 2. Note that the variant field is
+    // variable-width, so supporting other variants is not just a matter
+    // of changing the constant 2 below!
+    lsb &= ~(0x3L << 62)
+    lsb |= 2L << 62
+    new UUID(msb, lsb)
+  }
+
+  final def getLong(src: Array[Byte], offset: Int): Long = {
+    var index = offset
+    var h: Int = (src(index) & 0xff) << 24
+    index += 1
+    h |= (src(index) & 0xff) << 16
+    index += 1
+    h |= (src(index) & 0xff) << 8
+    index += 1
+    h |= (src(index) & 0xff)
+    index += 1
+
+    var l = (src(index) & 0xff) << 24
+    index += 1
+    l |= (src(index) & 0xff) << 16
+    index += 1
+    l |= (src(index) & 0xff) << 8
+    index += 1
+    l |= (src(index) & 0xff)
+
+    (h.toLong << 32L) | (l.toLong & 0xffffffffL)
+  }
 }
