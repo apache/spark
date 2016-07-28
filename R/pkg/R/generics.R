@@ -1308,6 +1308,10 @@ setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spar
 #' @export
 setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark.isoreg") })
 
+#' @rdname spark.mvnormalmixEM
+#' @export
+setGeneric("spark.mvnormalmixEM", function(data, formula, ...) { standardGeneric("spark.mvnormalmixEM") })
+
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
