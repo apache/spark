@@ -39,11 +39,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   test("having clause") {
-    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
-      .createOrReplaceTempView("hav")
-    checkAnswer(
-      sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
-      Row("one", 6) :: Row("three", 3) :: Nil)
+    withTempView("hav") {
+      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
+        .createOrReplaceTempView("hav")
+      checkAnswer(
+        sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
+        Row("one", 6) :: Row("three", 3) :: Nil)
+    }
+  }
+
+  test("having condition contains grouping column") {
+    withTempView("hav") {
+      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
+        .createOrReplaceTempView("hav")
+      checkAnswer(
+        sql("SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2"),
+        Row(1) :: Nil)
+    }
   }
 
   test("SPARK-8010: promote numeric to string") {
