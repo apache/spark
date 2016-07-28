@@ -1279,10 +1279,10 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
-#' @rdname spark.isotonicRegression
+#' @rdname spark.isoreg
 #' @export
-setGeneric("spark.isotonicRegression", function(data, formula, ...)
-    { standardGeneric("spark.isotonicRegression") })
+setGeneric("spark.isoreg", function(data, formula, ...)
+    { standardGeneric("spark.isoreg") })
 
 #' @rdname write.ml
 #' @export

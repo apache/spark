@@ -318,10 +318,10 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'                 antitonic/decreasing (false)
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
 #'                     no effect otherwise
-#' @return \code{spark.isotonicRegression} returns a fitted Isotonic Regression model
-#' @rdname spark.isotonicRegression
-#' @aliases spark.isotonicRegression,SparkDataFrame,formula-method
-#' @name spark.isotonicRegression
+#' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
+#' @rdname spark.isoreg
+#' @aliases spark.isoreg,SparkDataFrame,formula-method
+#' @name spark.isoreg
 #' @export
 #' @examples
 #' \dontrun{
@@ -329,7 +329,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
 #'         list(5.0, 3.0), list(1.0, 4.0))
 #' df <- createDataFrame(data, c("label", "feature"))
-#' model <- spark.isotonicRegression(df, label ~ feature, isotonic = FALSE)
+#' model <- spark.isoreg(df, label ~ feature, isotonic = FALSE)
 #' # return model boundaries and prediction as lists
 #' result <- summary(model, df)
 #'
@@ -341,8 +341,8 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #' }
-#' @note spark.isotonicRegression since 2.1.0
-setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula = "formula"),
+#' @note spark.isoreg since 2.1.0
+setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, isotonic = TRUE, featureIndex = 0) {
             formula <- paste0(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
@@ -355,7 +355,7 @@ setMethod("spark.isotonicRegression", signature(data = "SparkDataFrame", formula
 #' @param object a fitted isotonicRegressionModel
 #' @param newData A SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
-#' @rdname spark.isotonicRegression
+#' @rdname spark.isoreg
 #' @export
 #' @note predict(isotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
@@ -367,7 +367,7 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 
 #' @param object A fitted isotonicRegressionModel model
 #' @return \code{summary} returns the model's boundaries and prediction as lists
-#' @rdname spark.isotonicRegression
+#' @rdname spark.isoreg
 #' @export
 #' @note summary(isotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
@@ -618,7 +618,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname spark.isotonicRegression
+#' @rdname spark.isoreg
 #' @export
 #' @note write.ml(IsotonicRegression, character) since 2.0.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
