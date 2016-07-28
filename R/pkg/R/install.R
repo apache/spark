@@ -36,7 +36,7 @@
 #' \code{without-hadoop}.
 #'
 #' @param hadoopVersion Version of Hadoop to install. Default is \code{"2.7"}. It can take other
-#'                      version number in the format of "int.int".
+#'                      version number in the format of "x.y" where x and y are integer.
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
 #'                      See
 #'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
@@ -50,11 +50,9 @@
 #'                 \itemize{
 #'                   \item Mac OS X: \file{~/Library/Caches/spark}
 #'                   \item Unix: \env{$XDG_CACHE_HOME} if defined, otherwise \file{~/.cache/spark}
-#'                   \item Win XP:
-#'                         \file{C:\\Documents and Settings\\<username>\\Local Settings\\Application
-#'                         Data\\spark\\spark\\Cache}
-#'                   \item Win Vista:
-#'                         \file{C:\\Users\\<username>\\AppData\\Local\\spark\\spark\\Cache}
+#'                   \item Windows: \file{\%LOCALAPPDATA\%\\spark\\spark\\Cache}. See
+#'                         \href{https://www.microsoft.com/security/portal/mmpc/shared/variables.aspx}{
+#'                         Windows Common Folder Variables} about \%LOCALAPPDATA\%
 #'                 }
 #' @param overwrite If \code{TRUE}, download and overwrite the existing tar file in localDir
 #'                  and force re-install Spark (in case the local directory or file is corrupted)
@@ -210,7 +208,7 @@ hadoop_version_name <- function(hadoopVersion) {
 spark_cache_path <- function() {
   if (.Platform$OS.type == "windows") {
     winAppPath <- Sys.getenv("%LOCALAPPDATA%", unset = NA)
-    if (is.null(winAppPath)) {
+    if (is.na(winAppPath)) {
       msg <- paste("%LOCALAPPDATA% not found.",
                    "Please define the environment variable",
                    "or restart and enter an installation path in localDir.")
