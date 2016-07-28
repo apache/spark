@@ -24,6 +24,8 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 
+import sun.util.calendar.CalendarSystem
+
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -875,11 +877,20 @@ object DateTimeUtils {
         val hh = seconds / 3600
         val mm = seconds / 60 % 60
         val ss = seconds % 60
-        val nano = millisOfDay % 1000 * 1000000
-
+        val millis = millisOfDay % 1000
+        // Choose calendar based on java.util.Date getCalendarSystem
+        val calendar = if (year >= 1582) {
+          CalendarSystem.getGregorianCalendar()
+        } else {
+          CalendarSystem.forName("julian")
+        }
         // create a Timestamp to get the unix timestamp (in UTC)
-        val timestamp = new Timestamp(year - 1900, month - 1, day, hh, mm, ss, nano)
-        guess = (millisLocal - timestamp.getTime).toInt
+        val date = calendar.newCalendarDate(null).
+          setDate(year + 1900, month, day).
+          setTimeOfDay(hh, mm, ss, millis)
+
+        val timestamp = calendar.getTime(date)
+        guess = (millisLocal - timestamp).toInt
       }
     }
     guess
