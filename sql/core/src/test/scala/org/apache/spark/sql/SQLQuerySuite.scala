@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.math.MathContext
 import java.sql.Timestamp
 
-import org.apache.spark.{SparkException, AccumulatorSuite}
+import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
