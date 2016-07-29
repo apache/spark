@@ -161,15 +161,7 @@ class StringIndexerModel (
       return dataset.toDF
     }
     validateAndTransformSchema(dataset.schema)
-
-    val indexer = udf { label: String =>
-      if (labelToIndex.contains(label)) {
-        labelToIndex(label)
-      } else {
-        throw new SparkException(s"Unseen label: $label.")
-      }
-    }
-
+    val indexer = udf { transformInstance _ }
     val metadata = NominalAttribute.defaultAttr
       .withName($(outputCol)).withValues(labels).toMetadata()
     // If we are skipping invalid records, filter them out.
@@ -183,6 +175,15 @@ class StringIndexerModel (
     }
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
+  }
+
+  def transformInstance(label: String): Double = {
+    // Throws an exception if the label is unseen before
+    if (labelToIndex.contains(label)) {
+      labelToIndex(label)
+    } else {
+      throw new SparkException(s"Unseen label: $label.")
+    }
   }
 
   @Since("1.4.0")

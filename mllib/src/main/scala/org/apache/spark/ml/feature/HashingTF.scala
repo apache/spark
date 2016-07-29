@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
@@ -80,7 +81,11 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("1.2.0")
-  def setNumFeatures(value: Int): this.type = set(numFeatures, value)
+  def setNumFeatures(value: Int): this.type = {
+    set(numFeatures, value)
+    hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+    this
+  }
 
   /** @group getParam */
   @Since("2.0.0")
@@ -88,16 +93,26 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("2.0.0")
-  def setBinary(value: Boolean): this.type = set(binary, value)
+  def setBinary(value: Boolean): this.type = {
+    set(binary, value)
+    hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+    this
+  }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
-    // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
-    val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
+    val t = udf { transformInstance _ }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
+  }
+
+  /** Updated by the setters when parameters change */
+  private var hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+
+  def transformInstance(terms: Seq[_]): Vector = {
+    // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
+    hashingTF.transform(terms).asML
   }
 
   @Since("1.4.0")

@@ -359,10 +359,12 @@ class VectorIndexerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
+    val transformUDF = udf { transformInstance _ }
     val newCol = transformUDF(dataset($(inputCol)))
     dataset.withColumn($(outputCol), newCol, newField.metadata)
   }
+
+  def transformInstance(vector: Vector): Vector = {transformFunc(vector)}
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {

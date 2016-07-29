@@ -194,4 +194,6 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
   protected def predict(features: FeaturesType): Double
+
+  def transformInstance(features: FeaturesType): Double = {predict(features)}
 }

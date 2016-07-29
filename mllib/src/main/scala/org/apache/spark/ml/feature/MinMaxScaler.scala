@@ -170,25 +170,24 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    val reScale = udf { transformInstance _ }
+    dataset.withColumn($(outputCol), reScale(col($(inputCol))))
+  }
+
+  def transformInstance(vector: Vector): Vector = {
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
-
-    val reScale = udf { (vector: Vector) =>
-      val scale = $(max) - $(min)
-
-      // 0 in sparse vector will probably be rescaled to non-zero
-      val values = vector.toArray
-      val size = values.length
-      var i = 0
-      while (i < size) {
-        val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-        values(i) = raw * scale + $(min)
-        i += 1
-      }
-      Vectors.dense(values)
+    val scale = $(max) - $(min)
+    // 0 in sparse vector will probably be rescaled to non-zero
+    val values = vector.toArray
+    val size = values.length
+    var i = 0
+    while (i < size) {
+      val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
+      values(i) = raw * scale + $(min)
+      i += 1
     }
-
-    dataset.withColumn($(outputCol), reScale(col($(inputCol))))
+    Vectors.dense(values)
   }
 
   @Since("1.5.0")

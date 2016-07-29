@@ -74,25 +74,9 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val outputSchema = transformSchema(dataset.schema, logging = true)
     val schema = dataset.schema
     val inputType = schema($(inputCol)).dataType
-    val td = $(threshold)
-
-    val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    val binarizerVector = udf { (data: Vector) =>
-      val indices = ArrayBuilder.make[Int]
-      val values = ArrayBuilder.make[Double]
-
-      data.foreachActive { (index, value) =>
-        if (value > td) {
-          indices += index
-          values +=  1.0
-        }
-      }
-
-      Vectors.sparse(data.size, indices.result(), values.result()).compressed
-    }
-
+    val binarizerDouble = udf{(x: Double) => transformInstance(x)}
+    val binarizerVector = udf{(x: Vector) => transformInstance(x)}
     val metadata = outputSchema($(outputCol)).metadata
-
     inputType match {
       case DoubleType =>
         dataset.select(col("*"), binarizerDouble(col($(inputCol))).as($(outputCol), metadata))
@@ -100,6 +84,22 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         dataset.select(col("*"), binarizerVector(col($(inputCol))).as($(outputCol), metadata))
     }
   }
+
+  def transformInstance(in: Double): Double = {if (in > $(threshold)) 1.0 else 0.0}
+
+  def transformInstance(data: Vector): Vector = {
+    val indices = ArrayBuilder.make[Int]
+    val values = ArrayBuilder.make[Double]
+    val td = $(threshold)
+    data.foreachActive { (index, value) =>
+      if (value > td) {
+        indices += index
+        values +=  1.0
+      }
+    }
+    Vectors.sparse(data.size, indices.result(), values.result()).compressed
+  }
+
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
