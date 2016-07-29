@@ -109,6 +109,31 @@ object TypeCoercion {
   }
 
   /**
+   * Similar to [[findTightestCommonType]], but this handles all numeric types including
+   * fixed-precision decimals interacting with each other or with primitive types. This will
+   * not lose precision and scale.
+   */
+  private def findTightestCommonTypeToDecimal(left: DataType, right: DataType): Option[DataType] = {
+    findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
+      case (t1: DecimalType, t2: DecimalType) =>
+        val scale = math.max(t1.scale, t2.scale)
+        val range = math.max(t1.precision - t1.scale, t2.precision - t2.scale)
+        if (range + scale > 38) {
+          // DecimalType can't support precision > 38
+          None
+        } else {
+          Some(DecimalType(range + scale, scale))
+        }
+      case (t1: IntegralType, t2: DecimalType) =>
+        findTightestCommonTypeToDecimal(DecimalType.forType(t1), t2)
+      case (t1: DecimalType, t2: IntegralType) =>
+        findTightestCommonTypeToDecimal(t1, DecimalType.forType(t2))
+
+      case _ => None
+    })
+  }
+
+  /**
    * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
    * [[findTightestCommonTypeToString]] to find the TightestCommonType.
    */
@@ -117,6 +142,18 @@ object TypeCoercion {
       case None => None
       case Some(d) =>
         findTightestCommonTypeToString(d, c)
+    })
+  }
+
+  /**
+   * Similar to [[findTightestCommonType]], Find the tightest common type of a set of types
+   * by continuously applying `findTightestCommonTypeToDecimal` on these types.
+   */
+  private def findTightestCommonTypeAndPromoteToDecimal(types: Seq[DataType]): Option[DataType] = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
+      case None => None
+      case Some(d) =>
+        findTightestCommonTypeToDecimal(d, c)
     })
   }
 
@@ -496,14 +533,14 @@ object TypeCoercion {
 
       case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findTightestCommonTypeAndPromoteToDecimal(types) match {
           case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
           case None => g
         }
 
       case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findTightestCommonTypeAndPromoteToDecimal(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
           case None => l
         }

@@ -344,6 +344,15 @@ class TypeCoercionSuite extends PlanTest {
           :: Cast(Literal(1), DecimalType(22, 0))
           :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
           :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1L)
+          :: Literal(1)
+          :: Literal(new java.math.BigDecimal("1.5"))
+          :: Nil),
+        operator(Cast(Literal(1L), DecimalType(21, 1))
+          :: Cast(Literal(1), DecimalType(21, 1))
+          :: Cast(Literal(new java.math.BigDecimal("1.5")), DecimalType(21, 1))
+          :: Nil))
     }
   }
 
