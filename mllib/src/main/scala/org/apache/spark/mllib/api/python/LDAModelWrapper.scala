@@ -16,7 +16,7 @@
  */
 package org.apache.spark.mllib.api.python
 
-import scala.collection.JavaConverters
+import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.SparkContext
@@ -37,11 +37,11 @@ private[python] class LDAModelWrapper(model: LDAModel) {
 
   def describeTopics(maxTermsPerTopic: Int): Array[Byte] = {
     val topics = model.describeTopics(maxTermsPerTopic).map { case (terms, termWeights) =>
-      val jTerms = JavaConverters.seqAsJavaListConverter(terms).asJava
-      val jTermWeights = JavaConverters.seqAsJavaListConverter(termWeights).asJava
+      val jTerms = seqAsJavaListConverter(terms).asJava
+      val jTermWeights = seqAsJavaListConverter(termWeights).asJava
       Array[Any](jTerms, jTermWeights)
     }
-    SerDe.dumps(JavaConverters.seqAsJavaListConverter(topics).asJava)
+    SerDe.dumps(seqAsJavaListConverter(topics).asJava)
   }
 
   def topicDistributions(
@@ -62,6 +62,6 @@ private[python] class LDAModelWrapper(model: LDAModel) {
     }.asInstanceOf[ RDD[(Any, Any)] ])
 
   }
-  
+
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)
 }

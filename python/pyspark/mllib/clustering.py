@@ -979,7 +979,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
         :param documents:
           RDD of document id and features.
         :return:
-          RDD where each row is a tuple of document id and array of 
+          RDD where each row is a tuple of document id and array of
           estimated topic distribution for k topics.
         """
         if not isinstance(documents, RDD):

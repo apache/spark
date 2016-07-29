@@ -777,7 +777,7 @@ class DistributedLDAModel private[clustering] (
     JavaPairRDD.fromRDD(topicDistributions.asInstanceOf[RDD[(java.lang.Long, Vector)]])
   }
 
-  override def topicDistributions(documents: RDD[(Long, Vector)]: RDD[(Long, Vector)] = {
+  override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
     throw new NotImplementedError("Convert to LocalLDAModel or use online optimizer.")
   }
 
