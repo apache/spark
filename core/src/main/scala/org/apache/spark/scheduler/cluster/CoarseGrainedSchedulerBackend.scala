@@ -209,6 +209,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on all executors
     private def makeOffers() {
+      // Avoid making offers when cluster is not available for new offers
       if (!isClusterAvailableForNewOffers()) {
         return
       }
@@ -230,6 +231,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
+      // Avoid making offers when cluster is not available for new offersgit add .
       if (!isClusterAvailableForNewOffers()) {
         return
       }
@@ -351,6 +353,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     driverEndpoint = createDriverEndpointRef(properties)
   }
 
+  /**
+   * The hook to check if the cluster is running well or temporarily down.
+   *
+   * @return Whether cluster is available for new offers
+   */
   def isClusterAvailableForNewOffers(): Boolean = true
 
   protected def createDriverEndpointRef(
