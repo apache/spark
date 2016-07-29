@@ -231,7 +231,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
-      // Avoid making offers when cluster is not available for new offersgit add .
+      // Avoid making offers when cluster is not available for new offers
       if (!isClusterAvailableForNewOffers()) {
         return
       }
