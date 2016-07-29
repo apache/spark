@@ -416,15 +416,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     } else {
       val metadata = catalog.getTableMetadata(table)
 
-      if (DDLUtils.isDatasourceTable(metadata)) {
-        DDLUtils.getSchemaFromTableProperties(metadata) match {
-          case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, result)
-          case None => describeSchema(catalog.lookupRelation(table).schema, result)
-        }
-      } else {
-        describeSchema(metadata.schema, result)
-      }
-
+      describeSchema(metadata, result)
       if (isExtended) {
         describeExtended(metadata, result)
       } else if (isFormatted) {
@@ -439,12 +431,12 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(table)) {
-      val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
       val partColNames = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      for (schema <- userSpecifiedSchema if partColNames.nonEmpty) {
+      if (partColNames.nonEmpty) {
+        val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(StructType(partColNames.map(schema(_))), buffer)
+        describeSchema(StructType(partColNames.map(userSpecifiedSchema(_))), buffer)
       }
     } else {
       if (table.partitionColumns.nonEmpty) {
@@ -515,6 +507,17 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
       appendBucketInfo(DDLUtils.getBucketSpecFromTableProperties(metadata))
     } else {
       appendBucketInfo(metadata.bucketSpec)
+    }
+  }
+
+  private def describeSchema(
+      tableDesc: CatalogTable,
+      buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(tableDesc)) {
+      val schema = DDLUtils.getSchemaFromTableProperties(tableDesc)
+      describeSchema(schema, buffer)
+    } else {
+      describeSchema(tableDesc.schema, buffer)
     }
   }
 
@@ -876,12 +879,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    DDLUtils.getSchemaFromTableProperties(metadata).foreach { schema =>
-      val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
-      builder ++= columns.mkString("(", ", ", ")")
-    }
-
-    builder ++= "\n"
+    val schema = DDLUtils.getSchemaFromTableProperties(metadata)
+    val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+    builder ++= columns.mkString("(", ", ", ")\n")
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
