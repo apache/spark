@@ -63,6 +63,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     DenseVector([5.5...])
     >>> model.intercept
     -2.68...
+    >>> model.numFeatures
+    1
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
     >>> result = model.transform(test0).head()
     >>> result.prediction
@@ -89,6 +91,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> model.coefficients[0] == model2.coefficients[0]
     True
     >>> model.intercept == model2.intercept
+    True
+    >>> model.numFeatures == model2.numFeatures
     True
 
     .. versionadded:: 1.3.0
@@ -234,6 +238,14 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Model intercept.
         """
         return self._call_java("intercept")
+
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
 
     @property
     @since("2.0.0")
@@ -522,6 +534,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     1
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
     >>> print(model.toDebugString)
     DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
@@ -545,6 +559,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model.save(model_path)
     >>> model2 = DecisionTreeClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.numFeatures == model2.numFeatures
     True
 
     .. versionadded:: 1.4.0
@@ -623,6 +639,14 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLR
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
+
 
 @inherit_doc
 class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
@@ -662,6 +686,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> model.numFeatures
+    1
     >>> model.trees
     [DecisionTreeClassificationModel (uid=...) of depth..., DecisionTreeClassificationModel...]
     >>> rfc_path = temp_path + "/rfc"
@@ -673,6 +699,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model.save(model_path)
     >>> model2 = RandomForestClassificationModel.load(model_path)
     >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.numFeatures == model2.numFeatures
     True
 
     .. versionadded:: 1.4.0
@@ -746,6 +774,14 @@ class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaML
 
     @property
     @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
+
+    @property
+    @since("2.0.0")
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
@@ -794,6 +830,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     1.0
     >>> model.totalNumNodes
     15
+    >>> model.numFeatures
+    1
     >>> print(model.toDebugString)
     GBTClassificationModel (uid=...)...with 5 trees...
     >>> gbtc_path = temp_path + "gbtc"
@@ -810,6 +848,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     True
     >>> model.trees
     [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -897,6 +937,14 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
 
     @property
     @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
+
+    @property
+    @since("2.0.0")
     def trees(self):
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
@@ -938,6 +986,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
+    >>> model.numFeatures
+    2
     >>> nb_path = temp_path + "/nb"
     >>> nb.save(nb_path)
     >>> nb2 = NaiveBayes.load(nb_path)
@@ -955,6 +1005,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> result = model3.transform(test0).head()
     >>> result.prediction
     0.0
+    >>> model.numFeatures == model2.numFeatures
+    True
 
     .. versionadded:: 1.5.0
     """
@@ -1050,6 +1102,14 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("theta")
 
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
+
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
@@ -1075,6 +1135,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     [2, 2, 2]
     >>> model.weights.size
     12
+    >>> model.numFeatures
+    2
     >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
@@ -1103,6 +1165,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> model3.weights != model2.weights
     True
     >>> model3.layers == model.layers
+    True
+    >>> model.numFeatures == model2.numFeatures
     True
 
     .. versionadded:: 1.6.0
@@ -1250,6 +1314,14 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLR
         vector of initial weights for the model that consists of the weights of layers.
         """
         return self._call_java("weights")
+
+    @property
+    @since("2.0.0")
+    def numFeatures(self):
+        """
+        Number of features the model was trained on.
+        """
+        return self._call_java("numFeatures")
 
 
 class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
