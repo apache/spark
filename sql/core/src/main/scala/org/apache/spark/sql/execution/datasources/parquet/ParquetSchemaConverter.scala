@@ -445,14 +445,14 @@ private[parquet] class ParquetSchemaConverter(
         //     repeated <element-type> array;
         //   }
         // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
-          Types
+        Types
+          .buildGroup(repetition).as(LIST)
+          .addField(Types
             .buildGroup(REPEATED)
             // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
             .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
+          .named(field.name)
 
       // Spark 1.4.x and prior versions convert ArrayType with non-nullable elements into a 2-level
       // LIST structure.  This behavior mimics parquet-avro (1.6.0rc3).  Note that this case is
@@ -461,11 +461,10 @@ private[parquet] class ParquetSchemaConverter(
         // <list-repetition> group <name> (LIST) {
         //   repeated <element-type> element;
         // }
-        ConversionPatterns.listType(
-          repetition,
-          field.name,
-          // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
-          convertField(StructField("array", elementType, nullable), REPEATED))
+        Types
+          .buildGroup(repetition).as(LIST)
+          .addField(convertField(StructField("array", elementType, nullable), REPEATED))
+          .named(field.name)
 
       // Spark 1.4.x and prior versions convert MapType into a 3-level group annotated by
       // MAP_KEY_VALUE.  This is covered by `convertGroupField(field: GroupType): DataType`.
