@@ -2888,4 +2888,35 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         data.selectExpr("`part.col1`", "`col.1`"))
     }
   }
+
+  test("SPARK-16771: WITH clause should not fall into infinite loop") {
+    val m = intercept[AnalysisException] {
+      sql("WITH t AS (SELECT 1 FROM t) SELECT * FROM t")
+    }.getMessage
+    assert(m.contains("Table or view not found: t"))
+
+    spark.range(3).createOrReplaceTempView("t")
+    checkAnswer(sql("WITH t AS (SELECT 1 FROM t) SELECT * FROM t"),
+      Row(1) :: Row(1) :: Row(1) :: Nil)
+  }
+
+  test("SPARK-16771: WITH clauses should not fall into infinite loop") {
+    val m = intercept[AnalysisException] {
+      sql("WITH t1 AS (SELECT 1 FROM t2), t2 AS (SELECT 1 FROM t1) SELECT * FROM t1, t2")
+    }.getMessage
+    assert(m.contains("Table or view not found: t2"))
+
+    spark.range(2).createOrReplaceTempView("t2")
+    checkAnswer(sql("WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1, t2"),
+      Row(0, 2) :: Row(1, 2) :: Row(0, 2) :: Row(1, 2) :: Nil)
+  }
+
+  test("current_date and current_timestamp literals") {
+    // NOTE that I am comparing the result of the literal with the result of the function call.
+    // This is done to prevent the test from failing because we are comparing a result to an out
+    // dated timestamp (quite likely) or date (very unlikely - but equally annoying).
+    checkAnswer(
+      sql("select current_date = current_date(), current_timestamp = current_timestamp()"),
+      Seq(Row(true, true)))
+  }
 }

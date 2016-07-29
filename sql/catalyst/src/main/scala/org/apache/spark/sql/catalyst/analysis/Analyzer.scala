@@ -125,21 +125,23 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
-      case With(child, relations) => substituteCTE(child, relations)
+      case With(child, relations) if relations.nonEmpty =>
+        var resolvedRelations = Seq(relations.head._1 -> ResolveRelations(relations.head._2))
+        relations.tail.foreach { case (name, relation) =>
+          resolvedRelations = resolvedRelations ++
+            Seq(name -> ResolveRelations(substituteCTE(relation, resolvedRelations)))
+        }
+        substituteCTE(child, resolvedRelations)
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
-      plan transform {
-        // In hive, if there is same table name in database and CTE definition,
-        // hive will use the table in database, not the CTE one.
-        // Taking into account the reasonableness and the implementation complexity,
-        // here use the CTE definition first, check table name only and ignore database name
-        // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
+    def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
+      plan transformDown {
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(SubqueryAlias(_, relation))
-            withAlias.getOrElse(relation)
+          val substituted = cteRelations.find(_._1 == u.tableIdentifier.table).map(_._2).map {
+            relation =>
+              val withAlias = u.alias.map(SubqueryAlias(_, relation))
+              withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)
         case other =>
