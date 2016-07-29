@@ -449,7 +449,7 @@ private[parquet] class ParquetSchemaConverter(
           .buildGroup(repetition).as(LIST)
           .addField(Types
             .buildGroup(REPEATED)
-            // "array_element" is the name chosen by parquet-hive (1.7.0 and prior version)
+            // "array" is the name chosen by parquet-hive (1.7.0 and prior version)
             .addField(convertField(StructField("array", elementType, nullable)))
             .named("bag"))
           .named(field.name)
@@ -463,6 +463,7 @@ private[parquet] class ParquetSchemaConverter(
         // }
         Types
           .buildGroup(repetition).as(LIST)
+          // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
           .addField(convertField(StructField("array", elementType, nullable), REPEATED))
           .named(field.name)
 
