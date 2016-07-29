@@ -496,14 +496,14 @@ object TypeCoercion {
 
       case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
           case None => g
         }
 
       case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
           case None => l
         }

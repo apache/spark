@@ -39,6 +39,20 @@ class SQLTypeCoercionSuite extends QueryTest with SharedSQLContext {
       sql("select array(0.001, 0.1)"),
       Row(Seq(v1, v2))
     )
+
+    checkAnswer(
+      sql("select greatest(0.001, 0.1), least(0.001, 0.1)"),
+      Row(v2, v1)
+    )
+
+    checkAnswer(
+      sql(
+        """
+          |select ifnull(0.001, 0.1), nullif(0.001, 0.1), nvl2(0.001, 0.001, 0.1), nvl(0.001, 0.1),
+          |       if(true, 0.001, 0.1)
+        """.stripMargin),
+      Row(v1, v1, v1, v1, v1)
+    )
   }
 
 }

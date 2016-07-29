@@ -67,6 +67,7 @@ object DecimalPrecision extends Rule[LogicalPlan] {
   def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
     widerDecimalType(d1.precision, d1.scale, d2.precision, d2.scale)
   }
+
   // max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2)
   def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
     val scale = max(s1, s2)
