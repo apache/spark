@@ -137,7 +137,7 @@ object TypeCoercion {
    * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
    * loss of precision when widening decimal and double.
    */
-  private def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
+  def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
     case (t1: DecimalType, t2: DecimalType) =>
       Some(DecimalPrecision.widerDecimalType(t1, t2))
     case (t: IntegralType, d: DecimalType) =>
