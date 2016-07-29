@@ -292,7 +292,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite
 
     // Add another normal block manager and test that 2x replication works
     makeBlockManager(10000, "anotherStore")
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a2") === 2)
     }
   }
@@ -317,14 +317,14 @@ class BlockManagerReplicationSuite extends SparkFunSuite
 
     // Add another store, 3x replication should work now, 4x replication should only replicate 3x
     val newStore1 = makeBlockManager(storeSize, s"newstore1")
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a3", 3) === 3)
     }
     assert(replicateAndGetNumCopies("a4", 4) === 3)
 
     // Add another store, 4x replication should work now
     val newStore2 = makeBlockManager(storeSize, s"newstore2")
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a5", 4) === 4)
     }
 
@@ -340,7 +340,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite
     val newStores = (3 to 5).map {
       i => makeBlockManager(storeSize, s"newstore$i")
     }
-    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+    eventually(timeout(1000.milliseconds), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a7", 3) === 3)
     }
   }
