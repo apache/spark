@@ -22,6 +22,7 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
@@ -188,13 +189,13 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {
+    val proactivelyReplicate = conf.get("spark.storage.replication.proactive", "false").toBoolean
+
     val info = blockManagerInfo(blockManagerId)
 
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
 
-    // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -202,10 +203,31 @@ class BlockManagerMasterEndpoint(
       locations -= blockManagerId
       if (locations.size == 0) {
         blockLocations.remove(blockId)
+        logWarning(s"No more replicas available for $blockId !")
+      } else if ((blockId.isRDD || blockId.isInstanceOf[TestBlockId]) && proactivelyReplicate) {
+        // we only need to proactively replicate RDD blocks
+        // we also need to replicate this behavior for test blocks for unit tests
+        // we send a message to a randomly chosen executor location to replicate block
+        // assuming single executor failure, we find out how many replicas existed before failure
+        val maxReplicas = locations.size + 1
+
+        val i = (new Random(blockId.hashCode)).nextInt(locations.size)
+        val blockLocations = locations.toSeq
+        val candidateBMId = blockLocations(i)
+        val blockManager = blockManagerInfo.get(candidateBMId)
+        if(blockManager.isDefined) {
+          val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
+          val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+          blockManager.get.slaveEndpoint.ask[Boolean](replicateMsg)
+        }
       }
     }
+    // Remove it from blockManagerInfo and remove all the blocks.
+    blockManagerInfo.remove(blockManagerId)
+
     listenerBus.post(SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId))
     logInfo(s"Removing block manager $blockManagerId")
+
   }
 
   private def removeExecutor(execId: String) {

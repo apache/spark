@@ -1131,14 +1131,47 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Called for pro-active replenishment of blocks lost due to executor failures
+   *
+   * @param blockId blockId being replicate
+   * @param replicas existing block managers that have a replica
+   * @param maxReps maximum replicas needed
+   * @return
+   */
+  def replicateBlock(blockId: BlockId, replicas: Set[BlockManagerId], maxReps: Int): Boolean = {
+    logInfo(s"Pro-actively replicating $blockId")
+    val infoForReplication = blockInfoManager.lockForReading(blockId).map { info =>
+      val data = doGetLocalBytes(blockId, info)
+      val storageLevel = StorageLevel(
+        info.level.useDisk,
+        info.level.useMemory,
+        info.level.useOffHeap,
+        info.level.deserialized,
+        maxReps)
+      (data, storageLevel, info.classTag)
+    }
+    infoForReplication.foreach { case (data, storageLevel, classTag) =>
+      replicate(blockId, data, storageLevel, classTag, replicas)
+    }
+    true
+  }
+
+  /**
    * Replicate block to another node. Note that this is a blocking call that returns after
    * the block has been replicated.
+   *
+   * @param blockId
+   * @param data
+   * @param level
+   * @param classTag
+   * @param existingReplicas
    */
   private def replicate(
-      blockId: BlockId,
-      data: ChunkedByteBuffer,
-      level: StorageLevel,
-      classTag: ClassTag[_]): Unit = {
+    blockId: BlockId,
+    data: ChunkedByteBuffer,
+    level: StorageLevel,
+    classTag: ClassTag[_],
+    existingReplicas: Set[BlockManagerId] = Set.empty): Unit = {
 
     val maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1)
     val tLevel = StorageLevel(
@@ -1152,20 +1185,25 @@ private[spark] class BlockManager(
 
     val startTime = System.nanoTime
 
-    var peersReplicatedTo = mutable.HashSet.empty[BlockManagerId]
+    var peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
     var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
+    val initialPeers = {
+      val peers = getPeers(false)
+      if(existingReplicas.isEmpty) peers else peers.filter(!existingReplicas.contains(_))
+    }
+
     var peersForReplication = blockReplicationPolicy.prioritize(
       blockManagerId,
-      getPeers(false),
-      mutable.HashSet.empty,
+      initialPeers,
+      peersReplicatedTo,
       blockId,
       numPeersToReplicateTo)
 
     while(numFailures <= maxReplicationFailures &&
-        !peersForReplication.isEmpty &&
-        peersReplicatedTo.size != numPeersToReplicateTo) {
+      !peersForReplication.isEmpty &&
+      peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head
       try {
         val onePeerStartTime = System.nanoTime
