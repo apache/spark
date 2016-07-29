@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.io.File
 
 import scala.collection.Map
+import scala.io.Codec
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
@@ -45,6 +46,22 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       assert(c(1) === "2")
       assert(c(2) === "3")
       assert(c(3) === "4")
+    } else {
+      assert(true)
+    }
+  }
+
+  test("basic pipe with tokenization") {
+    if (testCommandAvailable("wc")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+
+      // verify that both RDD.pipe(command: String) and RDD.pipe(command: String, env) work good
+      for (piped <- Seq(nums.pipe("wc -l"), nums.pipe("wc -l", Map[String, String]()))) {
+        val c = piped.collect()
+        assert(c.size === 2)
+        assert(c(0).trim === "2")
+        assert(c(1).trim === "2")
+      }
     } else {
       assert(true)
     }
@@ -119,6 +136,14 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     } else {
       assert(true)
     }
+  }
+
+  test("pipe with empty partition") {
+    val data = sc.parallelize(Seq("foo", "bing"), 8)
+    val piped = data.pipe("wc -c")
+    assert(piped.count == 8)
+    val charCounts = piped.map(_.trim.toInt).collect().toSet
+    assert(Set(0, 4, 5) == charCounts)
   }
 
   test("pipe with env variable") {
@@ -207,7 +232,16 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
         }
       }
       val hadoopPart1 = generateFakeHadoopPartition()
-      val pipedRdd = new PipedRDD(nums, "printenv " + varName)
+      val pipedRdd =
+        new PipedRDD(
+          nums,
+          PipedRDD.tokenize("printenv " + varName),
+          Map(),
+          null,
+          null,
+          false,
+          4092,
+          Codec.defaultCharsetCodec.name)
       val tContext = TaskContext.empty()
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray

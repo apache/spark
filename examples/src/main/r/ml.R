@@ -21,13 +21,12 @@
 # Load SparkR library into your R session
 library(SparkR)
 
-# Initialize SparkContext and SQLContext
-sc <- sparkR.init(appName="SparkR-ML-example")
-sqlContext <- sparkRSQL.init(sc)
+# Initialize SparkSession
+sparkR.session(appName = "SparkR-ML-example")
 
 ############################ spark.glm and glm ##############################################
-
-irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+# $example on:glm$
+irisDF <- suppressWarnings(createDataFrame(iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF
 gaussianTestDF <- irisDF
@@ -55,14 +54,14 @@ summary(binomialGLM)
 # Prediction
 binomialPredictions <- predict(binomialGLM, binomialTestDF)
 showDF(binomialPredictions)
-
+# $example off:glm$
 ############################ spark.survreg ##############################################
-
+# $example on:survreg$
 # Use the ovarian dataset available in R survival package
 library(survival)
 
 # Fit an accelerated failure time (AFT) survival regression model with spark.survreg
-ovarianDF <- suppressWarnings(createDataFrame(sqlContext, ovarian))
+ovarianDF <- suppressWarnings(createDataFrame(ovarian))
 aftDF <- ovarianDF
 aftTestDF <- ovarianDF
 aftModel <- spark.survreg(aftDF, Surv(futime, fustat) ~ ecog_ps + rx)
@@ -73,12 +72,12 @@ summary(aftModel)
 # Prediction
 aftPredictions <- predict(aftModel, aftTestDF)
 showDF(aftPredictions)
-
+# $example off:survreg$
 ############################ spark.naiveBayes ##############################################
-
+# $example on:naiveBayes$
 # Fit a Bernoulli naive Bayes model with spark.naiveBayes
 titanic <- as.data.frame(Titanic)
-titanicDF <- suppressWarnings(createDataFrame(sqlContext, titanic[titanic$Freq > 0, -5]))
+titanicDF <- createDataFrame(titanic[titanic$Freq > 0, -5])
 nbDF <- titanicDF
 nbTestDF <- titanicDF
 nbModel <- spark.naiveBayes(nbDF, Survived ~ Class + Sex + Age)
@@ -89,11 +88,11 @@ summary(nbModel)
 # Prediction
 nbPredictions <- predict(nbModel, nbTestDF)
 showDF(nbPredictions)
-
+# $example off:naiveBayes$
 ############################ spark.kmeans ##############################################
-
+# $example on:kmeans$
 # Fit a k-means model with spark.kmeans
-irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+irisDF <- suppressWarnings(createDataFrame(iris))
 kmeansDF <- irisDF
 kmeansTestDF <- irisDF
 kmeansModel <- spark.kmeans(kmeansDF, ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width,
@@ -108,10 +107,10 @@ showDF(fitted(kmeansModel))
 # Prediction
 kmeansPredictions <- predict(kmeansModel, kmeansTestDF)
 showDF(kmeansPredictions)
-
+# $example off:kmeans$
 ############################ model read/write ##############################################
-
-irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+# $example on:read_write$
+irisDF <- suppressWarnings(createDataFrame(iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF
 gaussianTestDF <- irisDF
@@ -130,7 +129,7 @@ gaussianPredictions <- predict(gaussianGLM2, gaussianTestDF)
 showDF(gaussianPredictions)
 
 unlink(modelPath)
-
+# $example off:read_write$
 ############################ fit models with spark.lapply #####################################
 
 # Perform distributed training of multiple models with spark.lapply
@@ -139,11 +138,11 @@ train <- function(family) {
   model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
   summary(model)
 }
-model.summaries <- spark.lapply(sc, families, train)
+model.summaries <- spark.lapply(families, train)
 
 # Print the summary of each model
 print(model.summaries)
 
 
-# Stop the SparkContext now
-sparkR.stop()
+# Stop the SparkSession now
+sparkR.session.stop()

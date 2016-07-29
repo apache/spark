@@ -66,7 +66,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -548,7 +548,7 @@ object DenseVector {
 }
 
 /**
- * A sparse vector represented by an index array and an value array.
+ * A sparse vector represented by an index array and a value array.
  *
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.

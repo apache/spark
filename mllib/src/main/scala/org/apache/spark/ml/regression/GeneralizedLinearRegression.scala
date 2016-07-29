@@ -376,7 +376,7 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
     def deviance(y: Double, mu: Double, weight: Double): Double
 
     /**
-     * Akaike's 'An Information Criterion'(AIC) value of the family for a given dataset.
+     * Akaike Information Criterion (AIC) value of the family for a given dataset.
      *
      * @param predictions an RDD of (y, mu, weight) of instances in evaluation dataset
      * @param deviance the deviance for the fitted model in evaluation dataset
@@ -702,13 +702,13 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   import GeneralizedLinearRegression._
 
-  lazy val familyObj = Family.fromName($(family))
-  lazy val linkObj = if (isDefined(link)) {
+  private lazy val familyObj = Family.fromName($(family))
+  private lazy val linkObj = if (isDefined(link)) {
     Link.fromName($(link))
   } else {
     familyObj.defaultLink
   }
-  lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
+  private lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   override protected def predict(features: Vector): Double = {
     val eta = predictLink(features)
@@ -813,7 +813,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -827,7 +827,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
         .select("intercept", "coefficients").head()
       val intercept = data.getDouble(0)
       val coefficients = data.getAs[Vector](1)
@@ -1021,7 +1021,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     rss / degreesOfFreedom
   }
 
-  /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
+  /** Akaike Information Criterion (AIC) for the fitted model. */
   @Since("2.0.0")
   lazy val aic: Double = {
     val w = weightCol

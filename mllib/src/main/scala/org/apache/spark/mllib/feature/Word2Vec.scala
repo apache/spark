@@ -434,6 +434,9 @@ class Word2Vec extends Serializable with Logging {
       bcSyn1Global.unpersist(false)
     }
     newSentences.unpersist()
+    expTable.destroy()
+    bcVocab.destroy()
+    bcVocabHash.destroy()
 
     val wordArray = vocab.map(_.word)
     new Word2VecModel(wordArray.zipWithIndex.toMap, syn0Global)
@@ -609,7 +612,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     case class Data(word: String, vector: Array[Float])
 
     def load(sc: SparkContext, path: String): Word2VecModel = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val dataFrame = spark.read.parquet(Loader.dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
@@ -620,7 +623,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     }
 
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val vectorSize = model.values.head.length
       val numWords = model.size
@@ -629,14 +632,16 @@ object Word2VecModel extends Loader[Word2VecModel] {
         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      // We want to partition the model in partitions of size 32MB
-      val partitionSize = (1L << 25)
+      // We want to partition the model in partitions smaller than
+      // spark.kryoserializer.buffer.max
+      val bufferSize = Utils.byteStringAsBytes(
+        spark.conf.get("spark.kryoserializer.buffer.max", "64m"))
       // We calculate the approximate size of the model
-      // We only calculate the array size, not considering
-      // the string size, the formula is:
-      // floatSize * numWords * vectorSize
-      val approxSize = 4L * numWords * vectorSize
-      val nPartitions = ((approxSize / partitionSize) + 1).toInt
+      // We only calculate the array size, considering an
+      // average string size of 15 bytes, the formula is:
+      // (floatSize * vectorSize + 15) * numWords
+      val approxSize = (4L * vectorSize + 15) * numWords
+      val nPartitions = ((approxSize / bufferSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
       spark.createDataFrame(dataArray).repartition(nPartitions).write.parquet(Loader.dataPath(path))
     }

@@ -157,7 +157,7 @@ abstract class DStream[T: ClassTag] (
   def persist(level: StorageLevel): DStream[T] = {
     if (this.isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change storage level of an DStream after streaming context has started")
+        "Cannot change storage level of a DStream after streaming context has started")
     }
     this.storageLevel = level
     this
@@ -176,7 +176,7 @@ abstract class DStream[T: ClassTag] (
   def checkpoint(interval: Duration): DStream[T] = {
     if (isInitialized) {
       throw new UnsupportedOperationException(
-        "Cannot change checkpoint interval of an DStream after streaming context has started")
+        "Cannot change checkpoint interval of a DStream after streaming context has started")
     }
     persist()
     checkpointDuration = interval

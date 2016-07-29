@@ -74,7 +74,7 @@ object Window {
     spec.orderBy(cols : _*)
   }
 
-  private def spec: WindowSpec = {
+  private[sql] def spec: WindowSpec = {
     new WindowSpec(Seq.empty, Seq.empty, UnspecifiedFrame)
   }
 

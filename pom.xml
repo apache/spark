@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.11</artifactId>
-  <version>2.0.0-SNAPSHOT</version>
+  <version>2.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -109,6 +109,8 @@
     <module>launcher</module>
     <module>external/kafka-0-8</module>
     <module>external/kafka-0-8-assembly</module>
+    <module>external/kafka-0-10</module>
+    <module>external/kafka-0-10-assembly</module>
   </modules>
 
   <properties>
@@ -117,7 +119,7 @@
     <java.version>1.7</java.version>
     <maven.version>3.3.9</maven.version>
     <sbt.project.name>spark</sbt.project.name>
-    <mesos.version>0.21.1</mesos.version>
+    <mesos.version>0.22.2</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -160,7 +162,7 @@
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.7.3</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
     <snappy.version>1.1.2.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -171,7 +173,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.3.2</commons-lang3.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
-    <janino.version>2.7.8</janino.version>
+    <janino.version>3.0.0</janino.version>
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
     <jodd.version>3.5.2</jodd.version>
@@ -181,9 +183,13 @@
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
     <paranamer.version>2.8</paranamer.version>
+    <maven-antrun.version>1.8</maven-antrun.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
+
+    <!-- When using different JDKs for the build, we can't use Zinc for the jdk8 part. -->
+    <useZincForJdk8>true</useZincForJdk8>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
@@ -651,7 +657,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>0.11.2</version>
+        <version>0.12</version>
         <exclusions>
           <!-- This is included as a compile-scoped dependency by jtransforms, which is
                a dependency of breeze. -->
@@ -1826,11 +1832,6 @@
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
       </dependency>
-      <dependency>
-        <groupId>com.thoughtworks.paranamer</groupId>
-        <artifactId>paranamer</artifactId>
-        <version>${paranamer.version}</version>
-      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -1994,6 +1995,7 @@
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+              <spark.memory.debugFill>true</spark.memory.debugFill>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
             </systemProperties>
@@ -2064,7 +2066,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-antrun-plugin</artifactId>
-          <version>1.8</version>
+          <version>${maven-antrun.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -2187,7 +2189,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-antrun-plugin</artifactId>
-                    <versionRange>[1.8,)</versionRange>
+                    <versionRange>[${maven-antrun.version},)</versionRange>
                     <goals>
                       <goal>run</goal>
                     </goals>
@@ -2485,7 +2487,7 @@
     <profile>
       <id>hadoop-2.4</id>
       <properties>
-        <hadoop.version>2.4.0</hadoop.version>
+        <hadoop.version>2.4.1</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
       </properties>
     </profile>
@@ -2493,7 +2495,7 @@
     <profile>
       <id>hadoop-2.6</id>
       <properties>
-        <hadoop.version>2.6.0</hadoop.version>
+        <hadoop.version>2.6.4</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
@@ -2503,7 +2505,7 @@
     <profile>
       <id>hadoop-2.7</id>
       <properties>
-        <hadoop.version>2.7.0</hadoop.version>
+        <hadoop.version>2.7.2</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
@@ -2580,6 +2582,59 @@
       <properties>
         <test.java.home>${env.JAVA_HOME}</test.java.home>
       </properties>
+    </profile>
+
+    <profile>
+      <id>java7</id>
+      <activation>
+        <property><name>env.JAVA_7_HOME</name></property>
+      </activation>
+      <properties>
+        <useZincForJdk8>false</useZincForJdk8>
+      </properties>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+                <compilerArgs combine.children="append">
+                  <arg>-bootclasspath</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                </compilerArgs>
+              </configuration>
+            </plugin>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <!-- Note: -javabootclasspath is set on a per-execution basis rather than as a
+                   plugin-wide configuration because doc-jar generation will break if it's
+                   set; see SPARK-15839 for more details -->
+              <executions>
+                <execution>
+                  <id>scala-compile-first</id>
+                  <configuration>
+                    <args combine.children="append">
+                      <arg>-javabootclasspath</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                    </args>
+                  </configuration>
+                </execution>
+                <execution>
+                  <id>scala-test-compile-first</id>
+                  <configuration>
+                    <args combine.children="append">
+                      <arg>-javabootclasspath</arg>
+                      <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                    </args>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
 
     <profile>

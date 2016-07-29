@@ -182,8 +182,7 @@ class AnalysisSuite extends AnalysisTest {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    // StringType will be promoted into Decimal(38, 18)
-    assert(pl(3).dataType == DecimalType(38, 22))
+    assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)
   }
 
@@ -345,5 +344,37 @@ class AnalysisSuite extends AnalysisTest {
           Inner, None))
 
     assertAnalysisSuccess(query)
+  }
+
+  private def assertExpressionType(
+      expression: Expression,
+      expectedDataType: DataType): Unit = {
+    val afterAnalyze =
+      Project(Seq(Alias(expression, "a")()), OneRowRelation).analyze.expressions.head
+    if (!afterAnalyze.dataType.equals(expectedDataType)) {
+      fail(
+        s"""
+           |data type of expression $expression doesn't match expected:
+           |Actual data type:
+           |${afterAnalyze.dataType}
+           |
+           |Expected data type:
+           |${expectedDataType}
+         """.stripMargin)
+    }
+  }
+
+  test("SPARK-15776: test whether Divide expression's data type can be deduced correctly by " +
+    "analyzer") {
+    assertExpressionType(sum(Divide(1, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1, 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1, 2.0f)), DoubleType)
+    assertExpressionType(sum(Divide(1.0f, 2)), DoubleType)
+    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
+    assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
 }

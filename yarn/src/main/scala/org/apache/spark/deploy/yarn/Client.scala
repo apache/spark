@@ -271,6 +271,33 @@ private[spark] class Client(
         appContext.setResource(capability)
     }
 
+    sparkConf.get(ROLLED_LOG_INCLUDE_PATTERN).foreach { includePattern =>
+      try {
+        val logAggregationContext = Records.newRecord(
+          Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+          .asInstanceOf[Object]
+
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
+        sparkConf.get(ROLLED_LOG_EXCLUDE_PATTERN).foreach { excludePattern =>
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+        }
+
+        val setLogAggregationContextMethod =
+          appContext.getClass.getMethod("setLogAggregationContext",
+            Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+        setLogAggregationContextMethod.invoke(appContext, logAggregationContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Ignoring ${ROLLED_LOG_INCLUDE_PATTERN.key} because the version of YARN " +
+            s"does not support it", e)
+      }
+    }
+
     appContext
   }
 
@@ -804,8 +831,11 @@ private[spark] class Client(
         env("SPARK_JAVA_OPTS") = value
       }
       // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
-      sys.env.get("PYSPARK_DRIVER_PYTHON").foreach(env("PYSPARK_DRIVER_PYTHON") = _)
-      sys.env.get("PYSPARK_PYTHON").foreach(env("PYSPARK_PYTHON") = _)
+      Seq("PYSPARK_DRIVER_PYTHON", "PYSPARK_PYTHON").foreach { envname =>
+        if (!env.contains(envname)) {
+          sys.env.get(envname).foreach(env(envname) = _)
+        }
+      }
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
@@ -980,7 +1010,6 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
-    UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
     amContainer
   }
@@ -1001,7 +1030,8 @@ private[spark] class Client(
       sparkConf.set(KEYTAB.key, keytabFileName)
       sparkConf.set(PRINCIPAL.key, principal)
     }
-    credentials = UserGroupInformation.getCurrentUser.getCredentials
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
   }
 
   /**
@@ -1053,7 +1083,14 @@ private[spark] class Client(
           case YarnApplicationState.RUNNING =>
             reportLauncherState(SparkAppHandle.State.RUNNING)
           case YarnApplicationState.FINISHED =>
-            reportLauncherState(SparkAppHandle.State.FINISHED)
+            report.getFinalApplicationStatus match {
+              case FinalApplicationStatus.FAILED =>
+                reportLauncherState(SparkAppHandle.State.FAILED)
+              case FinalApplicationStatus.KILLED =>
+                reportLauncherState(SparkAppHandle.State.KILLED)
+              case _ =>
+                reportLauncherState(SparkAppHandle.State.FINISHED)
+            }
           case YarnApplicationState.FAILED =>
             reportLauncherState(SparkAppHandle.State.FAILED)
           case YarnApplicationState.KILLED =>

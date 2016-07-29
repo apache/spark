@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
  * can be accessed in multiple threads. This is an external catalog because it is expected to
  * interact with external systems.
  *
- * Implementations should throw [[NoSuchDatabaseException]] when table or database don't exist.
+ * Implementations should throw [[NoSuchDatabaseException]] when databases don't exist.
  */
 abstract class ExternalCatalog {
   import CatalogTypes.TablePartitionSpec
@@ -71,7 +71,7 @@ abstract class ExternalCatalog {
 
   def createTable(db: String, tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
 
-  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit
+  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
@@ -125,7 +125,8 @@ abstract class ExternalCatalog {
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit
 
   /**
    * Override the specs of one or many existing table partitions, assuming they exist.

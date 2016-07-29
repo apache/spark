@@ -158,7 +158,7 @@ object UnsafeProjection {
 object FromUnsafeProjection {
 
   /**
-   * Returns an Projection for given StructType.
+   * Returns a Projection for given StructType.
    */
   def apply(schema: StructType): Projection = {
     apply(schema.fields.map(_.dataType))
@@ -172,7 +172,7 @@ object FromUnsafeProjection {
   }
 
   /**
-   * Returns an Projection for given sequence of Expressions (bounded).
+   * Returns a Projection for given sequence of Expressions (bounded).
    */
   private def create(exprs: Seq[Expression]): Projection = {
     GenerateSafeProjection.generate(exprs)

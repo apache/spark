@@ -41,6 +41,7 @@ if __name__ == "__main__":
     stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
     model = stringIndexer.fit(df)
     indexed = model.transform(df)
+
     encoder = OneHotEncoder(dropLast=False, inputCol="categoryIndex", outputCol="categoryVec")
     encoded = encoder.transform(indexed)
     encoded.select("id", "categoryVec").show()

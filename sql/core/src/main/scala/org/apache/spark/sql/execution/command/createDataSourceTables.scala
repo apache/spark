@@ -27,10 +27,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.sources.InsertableRelation
+import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 import org.apache.spark.sql.types._
 
 /**
@@ -51,7 +52,7 @@ case class CreateDataSourceTableCommand(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
-    partitionColumns: Array[String],
+    userSpecifiedPartitionColumns: Array[String],
     bucketSpec: Option[BucketSpec],
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
@@ -94,17 +95,39 @@ case class CreateDataSourceTableCommand(
       }
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
-    DataSource(
-      sparkSession = sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      bucketSpec = None,
-      options = optionsWithPath).resolveRelation(checkPathExist = false)
+    val dataSource: BaseRelation =
+      DataSource(
+        sparkSession = sparkSession,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = provider,
+        bucketSpec = None,
+        options = optionsWithPath).resolveRelation(checkPathExist = false)
+
+    val partitionColumns = if (userSpecifiedSchema.nonEmpty) {
+      userSpecifiedPartitionColumns
+    } else {
+      val res = dataSource match {
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames
+        case _ => Array.empty[String]
+      }
+      if (userSpecifiedPartitionColumns.length > 0) {
+        // The table does not have a specified schema, which means that the schema will be inferred
+        // when we load the table. So, we are not expecting partition columns and we will discover
+        // partitions when we load the table. However, if there are specified partition columns,
+        // we simply ignore them and provide a warning message.
+        logWarning(
+          s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
+            s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
+            s"Schema: ${dataSource.schema.simpleString}; " +
+            s"Partition columns: ${res.mkString("(", ", ", ")")}")
+      }
+      res
+    }
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
-      userSpecifiedSchema = userSpecifiedSchema,
+      schema = dataSource.schema,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
       provider = provider,
@@ -118,8 +141,8 @@ case class CreateDataSourceTableCommand(
 /**
  * A command used to create a data source table using the result of a query.
  *
- * Note: This is different from [[CreateTableAsSelect]]. Please check the syntax for difference.
- * This is not intended for temporary tables.
+ * Note: This is different from [[CreateTableAsSelectLogicalPlan]]. Please check the syntax for
+ * difference. This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -137,6 +160,8 @@ case class CreateDataSourceTableAsSelectCommand(
     options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
@@ -166,7 +191,7 @@ case class CreateDataSourceTableAsSelectCommand(
         options
       }
 
-    var existingSchema = None: Option[StructType]
+    var existingSchema = Option.empty[StructType]
     if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
@@ -194,6 +219,15 @@ case class CreateDataSourceTableAsSelectCommand(
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+              // check if the file formats match
+              l.relation match {
+                case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
+                  throw new AnalysisException(
+                    s"The file format of the existing table $tableIdent is " +
+                      s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
+                      s"format `$provider`")
+                case _ =>
+              }
               if (query.schema.size != l.schema.size) {
                 throw new AnalysisException(
                   s"The column number of the existing schema[${l.schema}] " +
@@ -201,7 +235,7 @@ case class CreateDataSourceTableAsSelectCommand(
               }
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
+              existingSchema = Some(DDLUtils.getSchemaFromTableProperties(s.metadata))
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -230,8 +264,13 @@ case class CreateDataSourceTableAsSelectCommand(
       bucketSpec = bucketSpec,
       options = optionsWithPath)
 
-    val result = dataSource.write(mode, df)
-
+    val result = try {
+      dataSource.write(mode, df)
+    } catch {
+      case ex: AnalysisException =>
+        logError(s"Failed to write to table ${tableIdent.identifier} in $mode mode", ex)
+        throw ex
+    }
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation
@@ -239,7 +278,7 @@ case class CreateDataSourceTableAsSelectCommand(
       CreateDataSourceTableUtils.createDataSourceTable(
         sparkSession = sparkSession,
         tableIdent = tableIdent,
-        userSpecifiedSchema = Some(result.schema),
+        schema = result.schema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         provider = provider,
@@ -289,7 +328,7 @@ object CreateDataSourceTableUtils extends Logging {
   def createDataSourceTable(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
-      userSpecifiedSchema: Option[StructType],
+      schema: StructType,
       partitionColumns: Array[String],
       bucketSpec: Option[BucketSpec],
       provider: String,
@@ -298,28 +337,26 @@ object CreateDataSourceTableUtils extends Logging {
     val tableProperties = new mutable.HashMap[String, String]
     tableProperties.put(DATASOURCE_PROVIDER, provider)
 
-    // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
-    // stored into a single metastore SerDe property.  In this case, we split the JSON string and
-    // store each part as a separate SerDe property.
-    userSpecifiedSchema.foreach { schema =>
-      val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
-      val schemaJsonString = schema.json
-      // Split the JSON string.
-      val parts = schemaJsonString.grouped(threshold).toSeq
-      tableProperties.put(DATASOURCE_SCHEMA_NUMPARTS, parts.size.toString)
-      parts.zipWithIndex.foreach { case (part, index) =>
-        tableProperties.put(s"$DATASOURCE_SCHEMA_PART_PREFIX$index", part)
-      }
+    // Serialized JSON schema string may be too long to be stored into a single metastore table
+    // property. In this case, we split the JSON string and store each part as a separate table
+    // property.
+    val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
+    val schemaJsonString = schema.json
+    // Split the JSON string.
+    val parts = schemaJsonString.grouped(threshold).toSeq
+    tableProperties.put(DATASOURCE_SCHEMA_NUMPARTS, parts.size.toString)
+    parts.zipWithIndex.foreach { case (part, index) =>
+      tableProperties.put(s"$DATASOURCE_SCHEMA_PART_PREFIX$index", part)
     }
 
-    if (userSpecifiedSchema.isDefined && partitionColumns.length > 0) {
+    if (partitionColumns.length > 0) {
       tableProperties.put(DATASOURCE_SCHEMA_NUMPARTCOLS, partitionColumns.length.toString)
       partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
         tableProperties.put(s"$DATASOURCE_SCHEMA_PARTCOL_PREFIX$index", partCol)
       }
     }
 
-    if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
+    if (bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
       tableProperties.put(DATASOURCE_SCHEMA_NUMBUCKETS, numBuckets.toString)
@@ -336,16 +373,6 @@ object CreateDataSourceTableUtils extends Logging {
       }
     }
 
-    if (userSpecifiedSchema.isEmpty && partitionColumns.length > 0) {
-      // The table does not have a specified schema, which means that the schema will be inferred
-      // when we load the table. So, we are not expecting partition columns and we will discover
-      // partitions when we load the table. However, if there are specified partition columns,
-      // we simply ignore them and provide a warning message.
-      logWarning(
-        s"The schema and partitions of table $tableIdent will be inferred when it is loaded. " +
-          s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
-    }
-
     val tableType = if (isExternal) {
       tableProperties.put("EXTERNAL", "TRUE")
       CatalogTableType.EXTERNAL
@@ -358,7 +385,7 @@ object CreateDataSourceTableUtils extends Logging {
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
+        userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         className = provider,
@@ -375,7 +402,7 @@ object CreateDataSourceTableUtils extends Logging {
           outputFormat = None,
           serde = None,
           compressed = false,
-          serdeProperties = options
+          properties = options
         ),
         properties = tableProperties.toMap)
     }
@@ -395,7 +422,7 @@ object CreateDataSourceTableUtils extends Logging {
           outputFormat = serde.outputFormat,
           serde = serde.serde,
           compressed = false,
-          serdeProperties = options
+          properties = options
         ),
         schema = relation.schema.map { f =>
           CatalogColumn(f.name, f.dataType.catalogString)

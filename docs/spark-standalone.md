@@ -94,8 +94,8 @@ You can optionally configure the cluster further by setting environment variable
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
-    <td><code>SPARK_MASTER_IP</code></td>
-    <td>Bind the master to a specific IP address, for example a public one.</td>
+    <td><code>SPARK_MASTER_HOST</code></td>
+    <td>Bind the master to a specific hostname or IP address, for example a public one.</td>
   </tr>
   <tr>
     <td><code>SPARK_MASTER_PORT</code></td>
@@ -132,15 +132,6 @@ You can optionally configure the cluster further by setting environment variable
   <tr>
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
     <td>Port for the worker web UI (default: 8081).</td>
-  </tr>
-  <tr>
-    <td><code>SPARK_WORKER_INSTANCES</code></td>
-    <td>
-      Number of worker instances to run on each machine (default: 1). You can make this more than 1 if
-      you have have very large machines and would like multiple Spark worker processes. If you do set
-      this, make sure to also set <code>SPARK_WORKER_CORES</code> explicitly to limit the cores per worker,
-      or else each worker will try to use all the cores.
-    </td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_DIR</code></td>

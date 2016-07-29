@@ -22,10 +22,13 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.execution.streaming.IncrementalExecution
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 
 /**
@@ -57,6 +60,8 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
+  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+
   override def output: Seq[Attribute] = cmd.output
 
   override def children: Seq[SparkPlan] = Nil
@@ -68,10 +73,7 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
-
-  override def argString: String = cmd.toString
 }
-
 
 /**
  * An explain command for users to see how a command will be executed.
@@ -98,7 +100,14 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val queryExecution = sparkSession.sessionState.executePlan(logicalPlan)
+    val queryExecution =
+      if (logicalPlan.isStreaming) {
+        // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
+        // output mode does not matter since there is no `Sink`.
+        new IncrementalExecution(sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0)
+      } else {
+        sparkSession.sessionState.executePlan(logicalPlan)
+      }
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)
