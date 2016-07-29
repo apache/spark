@@ -727,6 +727,19 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("cast struct with a timestamp field") {
+    val origSchema = StructType(
+      Seq(StructField( "tsField", TimestampType, false ))
+    )
+    val trgSchema = StructType(
+      // nine out of ten times I'm casting a struct, it's to normalize its fields nullability
+      Seq(StructField( "tsField", TimestampType, true ))
+    )
+    val inp = Literal.create(InternalRow(0L), origSchema)
+    val expected = InternalRow(0L)
+    checkEvaluation( Cast(inp, trgSchema), expected)
+  }
+
   test("complex casting") {
     val complex = Literal.create(
       Row(
