@@ -878,8 +878,7 @@ object DateTimeUtils {
         val ss = seconds % 60
         val calendar = Calendar.getInstance(tz)
 
-        // create a CalendarDate in the provided timezone
-        val date = calendar.set(year, month, day, hh, mm, ss)
+        calendar.set(year, month, day, hh, mm, ss)
         calendar.getTime() // Set the timezone info
         guess = calendar.get(Calendar.ZONE_OFFSET) + calendar.get(Calendar.DST_OFFSET)
       }
