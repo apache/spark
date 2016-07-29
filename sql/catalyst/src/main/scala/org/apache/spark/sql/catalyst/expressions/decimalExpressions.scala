@@ -23,11 +23,11 @@ import org.apache.spark.sql.types._
 
 /**
  * Return the unscaled Long value of a Decimal, assuming it fits in a Long.
- * Note: this expression is internal and created only by the optimizer,
- * we don't need to do type check for it.
+ * Note: this expression is internal and created only by the optimizer.
  */
-case class UnscaledValue(child: Expression) extends UnaryExpression {
+case class UnscaledValue(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType)
   override def dataType: DataType = LongType
   override def toString: String = s"UnscaledValue($child)"
 
@@ -41,11 +41,15 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
 
 /**
  * Create a Decimal from an unscaled Long value.
- * Note: this expression is internal and created only by the optimizer,
- * we don't need to do type check for it.
+ * Note: this expression is internal and created only by the optimizer.
  */
-case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
+case class MakeDecimal(
+    child: Expression,
+    precision: Int,
+    scale: Int)
+  extends UnaryExpression with ExpectsInputTypes {
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
   override def dataType: DataType = DecimalType(precision, scale)
   override def nullable: Boolean = true
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
@@ -80,7 +84,12 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
  * Rounds the decimal to given scale and check whether the decimal can fit in provided precision
  * or not, returns null if not.
  */
-case class CheckOverflow(child: Expression, dataType: DecimalType) extends UnaryExpression {
+case class CheckOverflow(
+    child: Expression,
+    dataType: DecimalType)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType)
 
   override def nullable: Boolean = true
 

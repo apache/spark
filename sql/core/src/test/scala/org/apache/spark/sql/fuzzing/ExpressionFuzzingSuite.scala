@@ -121,6 +121,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
       }
       logInfo(s"After type coercion, expression is $expression")
       // Make sure that the resulting expression passes type checks.
+      require(expression.childrenResolved)
       val typecheckResult = expression.checkInputDataTypes()
       if (typecheckResult.isFailure) {
         logDebug(s"Type checks failed: $typecheckResult")
@@ -134,6 +135,11 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
 
           val maybeGenProjection =
             Try(GenerateSafeProjection.generate(Seq(expression), inputSchema))
+          if (maybeGenProjection.isFailure) {
+            //scalastyle:off
+            println(
+              s"Code generation for expression $expression failed with inputSchema $inputSchema")
+          }
           maybeGenProjection.foreach { generatedProjection =>
             val generatedResult = generatedProjection.apply(inputRow)
             assert(generatedResult === interpretedResult)
