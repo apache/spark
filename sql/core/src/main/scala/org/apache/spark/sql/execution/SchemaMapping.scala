@@ -24,6 +24,19 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * An interface for mapping two different schemas. For the relations that have are backed by files,
  * the inferred schema from the files might be different with the schema stored in the catalog. In
  * such case, the interface helps mapping inconsistent schemas.
+ *
+ * It assumes that the length of the fields in the schema inferred from the files plus the fields
+ * of partition are the same as the length of the catalog schema. Besides, the field order of
+ * (data schema + partition schema) must be the same as the catalog schema.
+ *
+ * For example, if Hive stores ORC files with incorrect schema ['_col1': int, '_col2': string], but
+ * the schema stored in Hive metastore is correct: ['a': int, 'b': string]. We need to use
+ * the catalog schema ['a', 'b'] as relation output. But we must use ['_col1', '_col2'] when reading
+ * data from the files. Besides, if we want to pushdown filters to data reading, we need to
+ * transform the fields in the filter expressions which are referring to catalog schema to the
+ * fields in data schema. E.g., a filter expression for the condition 'a=1' will be
+ * Equal(AttributeReference('a'), Literal(1)), and we will transform it to
+ * Equal(AttributeReference('_col1', Literal(1))), otherwise the filter pushdown will be failed.
  */
 private[sql] trait SchemaMapping {
   /** The schema inferred from the files. */
