@@ -55,24 +55,21 @@ class BlockManagerMasterEndpoint(
   private val askThreadPool = ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool")
   private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
 
-  private val topologyMapperClassName =
-    conf.get("spark.replication.topologyawareness.topologyMapper", "")
-
-  private val topologyMapper = if (!topologyMapperClassName.isEmpty) {
-    val ret = Utils.classForName(topologyMapperClassName).asInstanceOf[TopologyMapper]
-    logInfo(s"Using $topologyMapperClassName for mapping host names to topology")
-    ret
-  } else {
-    logInfo(s"Using DefaultTopologyMapper to map host names to topology")
-    new DefaultTopologyMapper
+  private val topologyMapper = {
+    val topologyMapperClassName = conf.get(
+      "spark.replication.topologyawareness.topologyMapper",
+      "org.apache.spark.storage.DefaultTopologyMapper")
+    val clazz = Utils.classForName(topologyMapperClassName)
+    val mapper = clazz.newInstance.asInstanceOf[TopologyMapper]
+    logInfo(s"Using $topologyMapperClassName for getting topology information")
+    mapper
   }
 
   logInfo("BlockManagerMasterEndpoint up")
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint) =>
-      register(blockManagerId, maxMemSize, slaveEndpoint)
-      context.reply(true)
+      context.reply(register(blockManagerId, maxMemSize, slaveEndpoint))
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
@@ -138,8 +135,6 @@ class BlockManagerMasterEndpoint(
           }
         case None => context.reply(false)
       }
-
-    case GetTopologyInfo(host) => context.reply(getTopologyInfoForHost(host))
   }
 
   private def getTopologyInfoForHost(host: String): String = {
@@ -318,7 +313,17 @@ class BlockManagerMasterEndpoint(
     ).map(_.flatten.toSeq)
   }
 
-  private def register(id: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef) {
+  private def register(dummyId: BlockManagerId,
+    maxMemSize: Long,
+    slaveEndpoint: RpcEndpointRef): BlockManagerId = {
+    // the dummy id is not expected to contain the topology information.
+    // we get that info here and respond back with a more fleshed out block manager id
+    val id = BlockManagerId(
+      dummyId.executorId,
+      dummyId.host,
+      dummyId.port,
+      Some(getTopologyInfoForHost(dummyId.host)))
+
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -338,6 +343,7 @@ class BlockManagerMasterEndpoint(
         id, System.currentTimeMillis(), maxMemSize, slaveEndpoint)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
+    id
   }
 
   private def updateBlockInfo(

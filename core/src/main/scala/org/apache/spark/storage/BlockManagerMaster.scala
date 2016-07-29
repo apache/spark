@@ -52,10 +52,14 @@ class BlockManagerMaster(
 
   /** Register the BlockManager's id with the driver. */
   def registerBlockManager(
-      blockManagerId: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef): Unit = {
-    logInfo(s"Registering BlockManager $blockManagerId")
-    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint))
-    logInfo(s"Registered BlockManager $blockManagerId")
+      blockManagerId: BlockManagerId,
+      maxMemSize: Long,
+      slaveEndpoint: RpcEndpointRef): BlockManagerId = {
+    logInfo(s"Trying to register BlockManager $blockManagerId")
+    val updatedId = driverEndpoint.askWithRetry[BlockManagerId](
+      RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint))
+    logInfo(s"Registered BlockManager $updatedId")
+    updatedId
   }
 
   def updateBlockInfo(

@@ -163,15 +163,6 @@ private[spark] class BlockManager(
     blockTransferService.init(this)
     shuffleClient.init(appId)
 
-    val topologyInfo = {
-      val topologyStr = master.getTopologyInfo(blockTransferService.hostName)
-      if (topologyStr == null || topologyStr.isEmpty) {
-        None
-      } else {
-        Some(topologyStr)
-      }
-    }
-
     blockReplicationPrioritizer = {
       val priorityClass = conf.get(
         "spark.replication.topologyawareness.prioritizer",
@@ -182,8 +173,15 @@ private[spark] class BlockManager(
       ret
     }
 
-    blockManagerId = BlockManagerId(
-      executorId, blockTransferService.hostName, blockTransferService.port, topologyInfo)
+    val id =
+      BlockManagerId(executorId, blockTransferService.hostName, blockTransferService.port, None)
+
+    val idFromMaster = master.registerBlockManager(
+      id,
+      maxMemory,
+      slaveEndpoint)
+
+    blockManagerId = if (idFromMaster != null) idFromMaster else id
 
     shuffleServerId = if (externalShuffleServiceEnabled) {
       logInfo(s"external shuffle service port = $externalShuffleServicePort")
@@ -191,8 +189,6 @@ private[spark] class BlockManager(
     } else {
       blockManagerId
     }
-
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
