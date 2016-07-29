@@ -99,38 +99,6 @@ object TypeCoercion {
     case _ => None
   }
 
-  /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
-  def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
-    findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
-      case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-      case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
-      case _ => None
-    })
-  }
-
-  /**
-   * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
-   * [[findTightestCommonTypeToString]] to find the TightestCommonType.
-   */
-  private def findTightestCommonTypeAndPromoteToString(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case None => None
-      case Some(d) =>
-        findTightestCommonTypeToString(d, c)
-    })
-  }
-
-  /**
-   * Find the tightest common type of a set of types by continuously applying
-   * `findTightestCommonTypeOfTwo` on these types.
-   */
-  private def findTightestCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case None => None
-      case Some(d) => findTightestCommonTypeOfTwo(d, c)
-    })
-  }
-
   /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
@@ -147,7 +115,13 @@ object TypeCoercion {
     case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
       Some(DoubleType)
     case _ =>
-      findTightestCommonTypeToString(t1, t2)
+      findTightestCommonTypeOfTwo(t1, t2).orElse((t1, t2) match {
+        case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType =>
+          Some(StringType)
+        case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType =>
+          Some(StringType)
+        case _ => None
+      })
   }
 
   private def findWiderCommonType(types: Seq[DataType]) = {
