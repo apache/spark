@@ -29,10 +29,7 @@ abstract class JavaSparkContextVarargsWorkaround {
     if (rdds.length == 0) {
       throw new IllegalArgumentException("Union called on empty list");
     }
-    List<JavaRDD<T>> rest = new ArrayList<>(rdds.length - 1);
-    for (int i = 1; i < rdds.length; i++) {
-      rest.add(rdds[i]);
-    }
+    rest = populateRDDList(rdds);
     return union(rdds[0], rest);
   }
 
@@ -40,10 +37,7 @@ abstract class JavaSparkContextVarargsWorkaround {
     if (rdds.length == 0) {
       throw new IllegalArgumentException("Union called on empty list");
     }
-    List<JavaDoubleRDD> rest = new ArrayList<>(rdds.length - 1);
-    for (int i = 1; i < rdds.length; i++) {
-      rest.add(rdds[i]);
-    }
+    rest = populateRDDList(rdds);
     return union(rdds[0], rest);
   }
 
@@ -57,6 +51,14 @@ abstract class JavaSparkContextVarargsWorkaround {
       rest.add(rdds[i]);
     }
     return union(rdds[0], rest);
+  }
+  
+  public final List<T> populateRDDList(T rdds) {
+    List<T> rest = new ArrayList<>(rdds.length - 1);
+    for (int i = 1; i < rdds.length; i++) {
+      rest.add(rdds[i]);
+    }
+    return rdds;
   }
 
   // These methods take separate "first" and "rest" elements to avoid having the same type erasure
