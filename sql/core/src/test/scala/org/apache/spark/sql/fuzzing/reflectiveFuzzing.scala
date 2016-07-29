@@ -40,6 +40,7 @@ object ReflectiveFuzzing {
    */
   private val whitelistedParameterTypes = Set(
     m.universe.typeOf[DataFrame],
+    m.universe.typeOf[Dataset[_]],
     m.universe.typeOf[Seq[Column]],
     m.universe.typeOf[Column],
     m.universe.typeOf[String],
@@ -51,12 +52,12 @@ object ReflectiveFuzzing {
    * methods and methods with parameters that we don't know how to supply.
    */
   private val dataFrameTransformations: Seq[ru.MethodSymbol] = {
-    val dfType = m.universe.typeOf[DataFrame]
+    val dfType = m.universe.typeOf[Dataset[_]]
     dfType.members
       .filter(_.isPublic)
       .filter(_.isMethod)
       .map(_.asMethod)
-      .filter(_.returnType =:= dfType)
+      .filter(_.returnType <:< dfType)
       .filterNot(_.isConstructor)
       .filter { m =>
       m.paramss.flatten.forall { p =>
@@ -86,7 +87,7 @@ object ReflectiveFuzzing {
     val params = method.paramss.flatten // We don't use multiple parameter lists
     val maybeValues: List[Option[Any]] = params.map { p =>
       val t = p.typeSignature
-      if (t =:= ru.typeOf[DataFrame]) {
+      if (t <:< ru.typeOf[Dataset[_]]) {
         randomChoice(
           df ::
             // TODO(josh): restore ability to generate new random DataFrames for use in joins.

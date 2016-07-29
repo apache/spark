@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -71,7 +72,10 @@ object DataFrameFuzzingUtils {
  * them in order to construct random queries. We don't have a source of truth for these random
  * queries but nevertheless they are still useful for testing that we don't crash in bad ways.
  */
-class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
+class DataFrameFuzzingSuite extends QueryTest with SharedSparkContext {
+
+
+  override protected def spark: SparkSession = sqlContext.sparkSession
 
   val tempDir = Utils.createTempDir()
 
@@ -128,30 +132,61 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
     tf.apply(df)
   }
 
+  def resetConfs(): Unit = {
+    sqlContext.conf.getAllDefinedConfs.foreach { case (key, defaultValue, doc) =>
+      sqlContext.conf.setConfString(key, defaultValue)
+    }
+    sqlContext.conf.setConfString("spark.sql.crossJoin.enabled", "true")
+    sqlContext.conf.setConfString("spark.sql.autoBroadcastJoinThreshold", "-1")
+  }
+
+  private val configurations = Seq(
+    "default" -> Seq(),
+    "no optimization" -> Seq(SQLConf.OPTIMIZER_MAX_ITERATIONS.key -> "0"),
+    "disable-wholestage-codegen" -> Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"),
+    "disable-exchange-reuse" -> Seq(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false")
+  )
+
+  def replan(df: DataFrame): DataFrame = {
+    new Dataset[Row](sqlContext.sparkSession, df.logicalPlan, RowEncoder(df.schema))
+  }
+
   test("fuzz test") {
-      for (i <- 1 to 1000) {
-        // scalastyle:off println
-        println(s"Iteration $i")
-        // scalastyle:on println
-        try {
-          var df = dataGenerator.randomDataFrame(
-            numCols = Random.nextInt(2) + 1,
-            numRows = 20,
-            allowComplexTypes = true)
-          var depth = 3
-          while (depth > 0) {
-            df = tryToExecute(applyRandomTransform(df))
-            depth -= 1
-          }
-        } catch {
-          case e: UnresolvedException[_] =>
-//            println("skipped due to unresolved")
-          case e: Exception
-            if ignoredAnalysisExceptionMessages.exists {
-              m => Option(e.getMessage).getOrElse("").toLowerCase.contains(m.toLowerCase)
-            } =>
-//            println("Skipped due to expected AnalysisException " + e)
+    for (i <- 1 to 1000) {
+      // scalastyle:off println
+      println(s"Iteration $i")
+      // scalastyle:on println
+      try {
+        resetConfs()
+        var df = dataGenerator.randomDataFrame(
+          numCols = Random.nextInt(2) + 1,
+          numRows = 20,
+          allowComplexTypes = false)
+        var depth = 3
+        while (depth > 0) {
+          df = tryToExecute(applyRandomTransform(df))
+          depth -= 1
         }
+        val defaultResult = replan(df).collect()
+        configurations.foreach { case (confName, confsToSet) =>
+          resetConfs()
+          withClue(s"configuration = $confName") {
+            confsToSet.foreach { case (key, value) =>
+              sqlContext.conf.setConfString(key, value)
+            }
+            checkAnswer(replan(df), defaultResult)
+          }
+        }
+        println(s"Finished all tests successfully for plan:\n${df.logicalPlan}")
+      } catch {
+        case e: UnresolvedException[_] =>
+//            println("skipped due to unresolved")
+        case e: Exception
+          if ignoredAnalysisExceptionMessages.exists {
+            m => Option(e.getMessage).getOrElse("").toLowerCase.contains(m.toLowerCase)
+          } =>
+//            println("Skipped due to expected AnalysisException " + e)
       }
     }
+  }
 }
