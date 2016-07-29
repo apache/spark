@@ -1432,6 +1432,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val timestamp = System.currentTimeMillis
     if (addedFiles.putIfAbsent(key, timestamp).isEmpty) {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
+      // Fetch the file locally so that closures which are run on the driver can still use the
+      // SparkFiles API to access files.
+      Utils.fetchFile(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
+        hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     }
   }
