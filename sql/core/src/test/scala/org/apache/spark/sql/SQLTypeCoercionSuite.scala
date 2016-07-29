@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SharedSQLContext
  */
 class SQLTypeCoercionSuite extends QueryTest with SharedSQLContext {
 
-  test("SPARK-16714 decimal in map and struct") {
+  test("SPARK-16714 decimal widening") {
     val v1 = new BigDecimal(1).divide(new BigDecimal(1000))
     val v2 = new BigDecimal(1).divide(new BigDecimal(10)).setScale(3)
 
