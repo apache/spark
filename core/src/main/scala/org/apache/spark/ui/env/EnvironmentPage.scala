@@ -25,7 +25,7 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val listener = parent.listener
-  val passwordProperties: Seq[String] = Seq("spark.ssl.keyPassword",
+  val passwordProperties: Set[String] = Set("spark.ssl.keyPassword",
     "spark.ssl.keyStorePassword", "spark.ssl.trustStorePassword")
 
   def removePass(kv: (String, String)): (String, String) = {
