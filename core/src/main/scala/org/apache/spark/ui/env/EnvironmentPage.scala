@@ -25,12 +25,20 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val listener = parent.listener
+  val passwordProperties: Seq[String] = Seq("spark.ssl.keyPassword",
+    "spark.ssl.keyStorePassword", "spark.ssl.trustStorePassword")
 
+  def removePass(kv: (String, String)): (String, String) = {
+    if (passwordProperties.contains(kv._1)) {
+      return (kv._1, "******")
+    }
+    kv
+  }
   def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(
-      propertyHeader, propertyRow, listener.sparkProperties, fixedWidth = true)
+      propertyHeader, propertyRow, listener.sparkProperties.map(removePass), fixedWidth = true)
     val systemPropertiesTable = UIUtils.listingTable(
       propertyHeader, propertyRow, listener.systemProperties, fixedWidth = true)
     val classpathEntriesTable = UIUtils.listingTable(
