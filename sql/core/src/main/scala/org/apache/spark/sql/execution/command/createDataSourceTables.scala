@@ -236,6 +236,11 @@ case class CreateDataSourceTableAsSelectCommand(
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
               existingSchema = Some(DDLUtils.getSchemaFromTableProperties(s.metadata))
+            // When the source table is a Hive table, the `saveAsTable` API of DataFrameWriter
+            // does not work. Instead, use the `insertInto` API.
+            case o if o.getClass.getName == "org.apache.spark.sql.hive.MetastoreRelation" =>
+              throw new AnalysisException("saveAsTable() for Hive tables is not supported yet. " +
+                "Please use insertInto() as an alternative.")
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }

@@ -1457,6 +1457,73 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("saveAsTable(CTAS) when the source DataFrame is built on a Hive table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+      val df = sql(s"select key, value as value from $tableName")
+
+      val message = intercept[AnalysisException] {
+        df.write.mode("append").saveAsTable(tableName)
+      }.getMessage
+      assert(message.contains(
+        "saveAsTable() for Hive tables is not supported yet. " +
+          "Please use insertInto() as an alternative"))
+    }
+  }
+
+  test("saveAsTable(CTAS) and insertInto when the source DataFrame is built on Data Source") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      val schema = StructType(
+        StructField("key", IntegerType, nullable = false) ::
+          StructField("value", IntegerType, nullable = true) :: Nil)
+      val row = Row(3, 4)
+      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+      df.write.format("json").mode("overwrite").saveAsTable(tableName)
+      df.write.format("json").mode("append").saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(3, 4) :: Row(3, 4) :: Nil
+      )
+
+      (1 to 2).map { i => (i, i) }.toDF("key", "value").write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, 1) :: Row(2, 2) :: Row(3, 4) :: Row(3, 4) :: Nil
+      )
+    }
+  }
+
+  test("insertInto when the source DataFrame is built on a Hive table") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName stored as SEQUENCEFILE as select 1 as key, 'abc' as value")
+      val df = sql(s"select key, value as value from $tableName")
+
+      df.write.insertInto(tableName)
+      checkAnswer(
+        sql(s"SELECT * FROM $tableName"),
+        Row(1, "abc") :: Row(1, "abc") :: Nil
+      )
+    }
+  }
+
+  test("insertInto when the source DataFrame is ") {
+    val tableName = "tab1"
+    withTable(tableName) {
+      (1 to 2).map { i => (i, i) }.toDF("key", "value").write.insertInto(tableName)
+      val df = sql(s"select key, value as value from $tableName")
+
+      df.write.mode("append").saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, 1) :: Row(1, 1) :: Nil
+      )
+    }
+  }
+
   test("SPARK-11590: use native json_tuple in lateral view") {
     checkAnswer(sql(
       """

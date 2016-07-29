@@ -449,6 +449,22 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
+  test("saveAsTable(CTAS) when the source DataFrame is built on a SimpleCatalog table") {
+    import testImplicits._
+
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(key int, value int) USING parquet")
+      (1 to 2).map { i => (i, i) }.toDF("key", "value").write.insertInto(tableName)
+      val df = sql(s"select key, value from $tableName")
+      df.write.mode("append").saveAsTable(tableName)
+      checkAnswer(
+        sql(s"SELECT key, value FROM $tableName"),
+        Row(1, 1) :: Row(2, 2) :: Row(1, 1) :: Row(2, 2) :: Nil
+      )
+    }
+  }
+
   private def testRead(
       df: => DataFrame,
       expectedResult: Seq[String],
