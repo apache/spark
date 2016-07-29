@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.kafka.clients.consumer._
@@ -238,7 +237,7 @@ class DirectKafkaStreamSuite
 
     // Send some initial messages before starting context
     kafkaTestUtils.sendMessages(topic, data)
-    eventually(timeout(10 seconds), interval(20 milliseconds)) {
+    eventually(timeout(10.seconds), interval(20.milliseconds)) {
       assert(getLatestOffset() > 3)
     }
     val offsetBeforeStart = getLatestOffset()
@@ -266,7 +265,7 @@ class DirectKafkaStreamSuite
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
@@ -288,7 +287,7 @@ class DirectKafkaStreamSuite
 
     // Send some initial messages before starting context
     kafkaTestUtils.sendMessages(topic, data)
-    eventually(timeout(10 seconds), interval(20 milliseconds)) {
+    eventually(timeout(10.seconds), interval(20.milliseconds)) {
       assert(getLatestOffset() >= 10)
     }
     val offsetBeforeStart = getLatestOffset()
@@ -318,7 +317,7 @@ class DirectKafkaStreamSuite
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
@@ -366,7 +365,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 10).sum)
     }
 
@@ -405,7 +404,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(10.seconds), interval(50.milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 20).sum)
     }
     ssc.stop()
@@ -428,7 +427,7 @@ class DirectKafkaStreamSuite
     def sendDataAndWaitForReceive(data: Seq[Int]) {
       val strings = data.map { _.toString}
       kafkaTestUtils.sendMessages(topic, strings.map { _ -> 1}.toMap)
-      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
         assert(strings.forall { collectedData.contains })
       }
     }
@@ -595,7 +594,7 @@ class DirectKafkaStreamSuite
       estimator.updateRate(rate)  // Set a new rate.
       // Expect blocks of data equal to "rate", scaled by the interval length in secs.
       val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
-      eventually(timeout(5.seconds), interval(10 milliseconds)) {
+      eventually(timeout(5.seconds), interval(10.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
         assert(collectedData.asScala.exists(_.size == expectedSize),

@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -186,7 +185,7 @@ class ReceivedBlockHandlerSuite
 
       val cleanupThreshTime = 3000L
       handler.cleanupOldBlocks(cleanupThreshTime)
-      eventually(timeout(10000 millis), interval(10 millis)) {
+      eventually(timeout(10000.millis), interval(10.millis)) {
         getWriteAheadLogFiles().size should be < preCleanupLogFiles.size
       }
     }
@@ -413,4 +412,3 @@ class ReceivedBlockHandlerSuite
 
   private def generateBlockId(): StreamBlockId = StreamBlockId(streamId, scala.util.Random.nextLong)
 }
-

@@ -19,8 +19,6 @@ package org.apache.spark.deploy.yarn
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.language.postfixOps
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation

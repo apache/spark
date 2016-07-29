@@ -21,7 +21,6 @@ import java.io.File
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
@@ -105,7 +104,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
       }
     ssc.start()
 
-    eventually(timeout(20000 milliseconds), interval(200 milliseconds)) {
+    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
       // A basic process verification for ReliableKafkaReceiver.
       // Verify whether received message number is equal to the sent message number.
       assert(data.size === result.size)
@@ -132,7 +131,7 @@ class ReliableKafkaStreamSuite extends SparkFunSuite
     stream.foreachRDD(_ => Unit)
     ssc.start()
 
-    eventually(timeout(20000 milliseconds), interval(100 milliseconds)) {
+    eventually(timeout(20000.milliseconds), interval(100.milliseconds)) {
       // Verify the offset for each group/topic to see whether they are equal to the expected one.
       topics.foreach { case (t, _) => assert(getCommitOffset(groupId, t, 0) === Some(29L)) }
     }

@@ -19,7 +19,6 @@ package org.apache.spark.streaming.kinesis
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.Random
 
 import com.amazonaws.regions.RegionUtils

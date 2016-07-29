@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.apache.commons.lang3.SerializationUtils

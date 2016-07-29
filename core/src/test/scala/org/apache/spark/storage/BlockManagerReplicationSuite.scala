@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
-import scala.language.postfixOps
 
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, Matchers}

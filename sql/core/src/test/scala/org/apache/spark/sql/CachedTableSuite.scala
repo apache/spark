@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
 
@@ -237,7 +236,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         "Eagerly cached in-memory table should have already been materialized")
 
       spark.catalog.uncacheTable("testCacheTable")
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
@@ -254,7 +253,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         "Eagerly cached in-memory table should have already been materialized")
 
       spark.catalog.uncacheTable("testCacheTable")
-      eventually(timeout(10 seconds)) {
+      eventually(timeout(10.seconds)) {
         assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
@@ -275,7 +274,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       "Lazily cached in-memory table should have been materialized")
 
     spark.catalog.uncacheTable("testData")
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
   }
@@ -365,7 +364,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     System.gc()
 
-    eventually(timeout(10 seconds)) {
+    eventually(timeout(10.seconds)) {
       assert(toBeCleanedAccIds.synchronized { toBeCleanedAccIds.isEmpty },
         "batchStats accumulators should be cleared after GC when uncacheTable")
     }

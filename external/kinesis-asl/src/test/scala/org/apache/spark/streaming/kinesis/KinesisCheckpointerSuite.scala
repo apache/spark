@@ -21,7 +21,6 @@ import java.util.concurrent.{ExecutorService, TimeoutException}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import org.mockito.Matchers._

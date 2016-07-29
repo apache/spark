@@ -23,7 +23,6 @@ import java.util.EnumSet
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.service.ServiceStateException

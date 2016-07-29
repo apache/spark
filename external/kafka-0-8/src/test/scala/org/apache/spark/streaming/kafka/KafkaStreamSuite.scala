@@ -19,7 +19,6 @@ package org.apache.spark.streaming.kafka
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
@@ -77,7 +76,7 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
 
     ssc.start()
 
-    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+    eventually(timeout(10000.milliseconds), interval(100.milliseconds)) {
       assert(result.synchronized { sent === result })
     }
   }
