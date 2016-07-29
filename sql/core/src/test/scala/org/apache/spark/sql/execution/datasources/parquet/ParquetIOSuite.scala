@@ -326,7 +326,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         """.stripMargin)
 
       val writeSupport = new TestGroupWriteSupport(schema)
-      val writer = new ParquetWriter[Group](path, writeSupport)
+      object ParquetWriterBuilder extends ParquetWriter.Builder[Group, Builder[Group]] {
+        @Override final val file = path
+        @Override final val writeSupport = writeSupport
+      }
+      val writer = ParquetWriterBuilder.build()
 
       (0 until 10).foreach { i =>
         val record = new SimpleGroup(schema)
