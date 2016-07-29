@@ -103,7 +103,6 @@ object DateTimeUtils {
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
     val millisLocal = days.toLong * MILLIS_PER_DAY
-    val offset = getOffsetFromLocalMillis(millisLocal, threadLocalLocalTimeZone.get())
     millisLocal - getOffsetFromLocalMillis(millisLocal, threadLocalLocalTimeZone.get())
   }
 
