@@ -352,13 +352,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
-   * is refreshed.
+   * is refreshed. For data source tables, the schema will not be inferred and refreshed.
    *
    * @group cachemgmt
    * @since 2.0.0
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
+    // Non-temp tables: refresh the metadata cache.
     sessionCatalog.refreshTable(tableIdent)
 
     // If this table is cached as an InMemoryRelation, drop the original

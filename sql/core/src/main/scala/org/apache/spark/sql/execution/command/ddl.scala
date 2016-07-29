@@ -521,31 +521,29 @@ object DDLUtils {
     table.partitionColumns.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
   }
 
-  // A persisted data source table may not store its schema in the catalog. In this case, its schema
-  // will be inferred at runtime when the table is referenced.
-  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
+  // A persisted data source table always store its schema in the catalog.
+  def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
     require(isDatasourceTable(metadata))
+    val msgSchemaCorrupted = "Could not read schema from the metastore because it is corrupted."
     val props = metadata.properties
-    if (props.isDefinedAt(DATASOURCE_SCHEMA)) {
+    props.get(DATASOURCE_SCHEMA).map { schema =>
       // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using spark.sql.sources.schema any more, we need to still support.
-      props.get(DATASOURCE_SCHEMA).map(DataType.fromJson(_).asInstanceOf[StructType])
-    } else {
-      metadata.properties.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
+      DataType.fromJson(schema).asInstanceOf[StructType]
+    } getOrElse {
+      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
         val parts = (0 until numParts.toInt).map { index =>
           val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
           if (part == null) {
-            throw new AnalysisException(
-              "Could not read schema from the metastore because it is corrupted " +
-                s"(missing part $index of the schema, $numParts parts are expected).")
+            throw new AnalysisException(msgSchemaCorrupted +
+              s" (missing part $index of the schema, $numParts parts are expected).")
           }
-
           part
         }
         // Stick all parts back to a single schema string.
         DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-      }
+      } getOrElse(throw new AnalysisException(msgSchemaCorrupted))
     }
   }
 

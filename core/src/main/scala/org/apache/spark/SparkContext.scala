@@ -249,7 +249,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def isStopped: Boolean = stopped.get()
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus
+  private[spark] val listenerBus = new LiveListenerBus(this)
 
   // This function allows components created by SparkEnv to be mocked in unit tests:
   private[spark] def createSparkEnv(
@@ -2148,7 +2148,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         }
     }
 
-    listenerBus.start(this)
+    listenerBus.start()
     _listenerBusStarted = true
   }
 
