@@ -40,7 +40,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -254,10 +254,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
     SchemaUtils.checkNumericType(schema, $(itemCol))
     // rating will be cast to Float
     SchemaUtils.checkNumericType(schema, $(ratingCol))
-    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
-    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
-    val ratingType = schema($(ratingCol)).dataType
-    require(ratingType == FloatType || ratingType == DoubleType)
     if (isSet(recommendFor)) {
       require(isSet(k), "Parameter 'k' must be set when 'recommendFor' is set.")
     }
@@ -450,14 +446,10 @@ class ALSModel private[ml] (
 
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    // user and item will be cast to Int
-    SchemaUtils.checkNumericType(schema, $(userCol))
-    SchemaUtils.checkNumericType(schema, $(itemCol))
-    SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
     if (isRecommendingTopK) {
       val labelSchema = $(recommendFor) match {
         case "user" =>
-          SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+          SchemaUtils.checkNumericType(schema, $(userCol))
           if (schema.contains($(itemCol))) {
             SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
             SchemaUtils.appendColumn(schema, $(labelCol), ArrayType(IntegerType, false))
@@ -465,7 +457,7 @@ class ALSModel private[ml] (
             schema
           }
         case "item" =>
-          SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+          SchemaUtils.checkNumericType(schema, $(itemCol))
           if (schema.contains($(userCol))) {
             SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
             SchemaUtils.appendColumn(schema, $(labelCol), ArrayType(IntegerType, false))
@@ -475,8 +467,8 @@ class ALSModel private[ml] (
       }
       SchemaUtils.appendColumn(labelSchema, $(predictionCol), ArrayType(IntegerType, false))
     } else {
-      SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
-      SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+      SchemaUtils.checkNumericType(schema, $(userCol))
+      SchemaUtils.checkNumericType(schema, $(itemCol))
       SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
     }
   }

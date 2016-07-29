@@ -566,8 +566,8 @@ class ALSSuite
   }
 
   private def getALSModel = {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val userFactors = Seq(
       (0, Array(6.0f, 4.0f)),
       (1, Array(3.0f, 4.0f)),
@@ -583,8 +583,8 @@ class ALSSuite
   }
 
   test("recommend top k with no 'ground truth' column") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
 
     val users = Seq(
       (0, Array((3, 54.0f), (4, 44.0f)), Array(3, 4)),
@@ -631,8 +631,8 @@ class ALSSuite
   }
 
   test("recommend top k with 'ground truth' column") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
 
     // raw input in the same format as for ALS.fit()
     val ratings = Seq(
@@ -669,13 +669,11 @@ class ALSSuite
   }
 
   test("ALS fit -> recommend top k") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val (ratings: RDD[Rating[Int]], _) = genExplicitTestData(numUsers = 5, numItems = 4, rank = 1)
     val dataset = ratings.toDF
-    val als = new ALS()
-      .setK(2)
-      .setRecommendFor("user")
+    val als = new ALS().setK(2).setRecommendFor("user")
 
     val userId = ratings.first().user
     val numItems = ratings.filter(_.user == userId).map(_.item).distinct().count()
@@ -689,15 +687,12 @@ class ALSSuite
   }
 
   test("invalid recommend params") {
-    // TODO
-    /*
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     intercept[IllegalArgumentException] {
       val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
       val als = new ALS().setRecommendFor("user").fit(ratings.toDF)
     }
-    */
     intercept[IllegalArgumentException] {
       val als = new ALS().setK(0)
     }
@@ -882,7 +877,7 @@ object ALSSuite extends Logging {
     "nonnegative" -> true,
     "checkpointInterval" -> 20,
     "intermediateStorageLevel" -> "MEMORY_ONLY",
-    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
+    "finalStorageLevel" -> "MEMORY_AND_DISK_SER",
     "checkpointInterval" -> 20,
     "k" -> 10,
     "recommendFor" -> "user",
