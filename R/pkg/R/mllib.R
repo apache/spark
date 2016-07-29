@@ -428,7 +428,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param initialWeights InitialWeights parameter
 #' @param layers Layers parameter
 #' @param solver Solver parameter
-#' @return \code{spark.mlp} returns a fitted naive Bayes model
+#' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model
 #' @rdname spark.mlp
 #' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
@@ -464,7 +464,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
 
-# Makes predictions from a naive Bayes model or a model produced by spark.mlp(),
+# Makes predictions from a Multilayer Perceptron Classification Model or a model produced by spark.mlp(),
 # similarly to R package e1071's predict.
 
 #' @param newData A SparkDataFrame for testing
@@ -478,9 +478,9 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-# Returns the summary of a naive Bayes model produced by \code{spark.mlp}
+# Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
-#' @param object A naive Bayes model fitted by \code{spark.mlp}
+#' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
 #' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
 #'         \code{tables}, conditional probabilities given the target label
 #' @rdname spark.mlp
