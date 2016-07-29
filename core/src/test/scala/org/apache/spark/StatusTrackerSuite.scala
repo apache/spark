@@ -76,13 +76,13 @@ class StatusTrackerSuite extends SparkFunSuite with Matchers with LocalSparkCont
     eventually(timeout(10.seconds)) {
       sc.statusTracker.getJobIdsForGroup("my-job-group") should be (Seq(firstJobId))
     }
-    val.secondJobFuture = sc.parallelize(1 to 1000).countAsync()
-    val.secondJobId = eventually(timeout(10.seconds)) {
-     .secondJobFuture.jobIds.head
+    val secondJobFuture = sc.parallelize(1 to 1000).countAsync()
+    val secondJobId = eventually(timeout(10.seconds)) {
+      secondJobFuture.jobIds.head
     }
     eventually(timeout(10.seconds)) {
       sc.statusTracker.getJobIdsForGroup("my-job-group").toSet should be (
-        Set(firstJobId,.secondJobId))
+        Set(firstJobId, secondJobId))
     }
   }
 
