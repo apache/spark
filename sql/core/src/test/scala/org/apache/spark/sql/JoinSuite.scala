@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.language.existentials
+
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._

@@ -47,7 +47,7 @@ class MultivariateGaussian @Since("2.0.0") (
     this(Vectors.fromBreeze(mean), Matrices.fromBreeze(cov))
   }
 
-  private val breezeMu = mean.toBreeze.toDenseVector
+  private val breezeMu = mean.asBreeze.toDenseVector
 
   /**
    * Compute distribution dependent constants:
@@ -61,7 +61,7 @@ class MultivariateGaussian @Since("2.0.0") (
    */
   @Since("2.0.0")
   def pdf(x: Vector): Double = {
-    pdf(x.toBreeze)
+    pdf(x.asBreeze)
   }
 
   /**
@@ -69,7 +69,7 @@ class MultivariateGaussian @Since("2.0.0") (
    */
   @Since("2.0.0")
   def logpdf(x: Vector): Double = {
-    logpdf(x.toBreeze)
+    logpdf(x.asBreeze)
   }
 
   /** Returns density of this multivariate Gaussian at given point, x */
@@ -113,7 +113,7 @@ class MultivariateGaussian @Since("2.0.0") (
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
    */
   private def calculateCovarianceConstants: (BDM[Double], Double) = {
-    val eigSym.EigSym(d, u) = eigSym(cov.toBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
+    val eigSym.EigSym(d, u) = eigSym(cov.asBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
 
     // For numerical stability, values are considered to be non-zero only if they exceed tol.
     // This prevents any inverted value from exceeding (eps * n * max(d))^-1

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Basic Statistics - spark.mllib
-displayTitle: Basic Statistics - spark.mllib
+title: Basic Statistics - RDD-based API
+displayTitle: Basic Statistics - RDD-based API
 ---
 
 * Table of contents
@@ -80,7 +80,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
 calculate correlations between series. Depending on the type of input, two `RDD[Double]`s or
 an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` respectively.
 
-Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
+Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/CorrelationsExample.scala %}
 </div>
@@ -210,7 +210,7 @@ message.
 run a 1-sample, 2-sided Kolmogorov-Smirnov test. The following example demonstrates how to run
 and interpret the hypothesis tests.
 
-Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
+Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics$) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/HypothesisTestingKolmogorovSmirnovTestExample.scala %}
 </div>
@@ -277,12 +277,12 @@ uniform, standard normal, or Poisson.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`RandomRDDs`](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) provides factory
+[`RandomRDDs`](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs$) provides factory
 methods to generate random double RDDs or vector RDDs.
 The following example generates a random double RDD, whose values follows the standard normal
 distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
-Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) for details on the API.
+Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs$) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext

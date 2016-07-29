@@ -46,9 +46,8 @@ object SparkTC {
       .builder
       .appName("SparkTC")
       .getOrCreate()
-    val sc = spark.sparkContext
     val slices = if (args.length > 0) args(0).toInt else 2
-    var tc = sc.parallelize(generateGraph, slices).cache()
+    var tc = spark.sparkContext.parallelize(generateGraph, slices).cache()
 
     // Linear transitive closure: each round grows paths by one edge,
     // by joining the graph's edges with the already-discovered paths.

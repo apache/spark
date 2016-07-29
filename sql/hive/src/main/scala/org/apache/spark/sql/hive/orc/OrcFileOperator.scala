@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
 private[orc] object OrcFileOperator extends Logging {
   /**
    * Retrieves an ORC file reader from a given path.  The path can point to either a directory or a
-   * single ORC file.  If it points to an directory, it picks any non-empty ORC file within that
+   * single ORC file.  If it points to a directory, it picks any non-empty ORC file within that
    * directory.
    *
    * The reader returned by this method is mainly used for two purposes:

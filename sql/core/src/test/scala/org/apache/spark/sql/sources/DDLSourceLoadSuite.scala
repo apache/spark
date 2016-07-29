@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -42,9 +42,10 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSQLContext {
   }
 
   test("should fail to load ORC without Hive Support") {
-    intercept[ClassNotFoundException] {
+    val e = intercept[AnalysisException] {
       spark.read.format("orc").load()
     }
+    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
   }
 }
 

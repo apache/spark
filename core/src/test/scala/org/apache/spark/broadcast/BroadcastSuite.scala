@@ -138,7 +138,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Verify the persistence of state associated with an TorrentBroadcast in a local-cluster.
+   * Verify the persistence of state associated with a TorrentBroadcast in a local-cluster.
    *
    * This test creates a broadcast variable, uses it on all executors, and then unpersists it.
    * In between each step, this test verifies that the broadcast blocks are present only on the

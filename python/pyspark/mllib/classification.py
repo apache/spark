@@ -48,11 +48,9 @@ class LinearClassificationModel(LinearModel):
     @since('1.4.0')
     def setThreshold(self, value):
         """
-        .. note:: Experimental
-
         Sets the threshold that separates positive predictions from
         negative predictions. An example with prediction score greater
-        than or equal to this threshold is identified as an positive,
+        than or equal to this threshold is identified as a positive,
         and negative otherwise. It is used for binary classification
         only.
         """
@@ -62,8 +60,6 @@ class LinearClassificationModel(LinearModel):
     @since('1.4.0')
     def threshold(self):
         """
-        .. note:: Experimental
-
         Returns the threshold (if any) used for converting raw
         prediction scores into 0/1 predictions. It is used for
         binary classification only.
@@ -73,8 +69,6 @@ class LinearClassificationModel(LinearModel):
     @since('1.4.0')
     def clearThreshold(self):
         """
-        .. note:: Experimental
-
         Clears the threshold so that `predict` will output raw
         prediction scores. It is used for binary classification only.
         """

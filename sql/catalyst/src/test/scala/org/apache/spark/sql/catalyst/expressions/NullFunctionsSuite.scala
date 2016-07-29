@@ -77,6 +77,21 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-16602 Nvl should support numeric-string cases") {
+    val intLit = Literal.create(1, IntegerType)
+    val doubleLit = Literal.create(2.2, DoubleType)
+    val stringLit = Literal.create("c", StringType)
+    val nullLit = Literal.create(null, NullType)
+
+    assert(Nvl(intLit, doubleLit).replaceForTypeCoercion().dataType == DoubleType)
+    assert(Nvl(intLit, stringLit).replaceForTypeCoercion().dataType == StringType)
+    assert(Nvl(stringLit, doubleLit).replaceForTypeCoercion().dataType == StringType)
+
+    assert(Nvl(nullLit, intLit).replaceForTypeCoercion().dataType == IntegerType)
+    assert(Nvl(doubleLit, nullLit).replaceForTypeCoercion().dataType == DoubleType)
+    assert(Nvl(nullLit, stringLit).replaceForTypeCoercion().dataType == StringType)
+  }
+
   test("AtLeastNNonNulls") {
     val mix = Seq(Literal("x"),
       Literal.create(null, StringType),

@@ -34,8 +34,12 @@ private[sql] case class LocalTableScanExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   private val unsafeRows: Array[InternalRow] = {
-    val proj = UnsafeProjection.create(output, output)
-    rows.map(r => proj(r).copy()).toArray
+    if (rows.isEmpty) {
+      Array.empty
+    } else {
+      val proj = UnsafeProjection.create(output, output)
+      rows.map(r => proj(r).copy()).toArray
+    }
   }
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows)
@@ -45,6 +49,14 @@ private[sql] case class LocalTableScanExec(
     rdd.map { r =>
       numOutputRows += 1
       r
+    }
+  }
+
+  override protected def stringArgs: Iterator[Any] = {
+    if (rows.isEmpty) {
+      Iterator("<empty>", output)
+    } else {
+      Iterator(output)
     }
   }
 
