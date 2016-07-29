@@ -216,6 +216,29 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  // Regression tests for SPARK-16787
+  for (
+    schedulingMode <- Seq("local-mode", "non-local-mode");
+    method <- Seq("addJar", "addFile")
+  ) {
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
+    val master = schedulingMode match {
+      case "local-mode" => "local"
+      case "non-local-mode" => "local-cluster[1,1,1024]"
+    }
+    test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
+      sc = new SparkContext(master, "test")
+      method match {
+        case "addJar" =>
+          sc.addJar(jarPath)
+          sc.addJar(jarPath)
+        case "addFile" =>
+          sc.addFile(jarPath)
+          sc.addFile(jarPath)
+      }
+    }
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
