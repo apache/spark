@@ -1510,20 +1510,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("insertInto when the source DataFrame is ") {
-    val tableName = "tab1"
-    withTable(tableName) {
-      (1 to 2).map { i => (i, i) }.toDF("key", "value").write.insertInto(tableName)
-      val df = sql(s"select key, value as value from $tableName")
-
-      df.write.mode("append").saveAsTable(tableName)
-      checkAnswer(
-        sql(s"SELECT key, value FROM $tableName"),
-        Row(1, 1) :: Row(1, 1) :: Nil
-      )
-    }
-  }
-
   test("SPARK-11590: use native json_tuple in lateral view") {
     checkAnswer(sql(
       """
