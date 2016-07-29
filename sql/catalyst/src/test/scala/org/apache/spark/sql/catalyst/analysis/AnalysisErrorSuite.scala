@@ -533,5 +533,13 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan4 = Filter(
+      Exists(
+        Limit(1,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in LIMIT" :: Nil)
   }
 }
