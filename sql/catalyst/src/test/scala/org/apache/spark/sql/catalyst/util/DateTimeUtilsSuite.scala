@@ -557,4 +557,31 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("convert TZ with boundary time pacific") {
+    val tz = TimeZone.getTimeZone("America/Los_Angeles")
+    val boundaryDates = List(
+      1425680000000L, // March 6, 2015 @ 10:13:20 pm
+      1425779000000L, // March 8, 2015 @ 1:43:20 am
+      1425780000000L, // March 8, 2015 @ 3:00:00 am - boundary
+      1425781000000L, // March 8, 2015 @ 3:16:40 am
+      1425880000000L // March 9, 2015 @ 6:46:40 am
+    )
+    val offsets = boundaryDates.map(boundaryDate =>
+      DateTimeUtils.getOffsetFromLocalMillis(boundaryDate, tz))
+    assert(List(-28800000, -28800000, -25200000, -25200000, -25200000) == offsets)
+  }
+
+  test("convert TZ with boundary time London") {
+    val tz = TimeZone.getTimeZone("Europe/London")
+    val boundaryDates = List(
+      1459040340000L, // March 27, 2016 @ 12:59:00 am
+      1459040400000L, // March 27, 2016 @ 2:00:00 am - boundary
+      1459040410000L, // March 27, 2016 @ 2:16:40 am
+      1459126800000L // March 28, 2016 @ 2:00:00 am
+    )
+    val offsets = boundaryDates.map(boundaryDate =>
+      DateTimeUtils.getOffsetFromLocalMillis(boundaryDate, tz))
+    assert(List(0, 3600000, 3600000, 3600000) == offsets)
+  }
 }

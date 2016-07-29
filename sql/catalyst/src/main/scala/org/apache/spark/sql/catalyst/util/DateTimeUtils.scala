@@ -855,7 +855,8 @@ object DateTimeUtils {
   /**
    * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in given timezone.
    */
-  private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
+  private[sql] def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
+    // scalastyle:off println
     var guess = tz.getRawOffset
     // the actual offset should be calculated based on milliseconds in UTC
     val offset = tz.getOffset(millisLocal - guess)
@@ -884,13 +885,13 @@ object DateTimeUtils {
         } else {
           CalendarSystem.forName("julian")
         }
-        // create a Timestamp to get the unix timestamp (in UTC)
-        val date = calendar.newCalendarDate(null).
-          setDate(year + 1900, month, day).
+        // create a CalendarDate to get zone offset
+        val date = calendar.newCalendarDate(tz).
+          setDate(year, month, day).
           setTimeOfDay(hh, mm, ss, millis)
-
-        val timestamp = calendar.getTime(date)
-        guess = (millisLocal - timestamp).toInt
+        // We need to normalize so the zone offset will have daylight savings correctly applied.
+        calendar.normalize(date)
+        guess = date.getZoneOffset()
       }
     }
     guess
