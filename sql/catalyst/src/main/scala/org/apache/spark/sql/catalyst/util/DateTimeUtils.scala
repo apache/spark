@@ -853,6 +853,7 @@ object DateTimeUtils {
   /**
    * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in given timezone.
    * TODO: Improve handling of normalization differences.
+   * TODO: Replace with JSR-310 or similar system - see SPARK-16788
    */
   private[sql] def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
     var guess = tz.getRawOffset
