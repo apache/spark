@@ -882,12 +882,7 @@ object DateTimeUtils {
         calendar.set(year, month - 1, day, hh, mm, ss)
         calendar.set(Calendar.MILLISECOND, ms)
         val date = calendar.getTime()
-        // TODO decide between return the offset from the calendar:
-        guess = calendar.get(Calendar.ZONE_OFFSET) + calendar.get(Calendar.DST_OFFSET)
-        // And returning the difference between timestamps (end up broken in different ways)
-        // This way appears to return a non-DST value even when in DST - but our round trips tests
-        // will work.
-        // guess = (millisLocal - calendar.getTimeInMillis()).toInt
+        guess = (millisLocal - calendar.getTimeInMillis()).toInt
       }
     }
     guess
