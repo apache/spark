@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPa
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -728,11 +728,17 @@ private[hive] class HiveClientImpl(
   }
 
   private def fromHiveColumn(hc: FieldSchema): StructField = {
-    val f = StructField(
+    val columnType = try {
+      CatalystSqlParser.parseDataType(hc.getType)
+    } catch {
+      case e: ParseException =>
+        throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
+    }
+    val field = StructField(
       name = hc.getName,
-      dataType = CatalystSqlParser.parseDataType(hc.getType),
+      dataType = columnType,
       nullable = true)
-    Option(hc.getComment).map(f.withComment).getOrElse(f)
+    Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
