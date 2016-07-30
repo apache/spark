@@ -22,6 +22,7 @@ import java.io.File
 import scala.collection.Map
 import scala.io.Codec
 import scala.sys.process._
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -213,7 +214,8 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   def testCommandAvailable(command: String): Boolean = {
-    Process(command).run().exitValue() == 0
+    val attempt = Try(Process(command).run().exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 
   def testExportInputFile(varName: String) {
