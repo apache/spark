@@ -728,6 +728,20 @@ object DenseVector {
   def fromML(v: newlinalg.DenseVector): DenseVector = {
     new DenseVector(v.values)
   }
+  
+  
+  /**
+    * Generate a `DenseVector` consisting of zeros.
+    *
+    * @param size size of the DenseVector
+    * @return  a `DenseVector` consisting of zeros and Double type.
+    */
+  @Since("2.0.0")
+  def zeros(size: Int): DenseVector = {
+    val bdv=BDV.zeros[Double](size)
+    return new DenseVector(bdv.toArray)
+  }
+
 }
 
 /**
