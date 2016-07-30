@@ -126,7 +126,7 @@ private[yarn] class AMDelegationTokenRenewer(
     try {
       val remoteFs = FileSystem.get(freshHadoopConf)
       val credentialsPath = new Path(credentialsFile)
-      val thresholdTime = System.currentTimeMillis() - (daysToKeepFiles days).toMillis
+      val thresholdTime = System.currentTimeMillis() - (daysToKeepFiles.days).toMillis
       hadoopUtil.listFilesSorted(
         remoteFs, credentialsPath.getParent,
         credentialsPath.getName, SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)

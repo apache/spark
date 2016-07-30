@@ -88,7 +88,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
     clock.advance(5 * checkpointInterval.milliseconds)
 
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, times(1)).checkpoint(seqNum)
       verify(checkpointerMock, times(1)).checkpoint(otherSeqNum)
     }
@@ -109,7 +109,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
 
     clock.advance(checkpointInterval.milliseconds * 5)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, atMost(1)).checkpoint(anyString())
     }
   }
@@ -132,7 +132,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
 
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
     clock.advance(checkpointInterval.milliseconds)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, times(1)).checkpoint(anyString())
     }
     // don't block test thread
@@ -140,11 +140,11 @@ class KinesisCheckpointerSuite extends TestSuiteBase
       ExecutionContext.global)
 
     intercept[TimeoutException] {
-      Await.ready(f, 50 millis)
+      Await.ready(f, 50.millis)
     }
 
     clock.advance(checkpointInterval.milliseconds / 2)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, times(2)).checkpoint(anyString())
     }
   }

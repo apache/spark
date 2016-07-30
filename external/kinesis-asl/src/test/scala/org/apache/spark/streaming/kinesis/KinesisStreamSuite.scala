@@ -187,7 +187,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(120 seconds), interval(10 second)) {
+    eventually(timeout(120.seconds), interval(10.second)) {
       testUtils.pushData(testData, aggregateTestData)
       assert(collected.synchronized { collected === testData.toSet },
         "\nData received does not match data sent")
@@ -215,7 +215,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(120 seconds), interval(10 second)) {
+    eventually(timeout(120.seconds), interval(10.second)) {
       testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
       assert(collected.synchronized { collected === modData.toSet },
@@ -259,7 +259,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     // Run until there are at least 10 batches with some data in them
     // If this times out because numBatchesWithData is empty, then its likely that foreachRDD
     // function failed with exceptions, and nothing got added to `collectedData`
-    eventually(timeout(2 minutes), interval(1 seconds)) {
+    eventually(timeout(2.minutes), interval(1.seconds)) {
       testUtils.pushData(1 to 5, aggregateTestData)
       assert(isCheckpointPresent && numBatchesWithData > 10)
     }
