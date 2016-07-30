@@ -445,6 +445,12 @@ private[parquet] class ParquetSchemaConverter(
         //     repeated <element-type> array;
         //   }
         // }
+
+        // This should not use `listOfElements` here because this new method checks if the
+        // element name is `element` in the `GroupType` and throws an exception if not.
+        // As mentioned above, Spark prior to 1.4.x writes `ArrayType` as `LIST` but with
+        // `array` as its element name as below. Therefore, we build manually
+        // the correct group type here via the builder. (See SPARK-16777)
         Types
           .buildGroup(repetition).as(LIST)
           .addField(Types
@@ -461,6 +467,8 @@ private[parquet] class ParquetSchemaConverter(
         // <list-repetition> group <name> (LIST) {
         //   repeated <element-type> element;
         // }
+
+        // Here too, we should not use `listOfElements`. (See SPARK-16777)
         Types
           .buildGroup(repetition).as(LIST)
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
