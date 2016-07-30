@@ -433,6 +433,16 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.containerizer</code></td>
+  <td><code>docker</code></td>
+  <td>
+    This only affects docker containers, and must be one of "docker"
+    or "mesos".  Mesos supports two types of
+    containerizers for docker: the "docker" containerizer, and the preferred
+    "mesos" containerizer.  Read more here: http://mesos.apache.org/documentation/latest/container-image/
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.driver.webui.url</code></td>
   <td><code>(none)</code></td>
   <td>

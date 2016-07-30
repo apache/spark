@@ -222,9 +222,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetchCache))
     }
 
-    conf.getOption("spark.mesos.uris").map { uris =>
-      setupUris(uris, command, useFetchCache)
-    }
+    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command, useFetchCache))
 
     command.build()
   }
@@ -412,7 +410,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
               image,
-              sc.conf.getOption,
+              sc.conf,
               taskBuilder.getContainerBuilder
             )
           }
