@@ -268,7 +268,7 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
-    instr.map(_.logNumFeatures(centers(0)(0).vector.size))
+    instr.foreach(_.logNumFeatures(centers(0)(0).vector.size))
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
