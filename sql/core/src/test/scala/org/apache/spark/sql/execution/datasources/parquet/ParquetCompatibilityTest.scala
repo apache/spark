@@ -119,8 +119,19 @@ private[sql] object ParquetCompatibilityTest {
       metadata: Map[String, String],
       recordWriters: (RecordConsumer => Unit)*): Unit = {
     val messageType = MessageTypeParser.parseMessageType(schema)
-    val writeSupport = new DirectWriteSupport(messageType, metadata)
-    val parquetWriter = new ParquetWriter[RecordConsumer => Unit](new Path(path), writeSupport)
+    val testWriteSupport = new DirectWriteSupport(messageType, metadata)
+    case class ParquetWriterBuilder() extends
+        ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](new Path(path)) {
+      final val writeSupport = testWriteSupport
+      @Override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = {
+        writeSupport
+      }
+
+      @Override def self() = {
+        this
+      }
+    }
+    val parquetWriter = new ParquetWriterBuilder().build()
     try recordWriters.foreach(parquetWriter.write) finally parquetWriter.close()
   }
 }
