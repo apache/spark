@@ -223,7 +223,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     }
 
     conf.getOption("spark.mesos.uris").map { uris =>
-      setupUris(uris, command)
+      setupUris(uris, command, useFetchCache)
     }
 
     command.build()
