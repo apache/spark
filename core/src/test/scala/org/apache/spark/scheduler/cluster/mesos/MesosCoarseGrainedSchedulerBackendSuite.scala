@@ -109,7 +109,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
 
-    val cpus = backend.getResource(taskInfos(0).getResourcesList, "cpus")
+    val cpus = backend.getResource(taskInfos.head.getResourcesList, "cpus")
     assert(cpus == executorCores)
   }
 
@@ -123,7 +123,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
 
-    val cpus = backend.getResource(taskInfos(0).getResourcesList, "cpus")
+    val cpus = backend.getResource(taskInfos.head.getResourcesList, "cpus")
     assert(cpus == offerCores)
   }
 
@@ -137,7 +137,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val taskInfos = verifyTaskLaunched(driver, "o1")
     assert(taskInfos.length == 1)
 
-    val cpus = backend.getResource(taskInfos(0).getResourcesList, "cpus")
+    val cpus = backend.getResource(taskInfos.head.getResourcesList, "cpus")
     assert(cpus == maxCores)
   }
 
@@ -250,6 +250,32 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
 
     backend.start()
+  }
+
+  test("honors unset spark.mesos.containerizer") {
+    setBackend(Map("spark.mesos.executor.docker.image" -> "test"))
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
+    backend.resourceOffers(driver, List(offer1).asJava)
+
+    val taskInfos = verifyTaskLaunched(driver, "o1")
+    assert(taskInfos.head.getContainer.getType == ContainerInfo.Type.DOCKER)
+  }
+
+  test("honors spark.mesos.containerizer=\"mesos\"") {
+    setBackend(Map(
+      "spark.mesos.executor.docker.image" -> "test",
+      "spark.mesos.containerizer" -> "mesos"))
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
+    backend.resourceOffers(driver, List(offer1).asJava)
+
+    val taskInfos = verifyTaskLaunched(driver, "o1")
+    assert(taskInfos.head.getContainer.getType == ContainerInfo.Type.MESOS)
   }
 
   test("docker settings are reflected in created tasks") {
