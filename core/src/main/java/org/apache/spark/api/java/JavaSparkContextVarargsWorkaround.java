@@ -50,7 +50,7 @@ abstract class JavaSparkContextVarargsWorkaround {
     return union(rdds[0], rest);
   }
   
-  private static final List<T> populateRDDList(T[] rdds) {
+  private static final <T> List<T> populateRDDList(T[] rdds) {
     List<T> rest = new ArrayList<>(rdds.length - 1);
     for (int i = 1; i < rdds.length; i++) {
       rest.add(rdds[i]);
