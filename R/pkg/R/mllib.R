@@ -353,7 +353,7 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 #  Predicted values based on an isotonicRegression model
 
 #' @param object a fitted isotonicRegressionModel
-#' @param newData A SparkDataFrame for testing
+#' @param newData SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
 #' @rdname spark.isoreg
 #' @export

@@ -29,7 +29,7 @@ import org.apache.spark.ml.regression.{IsotonicRegression, IsotonicRegressionMod
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
-private [r] class IsotonicRegressionWrapper private (
+private[r] class IsotonicRegressionWrapper private (
     val pipeline: PipelineModel,
     val features: Array[String]) extends MLWritable {
 
