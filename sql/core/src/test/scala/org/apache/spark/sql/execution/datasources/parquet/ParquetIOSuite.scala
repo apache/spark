@@ -325,12 +325,20 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           |}
         """.stripMargin)
 
-      val writeSupport = new TestGroupWriteSupport(schema)
-      object ParquetWriterBuilder extends ParquetWriter.Builder[Group, Builder[Group]] {
-        @Override final val file = path
-        @Override final val writeSupport = writeSupport
+      val testWriteSupport = new TestGroupWriteSupport(schema)
+      case class ParquetWriterBuilder() extends
+          ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
+        final val writeSupport = testWriteSupport
+        @Override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = {
+          writeSupport
+        }
+
+        @Override def self() = {
+          this
+        }
       }
-      val writer = ParquetWriterBuilder.build()
+
+      val writer = new ParquetWriterBuilder().build()
 
       (0 until 10).foreach { i =>
         val record = new SimpleGroup(schema)
