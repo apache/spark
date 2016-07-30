@@ -420,6 +420,12 @@ class MatricesSuite extends SparkFunSuite {
     assert(mat.values.toSeq === Seq(1.0, 2.0, 3.0, 4.0))
   }
 
+  test("DenseMatrix.rand with no rng") {
+    val mat = DenseMatrix.rand(2,3)
+    assert(mat.numRows === 2)
+    assert(mat.numCols === 3)
+  }
+  
   test("randn") {
     val rng = mock[Random]
     when(rng.nextGaussian()).thenReturn(1.0, 2.0, 3.0, 4.0)
