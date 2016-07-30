@@ -491,14 +491,14 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
             jobj <- object@jobj
             features <- callJMethod(jobj, "features")
             labels <- callJMethod(jobj, "labels")
-            apriori <- callJMethod(jobj, "apriori")
-            apriori <- t(as.matrix(unlist(apriori)))
+            layers <- callJMethod(jobj, "layers")
+            layers <- t(as.matrix(unlist(layers)))
             colnames(apriori) <- unlist(labels)
             tables <- callJMethod(jobj, "tables")
             tables <- matrix(tables, nrow = length(labels))
             rownames(tables) <- unlist(labels)
             colnames(tables) <- unlist(features)
-            return(list(apriori = apriori, tables = tables))
+            return(list(layers = layers, tables = tables))
           })
 
 #' Naive Bayes Models

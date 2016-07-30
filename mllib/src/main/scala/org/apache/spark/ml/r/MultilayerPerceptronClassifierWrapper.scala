@@ -40,10 +40,15 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
   private val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
     pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
 
+  lazy val layers: Array[Int] = multilayerPerceptronClassificationModel.layers.toArray
+
+  lazy val tables: Array[Double] =
+    multilayerPerceptronClassificationModel.weights.toArray.map(math.exp)
+
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
       .drop(PREDICTED_LABEL_INDEX_COL)
-//      .drop(MultilayerPerceptronClassifierModel.getFeaturesCol)
+      .drop(multilayerPerceptronClassificationModel.getFeaturesCol)
   }
 
   /**
