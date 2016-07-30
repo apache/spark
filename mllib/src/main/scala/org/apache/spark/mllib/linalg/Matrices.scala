@@ -507,7 +507,8 @@ object DenseMatrix {
   def rand(numRows: Int, numCols: Int): DenseMatrix = {
     require(numRows.toLong * numCols <= Int.MaxValue,
       s"$numRows x $numCols dense matrix is too large to allocate")
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)((new Random).nextDouble()))
+    val rng=new Random()
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
   
   /**
