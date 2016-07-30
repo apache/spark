@@ -198,7 +198,7 @@ private[spark] class MetricsSystem private (
         try {
           val sinkConstructor = Utils.classForName(classPath)
             .getConstructors.asInstanceOf[Array[Constructor[_ <: Sink]]]
-          val constructorNonTakingSparkConf = sinkConstructor.find { c =>
+          val constructorNotTakingSparkConf = sinkConstructor.find { c =>
             c.getParameterTypes.sameElements(Array(classOf[Properties],
               classOf[MetricRegistry],
               classOf[SecurityManager]))
@@ -211,8 +211,8 @@ private[spark] class MetricsSystem private (
           }
 
           val sink = {
-            if (constructorNonTakingSparkConf.isDefined) {
-              constructorNonTakingSparkConf.get.newInstance(kv._2, registry, securityMgr)
+            if (constructorNotTakingSparkConf.isDefined) {
+              constructorNotTakingSparkConf.get.newInstance(kv._2, registry, securityMgr)
             }
             else if (constructorTakingSparkConf.isDefined) {
               constructorTakingSparkConf.get.newInstance(kv._2, registry, securityMgr, conf)
