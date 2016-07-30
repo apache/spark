@@ -180,7 +180,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
   def sendMessages(topic: String, messages: Array[String]): Unit = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val records = messages.map { new ProducerRecord[String, String](topic, _) }
-    records.map(producer.send)
+    records.foreach(producer.send)
     producer.close()
     producer = null
   }
