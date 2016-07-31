@@ -122,9 +122,8 @@ private[sql] object ParquetCompatibilityTest {
     val testWriteSupport = new DirectWriteSupport(messageType, metadata)
     case class ParquetWriterBuilder() extends
         ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](new Path(path)) {
-      final val writeSupport = testWriteSupport
       @Override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = {
-        writeSupport
+        testWriteSupport
       }
 
       @Override def self() = {

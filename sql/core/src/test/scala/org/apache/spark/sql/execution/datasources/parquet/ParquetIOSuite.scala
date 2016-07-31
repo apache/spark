@@ -328,9 +328,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       val testWriteSupport = new TestGroupWriteSupport(schema)
       case class ParquetWriterBuilder() extends
           ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
-        final val writeSupport = testWriteSupport
         @Override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = {
-          writeSupport
+          testWriteSupport
         }
 
         @Override def self() = {
