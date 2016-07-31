@@ -881,7 +881,6 @@ object DateTimeUtils {
         val calendar = Calendar.getInstance(tz)
         calendar.set(year, month - 1, day, hh, mm, ss)
         calendar.set(Calendar.MILLISECOND, ms)
-        val date = calendar.getTime()
         guess = (millisLocal - calendar.getTimeInMillis()).toInt
       }
     }
