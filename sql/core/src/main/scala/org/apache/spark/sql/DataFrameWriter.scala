@@ -358,6 +358,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
+    val partitions = normalizedParCols.map(_.toArray).getOrElse(Array.empty[String])
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -371,7 +372,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           CreateTableUsingAsSelect(
             tableIdent,
             source,
-            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            partitions,
             getBucketSpec,
             mode,
             extraOptions.toMap,

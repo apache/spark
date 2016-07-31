@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrd
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 
@@ -145,7 +146,7 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 }
 
 /**
- * A rule to do various checks before inserting into or writing to a data source table.
+ * A rule to do various checks before inserting into or writing to a table.
  */
 private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   extends (LogicalPlan => Unit) {
@@ -206,7 +207,44 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         // The relation in l is not an InsertableRelation.
         failAnalysis(s"$l does not allow insertion.")
 
+      case c: CreateTableCommand =>
+        // If caseSensitiveAnalysis is false, convert the names to lower cases
+        val allColNamesInSchema =
+          c.table.schema.map(col => convertToCaseSensitiveAnalysisAware(col.name))
+        val partitionColumnNames =
+          c.table.partitionColumnNames.map(convertToCaseSensitiveAnalysisAware)
+
+        // Duplicates are not allowed in partitionBy
+        // Todo: when bucketBy and sortBy are supported, we also need to ban the duplication.
+        checkDuplicates(partitionColumnNames, "Partition")
+
+        val colNames = allColNamesInSchema.diff(partitionColumnNames)
+        // Ensuring whether no duplicate name is used in table definition
+        checkDuplicates(colNames, s"table definition of ${c.table.identifier}")
+
+        // For non-data-source tables, partition columns must not be part of the schema
+        val badPartCols = partitionColumnNames.toSet.intersect(colNames.toSet)
+        if (badPartCols.nonEmpty) {
+          failAnalysis(s"Operation not allowed: Partition columns may not be specified in the " +
+            "schema: " + badPartCols.map("`" + _ + "`").mkString(","))
+        }
+
+      case c: CreateTableUsing =>
+        // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.
+        checkDuplicates(c.partitionColumns, "Partition")
+        c.bucketSpec.foreach { b =>
+          checkDuplicates(b.bucketColumnNames, "Bucketing")
+          checkDuplicates(b.sortColumnNames, "Sorting")
+        }
+
       case c: CreateTableUsingAsSelect =>
+        // Duplicates are not allowed in partitionBy/bucketBy/sortBy columns.
+        checkDuplicates(c.partitionColumns, "Partition")
+        c.bucketSpec.foreach { b =>
+          checkDuplicates(b.bucketColumnNames, "Bucketing")
+          checkDuplicates(b.sortColumnNames, "Sorting")
+        }
+
         // When the SaveMode is Overwrite, we need to check if the table is an input table of
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
@@ -246,6 +284,21 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
       case _ => // OK
+    }
+  }
+
+  private def convertToCaseSensitiveAnalysisAware(name: String): String = {
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
+  }
+
+  private def checkDuplicates(columnNames: Seq[String], columnType: String): Unit = {
+    val duplicateColumns =
+      columnNames.groupBy(convertToCaseSensitiveAnalysisAware).collect {
+        case (x, ys) if ys.length > 1 => s"`$x`"
+      }
+    if (duplicateColumns.nonEmpty) {
+      throw new AnalysisException(
+        s"Found duplicate column(s) in $columnType: ${duplicateColumns.mkString(", ")}")
     }
   }
 }
