@@ -956,7 +956,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     // Storage format
     val defaultStorage: CatalogStorageFormat = {
-      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultStorageType = conf.defaultFileFormat.toLowerCase
       val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
       CatalogStorageFormat(
         locationUri = None,

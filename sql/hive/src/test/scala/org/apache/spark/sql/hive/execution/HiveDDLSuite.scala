@@ -141,6 +141,68 @@ class HiveDDLSuite
     }
   }
 
+  test("create table - the default spark.sql.default.fileformat is textfile") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(s"CREATE TABLE $tabName(c1 int)")
+      val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+      val storage = tableMetadata.storage
+      assert(storage.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
+      assert(storage.outputFormat ==
+        Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+    }
+  }
+
+  test("create table - change default spark.sql.default.fileformat to parquet") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      // the format name should be case incensitive
+      withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "pArQuEt") {
+        sql(s"CREATE TABLE $tabName(c1 int)")
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val storage = tableMetadata.storage
+        assert(storage.inputFormat ==
+          Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+        assert(storage.outputFormat ==
+          Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      }
+    }
+  }
+
+  test("create table - change default spark.sql.default.fileformat to nonexistent format") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      // the format name should be case incensitive
+      withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "nonExistent") {
+        sql(s"CREATE TABLE $tabName(c1 int)")
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val storage = tableMetadata.storage
+        assert(storage.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
+        assert(storage.outputFormat ==
+          Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+      }
+    }
+  }
+
+  test("create table - spark.sql.default.fileformat") {
+    val catalog = spark.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "parquet") {
+        sql(s"CREATE TABLE $tabName(c1 int)")
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val storage = tableMetadata.storage
+        assert(storage.inputFormat ==
+          Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+        assert(storage.outputFormat ==
+          Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      }
+    }
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
