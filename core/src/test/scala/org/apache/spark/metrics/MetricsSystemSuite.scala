@@ -25,6 +25,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.internal.config._
+import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.metrics.source.{Source, StaticSources}
 
 class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
@@ -42,7 +43,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
     metricsSystem.start()
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
-    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
+    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
 
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 0)
@@ -53,7 +54,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
     metricsSystem.start()
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
-    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
+    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
 
     assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 1)
@@ -272,7 +273,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val instanceName1 = "sinkWithSparkConf"
     val metricsSystem1 = MetricsSystem.createMetricsSystem(instanceName1, conf, securityMgr)
     metricsSystem1.start()
-    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
+    val sinks = PrivateMethod[ArrayBuffer[Sink]]('sinks)
 
     assert(metricsSystem1.invokePrivate(sinks()).length === 1)
 
