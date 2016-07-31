@@ -26,7 +26,6 @@ import java.util.List;
 // $example on:basic_parquet_example$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.JavaSparkContext$;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Encoders;
 // import org.apache.spark.sql.Encoders;
@@ -228,3 +227,4 @@ public class JavaSQLDataSourceExample {
   }
 
 }
+
