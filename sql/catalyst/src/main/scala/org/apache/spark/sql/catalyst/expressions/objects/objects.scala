@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -134,29 +134,40 @@ case class Invoke(
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    val callFunc = if (method.isDefined && method.get.getReturnType.isPrimitive) {
-      s"${obj.value}.$functionName($argString)"
+    val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
+    val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
+
+    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
+      s"""
+        try {
+          $resultVal = $funcCall;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
     } else {
-      s"(${ctx.boxedType(javaType)}) ${obj.value}.$functionName($argString)"
+      s"$resultVal = $funcCall;"
+    }
+
+    val evaluate = if (returnPrimitive) {
+      getFuncResult(ev.value, s"${obj.value}.$functionName($argString)")
+    } else {
+      val funcResult = ctx.freshName("funcResult")
+      s"""
+        Object $funcResult = null;
+        ${getFuncResult(funcResult, s"${obj.value}.$functionName($argString)")}
+        if ($funcResult == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = (${ctx.boxedType(javaType)}) $funcResult;
+        }
+      """
     }
 
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
       s"boolean ${ev.isNull} = ${obj.isNull} || ${argGen.map(_.isNull).mkString(" || ")};"
     } else {
       s"boolean ${ev.isNull} = ${obj.isNull};"
-    }
-
-    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
-      s"final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : $callFunc;"
-    } else {
-      s"""
-        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-        try {
-          ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $callFunc;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """
     }
 
     // If the function can return null, we do an extra check to make sure our null bit is still set
@@ -166,12 +177,14 @@ case class Invoke(
     } else {
       ""
     }
-
     val code = s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
       $setIsNull
-      $evaluate
+      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        $evaluate
+      }
       $postNullCheck
      """
     ev.copy(code = code)
@@ -485,6 +498,162 @@ case class MapObjects private(
       }
     """
     ev.copy(code = code, isNull = genInputData.isNull)
+  }
+}
+
+object ExternalMapToCatalyst {
+  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+
+  def apply(
+      inputMap: Expression,
+      keyType: DataType,
+      keyConverter: Expression => Expression,
+      valueType: DataType,
+      valueConverter: Expression => Expression): ExternalMapToCatalyst = {
+    val id = curId.getAndIncrement()
+    val keyName = "ExternalMapToCatalyst_key" + id
+    val valueName = "ExternalMapToCatalyst_value" + id
+    val valueIsNull = "ExternalMapToCatalyst_value_isNull" + id
+
+    ExternalMapToCatalyst(
+      keyName,
+      keyType,
+      keyConverter(LambdaVariable(keyName, "false", keyType)),
+      valueName,
+      valueIsNull,
+      valueType,
+      valueConverter(LambdaVariable(valueName, valueIsNull, valueType)),
+      inputMap
+    )
+  }
+}
+
+/**
+ * Converts a Scala/Java map object into catalyst format, by applying the key/value converter when
+ * iterate the map.
+ *
+ * @param key the name of the map key variable that used when iterate the map, and used as input for
+ *            the `keyConverter`
+ * @param keyType the data type of the map key variable that used when iterate the map, and used as
+ *                input for the `keyConverter`
+ * @param keyConverter A function that take the `key` as input, and converts it to catalyst format.
+ * @param value the name of the map value variable that used when iterate the map, and used as input
+ *              for the `valueConverter`
+ * @param valueIsNull the nullability of the map value variable that used when iterate the map, and
+ *                    used as input for the `valueConverter`
+ * @param valueType the data type of the map value variable that used when iterate the map, and
+ *                  used as input for the `valueConverter`
+ * @param valueConverter A function that take the `value` as input, and converts it to catalyst
+ *                       format.
+ * @param child An expression that when evaluated returns the input map object.
+ */
+case class ExternalMapToCatalyst private(
+    key: String,
+    keyType: DataType,
+    keyConverter: Expression,
+    value: String,
+    valueIsNull: String,
+    valueType: DataType,
+    valueConverter: Expression,
+    child: Expression)
+  extends UnaryExpression with NonSQLExpression {
+
+  override def foldable: Boolean = false
+
+  override def dataType: MapType = MapType(keyConverter.dataType, valueConverter.dataType)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val inputMap = child.genCode(ctx)
+    val genKeyConverter = keyConverter.genCode(ctx)
+    val genValueConverter = valueConverter.genCode(ctx)
+    val length = ctx.freshName("length")
+    val index = ctx.freshName("index")
+    val convertedKeys = ctx.freshName("convertedKeys")
+    val convertedValues = ctx.freshName("convertedValues")
+    val entry = ctx.freshName("entry")
+    val entries = ctx.freshName("entries")
+
+    val (defineEntries, defineKeyValue) = child.dataType match {
+      case ObjectType(cls) if classOf[java.util.Map[_, _]].isAssignableFrom(cls) =>
+        val javaIteratorCls = classOf[java.util.Iterator[_]].getName
+        val javaMapEntryCls = classOf[java.util.Map.Entry[_, _]].getName
+
+        val defineEntries =
+          s"final $javaIteratorCls $entries = ${inputMap.value}.entrySet().iterator();"
+
+        val defineKeyValue =
+          s"""
+            final $javaMapEntryCls $entry = ($javaMapEntryCls) $entries.next();
+            ${ctx.javaType(keyType)} $key = (${ctx.boxedType(keyType)}) $entry.getKey();
+            ${ctx.javaType(valueType)} $value = (${ctx.boxedType(valueType)}) $entry.getValue();
+          """
+
+        defineEntries -> defineKeyValue
+
+      case ObjectType(cls) if classOf[scala.collection.Map[_, _]].isAssignableFrom(cls) =>
+        val scalaIteratorCls = classOf[Iterator[_]].getName
+        val scalaMapEntryCls = classOf[Tuple2[_, _]].getName
+
+        val defineEntries = s"final $scalaIteratorCls $entries = ${inputMap.value}.iterator();"
+
+        val defineKeyValue =
+          s"""
+            final $scalaMapEntryCls $entry = ($scalaMapEntryCls) $entries.next();
+            ${ctx.javaType(keyType)} $key = (${ctx.boxedType(keyType)}) $entry._1();
+            ${ctx.javaType(valueType)} $value = (${ctx.boxedType(valueType)}) $entry._2();
+          """
+
+        defineEntries -> defineKeyValue
+    }
+
+    val valueNullCheck = if (ctx.isPrimitiveType(valueType)) {
+      s"boolean $valueIsNull = false;"
+    } else {
+      s"boolean $valueIsNull = $value == null;"
+    }
+
+    val arrayCls = classOf[GenericArrayData].getName
+    val mapCls = classOf[ArrayBasedMapData].getName
+    val convertedKeyType = ctx.boxedType(keyConverter.dataType)
+    val convertedValueType = ctx.boxedType(valueConverter.dataType)
+    val code =
+      s"""
+        ${inputMap.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${inputMap.isNull}) {
+          final int $length = ${inputMap.value}.size();
+          final Object[] $convertedKeys = new Object[$length];
+          final Object[] $convertedValues = new Object[$length];
+          int $index = 0;
+          $defineEntries
+          while($entries.hasNext()) {
+            $defineKeyValue
+            $valueNullCheck
+
+            ${genKeyConverter.code}
+            if (${genKeyConverter.isNull}) {
+              throw new RuntimeException("Cannot use null as map key!");
+            } else {
+              $convertedKeys[$index] = ($convertedKeyType) ${genKeyConverter.value};
+            }
+
+            ${genValueConverter.code}
+            if (${genValueConverter.isNull}) {
+              $convertedValues[$index] = null;
+            } else {
+              $convertedValues[$index] = ($convertedValueType) ${genValueConverter.value};
+            }
+
+            $index++;
+          }
+
+          ${ev.value} = new $mapCls(new $arrayCls($convertedKeys), new $arrayCls($convertedValues));
+        }
+      """
+    ev.copy(code = code, isNull = inputMap.isNull)
   }
 }
 

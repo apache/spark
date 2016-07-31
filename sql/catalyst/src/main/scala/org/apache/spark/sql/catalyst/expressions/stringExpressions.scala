@@ -171,7 +171,7 @@ case class ConcatWs(children: Seq[Expression])
   usage = "_FUNC_(n, str1, str2, ...) - returns the n-th string, e.g. returns str2 when n is 2",
   extended = "> SELECT _FUNC_(1, 'scala', 'java') FROM src LIMIT 1;\n" + "'scala'")
 case class Elt(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   private lazy val indexExpr = children.head
   private lazy val stringExprs = children.tail.toArray
@@ -203,6 +203,29 @@ case class Elt(children: Seq[Expression])
         stringExprs(index - 1).eval(input)
       }
     }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val index = indexExpr.genCode(ctx)
+    val strings = stringExprs.map(_.genCode(ctx))
+    val assignStringValue = strings.zipWithIndex.map { case (eval, index) =>
+      s"""
+        case ${index + 1}:
+          ${ev.value} = ${eval.isNull} ? null : ${eval.value};
+          break;
+      """
+    }.mkString("\n")
+    val indexVal = ctx.freshName("index")
+    val stringArray = ctx.freshName("strings");
+
+    ev.copy(index.code + "\n" + strings.map(_.code).mkString("\n") + s"""
+      final int $indexVal = ${index.value};
+      UTF8String ${ev.value} = null;
+      switch ($indexVal) {
+        $assignStringValue
+      }
+      final boolean ${ev.isNull} = ${ev.value} == null;
+    """)
   }
 }
 

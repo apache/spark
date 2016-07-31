@@ -19,6 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import scala.sys.process.Process
+import scala.util.Try
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
@@ -62,6 +65,20 @@ case class Order(
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
+
+  test("script") {
+    if (testCommandAvailable("bash") && testCommandAvailable("echo | sed")) {
+      val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
+      df.createOrReplaceTempView("script_table")
+      val query1 = sql(
+        """
+          |SELECT col1 FROM (from(SELECT c1, c2, c3 FROM script_table) tempt_table
+          |REDUCE c1, c2, c3 USING 'bash src/test/resources/test_script.sh' AS
+          |(col1 STRING, col2 STRING)) script_test_table""".stripMargin)
+      checkAnswer(query1, Row("x1_y1") :: Row("x2_y2") :: Nil)
+    }
+    // else skip this test
+  }
 
   test("UDTF") {
     withUserDefinedFunction("udtf_count2" -> true) {
@@ -111,7 +128,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
-    withTempTable("src") {
+    withTempView("src") {
       Seq(("id1", "value1")).toDF("key", "value").createOrReplaceTempView("src")
       val query =
         sql("SELECT genoutput.* FROM src " +
@@ -941,7 +958,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("Sorting columns are not in Generate") {
-    withTempTable("data") {
+    withTempView("data") {
       spark.range(1, 5)
         .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
         .createOrReplaceTempView("data")
@@ -1218,7 +1235,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
-      withTempTable("src") {
+      withTempView("src") {
         Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF("c1", "c2").createOrReplaceTempView("src")
         sql("CREATE TABLE test10741 STORED AS PARQUET AS SELECT * FROM src")
       }
@@ -1472,7 +1489,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("multi-insert with lateral view") {
-    withTempTable("t1") {
+    withTempView("t1") {
       spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
@@ -1754,5 +1771,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           Row(2))
       }
     }
+  }
+
+  def testCommandAvailable(command: String): Boolean = {
+    Try(Process(command) !!).isSuccess
   }
 }

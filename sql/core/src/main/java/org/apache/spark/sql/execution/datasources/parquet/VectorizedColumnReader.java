@@ -59,7 +59,7 @@ public class VectorizedColumnReader {
   /**
    * If true, the current page is dictionary encoded.
    */
-  private boolean useDictionary;
+  private boolean isCurrentPageDictionaryEncoded;
 
   /**
    * Maximum definition level for this column.
@@ -100,13 +100,13 @@ public class VectorizedColumnReader {
     if (dictionaryPage != null) {
       try {
         this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
-        this.useDictionary = true;
+        this.isCurrentPageDictionaryEncoded = true;
       } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
       }
     } else {
       this.dictionary = null;
-      this.useDictionary = false;
+      this.isCurrentPageDictionaryEncoded = false;
     }
     this.totalValueCount = pageReader.getTotalValueCount();
     if (totalValueCount == 0) {
@@ -136,6 +136,13 @@ public class VectorizedColumnReader {
    */
   void readBatch(int total, ColumnVector column) throws IOException {
     int rowId = 0;
+    ColumnVector dictionaryIds = null;
+    if (dictionary != null) {
+      // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
+      // decode all previous dictionary encoded pages if we ever encounter a non-dictionary encoded
+      // page.
+      dictionaryIds = column.reserveDictionaryIds(total);
+    }
     while (total > 0) {
       // Compute the number of values we want to read in this page.
       int leftInPage = (int) (endOfPageValueCount - valuesRead);
@@ -144,12 +151,10 @@ public class VectorizedColumnReader {
         leftInPage = (int) (endOfPageValueCount - valuesRead);
       }
       int num = Math.min(total, leftInPage);
-      if (useDictionary) {
+      if (isCurrentPageDictionaryEncoded) {
         // Read and decode dictionary ids.
-        ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-
         if (column.hasDictionary() || (rowId == 0 &&
             (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
@@ -461,13 +466,13 @@ public class VectorizedColumnReader {
         throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
       }
       this.dataColumn = new VectorizedRleValuesReader();
-      this.useDictionary = true;
+      this.isCurrentPageDictionaryEncoded = true;
     } else {
       if (dataEncoding != Encoding.PLAIN) {
         throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
       }
       this.dataColumn = new VectorizedPlainValuesReader();
-      this.useDictionary = false;
+      this.isCurrentPageDictionaryEncoded = false;
     }
 
     try {
