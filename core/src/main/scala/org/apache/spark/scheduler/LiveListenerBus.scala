@@ -22,8 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.DynamicVariable
 
-import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.internal.config._
+import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
 
 /**
@@ -33,24 +32,18 @@ import org.apache.spark.util.Utils
  * has started will events be actually propagated to all attached listeners. This listener bus
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
-private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends SparkListenerBus {
+private[spark] class LiveListenerBus extends SparkListenerBus {
 
   self =>
 
   import LiveListenerBus._
 
+  private var sparkContext: SparkContext = null
+
   // Cap the capacity of the event queue so we get an explicit error (rather than
   // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
-  private lazy val EVENT_QUEUE_CAPACITY = validateAndGetQueueSize()
-  private lazy val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
-
-  private def validateAndGetQueueSize(): Int = {
-    val queueSize = sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_SIZE)
-    if (queueSize <= 0) {
-      throw new SparkException("spark.scheduler.listenerbus.eventqueue.size must be > 0!")
-    }
-    queueSize
-  }
+  private val EVENT_QUEUE_CAPACITY = 10000
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
 
   // Indicate if `start()` is called
   private val started = new AtomicBoolean(false)
@@ -103,9 +96,11 @@ private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends Spa
    * listens for any additional events asynchronously while the listener bus is still running.
    * This should only be called once.
    *
+   * @param sc Used to stop the SparkContext in case the listener thread dies.
    */
-  def start(): Unit = {
+  def start(sc: SparkContext): Unit = {
     if (started.compareAndSet(false, true)) {
+      sparkContext = sc
       listenerThread.start()
     } else {
       throw new IllegalStateException(s"$name already started!")

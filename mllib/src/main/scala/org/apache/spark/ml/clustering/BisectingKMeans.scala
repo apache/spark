@@ -99,7 +99,6 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -223,7 +222,6 @@ class BisectingKMeans @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
-    transformSchema(dataset.schema, logging = true)
     val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }

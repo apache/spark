@@ -23,8 +23,8 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 
 import org.apache.spark.ml.feature.VectorAssembler;
-import org.apache.spark.ml.linalg.VectorUDT;
-import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;

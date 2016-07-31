@@ -272,9 +272,14 @@ private[spark] class ExternalSorter[K, V, C](
 
     // These variables are reset after each flush
     var objectsWritten: Long = 0
-    val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
-    val writer: DiskBlockObjectWriter =
-      blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
+    var spillMetrics: ShuffleWriteMetrics = null
+    var writer: DiskBlockObjectWriter = null
+    def openWriter(): Unit = {
+      assert (writer == null && spillMetrics == null)
+      spillMetrics = new ShuffleWriteMetrics
+      writer = blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
+    }
+    openWriter()
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
@@ -283,11 +288,14 @@ private[spark] class ExternalSorter[K, V, C](
     val elementsPerPartition = new Array[Long](numPartitions)
 
     // Flush the disk writer's contents to disk, and update relevant variables.
-    // The writer is committed at the end of this process.
+    // The writer is closed at the end of this process, and cannot be reused.
     def flush(): Unit = {
-      val segment = writer.commitAndGet()
-      batchSizes.append(segment.length)
-      _diskBytesSpilled += segment.length
+      val w = writer
+      writer = null
+      w.commitAndClose()
+      _diskBytesSpilled += spillMetrics.bytesWritten
+      batchSizes.append(spillMetrics.bytesWritten)
+      spillMetrics = null
       objectsWritten = 0
     }
 
@@ -303,21 +311,24 @@ private[spark] class ExternalSorter[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
+          openWriter()
         }
       }
       if (objectsWritten > 0) {
         flush()
-      } else {
-        writer.revertPartialWritesAndClose()
+      } else if (writer != null) {
+        val w = writer
+        writer = null
+        w.revertPartialWritesAndClose()
       }
       success = true
     } finally {
-      if (success) {
-        writer.close()
-      } else {
+      if (!success) {
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
-        writer.revertPartialWritesAndClose()
+        if (writer != null) {
+          writer.revertPartialWritesAndClose()
+        }
         if (file.exists()) {
           if (!file.delete()) {
             logWarning(s"Error deleting ${file}")
@@ -682,37 +693,42 @@ private[spark] class ExternalSorter[K, V, C](
       blockId: BlockId,
       outputFile: File): Array[Long] = {
 
+    val writeMetrics = context.taskMetrics().shuffleWriteMetrics
+
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
-    val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-      context.taskMetrics().shuffleWriteMetrics)
 
     if (spills.isEmpty) {
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
       while (it.hasNext) {
+        val writer = blockManager.getDiskWriter(
+          blockId, outputFile, serInstance, fileBufferSize, writeMetrics)
         val partitionId = it.nextPartition()
         while (it.hasNext && it.nextPartition() == partitionId) {
           it.writeNext(writer)
         }
-        val segment = writer.commitAndGet()
+        writer.commitAndClose()
+        val segment = writer.fileSegment()
         lengths(partitionId) = segment.length
       }
     } else {
       // We must perform merge-sort; get an iterator by partition and write everything directly.
       for ((id, elements) <- this.partitionedIterator) {
         if (elements.hasNext) {
+          val writer = blockManager.getDiskWriter(
+            blockId, outputFile, serInstance, fileBufferSize, writeMetrics)
           for (elem <- elements) {
             writer.write(elem._1, elem._2)
           }
-          val segment = writer.commitAndGet()
+          writer.commitAndClose()
+          val segment = writer.fileSegment()
           lengths(id) = segment.length
         }
       }
     }
 
-    writer.close()
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)

@@ -786,10 +786,9 @@ def _parse_struct_fields_string(s):
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
-    to :class:`DataType.simpleString`, except that top level struct type can omit
-    the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
-    of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
-    for :class:`IntegerType`.
+    to `DataType.simpleString`, except that top level struct type can omit the `struct<>` and
+    atomic types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
+    ByteType. We can also use `int` as a short name for IntegerType.
 
     >>> _parse_datatype_string("int ")
     IntegerType

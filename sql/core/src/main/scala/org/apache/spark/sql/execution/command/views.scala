@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
@@ -31,13 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
  * depending on Hive meta-store.
  *
- * @param name the name of this view.
- * @param userSpecifiedColumns the output column names and optional comments specified by users,
- *                             can be Nil if not specified.
- * @param comment the comment of this view.
- * @param properties the properties of this view.
- * @param originalText the original SQL text of this view, can be None if this view is created via
- *                     Dataset API.
+ * @param tableDesc the catalog table
  * @param child the logical plan that represents the view; this is used to generate a canonicalized
  *              version of the SQL that can be saved in the catalog.
  * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
@@ -50,11 +44,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
  *                 unless they are specified with full qualified table name with database prefix.
  */
 case class CreateViewCommand(
-    name: TableIdentifier,
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    properties: Map[String, String],
-    originalText: Option[String],
+    tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
@@ -68,9 +58,11 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
+  require(tableDesc.tableType == CatalogTableType.VIEW,
+    "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
   if (!isTemporary) {
-    require(originalText.isDefined,
-      "The table to created with CREATE VIEW must have 'originalText'.")
+    require(tableDesc.viewText.isDefined,
+      "The table to created with CREATE VIEW must have 'viewText'.")
   }
 
   if (allowExisting && replace) {
@@ -84,8 +76,8 @@ case class CreateViewCommand(
   }
 
   // Temporary view names should NOT contain database prefix like "database.table"
-  if (isTemporary && name.database.isDefined) {
-    val database = name.database.get
+  if (isTemporary && tableDesc.identifier.database.isDefined) {
+    val database = tableDesc.identifier.database.get
     throw new AnalysisException(
       s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
@@ -96,31 +88,26 @@ case class CreateViewCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    if (userSpecifiedColumns.nonEmpty &&
-        userSpecifiedColumns.length != analyzedPlan.output.length) {
+    if (tableDesc.schema != Nil && tableDesc.schema.length != analyzedPlan.output.length) {
       throw new AnalysisException(s"The number of columns produced by the SELECT clause " +
         s"(num: `${analyzedPlan.output.length}`) does not match the number of column names " +
-        s"specified by CREATE VIEW (num: `${userSpecifiedColumns.length}`).")
+        s"specified by CREATE VIEW (num: `${tableDesc.schema.length}`).")
     }
     val sessionState = sparkSession.sessionState
 
     if (isTemporary) {
-      createTemporaryView(sparkSession, analyzedPlan)
+      createTemporaryView(tableDesc.identifier, sparkSession, analyzedPlan)
     } else {
       // Adds default database for permanent table if it doesn't exist, so that tableExists()
       // only check permanent tables.
-      val database = name.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-      val qualifiedName = name.copy(database = Option(database))
+      val database = tableDesc.identifier.database.getOrElse(
+        sessionState.catalog.getCurrentDatabase)
+      val tableIdentifier = tableDesc.identifier.copy(database = Option(database))
 
-      if (sessionState.catalog.tableExists(qualifiedName)) {
-        val tableMetadata = sessionState.catalog.getTableMetadata(qualifiedName)
+      if (sessionState.catalog.tableExists(tableIdentifier)) {
         if (allowExisting) {
           // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
           // already exists.
-        } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-          throw new AnalysisException(
-            "Existing table is not a view. The following is an existing table, " +
-              s"not a view: $qualifiedName")
         } else if (replace) {
           // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
           sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
@@ -128,7 +115,7 @@ case class CreateViewCommand(
           // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
           // exists.
           throw new AnalysisException(
-            s"View $qualifiedName already exists. If you want to update the view definition, " +
+            s"View $tableIdentifier already exists. If you want to update the view definition, " +
               "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
         }
       } else {
@@ -140,20 +127,25 @@ case class CreateViewCommand(
     Seq.empty[Row]
   }
 
-  private def createTemporaryView(sparkSession: SparkSession, analyzedPlan: LogicalPlan): Unit = {
-    val catalog = sparkSession.sessionState.catalog
+  private def createTemporaryView(
+      table: TableIdentifier, sparkSession: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+
+    val sessionState = sparkSession.sessionState
+    val catalog = sessionState.catalog
 
     // Projects column names to alias names
-    val logicalPlan = if (userSpecifiedColumns.isEmpty) {
-      analyzedPlan
-    } else {
-      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
-        case (attr, (colName, _)) => Alias(attr, colName)()
+    val logicalPlan = {
+      if (tableDesc.schema.isEmpty) {
+        analyzedPlan
+      } else {
+        val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
+          case (attr, col) => Alias(attr, col.name)()
+        }
+        sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
       }
-      sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
     }
 
-    catalog.createTempView(name.table, logicalPlan, replace)
+    catalog.createTempView(table.table, logicalPlan, replace)
   }
 
   /**
@@ -162,14 +154,15 @@ case class CreateViewCommand(
    */
   private def prepareTable(sparkSession: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
     val viewSQL: String = {
-      val logicalPlan = if (userSpecifiedColumns.isEmpty) {
-        analyzedPlan
-      } else {
-        val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
-          case (attr, (colName, _)) => Alias(attr, colName)()
+      val logicalPlan =
+        if (tableDesc.schema.isEmpty) {
+          analyzedPlan
+        } else {
+          val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
+            case (attr, col) => Alias(attr, col.name)()
+          }
+          sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
         }
-        sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
-      }
       new SQLBuilder(logicalPlan).toSQL
     }
 
@@ -183,26 +176,21 @@ case class CreateViewCommand(
           "Failed to analyze the canonicalized SQL. It is possible there is a bug in Spark.", e)
     }
 
-    val viewSchema = if (userSpecifiedColumns.isEmpty) {
-      analyzedPlan.output.map { a =>
-        CatalogColumn(a.name, a.dataType.catalogString)
-      }
-    } else {
-      analyzedPlan.output.zip(userSpecifiedColumns).map {
-        case (a, (name, comment)) =>
-          CatalogColumn(name, a.dataType.catalogString, comment = comment)
+    val viewSchema: Seq[CatalogColumn] = {
+      if (tableDesc.schema.isEmpty) {
+        analyzedPlan.output.map { a =>
+          CatalogColumn(a.name, a.dataType.catalogString)
+        }
+      } else {
+        analyzedPlan.output.zip(tableDesc.schema).map { case (a, col) =>
+          CatalogColumn(col.name, a.dataType.catalogString, nullable = true, col.comment)
+        }
       }
     }
 
-    CatalogTable(
-      identifier = name,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = viewSchema,
-      properties = properties,
-      viewOriginalText = originalText,
-      viewText = Some(viewSQL),
-      comment = comment
-    )
+    tableDesc.copy(schema = viewSchema, viewText = Some(viewSQL))
   }
+
+  /** Escape backtick with double-backtick in column name and wrap it with backtick. */
+  private def quote(name: String) = s"`${name.replaceAll("`", "``")}`"
 }

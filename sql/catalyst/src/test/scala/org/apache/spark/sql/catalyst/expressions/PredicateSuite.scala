@@ -141,7 +141,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.foreach { t =>
+    primitiveTypes.map { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
@@ -182,7 +182,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.foreach { t =>
+    primitiveTypes.map { t =>
       val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()

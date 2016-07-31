@@ -968,7 +968,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // whether to convert a table created by CTAS to a datasource table.
         serde = None,
         compressed = false,
-        properties = Map())
+        serdeProperties = Map())
     }
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
@@ -986,7 +986,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
       compressed = false,
-      properties = rowStorage.properties ++ fileStorage.properties)
+      serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
     // If location is defined, we'll assume this is an external table.
     // Otherwise, we may accidentally delete existing data.
     val tableType = if (external || location.isDefined) {
@@ -1145,7 +1145,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     import ctx._
     CatalogStorageFormat.empty.copy(
       serde = Option(string(name)),
-      properties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
+      serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
@@ -1173,7 +1173,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             ctx)
           "line.delim" -> value
         }
-    CatalogStorageFormat.empty.copy(properties = entries.toMap)
+    CatalogStorageFormat.empty.copy(serdeProperties = entries.toMap)
   }
 
   /**
@@ -1235,21 +1235,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.identifierList != null) {
       operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
     } else {
-      val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
-        icl.identifierComment.asScala.map { ic =>
-          ic.identifier.getText -> Option(ic.STRING).map(string)
-        }
+      val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
+      val schema = identifiers.map { ic =>
+        CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
       }
       createView(
         ctx,
         ctx.tableIdentifier,
         comment = Option(ctx.STRING).map(string),
-        userSpecifiedColumns,
+        schema,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
-        allowExisting = ctx.EXISTS != null,
-        replace = ctx.REPLACE != null,
-        isTemporary = ctx.TEMPORARY != null
+        ctx.EXISTS != null,
+        ctx.REPLACE != null,
+        ctx.TEMPORARY != null
       )
     }
   }
@@ -1260,12 +1259,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     createView(
       ctx,
-      name = ctx.tableIdentifier,
+      ctx.tableIdentifier,
       comment = None,
-      userSpecifiedColumns = Seq.empty,
-      query = ctx.query,
-      properties = Map.empty,
-      allowExisting = false,
+      Seq.empty,
+      ctx.query,
+      Map.empty,
+      allowExist = false,
       replace = true,
       isTemporary = false)
   }
@@ -1277,23 +1276,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx: ParserRuleContext,
       name: TableIdentifierContext,
       comment: Option[String],
-      userSpecifiedColumns: Seq[(String, Option[String])],
+      schema: Seq[CatalogColumn],
       query: QueryContext,
       properties: Map[String, String],
-      allowExisting: Boolean,
+      allowExist: Boolean,
       replace: Boolean,
       isTemporary: Boolean): LogicalPlan = {
-    val originalText = source(query)
-    CreateViewCommand(
-      visitTableIdentifier(name),
-      userSpecifiedColumns,
-      comment,
-      properties,
-      Some(originalText),
-      plan(query),
-      allowExisting = allowExisting,
-      replace = replace,
-      isTemporary = isTemporary)
+    val sql = Option(source(query))
+    val tableDesc = CatalogTable(
+      identifier = visitTableIdentifier(name),
+      tableType = CatalogTableType.VIEW,
+      schema = schema,
+      storage = CatalogStorageFormat.empty,
+      properties = properties,
+      viewOriginalText = sql,
+      viewText = sql,
+      comment = comment)
+    CreateViewCommand(tableDesc, plan(query), allowExist, replace, isTemporary)
   }
 
   /**

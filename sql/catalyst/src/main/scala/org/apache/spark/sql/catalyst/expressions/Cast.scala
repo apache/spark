@@ -52,8 +52,7 @@ object Cast {
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
 
-    case (StringType, DateType) => true
-    case (TimestampType, DateType) => true
+    case (_, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
 
@@ -113,9 +112,6 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-@ExpressionDescription(
-  usage = " - Cast value v to the target data type.",
-  extended = "> SELECT _FUNC_('10' as int);\n 10")
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
@@ -232,12 +228,18 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
       buildCast[Long](_, t => DateTimeUtils.millisToDays(t / 1000L))
+    // Hive throws this exception as a Semantic Exception
+    // It is never possible to compare result when hive return with exception,
+    // so we can return null
+    // NULL is more reasonable here, since the query itself obeys the grammar.
+    case _ => _ => null
   }
 
   // IntervalConverter
   private[this] def castToInterval(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
+    case _ => _ => null
   }
 
   // LongConverter

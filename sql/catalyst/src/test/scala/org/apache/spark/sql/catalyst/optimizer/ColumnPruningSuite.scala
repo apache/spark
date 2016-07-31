@@ -346,20 +346,5 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
   }
 
-  test("push project down into sample") {
-    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-    val x = testRelation.subquery('x)
-
-    val query1 = Sample(0.0, 0.6, false, 11L, x)().select('a)
-    val optimized1 = Optimize.execute(query1.analyze)
-    val expected1 = Sample(0.0, 0.6, false, 11L, x.select('a))()
-    comparePlans(optimized1, expected1.analyze)
-
-    val query2 = Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
-    val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a))().select('a as 'aa)
-    comparePlans(optimized2, expected2.analyze)
-  }
-
   // todo: add more tests for column pruning
 }

@@ -819,13 +819,10 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.checkpoint(checkpointDirectory)
     ssc.textFileStream(testDirectory).foreachRDD { rdd => rdd.count() }
     ssc.start()
-    try {
-      eventually(timeout(30000 millis)) {
-        assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
-      }
-    } finally {
-      ssc.stop()
+    eventually(timeout(10000 millis)) {
+      assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
     }
+    ssc.stop()
     checkpointDirectory
   }
 

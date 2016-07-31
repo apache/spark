@@ -37,13 +37,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   val jobCompletionTime = 1421191296660L
 
   test("don't call sc.stop in listener") {
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SparkContextStoppingListener(sc)
-    val bus = new LiveListenerBus(sc)
+    val bus = new LiveListenerBus
     bus.addListener(listener)
 
     // Starting listener bus should flush all buffered events
-    bus.start()
+    bus.start(sc)
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
 
@@ -52,9 +52,8 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("basic creation and shutdown of LiveListenerBus") {
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
     val counter = new BasicJobCounter
-    val bus = new LiveListenerBus(sc)
+    val bus = new LiveListenerBus
     bus.addListener(counter)
 
     // Listener bus hasn't started yet, so posting events should not increment counter
@@ -62,7 +61,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     assert(counter.count === 0)
 
     // Starting listener bus should flush all buffered events
-    bus.start()
+    bus.start(sc)
     bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(counter.count === 5)
 
@@ -73,14 +72,14 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     // Listener bus must not be started twice
     intercept[IllegalStateException] {
-      val bus = new LiveListenerBus(sc)
-      bus.start()
-      bus.start()
+      val bus = new LiveListenerBus
+      bus.start(sc)
+      bus.start(sc)
     }
 
     // ... or stopped before starting
     intercept[IllegalStateException] {
-      val bus = new LiveListenerBus(sc)
+      val bus = new LiveListenerBus
       bus.stop()
     }
   }
@@ -107,12 +106,12 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
         drained = true
       }
     }
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
-    val bus = new LiveListenerBus(sc)
+
+    val bus = new LiveListenerBus
     val blockingListener = new BlockingListener
 
     bus.addListener(blockingListener)
-    bus.start()
+    bus.start(sc)
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
 
     listenerStarted.acquire()
@@ -354,14 +353,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val badListener = new BadListener
     val jobCounter1 = new BasicJobCounter
     val jobCounter2 = new BasicJobCounter
-    sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
-    val bus = new LiveListenerBus(sc)
+    val bus = new LiveListenerBus
 
     // Propagate events to bad listener first
     bus.addListener(badListener)
     bus.addListener(jobCounter1)
     bus.addListener(jobCounter2)
-    bus.start()
+    bus.start(sc)
 
     // Post events to all listeners, and wait until the queue is drained
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }

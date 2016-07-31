@@ -79,7 +79,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       input: ByteBuffer): Unit = {
     val benchmark = new Benchmark(name, iters * count)
 
-    schemes.filter(_.supports(tpe)).foreach { scheme =>
+    schemes.filter(_.supports(tpe)).map { scheme =>
       val (compressFunc, compressionRatio, buf) = prepareEncodeInternal(count, tpe, scheme, input)
       val label = s"${getFormattedClassName(scheme)}(${compressionRatio.formatted("%.3f")})"
 
@@ -103,7 +103,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       input: ByteBuffer): Unit = {
     val benchmark = new Benchmark(name, iters * count)
 
-    schemes.filter(_.supports(tpe)).foreach { scheme =>
+    schemes.filter(_.supports(tpe)).map { scheme =>
       val (compressFunc, _, buf) = prepareEncodeInternal(count, tpe, scheme, input)
       val compressedBuf = compressFunc(input, buf)
       val label = s"${getFormattedClassName(scheme)}"

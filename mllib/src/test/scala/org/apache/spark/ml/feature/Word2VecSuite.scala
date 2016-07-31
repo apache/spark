@@ -138,8 +138,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
 
-    assert(synonyms === Array("b", "c"))
-    expectedSimilarity.zip(similarity).foreach {
+    assert(synonyms.toArray === Array("b", "c"))
+    expectedSimilarity.zip(similarity).map {
       case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
     }
   }
