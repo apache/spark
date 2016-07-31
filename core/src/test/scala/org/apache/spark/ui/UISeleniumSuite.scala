@@ -218,7 +218,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
-        tableHeaders(0) should not startWith "Job Id (Job Group)"
+        tableHeaders should not contain "Job Id (Job Group)"
       }
       // Once at least one job has been run in a job group, then we should display the group name:
       sc.setJobGroup("my-job-group", "my-job-group-description")
@@ -226,8 +226,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
-        // Can suffix up/down arrow in the header
-        tableHeaders(0) should startWith ("Job Id (Job Group)")
+        tableHeaders should contain ("Job Id (Job Group)")
       }
 
       val jobJson = getJson(sc.ui.get, "jobs")

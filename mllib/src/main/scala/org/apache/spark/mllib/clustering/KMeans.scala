@@ -20,7 +20,6 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
 import org.apache.spark.ml.util.Instrumentation
@@ -269,7 +268,7 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
-    instr.foreach(_.logNumFeatures(centers(0)(0).vector.size))
+    instr.map(_.logNumFeatures(centers(0)(0).vector.size))
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
@@ -310,7 +309,7 @@ class KMeans private (
         contribs.iterator
       }.reduceByKey(mergeContribs).collectAsMap()
 
-      bcActiveCenters.destroy(blocking = false)
+      bcActiveCenters.unpersist(blocking = false)
 
       // Update the cluster centers and costs for each active run
       for ((run, i) <- activeRuns.zipWithIndex) {
@@ -403,10 +402,8 @@ class KMeans private (
     // to their squared distance from that run's centers. Note that only distances between points
     // and new centers are computed in each iteration.
     var step = 0
-    var bcNewCentersList = ArrayBuffer[Broadcast[_]]()
     while (step < initializationSteps) {
       val bcNewCenters = data.context.broadcast(newCenters)
-      bcNewCentersList += bcNewCenters
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
           Array.tabulate(runs) { r =>
@@ -456,7 +453,6 @@ class KMeans private (
 
     mergeNewCenters()
     costs.unpersist(blocking = false)
-    bcNewCentersList.foreach(_.destroy(false))
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
@@ -468,7 +464,7 @@ class KMeans private (
       }
     }.reduceByKey(_ + _).collectAsMap()
 
-    bcCenters.destroy(blocking = false)
+    bcCenters.unpersist(blocking = false)
 
     val finalCenters = (0 until runs).par.map { r =>
       val myCenters = centers(r).toArray

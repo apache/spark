@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst
 
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable.Map
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -39,23 +38,14 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
  */
-class SQLBuilder private (
-    logicalPlan: LogicalPlan,
-    nextSubqueryId: AtomicLong,
-    nextGenAttrId: AtomicLong,
-    exprIdMap: Map[Long, Long]) extends Logging {
+class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
   require(logicalPlan.resolved,
     "SQLBuilder only supports resolved logical query plans. Current plan:\n" + logicalPlan)
 
-  def this(logicalPlan: LogicalPlan) =
-    this(logicalPlan, new AtomicLong(0), new AtomicLong(0), Map.empty[Long, Long])
-
   def this(df: Dataset[_]) = this(df.queryExecution.analyzed)
 
+  private val nextSubqueryId = new AtomicLong(0)
   private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
-  private def normalizedName(n: NamedExpression): String = synchronized {
-    "gen_attr_" + exprIdMap.getOrElseUpdate(n.exprId.id, nextGenAttrId.getAndIncrement())
-  }
 
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
@@ -80,7 +70,7 @@ class SQLBuilder private (
     try {
       val replaced = finalPlan.transformAllExpressions {
         case s: SubqueryExpression =>
-          val query = new SQLBuilder(s.query, nextSubqueryId, nextGenAttrId, exprIdMap).toSQL
+          val query = new SQLBuilder(s.query).toSQL
           val sql = s match {
             case _: ListQuery => query
             case _: Exists => s"EXISTS($query)"
@@ -178,11 +168,6 @@ class SQLBuilder private (
         val fraction = math.min(100, math.max(0, (upperBound - lowerBound) * 100))
         qualifiedName + " TABLESAMPLE(" + fraction + " PERCENT)"
       }.getOrElse(qualifiedName)
-
-    case relation: CatalogRelation =>
-      val m = relation.catalogTable
-      val qualifiedName = s"${quoteIdentifier(m.database)}.${quoteIdentifier(m.identifier.table)}"
-      qualifiedName
 
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
         if orders.map(_.child) == partitionExprs =>
@@ -391,6 +376,8 @@ class SQLBuilder private (
     )
   }
 
+  private def normalizedName(n: NamedExpression): String = "gen_attr_" + n.exprId.id
+
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
       Batch("Prepare", FixedPoint(100),
@@ -525,13 +512,8 @@ class SQLBuilder private (
           ScalarSubquery(rewrite, Seq.empty, exprId)
 
         case PredicateSubquery(query, conditions, false, exprId) =>
-          val subquery = addSubqueryIfNeeded(query)
-          val plan = if (conditions.isEmpty) {
-            subquery
-          } else {
-            Project(Seq(Alias(Literal(1), "1")()),
-              Filter(conditions.reduce(And), subquery))
-          }
+          val plan = Project(Seq(Alias(Literal(1), "1")()),
+            Filter(conditions.reduce(And), addSubqueryIfNeeded(query)))
           Exists(plan, exprId)
 
         case PredicateSubquery(query, conditions, true, exprId) =>

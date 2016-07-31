@@ -138,20 +138,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testPySpark(false)
   }
 
-  test("run Python application in yarn-cluster mode using " +
-    " spark.yarn.appMasterEnv to override local envvar") {
-    testPySpark(
-      clientMode = false,
-      extraConf = Map(
-        "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
-        "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
-      extraEnv = Map(
-        "PYSPARK_DRIVER_PYTHON" -> "not python",
-        "PYSPARK_PYTHON" -> "not python"))
-  }
-
   test("user class path first in client mode") {
     testUseClassPathFirst(true)
   }
@@ -221,10 +207,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "ORIGINAL")
   }
 
-  private def testPySpark(
-      clientMode: Boolean,
-      extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): Unit = {
+  private def testPySpark(clientMode: Boolean): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
 
@@ -235,9 +218,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val pythonPath = Seq(
         s"$sparkHome/python/lib/py4j-0.10.1-src.zip",
         s"$sparkHome/python")
-    val extraEnvVars = Map(
+    val extraEnv = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
 
     val moduleDir =
       if (clientMode) {
@@ -259,8 +242,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
       sparkArgs = Seq("--py-files" -> pyFiles),
       appArgs = Seq(result.getAbsolutePath()),
-      extraEnv = extraEnvVars,
-      extraConf = extraConf)
+      extraEnv = extraEnv)
     checkResult(finalState, result)
   }
 

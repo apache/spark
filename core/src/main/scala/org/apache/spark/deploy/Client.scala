@@ -116,7 +116,7 @@ private class ClientEndpoint(
   }
 
   /* Find out driver status then exit the JVM */
-  def pollAndReportStatus(driverId: String): Unit = {
+  def pollAndReportStatus(driverId: String) {
     // Since ClientEndpoint is the only RpcEndpoint in the process, blocking the event loop thread
     // is fine.
     logInfo("... waiting before polling master for driver state")
@@ -137,14 +137,12 @@ private class ClientEndpoint(
           case _ =>
         }
         // Exception, if present
-        statusResponse.exception match {
-          case Some(e) =>
-            logError(s"Exception from cluster was: $e")
-            e.printStackTrace()
-            System.exit(-1)
-          case _ =>
-            System.exit(0)
+        statusResponse.exception.map { e =>
+          logError(s"Exception from cluster was: $e")
+          e.printStackTrace()
+          System.exit(-1)
         }
+        System.exit(0)
     }
   }
 

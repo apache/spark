@@ -34,7 +34,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     try {
-      StreamingContext.getActive().foreach(_.stop())
+      StreamingContext.getActive().map { _.stop() }
     } finally {
       super.afterAll()
     }

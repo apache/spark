@@ -88,7 +88,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
-  private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
 
@@ -132,7 +131,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SerializerInstance serInstance = serializer.newInstance();
     final long openStartTime = System.nanoTime();
     partitionWriters = new DiskBlockObjectWriter[numPartitions];
-    partitionWriterSegments = new FileSegment[numPartitions];
     for (int i = 0; i < numPartitions; i++) {
       final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusFile =
         blockManager.diskBlockManager().createTempShuffleBlock();
@@ -152,10 +150,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       partitionWriters[partitioner.getPartition(key)].write(key, record._2());
     }
 
-    for (int i = 0; i < numPartitions; i++) {
-      final DiskBlockObjectWriter writer = partitionWriters[i];
-      partitionWriterSegments[i] = writer.commitAndGet();
-      writer.close();
+    for (DiskBlockObjectWriter writer : partitionWriters) {
+      writer.commitAndClose();
     }
 
     File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
@@ -188,7 +184,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
-        final File file = partitionWriterSegments[i].file();
+        final File file = partitionWriters[i].fileSegment().file();
         if (file.exists()) {
           final FileInputStream in = new FileInputStream(file);
           boolean copyThrewException = true;

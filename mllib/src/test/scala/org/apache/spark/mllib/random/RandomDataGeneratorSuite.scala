@@ -80,7 +80,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   }
 
   test("LogNormalGenerator") {
-    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).foreach {
+    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).map {
       case (mean: Double, vari: Double) =>
         val normal = new LogNormalGenerator(mean, math.sqrt(vari))
         apiChecks(normal)
@@ -125,7 +125,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
 
   test("GammaGenerator") {
     // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
-    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).foreach {
+    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).map {
       case (shape: Double, scale: Double) =>
         val gamma = new GammaGenerator(shape, scale)
         apiChecks(gamma)
@@ -138,7 +138,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   }
 
   test("WeibullGenerator") {
-    List((1.0, 2.0), (2.0, 3.0), (2.5, 3.5), (10.4, 2.222)).foreach {
+    List((1.0, 2.0), (2.0, 3.0), (2.5, 3.5), (10.4, 2.222)).map {
       case (alpha: Double, beta: Double) =>
         val weibull = new WeibullGenerator(alpha, beta)
         apiChecks(weibull)

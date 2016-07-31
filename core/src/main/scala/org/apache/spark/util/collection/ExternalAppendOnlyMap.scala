@@ -105,8 +105,8 @@ class ExternalAppendOnlyMap[K, V, C](
   private val fileBufferSize =
     sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k").toInt * 1024
 
-  // Write metrics
-  private val writeMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics()
+  // Write metrics for current spill
+  private var curWriteMetrics: ShuffleWriteMetrics = _
 
   // Peak size of the in-memory map observed so far, in bytes
   private var _peakMemoryUsedBytes: Long = 0L
@@ -206,7 +206,8 @@ class ExternalAppendOnlyMap[K, V, C](
   private[this] def spillMemoryIteratorToDisk(inMemoryIterator: Iterator[(K, C)])
       : DiskMapIterator = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
-    val writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics)
+    curWriteMetrics = new ShuffleWriteMetrics()
+    var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -214,9 +215,11 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // Flush the disk writer's contents to disk, and update relevant variables
     def flush(): Unit = {
-      val segment = writer.commitAndGet()
-      batchSizes.append(segment.length)
-      _diskBytesSpilled += segment.length
+      val w = writer
+      writer = null
+      w.commitAndClose()
+      _diskBytesSpilled += curWriteMetrics.bytesWritten
+      batchSizes.append(curWriteMetrics.bytesWritten)
       objectsWritten = 0
     }
 
@@ -229,20 +232,25 @@ class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           flush()
+          curWriteMetrics = new ShuffleWriteMetrics()
+          writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
         }
       }
       if (objectsWritten > 0) {
         flush()
-        writer.close()
-      } else {
-        writer.revertPartialWritesAndClose()
+      } else if (writer != null) {
+        val w = writer
+        writer = null
+        w.revertPartialWritesAndClose()
       }
       success = true
     } finally {
       if (!success) {
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
-        writer.revertPartialWritesAndClose()
+        if (writer != null) {
+          writer.revertPartialWritesAndClose()
+        }
         if (file.exists()) {
           if (!file.delete()) {
             logWarning(s"Error deleting ${file}")

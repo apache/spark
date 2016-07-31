@@ -139,7 +139,7 @@ class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new MetricsConfig(sparkConf)
     conf.initialize()
 
-    val propCategories = conf.perInstanceSubProperties
+    val propCategories = conf.propertyCategories
     assert(propCategories.size === 3)
 
     val masterProp = conf.getInstance("master")

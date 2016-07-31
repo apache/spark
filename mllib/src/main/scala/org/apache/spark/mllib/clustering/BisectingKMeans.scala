@@ -165,8 +165,6 @@ class BisectingKMeans private (
     val random = new Random(seed)
     var numLeafClustersNeeded = k - 1
     var level = 1
-    var preIndices: RDD[Long] = null
-    var indices: RDD[Long] = null
     while (activeClusters.nonEmpty && numLeafClustersNeeded > 0 && level < LEVEL_LIMIT) {
       // Divisible clusters are sufficiently large and have non-trivial cost.
       var divisibleClusters = activeClusters.filter { case (_, summary) =>
@@ -196,9 +194,8 @@ class BisectingKMeans private (
           newClusters = summarize(d, newAssignments)
           newClusterCenters = newClusters.mapValues(_.center).map(identity)
         }
-        if (preIndices != null) preIndices.unpersist()
-        preIndices = indices
-        indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
+        // TODO: Unpersist old indices.
+        val indices = updateAssignments(assignments, divisibleIndices, newClusterCenters).keys
           .persist(StorageLevel.MEMORY_AND_DISK)
         assignments = indices.zip(vectors)
         inactiveClusters ++= activeClusters
@@ -211,7 +208,6 @@ class BisectingKMeans private (
       }
       level += 1
     }
-    if(indices != null) indices.unpersist()
     val clusters = activeClusters ++ inactiveClusters
     val root = buildTree(clusters)
     new BisectingKMeansModel(root)

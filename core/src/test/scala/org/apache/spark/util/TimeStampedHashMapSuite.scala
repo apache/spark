@@ -171,8 +171,8 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
     })
 
     test(name + " - threading safety test")  {
-      threads.foreach(_.start())
-      threads.foreach(_.join())
+      threads.map(_.start)
+      threads.map(_.join)
       assert(!error)
     }
   }

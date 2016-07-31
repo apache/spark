@@ -124,9 +124,10 @@ object DecisionTreeExample {
       }
     }
 
-    parser.parse(args, defaultParams) match {
-      case Some(params) => run(params)
-      case _ => sys.exit(1)
+    parser.parse(args, defaultParams).map { params =>
+      run(params)
+    }.getOrElse {
+      sys.exit(1)
     }
   }
 
@@ -196,7 +197,7 @@ object DecisionTreeExample {
     (training, test)
   }
 
-  def run(params: Params): Unit = {
+  def run(params: Params) {
     val spark = SparkSession
       .builder
       .appName(s"DecisionTreeExample with $params")

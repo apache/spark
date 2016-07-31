@@ -191,10 +191,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         sql("REFRESH TABLE jsonTable")
 
-        // After refresh, schema is not changed.
+        // Check that the refresh worked
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
-          Row("a1", "b1"))
+          Row("a1", "b1", "c1"))
       }
     }
   }
@@ -703,7 +703,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           createDataSourceTable(
             sparkSession = spark,
             tableIdent = TableIdentifier("wide_schema"),
-            schema = schema,
+            userSpecifiedSchema = Some(schema),
             partitionColumns = Array.empty[String],
             bucketSpec = None,
             provider = "json",
@@ -733,7 +733,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           outputFormat = None,
           serde = None,
           compressed = false,
-          properties = Map(
+          serdeProperties = Map(
             "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
         ),
         properties = Map(
@@ -748,7 +748,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       assert(schema === actualSchema)
 
       // Checks the DESCRIBE output.
-      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", null) :: Nil)
+      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", "") :: Nil)
     }
   }
 
@@ -988,7 +988,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
-        schema = schema,
+        userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
@@ -1003,7 +1003,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("skip_hive_metadata"),
-        schema = schema,
+        userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
@@ -1171,8 +1171,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
         val catalogTable = sharedState.externalCatalog.getTable("default", "t")
         // there should not be a lowercase key 'path' now
-        assert(catalogTable.storage.properties.get("path").isEmpty)
-        assert(catalogTable.storage.properties.get("PATH").isDefined)
+        assert(catalogTable.storage.serdeProperties.get("path").isEmpty)
+        assert(catalogTable.storage.serdeProperties.get("PATH").isDefined)
       }
     }
   }
