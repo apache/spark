@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+def scalaBinaryVersion = "2.11"
+rootProject.name = 'snappy-spark'
+
+include ':snappy-spark-tags_' + scalaBinaryVersion
+include ':snappy-spark-core_' + scalaBinaryVersion
+include ':snappy-spark-graphx_' + scalaBinaryVersion
+include ':snappy-spark-mllib_' + scalaBinaryVersion
+include ':snappy-spark-mllib-local_' + scalaBinaryVersion
+include ':snappy-spark-tools_' + scalaBinaryVersion
+include ':snappy-spark-network-common_' + scalaBinaryVersion
+include ':snappy-spark-network-shuffle_' + scalaBinaryVersion
+include ':snappy-spark-network-yarn_' + scalaBinaryVersion
+include ':snappy-spark-sketch_' + scalaBinaryVersion
+include ':snappy-spark-yarn_' + scalaBinaryVersion
+include ':snappy-spark-streaming_' + scalaBinaryVersion
+include ':snappy-spark-catalyst_' + scalaBinaryVersion
+include ':snappy-spark-sql_' + scalaBinaryVersion
+include ':snappy-spark-hive_' + scalaBinaryVersion
+include ':snappy-spark-hive-thriftserver_' + scalaBinaryVersion
+include ':snappy-spark-unsafe_' + scalaBinaryVersion
+include ':snappy-spark-assembly_' + scalaBinaryVersion
+include ':snappy-spark-streaming-flume_' + scalaBinaryVersion
+include ':snappy-spark-streaming-flume-sink_' + scalaBinaryVersion
+include ':snappy-spark-streaming-kafka-0.8_' + scalaBinaryVersion
+include ':snappy-spark-streaming-kafka-0.10_' + scalaBinaryVersion
+include ':snappy-spark-examples_' + scalaBinaryVersion
+include ':snappy-spark-repl_' + scalaBinaryVersion
+include ':snappy-spark-launcher_' + scalaBinaryVersion
+include ':snappy-spark-assembly_' + scalaBinaryVersion
+
+project(':snappy-spark-tags_' + scalaBinaryVersion).projectDir = "$rootDir/common/tags" as File
+project(':snappy-spark-core_' + scalaBinaryVersion).projectDir = "$rootDir/core" as File
+project(':snappy-spark-graphx_' + scalaBinaryVersion).projectDir = "$rootDir/graphx" as File
+project(':snappy-spark-mllib_' + scalaBinaryVersion).projectDir = "$rootDir/mllib" as File
+project(':snappy-spark-mllib-local_' + scalaBinaryVersion).projectDir = "$rootDir/mllib-local" as File
+project(':snappy-spark-tools_' + scalaBinaryVersion).projectDir = "$rootDir/tools" as File
+project(':snappy-spark-network-common_' + scalaBinaryVersion).projectDir = "$rootDir/common/network-common" as File
+project(':snappy-spark-network-shuffle_' + scalaBinaryVersion).projectDir = "$rootDir/common/network-shuffle" as File
+project(':snappy-spark-network-yarn_' + scalaBinaryVersion).projectDir = "$rootDir/common/network-yarn" as File
+project(':snappy-spark-sketch_' + scalaBinaryVersion).projectDir = "$rootDir/common/sketch" as File
+project(':snappy-spark-yarn_' + scalaBinaryVersion).projectDir = "$rootDir/yarn" as File
+project(':snappy-spark-streaming_' + scalaBinaryVersion).projectDir = "$rootDir/streaming" as File
+project(':snappy-spark-catalyst_' + scalaBinaryVersion).projectDir = "$rootDir/sql/catalyst" as File
+project(':snappy-spark-sql_' + scalaBinaryVersion).projectDir = "$rootDir/sql/core" as File
+project(':snappy-spark-hive_' + scalaBinaryVersion).projectDir = "$rootDir/sql/hive" as File
+project(':snappy-spark-hive-thriftserver_' + scalaBinaryVersion).projectDir = "$rootDir/sql/hive-thriftserver" as File
+project(':snappy-spark-unsafe_' + scalaBinaryVersion).projectDir = "$rootDir/common/unsafe" as File
+project(':snappy-spark-assembly_' + scalaBinaryVersion).projectDir = "$rootDir/assembly" as File
+project(':snappy-spark-streaming-flume_' + scalaBinaryVersion).projectDir = "$rootDir/external/flume" as File
+project(':snappy-spark-streaming-flume-sink_' + scalaBinaryVersion).projectDir = "$rootDir/external/flume-sink" as File
+project(':snappy-spark-streaming-kafka-0.8_' + scalaBinaryVersion).projectDir = "$rootDir/external/kafka-0-8" as File
+project(':snappy-spark-streaming-kafka-0.10_' + scalaBinaryVersion).projectDir = "$rootDir/external/kafka-0-10" as File
+project(':snappy-spark-examples_' + scalaBinaryVersion).projectDir = "$rootDir/examples" as File
+project(':snappy-spark-repl_' + scalaBinaryVersion).projectDir = "$rootDir/repl" as File
+project(':snappy-spark-launcher_' + scalaBinaryVersion).projectDir = "$rootDir/launcher" as File
+project(':snappy-spark-assembly_' + scalaBinaryVersion).projectDir = "$rootDir/assembly" as File
+
+if (rootProject.hasProperty('docker')) {
+  include ':snappy-spark-docker-integration-tests_' + scalaBinaryVersion
+  project(':snappy-spark-docker-integration-tests_' + scalaBinaryVersion).projectDir = "$rootDir/external/docker-integration-tests" as File
+}
+if (rootProject.hasProperty('ganglia')) {
+  include ':snappy-spark-ganglia-lgpl_' + scalaBinaryVersion
+  project(':snappy-spark-ganglia-lgpl_' + scalaBinaryVersion).projectDir = "$rootDir/external/spark-ganglia-lgpl" as File
+}

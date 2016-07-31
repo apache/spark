@@ -54,6 +54,11 @@ class AnalysisException protected[sql] (
     val cause: Option[Throwable] = None)
   extends Exception(message, cause.orNull) with Serializable {
 
+  def this(message: String, cause: Throwable) = {
+    this(message)
+    initCause(cause)
+  }
+
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
     val newException = new AnalysisException(message, line, startPosition)
     newException.setStackTrace(getStackTrace)

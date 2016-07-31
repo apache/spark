@@ -1,0 +1,39 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Launcher'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
+
+  testCompile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.mockito', module: 'mockito-all')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+    exclude(group: 'junit', module: 'junit')
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'com.sun.jersey')
+    exclude(group: 'com.sun.jersey.jersey-test-framework')
+    exclude(group: 'com.sun.jersey.contribs')
+  }
+  testCompile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
+}

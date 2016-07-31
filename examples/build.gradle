@@ -1,0 +1,43 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Examples'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-mllib_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-hive_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-graphx_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming-flume_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming-kafka-0.8_' + scalaBinaryVersion)
+
+  compile group: 'org.apache.commons', name: 'commons-math3', version: '3.4.1'
+  compile group: 'com.github.scopt', name: 'scopt_' + scalaBinaryVersion, version: '3.3.0'
+  compile group: 'com.twitter', name: 'parquet-hadoop-bundle', version: hiveParquetVersion
+
+  runtimeJar group: 'com.github.scopt', name: 'scopt_' + scalaBinaryVersion, version: '3.3.0'
+}
+
+jar.doLast {
+  copy {
+    from configurations.runtimeJar
+    from outputs
+    exclude 'scala-*'
+    into "${buildDir}/jars"
+  }
+}

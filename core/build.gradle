@@ -1,0 +1,171 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Core'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-launcher_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-network-common_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-network-shuffle_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-unsafe_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
+
+  compile(group: 'org.apache.avro', name: 'avro-ipc', version: avroVersion) {
+    exclude(group: 'io.netty', module: 'netty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
+    exclude(group: 'org.apache.velocity', module: 'velocity')
+  }
+  compile(group: 'org.apache.avro', name: 'avro-mapred', version: avroVersion, classifier: 'hadoop2') {
+    exclude(group: 'io.netty', module: 'netty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
+    exclude(group: 'org.apache.velocity', module: 'velocity')
+    exclude(group: 'org.apache.avro', module: 'avro-ipc')
+  }
+  compile group: 'com.google.guava', name: 'guava', version: guavaVersion
+  compile group: 'com.twitter', name: 'chill_' + scalaBinaryVersion, version: chillVersion
+  compile group: 'com.twitter', name: 'chill-java', version: chillVersion
+  compile group: 'org.apache.xbean', name: 'xbean-asm5-shaded', version: '4.4'
+  // explicitly include netty from akka-remote to not let zookeeper override it
+  compile group: 'io.netty', name: 'netty', version: nettyVersion
+  // explicitly exclude old netty from zookeeper
+  compile(group: 'org.apache.zookeeper', name: 'zookeeper', version: '3.4.8') {
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'jline', module: 'jline')
+  }
+  compile group: 'com.google.protobuf', name: 'protobuf-java', version: protobufVersion
+  compile(group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.mockito', module: 'mockito-all')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+    exclude(group: 'junit', module: 'junit')
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'com.sun.jersey')
+    exclude(group: 'com.sun.jersey.jersey-test-framework')
+    exclude(group: 'com.sun.jersey.contribs')
+    exclude(group: 'com.google.protobuf', module: 'protobuf-java')
+  }
+  compile(group: 'net.java.dev.jets3t', name: 'jets3t', version: '0.9.3') {
+    exclude(group: 'commons-logging', module: 'commons-logging')
+  }
+  compile(group: 'org.apache.curator', name: 'curator-recipes', version: curatorVersion) {
+    exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'jline', module: 'jline')
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
+
+  compile 'org.scala-lang:scalap:' + scalaVersion
+  compile group: 'org.apache.xbean', name: 'xbean-asm5-shaded' , version: '4.4'
+  compile group: 'org.roaringbitmap', name: 'RoaringBitmap' , version: '0.5.11'
+
+  compile group: 'org.eclipse.jetty', name: 'jetty-server', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-plus', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-util', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-http', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-servlet', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-servlets', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-security', version: jettyVersion
+  compile group: 'org.eclipse.jetty', name: 'jetty-continuation', version: jettyVersion
+  compile group: 'javax.servlet', name: 'javax.servlet-api', version: javaxServletVersion
+  compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.3.2'
+  compile group: 'org.apache.commons', name: 'commons-math3', version: '3.4.1'
+  compile group: 'com.google.code.findbugs', name: 'jsr305', version: jsr305Version
+  compile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
+  compile group: 'org.slf4j', name: 'jcl-over-slf4j', version: slf4jVersion
+  compile group: 'com.ning', name: 'compress-lzf', version: '1.0.3'
+  compile group: 'org.xerial.snappy', name: 'snappy-java', version: snappyJavaVersion
+  compile group: 'net.jpountz.lz4', name: 'lz4', version: '1.3.0'
+  compile group: 'commons-net', name: 'commons-net', version: '2.2'
+  compile group: 'org.json4s', name: 'json4s-jackson_' + scalaBinaryVersion, version: '3.2.11'
+  compile group: 'org.glassfish.jersey.core', name: 'jersey-client', version: jerseyVersion
+  compile group: 'org.glassfish.jersey.core', name: 'jersey-common', version: jerseyVersion
+  compile group: 'org.glassfish.jersey.core', name: 'jersey-server', version: jerseyVersion
+  compile group: 'org.glassfish.jersey.containers', name: 'jersey-container-servlet', version: jerseyVersion
+  compile group: 'org.glassfish.jersey.containers', name: 'jersey-container-servlet-core', version: jerseyVersion
+  compile(group: 'org.apache.mesos', name: 'mesos', version: '0.21.1', classifier: 'shaded-protobuf') {
+    exclude(group: 'com.google.protobuf', module: 'protobuf-java')
+  }
+  compile group: 'io.netty', name: 'netty-all', version: nettyAllVersion
+  compile(group: 'com.clearspring.analytics', name: 'stream', version: '2.7.0') {
+    exclude(group: 'it.unimi.dsi', module: 'fastutil')
+  }
+  compile group: 'io.dropwizard.metrics', name: 'metrics-core', version: metricsVersion
+  compile group: 'io.dropwizard.metrics', name: 'metrics-jvm', version: metricsVersion
+  compile group: 'io.dropwizard.metrics', name: 'metrics-json', version: metricsVersion
+  compile group: 'io.dropwizard.metrics', name: 'metrics-graphite', version: metricsVersion
+  compile group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: fasterXmlVersion
+  compile(group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_' + scalaBinaryVersion, version: fasterXmlVersion) {
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
+  compile group: 'org.apache.ivy', name: 'ivy', version: '2.4.0'
+  compile group: 'oro', name: 'oro', version: '2.0.8'
+  compile(group: 'net.razorvine', name: 'pyrolite', version: '4.9') {
+    exclude(group: 'net.razorvine', module: 'serpent')
+  }
+  compile group: 'net.sf.py4j', name: 'py4j', version: '0.10.1'
+
+  testCompile group: 'org.apache.avro', name: 'avro-ipc', version: avroVersion, classifier: 'tests'
+  testCompile "org.apache.derby:derby:${derbyVersion}"
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: seleniumVersion) {
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-htmlunit-driver', version: seleniumVersion) {
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
+  testCompile group: 'xml-apis', name: 'xml-apis', version: '1.4.01'
+  testCompile group: 'org.hamcrest', name: 'hamcrest-core', version: '1.3'
+  testCompile group: 'org.hamcrest', name: 'hamcrest-library', version: '1.3'
+  testCompile(group: 'org.apache.curator', name: 'curator-test', version: curatorVersion) {
+    exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
+}
+
+// TODO: sparkr profile, copy-dependencies target?
+
+// fix scala+java test ordering
+sourceSets.test.scala.srcDir 'src/test/java'
+sourceSets.test.java.srcDirs = []
+
+// generate properties using spark-build-info and add to project resources
+String extraResourceDir = "${buildDir}/extra-resources"
+
+task generateBuildInfo << {
+  file(extraResourceDir).mkdirs()
+  exec {
+    executable 'bash'
+    workingDir = buildDir
+    args "${projectDir}/../build/spark-build-info", extraResourceDir, version
+  }
+}
+sourceSets {
+  main {
+    // register generated resources on the main SourceSet
+    output.dir(extraResourceDir, builtBy: 'generateBuildInfo')
+  }
+}

@@ -1,0 +1,117 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Hive'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
+
+  compile group: 'com.twitter', name: 'parquet-hadoop-bundle', version: hiveParquetVersion
+  compile group: 'org.apache.derby', name: 'derby', version: derbyVersion
+  compile(group: 'org.spark-project.hive', name: 'hive-exec', version: hiveVersion) {
+    exclude(group: 'org.spark-project.hive', module: 'hive-metastore')
+    exclude(group: 'org.spark-project.hive', module: 'hive-shims')
+    exclude(group: 'org.spark-project.hive', module: 'hive-ant')
+    exclude(group: 'org.spark-project.hive', module: 'spark-client')
+    exclude(group: 'org.apache.ant', module: 'ant')
+    exclude(group: 'com.esotericsoftware.kryo', module: 'kryo')
+    exclude(group: 'commons-codec', module: 'commons-codec')
+    exclude(group: 'commons-httpclient', module: 'commons-httpclient')
+    exclude(group: 'org.apache.avro', module: 'avro-mapred')
+    exclude(group: 'org.apache.calcite', module: 'calcite-core')
+    exclude(group: 'org.apache.curator', module: 'apache-curator')
+    exclude(group: 'org.apache.curator', module: 'curator-client')
+    exclude(group: 'org.apache.curator', module: 'curator-framework')
+    exclude(group: 'org.apache.thrift', module: 'libthrift')
+    exclude(group: 'org.apache.thrift', module: 'libfb303')
+    exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+    exclude(group: 'org.slf4j', module: 'slf4j-log4j12')
+    exclude(group: 'log4j', module: 'log4j')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.codehaus.groovy', module: 'groovy-all')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-metastore', version: hiveVersion) {
+    exclude(group: 'org.spark-project.hive', module: 'hive-serde')
+    exclude(group: 'org.spark-project.hive', module: 'hive-shims')
+    exclude(group: 'org.apache.thrift', module: 'libfb303')
+    exclude(group: 'org.apache.thrift', module: 'libthrift')
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+    exclude(group: 'org.slf4j', module: 'slf4j-log4j12')
+    exclude(group: 'org.apache.derby', module: 'derby')
+  }
+
+  compile group: 'org.apache.avro', name: 'avro', version: avroVersion
+  compile(group: 'org.apache.avro', name: 'avro-ipc', version: avroVersion) {
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
+    exclude(group: 'org.apache.velocity', module: 'velocity')
+  }
+  compile(group: 'org.apache.avro', name: 'avro-mapred', version: avroVersion, classifier: 'hadoop2') {
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty')
+    exclude(group: 'org.mortbay.jetty', module: 'jetty-util')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api')
+    exclude(group: 'org.apache.velocity', module: 'velocity')
+    exclude(group: 'org.apache.avro', module: 'avro-ipc')
+  }
+  compile group: 'commons-httpclient', name: 'commons-httpclient', version: '3.1'
+  compile(group: 'org.apache.calcite', name: 'calcite-avatica', version: '1.2.0-incubating') {
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-annotations')
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-core')
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-databind')
+  }
+  compile(group: 'org.apache.calcite', name: 'calcite-core', version: '1.2.0-incubating') {
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-annotations')
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-core')
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-databind')
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'com.google.code.findbugs', module: 'jsr305')
+    exclude(group: 'org.codehaus.janino', module: 'janino')
+    exclude(group: 'org.hsqldb', module: 'hsqldb')
+    exclude(group: 'org.pentaho', module: 'pentaho-aggdesigner-algorithm')
+  }
+  compile group: 'org.apache.httpcomponents', name: 'httpclient', version: httpClientVersion
+  compile group: 'org.codehaus.jackson', name: 'jackson-mapper-asl', version: '1.9.13'
+  compile group: 'commons-codec', name: 'commons-codec', version: commonsCodecVersion
+  compile group: 'joda-time', name: 'joda-time', version: '2.9.4'
+  compile group: 'org.jodd', name: 'jodd-core', version: '3.5.2'
+  compile group: 'com.google.code.findbugs', name: 'jsr305', version: jsr305Version
+  compile group: 'org.datanucleus', name: 'datanucleus-core', version: '3.2.10'
+  compile(group: 'org.apache.thrift', name: 'libthrift', version: thriftVersion) {
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+  }
+  compile(group: 'org.apache.thrift', name: 'libfb303', version: thriftVersion) {
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+  }
+
+  testCompile group: 'org.apache.avro', name: 'avro-ipc', version: avroVersion, classifier: 'tests'
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion, configuration: 'testOutput')
+}
+
+// fix scala+java test ordering
+sourceSets.test.scala.srcDirs 'src/test/java', 'compatibility/src/test/scala'
+sourceSets.test.java.srcDirs = []

@@ -62,7 +62,7 @@ spark-*-bin-*.tgz
 spark-tests.log
 src_managed/
 streaming-tests.log
-target/
+build-artifacts/
 unit-tests.log
 work/
 
@@ -77,8 +77,9 @@ spark-warehouse/
 # For R session data
 .RData
 .RHistory
-.Rhistory
 *.Rproj
 *.Rproj.*
-
 .Rproj.user
+
+# gradle specific
+.gradle/

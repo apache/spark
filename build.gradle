@@ -1,0 +1,376 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+apply plugin: 'wrapper'
+
+// TODO: profiles and allow changing hadoopVersion
+
+buildscript {
+  repositories {
+    maven { url 'https://plugins.gradle.org/m2' }
+    mavenCentral()
+  }
+  dependencies {
+    classpath 'io.snappydata:gradle-scalatest:0.13-1'
+    classpath 'org.github.ngbinh.scalastyle:gradle-scalastyle-plugin_2.11:0.8.2'
+  }
+}
+
+description = 'Spark Project'
+
+allprojects {
+  // We want to see all test results.  This is equivalent to setting --continue
+  // on the command line.
+  gradle.startParameter.continueOnFailure = true
+
+  repositories {
+    mavenCentral()
+    maven { url 'http://repository.apache.org/snapshots' }
+  }
+
+  apply plugin: 'idea'
+
+  group = 'io.snappydata'
+  version = '2.0.1-1'
+
+  ext {
+    scalaBinaryVersion = '2.11'
+    scalaVersion = scalaBinaryVersion + '.8'
+    hadoopVersion = '2.7.2'
+    protobufVersion = '2.6.1'
+    jerseyVersion = '2.22.2'
+    sunJerseyVersion = '1.19.1'
+    jettyVersion = '9.2.16.v20160414'
+    log4jVersion = '1.2.17'
+    slf4jVersion = '1.7.21'
+    junitVersion = '4.12'
+    javaxServletVersion = '3.1.0'
+    guavaVersion = '14.0.1'
+    hiveVersion = '1.2.1.spark2'
+    chillVersion = '0.8.0'
+    nettyVersion = '3.8.0.Final'
+    nettyAllVersion = '4.0.29.Final'
+    derbyVersion = '10.12.1.1'
+    httpClientVersion = '4.5.2'
+    httpCoreVersion = '4.4.4'
+    fasterXmlVersion = '2.6.5'
+    snappyJavaVersion = '1.1.2.6'
+    parquetVersion = '1.7.0'
+    hiveParquetVersion = '1.6.0'
+    metricsVersion = '3.1.2'
+    thriftVersion = '0.9.3'
+    antlrVersion = '4.5.3'
+    jpamVersion = '1.1'
+    seleniumVersion = '2.52.0'
+    curatorVersion = '2.7.1'
+    commonsCodecVersion = '1.10'
+    avroVersion = '1.7.7'
+    jsr305Version = '3.0.1'
+    scalatestVersion = '2.2.6'
+    pegdownVersion = '1.6.0'
+
+    shadePackageName = 'org.spark_project'
+  }
+
+  // default output directory like in sbt/maven
+  buildDir = 'build-artifacts/scala-' + scalaBinaryVersion
+
+  ext {
+    if (rootProject.name == 'snappy-spark') {
+      subprojectBase = ':'
+      sparkProjectRoot = ':'
+      sparkProjectRootDir = project(':').projectDir
+      testResultsBase = "${rootProject.buildDir}/tests"
+      gitCmd = "git --git-dir=${rootDir}/.git --work-tree=${rootDir}"
+    } else {
+      subprojectBase = ':snappy-spark:'
+      sparkProjectRoot = ':snappy-spark'
+      sparkProjectRootDir = project(':snappy-spark').projectDir
+      testResultsBase = "${rootProject.buildDir}/tests/spark"
+      gitCmd = "git --git-dir=${project(sparkProjectRoot).projectDir}/.git --work-tree=${project(sparkProjectRoot).projectDir}"
+    }
+    snappyProductDir = "${rootProject.buildDir}/snappy"
+  }
+}
+
+def getStackTrace(def t) {
+  java.io.StringWriter sw = new java.io.StringWriter()
+  java.io.PrintWriter pw = new java.io.PrintWriter(sw)
+  org.codehaus.groovy.runtime.StackTraceUtils.sanitize(t).printStackTrace(pw)
+  return sw.toString()
+}
+
+task cleanSparkScalaTest << {
+  def workingDir = "${testResultsBase}/scalatest"
+  delete workingDir
+  file(workingDir).mkdirs()
+}
+task cleanSparkJUnit << {
+  def workingDir = "${testResultsBase}/junit"
+  delete workingDir
+  file(workingDir).mkdirs()
+}
+
+subprojects {
+  apply plugin: 'scala'
+  apply plugin: 'maven'
+  apply plugin: 'scalaStyle'
+
+  // apply compiler options
+  compileJava.options.encoding = 'UTF-8'
+  compileJava.options.compilerArgs << '-Xlint:all,-serial,-path,-deprecation'
+  // compileScala.scalaCompileOptions.optimize = true
+  compileScala.options.encoding = 'UTF-8'
+
+  javadoc.options.charSet = 'UTF-8'
+
+  scalaStyle {
+    configLocation = "${sparkProjectRootDir}/scalastyle-config.xml"
+    inputEncoding = 'UTF-8'
+    outputEncoding = 'UTF-8'
+    outputFile = "${buildDir}/scalastyle-output.xml"
+    includeTestSourceDirectory = false
+    source = 'src/main/scala'
+    testSource = 'src/test/scala'
+    failOnViolation = true
+    failOnWarning = false
+  }
+
+  configurations {
+    runtimeJar {
+      description 'a dependency to include additional jars at runtime'
+      visible true
+    }
+  }
+
+  // when invoking from snappydata, below are already defined at top-level
+  if (rootProject.name == 'snappy-spark') {
+    task packageSources(type: Jar, dependsOn: classes) {
+      classifier = 'sources'
+      from sourceSets.main.allSource
+    }
+
+    configurations {
+      provided {
+        description 'a dependency that is provided externally at runtime'
+        visible true
+      }
+      testOutput {
+        extendsFrom testCompile
+        description 'a dependency that exposes test artifacts'
+      }
+    }
+
+    task packageTests(type: Jar, dependsOn: testClasses) {
+      description 'Assembles a jar archive of test classes.'
+      from sourceSets.test.output.classesDir
+      classifier = 'tests'
+    }
+    artifacts {
+      testOutput packageTests
+    }
+
+    idea {
+      module {
+        scopes.PROVIDED.plus += [ configurations.provided ]
+      }
+    }
+
+    sourceSets {
+      main.compileClasspath += configurations.provided
+      main.runtimeClasspath -= configurations.provided
+      test.compileClasspath += configurations.provided
+      test.runtimeClasspath += configurations.provided
+    }
+
+    javadoc.classpath += configurations.provided
+  }
+  task packageScalaDocs(type: Jar, dependsOn: scaladoc) {
+    classifier = 'javadoc'
+    from scaladoc
+  }
+  if (rootProject.hasProperty('enablePublish')) {
+    artifacts {
+      archives packageScalaDocs, packageSources
+    }
+  }
+
+  // fix scala+java mix to all use compileScala which use correct dependency order
+  sourceSets.main.scala.srcDir 'src/main/java'
+  sourceSets.main.java.srcDirs = []
+
+  dependencies {
+    // This is a dummy dependency that is used along with the shading plug-in
+    // to create effective poms on publishing (see SPARK-3812).
+    //compile group: 'org.spark-project.spark', name: 'unused', version: '1.0.0'
+    compile 'org.scala-lang:scala-library:' + scalaVersion
+    compile 'org.scala-lang:scala-reflect:' + scalaVersion
+
+    compile group: 'log4j', name:'log4j', version: log4jVersion
+    compile 'org.slf4j:slf4j-api:' + slf4jVersion
+    compile 'org.slf4j:slf4j-log4j12:' + slf4jVersion
+
+    testCompile "junit:junit:${junitVersion}"
+    testCompile "org.scalatest:scalatest_${scalaBinaryVersion}:${scalatestVersion}"
+    testCompile 'org.mockito:mockito-core:1.10.19'
+    testCompile 'org.scalacheck:scalacheck_' + scalaBinaryVersion + ':1.12.5'
+    testCompile 'com.novocode:junit-interface:0.11'
+
+    testRuntime "org.pegdown:pegdown:${pegdownVersion}"
+  }
+
+  if (rootProject.name == 'snappy-spark') {
+    task scalaTest(type: Test) {
+      actions = [ new com.github.maiflai.ScalaTestAction() ]
+
+      List<String> suites = []
+      extensions.add(com.github.maiflai.ScalaTestAction.SUITES, suites)
+      extensions.add('suite', { String name -> suites.add(name) } )
+      extensions.add('suites', { String... name -> suites.addAll(name) } )
+
+      def result = new StringBuilder()
+      extensions.add(com.github.maiflai.ScalaTestAction.TESTRESULT, result)
+      extensions.add('testResult', { String name -> result.append(name) } )
+
+      def output = new StringBuilder()
+      extensions.add(com.github.maiflai.ScalaTestAction.TESTOUTPUT, output)
+      extensions.add('testOutput', { String name -> output.append(name) } )
+
+      def errorOutput = new StringBuilder()
+      extensions.add(com.github.maiflai.ScalaTestAction.TESTERROR, errorOutput)
+      extensions.add('testError', { String name -> errorOutput.append(name) } )
+
+      // running a single scala suite
+      if (rootProject.hasProperty('singleSuite')) {
+        suite singleSuite
+      }
+    }
+  }
+  scalaTest {
+    // top-level default is single process run since scalatest does not
+    // spawn separate JVMs
+    maxParallelForks = 1
+    systemProperties 'test.src.tables': '__not_used__'
+
+    workingDir = "${testResultsBase}/scalatest"
+
+    testResult '/dev/tty'
+    testOutput "${workingDir}/output.txt"
+    testError "${workingDir}/error.txt"
+    binResultsDir = file("${workingDir}/binary/${project.name}")
+    reports.html.destination = file("${workingDir}/html/${project.name}")
+    reports.junitXml.destination = file(workingDir)
+  }
+  test {
+    jvmArgs '-Xss4096k'
+    maxParallelForks = (2 * Runtime.getRuntime().availableProcessors())
+    systemProperties 'spark.master.rest.enabled': 'false',
+      'test.src.tables': 'src'
+
+    workingDir = "${testResultsBase}/junit"
+
+    binResultsDir = file("${workingDir}/binary/${project.name}")
+    reports.html.destination = file("${workingDir}/html/${project.name}")
+    reports.junitXml.destination = file(workingDir)
+  }
+  // need to do below after graph is ready else it will give an error about
+  // runtimeClaspath being set after being finalized
+  gradle.taskGraph.whenReady({ graph ->
+    tasks.withType(Test).each { test ->
+      test.configure {
+        onlyIf { ! Boolean.getBoolean('skip.tests') }
+
+        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:MaxPermSize=512m', '-XX:ReservedCodeCacheSize=512m'
+        maxHeapSize '3g'
+        // disable assertions for hive tests as in Spark's pom.xml because HiveCompatibilitySuite currently fails (SPARK-4814)
+        if (test.project.name.contains('snappy-spark-hive_')) {
+          jvmArgs '-da'
+          maxParallelForks = 1
+        } else {
+          jvmArgs '-ea'
+        }
+        environment 'SPARK_DIST_CLASSPATH': "${sourceSets.test.runtimeClasspath.asPath}",
+          'SPARK_PREPEND_CLASSES': '1',
+          'SPARK_SCALA_VERSION': scalaBinaryVersion,
+          'SPARK_TESTING': '1',
+          'JAVA_HOME': System.getProperty('java.home')
+        systemProperties 'log4j.configuration': "file:${projectDir}/src/test/resources/log4j.properties",
+          'derby.system.durability': 'test',
+          'java.awt.headless': 'true',
+          'java.io.tmpdir': "${rootProject.buildDir}/tmp",
+          'spark.test.home': snappyProductDir,
+          'spark.project.home': "${project(sparkProjectRoot).projectDir}",
+          'spark.testing': '1',
+          'spark.ui.enabled': 'false',
+          'spark.ui.showConsoleProgress': 'false',
+          'spark.driver.allowMultipleContexts': 'true',
+          'spark.unsafe.exceptionOnMemoryLeak': 'true'
+
+        testLogging.exceptionFormat = 'full'
+
+        if (rootProject.name == 'snappy-spark') {
+          def eol = System.getProperty('line.separator')
+          beforeTest { desc ->
+            def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
+            def progress = new File(workingDir, "progress.txt")
+            def output = new File(workingDir, "output.txt")
+            progress << "$now Starting test $desc.className $desc.name$eol"
+            output << "${now} STARTING TEST ${desc.className} ${desc.name}${eol}${eol}"
+          }
+          onOutput { desc, event ->
+            def output = new File(workingDir, "output.txt")
+            output  << event.message
+          }
+          afterTest { desc, result ->
+            def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
+            def progress = new File(workingDir, "progress.txt")
+            def output = new File(workingDir, "output.txt")
+            progress << "${now} Completed test ${desc.className} ${desc.name} with result: ${result.resultType}${eol}"
+            output << "${eol}${now} COMPLETED TEST ${desc.className} ${desc.name} with result: ${result.resultType}${eol}${eol}"
+            result.exceptions.each { t ->
+              progress << "  EXCEPTION: ${getStackTrace(t)}${eol}"
+              output << "${getStackTrace(t)}${eol}"
+            }
+          }
+        }
+      }
+    }
+  })
+  test.dependsOn subprojectBase + 'cleanSparkJUnit'
+  scalaTest.dependsOn subprojectBase + 'cleanSparkScalaTest'
+  check.dependsOn scalaTest
+  if (rootProject.name == 'snappy-spark') {
+    check.dependsOn "${subprojectBase}snappy-spark-assembly_${scalaBinaryVersion}:product"
+  }
+}
+
+task generateSources {
+  dependsOn subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion + ':generateGrammarSource'
+  dependsOn subprojectBase + 'snappy-spark-streaming-flume-sink_' + scalaBinaryVersion + ':generateAvroJava'
+}
+
+if (rootProject.name == 'snappy-spark') {
+  task scalaStyle {
+    dependsOn subprojects.scalaStyle
+  }
+  task check {
+    dependsOn subprojects.check
+  }
+} else {
+  scalaStyle.dependsOn subprojects.scalaStyle
+  check.dependsOn subprojects.check
+}

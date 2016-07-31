@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Hive Thrift Server'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-hive_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
+
+  compile group: 'com.google.guava', name: 'guava', version: guavaVersion
+  compile(group: 'org.spark-project.hive', name: 'hive-cli', version: hiveVersion) {
+    exclude(group: 'org.spark-project.hive', module: 'hive-common')
+    exclude(group: 'org.spark-project.hive', module: 'hive-exec')
+    exclude(group: 'org.spark-project.hive', module: 'hive-jdbc')
+    exclude(group: 'org.spark-project.hive', module: 'hive-metastore')
+    exclude(group: 'org.spark-project.hive', module: 'hive-serde')
+    exclude(group: 'org.spark-project.hive', module: 'hive-service')
+    exclude(group: 'org.spark-project.hive', module: 'hive-shims')
+    exclude(group: 'org.apache.thrift', module: 'libthrift')
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+    exclude(group: 'org.slf4j', module: 'slf4j-log4j12')
+    exclude(group: 'log4j', module: 'log4j')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-beeline', version: hiveVersion) {
+    exclude(group: 'org.spark-project.hive', module: 'hive-common')
+    exclude(group: 'org.spark-project.hive', module: 'hive-exec')
+    exclude(group: 'org.spark-project.hive', module: 'hive-jdbc')
+    exclude(group: 'org.spark-project.hive', module: 'hive-metastore')
+    exclude(group: 'org.spark-project.hive', module: 'hive-service')
+    exclude(group: 'org.spark-project.hive', module: 'hive-shims')
+    exclude(group: 'org.apache.thrift', module: 'libthrift')
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+    exclude(group: 'org.slf4j', module: 'slf4j-log4j12')
+    exclude(group: 'log4j', module: 'log4j')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+  }
+  compile(group: 'org.spark-project.hive', name: 'hive-jdbc', version: hiveVersion) {
+    exclude(group: 'org.spark-project.hive', module: 'hive-common')
+    exclude(group: 'org.spark-project.hive', module: 'hive-metastore')
+    exclude(group: 'org.spark-project.hive', module: 'hive-serde')
+    exclude(group: 'org.spark-project.hive', module: 'hive-service')
+    exclude(group: 'org.spark-project.hive', module: 'hive-shims')
+    exclude(group: 'org.spark-project.hive', module: 'httpclient')
+    exclude(group: 'org.apache.curator', module: 'curator-framework')
+    exclude(group: 'org.apache.thrift', module: 'libthrift')
+    exclude(group: 'org.apache.thrift', module: 'libfb303')
+    exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
+    exclude(group: 'org.slf4j', module: 'slf4j-api')
+    exclude(group: 'org.slf4j', module: 'slf4j-log4j12')
+    exclude(group: 'log4j', module: 'log4j')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.codehaus.groovy', module: 'groovy-all')
+  }
+  compile(group: 'net.sf.jpam', name: 'jpam', version: jpamVersion) {
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+  }
+
+  testCompile project(path: subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(path: subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-java', version: seleniumVersion) {
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'io.netty', module: 'netty')
+  }
+  testCompile(group: 'org.seleniumhq.selenium', name: 'selenium-htmlunit-driver', version: seleniumVersion) {
+    exclude(group: 'com.google.guava', module: 'guava')
+  }
+}
+
+// add generated sources
+sourceSets.main.scala.srcDir 'src/gen/java'

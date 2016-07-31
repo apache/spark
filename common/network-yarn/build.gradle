@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+plugins {
+  id 'com.github.johnrengelman.shadow' version '1.2.3'
+}
+
+description = 'Spark Project YARN Shuffle Service'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-network-shuffle_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
+
+  compile group: 'io.netty', name: 'netty-all', version: nettyAllVersion
+  provided (group: 'org.apache.hadoop', name: 'hadoop-client', version: hadoopVersion) {
+    exclude(group: 'asm', module: 'asm')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-core-asl')
+    exclude(group: 'org.codehaus.jackson', module: 'jackson-mapper-asl')
+    exclude(group: 'org.ow2.asm', module: 'asm')
+    exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'org.mockito', module: 'mockito-all')
+    exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
+    exclude(group: 'javax.servlet', module: 'servlet-api')
+    exclude(group: 'junit', module: 'junit')
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'com.sun.jersey')
+    exclude(group: 'com.sun.jersey.jersey-test-framework')
+    exclude(group: 'com.sun.jersey.contribs')
+  }
+
+  /*
+  runtimeJar project(subprojectBase + 'snappy-spark-network-common_' + scalaBinaryVersion)
+  runtimeJar project(subprojectBase + 'snappy-spark-network-shuffle_' + scalaBinaryVersion)
+  runtimeJar group: 'io.netty', name: 'netty-all', version: nettyAllVersion
+  runtimeJar group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: fasterXmlVersion
+  runtimeJar group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: fasterXmlVersion
+  */
+}
+
+shadowJar {
+  baseName 'snappy-spark'
+  classifier 'yarn-shuffle'
+
+  mergeServiceFiles {
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+  }
+
+  dependencies {
+    exclude(dependency('org.scala-lang:.*'))
+    exclude(dependency('org.scala-lang.modules:.*'))
+    exclude(dependency('org.slf4j:.*'))
+    exclude(dependency('log4j:.*'))
+    exclude(dependency('org.scalatest:.*'))
+  }
+  //configurations = [ project.configurations.runtimeJar ]
+
+  relocate 'io.netty', "${shadePackageName}.io.netty"
+  relocate 'com.fasterxml.jackson', "${shadePackageName}.com.fasterxml.jackson"
+  relocate 'com.google.common', "${shadePackageName}.guava"
+
+  String createdBy = ""
+  if (rootProject.hasProperty('enablePublish')) {
+    createdBy = "SnappyData Build Team"
+  } else {
+    createdBy = System.getProperty("user.name")
+  }
+  manifest {
+    attributes(
+      "Manifest-Version"  : "1.0",
+      "Created-By"        : createdBy,
+      "Title"             : project.name,
+      "Version"           : version,
+      "Vendor"            : "SnappyData, Inc."
+    )
+  }
+
+  doLast {
+    copy {
+      from outputs
+      into "${buildDir}/jars"
+    }
+  }
+}

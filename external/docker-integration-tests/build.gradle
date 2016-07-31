@@ -1,0 +1,52 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Docker Integration Tests'
+
+dependencies {
+  compile group: 'com.ibm.db2.jcc', name: 'db2jcc4', version: '10.5.0.5'
+
+  testCompile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  testCompile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
+  testCompile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
+
+  testCompile(group: 'com.spotify', name: 'docker-client', version: '3.6.6', classifier: 'shaded') {
+    exclude(group: 'com.google.guava', module: 'guava')
+    exclude(group: 'commons-logging', module: 'commons-logging')
+    exclude(group: 'com.fasterxml.jackson.jaxrs', module: 'jackson-jaxrs-json-provider')
+    exclude(group: 'com.fasterxml.jackson.datatype', module: 'jackson-datatype-guava')
+    exclude(group: 'com.fasterxml.jackson.core', module: 'jackson-databind')
+    exclude(group: 'org.glassfish.jersey.core', module: 'jersey-client')
+    exclude(group: 'org.glassfish.jersey.connectors', module: 'jersey-apache-connector')
+    exclude(group: 'org.glassfish.jersey.media', module: 'jersey-media-json-jackson')
+  }
+  testCompile group: 'org.apache.httpcomponents', name: 'httpclient', version: httpClientVersion
+  testCompile group: 'org.apache.httpcomponents', name: 'httpcore', version: httpCoreVersion
+  testCompile group: 'mysql', name: 'mysql-connector-java', version: '5.1.38'
+  testCompile group: 'org.postgresql', name: 'postgresql', version: '9.4.1207.jre7'
+  testCompile group: 'com.oracle', name: 'ojdbc6', version: '11.2.0.1.0'
+  testCompile group: 'com.sun.jersey', name: 'jersey-server', version: sunJerseyVersion
+  testCompile group: 'com.sun.jersey', name: 'jersey-core', version: sunJerseyVersion
+  testCompile group: 'com.sun.jersey', name: 'jersey-servlet', version: sunJerseyVersion
+  testCompile(group: 'com.sun.jersey', name: 'jersey-json', version: sunJerseyVersion) {
+    exclude(group: 'stax', module: 'stax-api')
+  }
+  testCompile group: 'com.google.guava', name: 'guava', version: '18.0'
+
+  testCompile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion, configuration: 'testOutput')
+  testCompile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion, configuration: 'testOutput')
+}

@@ -1,0 +1,132 @@
+/*
+ * Copyright (c) 2016 SnappyData, Inc. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You
+ * may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License. See accompanying
+ * LICENSE file.
+ */
+
+description = 'Spark Project Assembly'
+
+dependencies {
+  compile project(subprojectBase + 'snappy-spark-core_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-catalyst_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-sql_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-hive_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-hive-thriftserver_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-repl_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming-kafka-0.8_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-streaming-kafka-0.10_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-yarn_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-mllib_' + scalaBinaryVersion)
+  compile project(subprojectBase + 'snappy-spark-graphx_' + scalaBinaryVersion)
+  if (rootProject.hasProperty('ganglia')) {
+    compile project(subprojectBase + 'snappy-spark-ganglia-lgpl_' + scalaBinaryVersion)
+  }
+}
+
+def cleanProduct() {
+  delete "${sparkProjectRootDir}/python/lib/pyspark.zip"
+  delete snappyProductDir
+}
+clean.doLast {
+  cleanProduct()
+}
+
+task product(type: Zip) {
+  def examplesProject = project(subprojectBase + 'snappy-spark-examples_' + scalaBinaryVersion)
+  String yarnShuffleProject = subprojectBase + 'snappy-spark-network-yarn_' + scalaBinaryVersion
+  dependsOn jar, examplesProject.jar, "${yarnShuffleProject}:shadowJar"
+  // create python zip
+  destinationDir = file("${snappyProductDir}/python/lib")
+  archiveName = 'pyspark.zip'
+  from("${sparkProjectRootDir}/python") {
+    include 'pyspark/**/*'
+  }
+
+  doFirst {
+    cleanProduct()
+  }
+  doLast {
+    // copy all runtime dependencies (skip for top-level snappydata builds)
+    if (rootProject.name == 'snappy-spark') {
+      copy {
+        from(configurations.runtime) {
+          // exclude antlr4 explicitly (runtime is still included)
+          // that gets pulled by antlr gradle plugin
+          exclude '**antlr4-4*.jar'
+          // exclude scalatest included by spark-tags
+          exclude '**scalatest*.jar'
+        }
+        into "${snappyProductDir}/jars"
+      }
+    }
+    // copy scripts, data and other files that are part of distribution
+    copy {
+      from(sparkProjectRootDir) {
+        include 'bin/**'
+        include 'sbin/**'
+        include 'conf/**'
+        include 'data/**'
+        include 'licenses/**'
+        include 'python/**'
+        include 'examples/src/**'
+      }
+      into snappyProductDir
+    }
+    def sparkR = 'sparkProjectRootDir/R/lib/SparkR'
+    if (file(sparkR).exists()) {
+      copy {
+        from sparkR
+        into "${snappyProductDir}/R/lib"
+      }
+    }
+
+    // copy yarn shuffle shadow jar
+    copy {
+      from "${project(yarnShuffleProject).buildDir}/jars"
+      into "${snappyProductDir}/yarn"
+    }
+    // copy examples jars
+    copy {
+      from "${examplesProject.buildDir}/jars"
+      into "${snappyProductDir}/examples/jars"
+    }
+    // create RELEASE file, copy README etc for top-level snappy-spark project
+    if (rootProject.name == 'snappy-spark') {
+      copy {
+        from(sparkProjectRootDir) {
+          include 'LICENSE'
+          include 'NOTICE'
+          include 'README.md'
+        }
+        into snappyProductDir
+      }
+      def releaseFile = file("${snappyProductDir}/RELEASE")
+      String buildFlags = ""
+      if (rootProject.hasProperty('docker')) {
+        buildFlags += ' -Pdocker'
+      }
+      if (rootProject.hasProperty('ganglia')) {
+        buildFlags += ' -Pganglia'
+      }
+      String gitRevision = "${gitCmd} rev-parse --short HEAD".execute().text.trim()
+      if (gitRevision.length() > 0) {
+        gitRevision = " (git revision ${gitRevision})"
+      }
+
+      releaseFile.append("Spark ${version}${gitRevision} built for Hadoop ${hadoopVersion}\n")
+      releaseFile.append("Build flags:${buildFlags}\n")
+    }
+  }
+}
