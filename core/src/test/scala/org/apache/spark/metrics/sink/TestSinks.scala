@@ -25,8 +25,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 
 object TestSinks {
   class TestSinkWithoutSparkConfInConstructor(val property: Properties,
-                                           val registry: MetricRegistry,
-                                           val securityMgr: SecurityManager) extends Sink {
+                                              val registry: MetricRegistry,
+                                              val securityMgr: SecurityManager) extends Sink {
     override def start(): Unit = { /** Do nothing */ }
 
     override def stop(): Unit = { /** Do nothing */ }
