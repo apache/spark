@@ -268,4 +268,30 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     assert(metricName === source.sourceName)
   }
 
+  test("MetricsSystem with different types of constructors") {
+    val instanceName1 = "sinkWithSparkConf"
+    val metricsSystem1 = MetricsSystem.createMetricsSystem(instanceName1, conf, securityMgr)
+    metricsSystem1.start()
+    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
+
+    assert(metricsSystem1.invokePrivate(sinks()).length === 1)
+
+    val instanceName2 = "sinkWithoutSparkConf"
+    val metricsSystem2 = MetricsSystem.createMetricsSystem(instanceName1, conf, securityMgr)
+    metricsSystem2.start()
+
+    assert(metricsSystem1.invokePrivate(sinks()).length === 1)
+
+    val instanceName3 = "sinkWithInvalidConstructor"
+    val metricsSystem3 = MetricsSystem.createMetricsSystem(instanceName1, conf, securityMgr)
+    try {
+      metricsSystem2.start()
+      fail("Expected exception for invalid sink constructor with empty arguments.")
+    }
+    catch {
+      case e: Exception => /** Passs */
+    }
+    assert(metricsSystem3.invokePrivate(sinks()).length === 0)
+  }
+
 }
