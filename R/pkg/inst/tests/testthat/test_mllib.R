@@ -481,6 +481,8 @@ test_that("spark.isotonicRegression", {
           list(5.0, 3.0), list(1.0, 4.0))
   df <- createDataFrame(data, c("label", "feature"))
   model <- spark.isoreg(df, label ~ feature, isotonic = FALSE)
+  # only allow one variable on the righthand side of the formula
+  expect_error(model2 <- spark.isoreg(df, ~., isotonic = FALSE))
   result <- summary(model, df)
   expect_equal(result$predictions, list(7, 5, 4, 4, 1))
 
