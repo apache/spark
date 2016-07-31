@@ -89,15 +89,6 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
       s"""
         |LOAD DATA LOCAL INPATH '$testData2' overwrite into table over1k
       """.stripMargin)
-
-    // The following settings are used for generating golden files with Hive.
-    // We have to use kryo to correctly let Hive serialize plans with window functions.
-    // This is used to generate golden files.
-    sql("set hive.plan.serialization.format=kryo")
-    // Explicitly set fs to local fs.
-    sql(s"set fs.default.name=file://$testTempDir/")
-    // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {
@@ -758,15 +749,6 @@ class HiveWindowFunctionQueryFileSuite
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
-
-    // The following settings are used for generating golden files with Hive.
-    // We have to use kryo to correctly let Hive serialize plans with window functions.
-    // This is used to generate golden files.
-    // sql("set hive.plan.serialization.format=kryo")
-    // Explicitly set fs to local fs.
-    // sql(s"set fs.default.name=file://$testTempDir/")
-    // Ask Hive to run jobs in-process as a single map and reduce task.
-    // sql("set mapred.job.tracker=local")
   }
 
   override def afterAll() {
