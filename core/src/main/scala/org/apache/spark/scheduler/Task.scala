@@ -120,7 +120,6 @@ private[spark] abstract class Task[T](
     this.taskMemoryManager = taskMemoryManager
   }
 
-  // Run a task returning the result and if all of the input was consumed.
   def runTask(context: TaskContext): T
 
   def preferredLocations: Seq[TaskLocation] = Nil
