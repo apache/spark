@@ -175,7 +175,7 @@ class HiveDDLSuite
     val catalog = spark.sessionState.catalog
     val tabName = "tab1"
     withTable(tabName) {
-      // the format name should be case incensitive
+      // the format name should be case insensitive
       withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "nonExistent") {
         sql(s"CREATE TABLE $tabName(c1 int)")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
