@@ -25,11 +25,9 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val listener = parent.listener
-  val passwordProperties: Set[String] = Set("spark.ssl.keyPassword",
-    "spark.ssl.keyStorePassword", "spark.ssl.trustStorePassword")
 
-  def removePass(kv: (String, String)): (String, String) = {
-    if (passwordProperties.contains(kv._1)) {
+  private def removePass(kv: (String, String)): (String, String) = {
+    if (kv._1.toLowerCase.contains("password")) {
       return (kv._1, "******")
     }
     kv
