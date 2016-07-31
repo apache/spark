@@ -19,10 +19,14 @@ package org.apache.spark.examples.sql;
 // $example on:schema_merging$
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 // $example off:schema_merging$
 
 // $example on:basic_parquet_example$
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.JavaSparkContext$;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Encoders;
 // import org.apache.spark.sql.Encoders;
@@ -214,6 +218,13 @@ public class JavaSQLDataSourceExample {
     // |Justin|
     // +------+
     // $example off:json_dataset$
+
+    // Alternatively, a Dataset can be created for a JSON dataset represented by
+    // an RDD[String] storing one JSON object per string.
+    List<String> jsonData = Arrays.asList(
+            "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
+    JavaRDD<String> anotherPeopleRDD = new JavaSparkContext(spark.sparkContext()).parallelize(jsonData);
+    Dataset anotherPeople = spark.read().json(anotherPeopleRDD);
   }
 
 }
