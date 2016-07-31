@@ -302,7 +302,7 @@ object SQLConf {
     .createWithDefault("parquet")
 
   val DEFAULT_FILE_FORMAT = SQLConfigBuilder("spark.sql.default.fileformat")
-    .doc("The  Default file format for CREATE TABLE statement. Options are TextFile, Parquet, " +
+    .doc("The default file format for CREATE TABLE statement. Options are TextFile, Parquet, " +
       "SequenceFile, RCfile, ORC, and Avro.")
     .stringConf
     .createWithDefault("textfile")
