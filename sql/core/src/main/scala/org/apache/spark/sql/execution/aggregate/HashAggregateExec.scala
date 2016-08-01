@@ -487,8 +487,12 @@ case class HashAggregateExec(
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
         bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 
-    // Acting conservative and do not support byte array based decimal type for aggregate values
-    // for now.
+    // For vectorized hash map, We do not support byte array based decimal type for aggregate values
+    // as ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
+    // updates. Due to this, appending the byte array in the vectorized hash map can turn out to be
+    // quite inefficient and can potentially OOM the executor.
+    // For row-based hash map, while decimal update is supported in UnsafeRow, we will just act
+    // conservative here, due to lack of testing and benchmarking.
     val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
@@ -779,68 +783,29 @@ case class HashAggregateExec(
     }
 
 
-    val updateRowInVectorizedHashMap: Option[String] = {
+    def updateRowInFastHashMap(isVectorized: Boolean): Option[String] = {
       ctx.INPUT_ROW = fastRowBuffer
       val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
       val effectiveCodes = subExprs.codes.mkString("\n")
-      val vectorizedRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+      val fastRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExpr.map(_.genCode(ctx))
       }
-      val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
+      val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
         val dt = updateExpr(i).dataType
-        ctx.updateColumn(fastRowBuffer, dt, i, ev, updateExpr(i).nullable,
-          isVectorized = true)
+        ctx.updateColumn(fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorized)
       }
       Option(
         s"""
            |// common sub-expressions
            |$effectiveCodes
            |// evaluate aggregate function
-           |${evaluateVariables(vectorizedRowEvals)}
-           |// update vectorized row
-           |${updateVectorizedRow.mkString("\n").trim}
+           |${evaluateVariables(fastRowEvals)}
+           |// update fast row
+           |${updateFastRow.mkString("\n").trim}
            |
          """.stripMargin)
     }
-
-    val updateRowInRowBasedHashMap: Option[String] = {
-      ctx.INPUT_ROW = fastRowBuffer
-      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-      val effectiveCodes = subExprs.codes.mkString("\n")
-      val rowBasedRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
-        boundUpdateExpr.map(_.genCode(ctx))
-      }
-      val updateRowBasedRow = rowBasedRowEvals.zipWithIndex.map { case (ev, i) =>
-        val dt = updateExpr(i).dataType
-        ctx.updateColumn(fastRowBuffer, dt, i, ev, updateExpr(i).nullable,
-          isVectorized = false)
-      }
-      Option(
-        s"""
-           |// common sub-expressions
-           |$effectiveCodes
-           |// evaluate aggregate function
-           |${evaluateVariables(rowBasedRowEvals)}
-           |// update row based map row
-           |${updateRowBasedRow.mkString("\n").trim}
-           |
-         """.stripMargin)
-    }
-
-
-    val updateRowInFastHashMap: String = {
-      if (isFastHashMapEnabled) {
-        if (isVectorizedHashMapEnabled) {
-          updateRowInVectorizedHashMap.getOrElse("")
-        } else {
-          updateRowInRowBasedHashMap.getOrElse("")
-        }
-      } else ""
-    }
-
-
 
     // Next, we generate code to probe and update the unsafe row hash map.
     val findOrInsertInUnsafeRowMap: String = {
@@ -923,7 +888,11 @@ case class HashAggregateExec(
 
      if ($fastRowBuffer != null) {
        // update fast row
-       ${updateRowInFastHashMap}
+       ${
+          if (isFastHashMapEnabled) {
+            updateRowInFastHashMap(isVectorizedHashMapEnabled).getOrElse("")
+          } else ""
+        }
      } else {
        // update unsafe row
        $updateRowInUnsafeRowMap
