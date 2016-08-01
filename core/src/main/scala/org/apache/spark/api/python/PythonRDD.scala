@@ -38,7 +38,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorV2, SerializableConfiguration, Utils}
 
 
 private[spark] class PythonRDD(
@@ -75,7 +75,7 @@ private[spark] case class PythonFunction(
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: Accumulator[JList[Array[Byte]]])
+    accumulator: PythonAccumulatorV2)
 
 /**
  * A wrapper for chained Python functions (from bottom to top).
@@ -200,7 +200,7 @@ private[spark] class PythonRunner(
                 val updateLen = stream.readInt()
                 val update = new Array[Byte](updateLen)
                 stream.readFully(update)
-                accumulator += Collections.singletonList(update)
+                accumulator.add(Collections.singletonList(update))
               }
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
@@ -866,11 +866,13 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
 }
 
 /**
- * Internal class that acts as an `AccumulatorParam` for Python accumulators. Inside, it
+ * Internal class that acts as an `AccumulatorV2` for Python accumulators. Inside, it
  * collects a list of pickled strings that we pass to Python through a socket.
  */
-private class PythonAccumulatorParam(@transient private val serverHost: String, serverPort: Int)
-  extends AccumulatorParam[JList[Array[Byte]]] {
+private[spark] class PythonAccumulatorV2(@transient private val serverHost: String, serverPort: Int)
+  extends AccumulatorV2[JList[Array[Byte]], JList[Array[Byte]]] {
+
+  private[python] var _acc: JList[Array[Byte]] = new JArrayList[Array[Byte]]
 
   Utils.checkHost(serverHost, "Expected hostname")
 
@@ -889,21 +891,40 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
     socket
   }
 
-  override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
+  override def reset(): Unit = {
+    this._acc = new JArrayList[Array[Byte]]
+  }
 
-  override def addInPlace(val1: JList[Array[Byte]], val2: JList[Array[Byte]])
-      : JList[Array[Byte]] = synchronized {
+  override def isZero: Boolean = {
+    this._acc.isEmpty
+  }
+
+  override def copy(): PythonAccumulatorV2 = {
+    val newAcc = new PythonAccumulatorV2(serverHost, serverPort)
+    newAcc._acc = this._acc
+    newAcc
+  }
+
+  // This happens on the worker node, where we just want to remember all the updates
+  override def add(val2: JList[Array[Byte]]): Unit = synchronized {
+    _acc.addAll(val2)
+  }
+
+
+  override def merge(other: AccumulatorV2[JList[Array[Byte]], JList[Array[Byte]]]): Unit = {
+    val otherPythonAccumulator = other.asInstanceOf[PythonAccumulatorV2]
+    // This conditional isn't strictly speaking needed - merging only currently happens on the
+    // driver program - but that isn't gauranteed so incase this changes.
     if (serverHost == null) {
-      // This happens on the worker node, where we just want to remember all the updates
-      val1.addAll(val2)
-      val1
+      // We are on the worker
+      _acc.addAll(otherPythonAccumulator._acc)
     } else {
       // This happens on the master, where we pass the updates to Python through a socket
       val socket = openSocket()
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
-      out.writeInt(val2.size)
-      for (array <- val2.asScala) {
+      out.writeInt(otherPythonAccumulator._acc.size)
+      for (array <- otherPythonAccumulator._acc.asScala) {
         out.writeInt(array.length)
         out.write(array)
       }
@@ -913,8 +934,14 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
       if (byteRead == -1) {
         throw new SparkException("EOF reached before Python server acknowledged")
       }
-      null
     }
+  }
+
+  /**
+   * Value function - not expected to be called for Python
+   */
+  def value: JList[Array[Byte]] = {
+    _acc
   }
 }
 
