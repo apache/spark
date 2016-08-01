@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming.{MemoryPlan, StreamingExecutionRelation, StreamingRelation, StreamingRelationExec}
+import org.apache.spark.sql.execution.subquery.{CommonSubqueryAlias, CommonSubqueryExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
 
@@ -414,6 +415,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case LogicalRDD(output, rdd) => RDDScanExec(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
+      case c: CommonSubqueryAlias => CommonSubqueryExec(c.output, c) :: Nil
       case _ => Nil
     }
   }

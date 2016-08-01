@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.subquery.CommonSubqueryExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
@@ -570,5 +572,23 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
+
+  test("Dedup subqueries") {
+    spark.range(10).createOrReplaceTempView("t")
+    val df = sql("WITH s AS (SELECT 1 FROM t) SELECT * FROM s s1 join s s2")
+
+    val commonSubqueries = df.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries.length == 1)
+
+    val df2 = sql("WITH s1 AS (SELECT 1 FROM t), s2 AS (SELECT 1 FROM t) " +
+      "SELECT * FROM s1 JOIN (SELECT * FROM s1, s2)")
+
+    val commonSubqueries2 = df2.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries2.length == 1)
   }
 }

@@ -49,7 +49,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-      EliminateSubqueryAliases,
+      EliminateOneTimeSubqueryAliases,
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -2050,5 +2050,43 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       } else {
         f
       }
+  }
+}
+
+/**
+ * Removes the [[SubqueryAlias]] operators which are used only once from the plan and use
+ * [[CommonSubqueryAlias]] to replace these operators.
+ */
+object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val subqueries = ArrayBuffer[LogicalPlan]()
+    val duplicateSubqueries = ArrayBuffer[LogicalPlan]()
+
+    val noRecursiveSubqueryPlan = plan.transformDown {
+      // Eliminate the recursive subqueries which have the same output.
+      case s @ SubqueryAlias(_, child)
+          if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
+        child
+    }
+
+    noRecursiveSubqueryPlan.foreach {
+      // Collect the subqueries that are used more than once in the query.
+      case SubqueryAlias(_, child) =>
+        if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
+          // If the plan with same results can be found.
+          duplicateSubqueries += child
+        } else {
+          // If it can't be found, add it into the list.
+          subqueries += child
+        }
+      case _ =>
+    }
+
+    noRecursiveSubqueryPlan.transformDown {
+      // Only eliminate the subqueries that are used only once in the query.
+      case SubqueryAlias(_, child)
+          if duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0 =>
+        child
+    }
   }
 }
