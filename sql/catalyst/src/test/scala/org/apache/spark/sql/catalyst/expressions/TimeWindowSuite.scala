@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
 
