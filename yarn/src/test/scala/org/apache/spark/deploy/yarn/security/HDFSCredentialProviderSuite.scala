@@ -27,13 +27,7 @@ class HDFSCredentialProviderSuite
     extends SparkFunSuite
     with PrivateMethodTester
     with Matchers {
-  private val _nnsToAccess = PrivateMethod[Set[Path]]('nnsToAccess)
   private val _getTokenRenewer = PrivateMethod[String]('getTokenRenewer)
-
-  private def nnsToAccess(
-      hdfsCredentialProvider: HDFSCredentialProvider, sparkConf: SparkConf): Set[Path] = {
-    hdfsCredentialProvider invokePrivate _nnsToAccess(sparkConf)
-  }
 
   private def getTokenRenewer(
       hdfsCredentialProvider: HDFSCredentialProvider, conf: Configuration): String = {
@@ -56,35 +50,6 @@ class HDFSCredentialProviderSuite
     }
 
     super.afterAll()
-  }
-
-  test("check access nns empty") {
-    val sparkConf = new SparkConf()
-      .set("spark.yarn.access.namenodes", "")
-    nnsToAccess(hdfsCredentialProvider, sparkConf) should be (Set())
-  }
-
-  test("check access nns unset") {
-    nnsToAccess(hdfsCredentialProvider, new SparkConf) should be (Set())
-  }
-
-  test("check access nns") {
-    val sparkConf = new SparkConf()
-      .set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
-    nnsToAccess(hdfsCredentialProvider, sparkConf) should be (Set(new Path("hdfs://nn1:8032")))
-  }
-
-  test("check access nns space") {
-    val sparkConf = new SparkConf()
-      .set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
-    nnsToAccess(hdfsCredentialProvider, sparkConf) should be (Set(new Path("hdfs://nn1:8032")))
-  }
-
-  test("check access two nns") {
-    val sparkConf = new SparkConf()
-      .set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
-    nnsToAccess(hdfsCredentialProvider, sparkConf) should be
-      (Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
   }
 
   test("check token renewer") {

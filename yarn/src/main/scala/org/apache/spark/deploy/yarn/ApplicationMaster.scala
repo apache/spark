@@ -238,8 +238,8 @@ private[spark] class ApplicationMaster(
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        credentialRenewer = new ConfigurableCredentialManager(sparkConf, yarnConf)
-          .credentialRenewer
+        credentialRenewer =
+          new ConfigurableCredentialManager(sparkConf, yarnConf).credentialRenewer()
         credentialRenewer.scheduleLoginFromKeytab()
       }
 

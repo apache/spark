@@ -544,10 +544,11 @@ If an application needs to interact with other secure HDFS clusters, then
 the tokens needed to access these clusters must be explicitly requested at
 launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
 
-Also Spark supports interacting with other security services through plug-in mechanism, user must implement
-`org.apache.spark.deploy.yarn.security.ServiceCredentialProvider` and register the class into META-INFO/services for
-ServiceLoader to load in. Also this plugged-in credential provider can be disabed by setting
-`spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
+Spark supports integrating with other security-aware services through Java Services mechanism (see
+`java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
+ should be available to Spark by listing their names in the corresponding file in the jar's
+ `META-INF/services` directory. These plug-ins can be disabled by setting
+ `spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
 
 ```

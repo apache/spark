@@ -73,12 +73,6 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     credentialManager.getServiceCredentialProvider("hbase") should not be (None)
   }
 
-  test("plug in customized credential provider") {
-    credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-
-    credentialManager.getServiceCredentialProvider("test") should not be (None)
-  }
-
   test("verify obtaining credentials from provider") {
     credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
     val creds = new Credentials()
@@ -102,7 +96,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
     nextRenewal should be (testCredentialProvider.timeOfNextTokenRenewal)
   }
 
-  test("Obtain tokens For HiveMetastore") {
+  test("obtain tokens For HiveMetastore") {
     val hadoopConf = new Configuration()
     hadoopConf.set("hive.metastore.kerberos.principal", "bob")
     // thrift picks up on port 0 and bails out, without trying to talk to endpoint
@@ -110,7 +104,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     val hiveCredentialProvider = new HiveCredentialProvider()
     val credentials = new Credentials()
-    hiveCredentialProvider.obtainCredentials(hadoopConf, credentials)
+    hiveCredentialProvider.obtainCredentials(hadoopConf, sparkConf, credentials)
 
     credentials.getAllTokens.size() should be (0)
   }
@@ -121,7 +115,7 @@ class ConfigurableCredentialManagerSuite extends SparkFunSuite with Matchers wit
 
     val hbaseTokenProvider = new HBaseCredentialProvider()
     val creds = new Credentials()
-    hbaseTokenProvider.obtainCredentials(hadoopConf, creds)
+    hbaseTokenProvider.obtainCredentials(hadoopConf, sparkConf, creds)
 
     creds.getAllTokens.size should be (0)
   }
@@ -133,9 +127,12 @@ class TestCredentialProvider extends ServiceCredentialProvider {
 
   override def serviceName: String = "test"
 
-  override def isCredentialRequired(conf: Configuration): Boolean = true
+  override def credentialsRequired(conf: Configuration): Boolean = true
 
-  override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long] = {
+  override def obtainCredentials(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = {
     if (creds == null) {
       // Guard out other unit test failures.
       return None

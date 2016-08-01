@@ -33,7 +33,7 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * The following methods are primarily meant to make sure long-running apps like Spark
- * Streaming apps can run without interruption while access security services. The
+ * Streaming apps can run without interruption while accessing security services. The
  * scheduleLoginFromKeytab method is called on the AM to get the new credentials.
  * This method wakes up a thread that logs into the KDC
  * once 75% of the renewal interval of the original credentials used for the container

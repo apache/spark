@@ -51,14 +51,14 @@ private[yarn] final class ConfigurableCredentialManager (
 
     // Filter out credentials in which spark.yarn.security.credentials.{service}.enabled is false.
     providers.filter { p =>
-      sparkConf.getOption(providerEnabledConfig.format(p.serviceName)).map(_.toBoolean)
+      sparkConf.getOption(providerEnabledConfig.format(p.serviceName))
         .orElse {
           sparkConf.getOption(deprecatedProviderEnabledConfig.format(p.serviceName)).map { c =>
             logWarning(s"${deprecatedProviderEnabledConfig.format(p.serviceName)} is deprecated, " +
               s"using ${providerEnabledConfig.format(p.serviceName)} instead")
-            c.toBoolean
+            c
           }
-        }.getOrElse(true)
+        }.map(_.toBoolean).getOrElse(true)
     }.map { p => (p.serviceName, p) }.toMap
   }
 
@@ -76,8 +76,8 @@ private[yarn] final class ConfigurableCredentialManager (
    */
   def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Long = {
     credentialProviders.values.flatMap { provider =>
-      if (provider.isCredentialRequired(hadoopConf)) {
-        provider.obtainCredentials(hadoopConf, creds)
+      if (provider.credentialsRequired(hadoopConf)) {
+        provider.obtainCredentials(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -86,11 +86,20 @@ private[yarn] final class ConfigurableCredentialManager (
     }.foldLeft(Long.MaxValue)(math.min)
   }
 
-  def credentialRenewer: AMCredentialRenewer = {
+  /**
+   * Create an [[AMCredentialRenewer]] instance, caller should be responsible to stop this
+   * instance when it is not used. AM will use it to renew credentials periodically.
+   */
+  def credentialRenewer(): AMCredentialRenewer = {
     new AMCredentialRenewer(sparkConf, hadoopConf, this)
   }
 
-  def credentialUpdater: CredentialUpdater = {
+  /**
+   * Create an [[CredentialUpdater]] instance, caller should be resposible to stop this intance
+   * when it is not used. Executors and driver (client mode) will use it to update credentials.
+   * periodically.
+   */
+  def credentialUpdater(): CredentialUpdater = {
     new CredentialUpdater(sparkConf, hadoopConf, this)
   }
 }

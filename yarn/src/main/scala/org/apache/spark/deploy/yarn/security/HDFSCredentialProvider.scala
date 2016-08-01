@@ -28,32 +28,23 @@ import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 private[security] class HDFSCredentialProvider extends ServiceCredentialProvider with Logging {
-
-  private val sparkConf = new SparkConf()
-
-  // NameNode to access, used to get tokens from different FileSystems
-  private val unionNNsToAccess = {
-    val tmpConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val stageDir = sparkConf.get(STAGING_DIR).map(new Path(_))
-      .getOrElse(FileSystem.get(tmpConf).getHomeDirectory)
-    nnsToAccess(sparkConf) + stageDir
-  }
-
   // Token renewal interval, this value will be set in the first call,
   // if None means no token renewer specified, so cannot get token renewal interval.
   private var tokenRenewalInterval: Option[Long] = null
 
-  override val  serviceName: String = "hdfs"
+  override val serviceName: String = "hdfs"
 
-  override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long] = {
-    // Obtain tokens from HDFS and add into Credentials
-    unionNNsToAccess.foreach { dst =>
+  override def obtainCredentials(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = {
+    // NameNode to access, used to get tokens from different FileSystems
+    nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
       val dstFs = dst.getFileSystem(hadoopConf)
       logInfo("getting token for namenode: " + dst)
       dstFs.addDelegationTokens(getTokenRenewer(hadoopConf), creds)
@@ -61,7 +52,7 @@ private[security] class HDFSCredentialProvider extends ServiceCredentialProvider
 
     // Get the token renewal interval if it is not set. It will only be called once.
     if (tokenRenewalInterval == null) {
-      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf)
+      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf)
     }
 
     // Get the time of next renewal.
@@ -76,13 +67,14 @@ private[security] class HDFSCredentialProvider extends ServiceCredentialProvider
     }
   }
 
-  private def getTokenRenewalInterval(hadoopConf: Configuration): Option[Long] = {
+  private def getTokenRenewalInterval(
+      hadoopConf: Configuration, sparkConf: SparkConf): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
     sparkConf.get(PRINCIPAL).map { renewer =>
       val creds = new Credentials()
-      unionNNsToAccess.foreach { dst =>
+      nnsToAccess(hadoopConf, sparkConf).foreach { dst =>
         val dstFs = dst.getFileSystem(hadoopConf)
         dstFs.addDelegationTokens(renewer, creds)
       }
@@ -110,9 +102,9 @@ private[security] class HDFSCredentialProvider extends ServiceCredentialProvider
     delegTokenRenewer
   }
 
-  private def nnsToAccess(sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get(NAMENODES_TO_ACCESS)
-      .map(new Path(_))
-      .toSet
+  private def nnsToAccess(hadoopConf: Configuration, sparkConf: SparkConf): Set[Path] = {
+    sparkConf.get(NAMENODES_TO_ACCESS).map(new Path(_)).toSet +
+      sparkConf.get(STAGING_DIR).map(new Path(_))
+        .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory)
   }
 }

@@ -24,13 +24,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
 private[security] class HBaseCredentialProvider extends ServiceCredentialProvider with Logging {
 
   override def serviceName: String = "hbase"
 
-  override def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Option[Long] = {
+  override def obtainCredentials(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
       val obtainToken = mirror.classLoader.
@@ -50,7 +54,7 @@ private[security] class HBaseCredentialProvider extends ServiceCredentialProvide
     None
   }
 
-  override def isCredentialRequired(hadoopConf: Configuration): Boolean = {
+  override def credentialsRequired(hadoopConf: Configuration): Boolean = {
     hbaseConf(hadoopConf).get("hbase.security.authentication") == "kerberos"
   }
 
