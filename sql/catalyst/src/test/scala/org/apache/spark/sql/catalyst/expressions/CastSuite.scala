@@ -734,7 +734,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val inp = Literal.create(InternalRow(0L), originalSchema)
     val expected = InternalRow(0L)
-    checkEvaluation(cast(inp, targetSchema), expected )
+    checkEvaluation(cast(inp, targetSchema), expected)
   }
 
   test("complex casting") {
