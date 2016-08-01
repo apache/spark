@@ -673,13 +673,18 @@ test_that("spark.als", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-als", fileext = ".tmp")
-  write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
   expect_equal(stats2$maxIter, 5)
-  expect_equal(collect(stats$userFactors), collect(stats2$userFactors))
-  expect_equal(collect(stats$itemFactors), collect(stats2$itemFactors))
+  userFactors <- collect(stats$userFactors)
+  itemFactors <- collect(stats$itemFactors)
+  userFactors2 <- collect(stats2$userFactors)
+  itemFactors2 <- collect(stats2$itemFactors)
+  expect_equal(userFactors$features, userFactors2$features)
+  expect_equal(userFactors$id, userFactors2$id)
+  expect_equal(itemFactors$features, itemFactors2$features)
+  expect_equal(itemFactors$id, itemFactors2$id)
 
   unlink(modelPath)
 })
