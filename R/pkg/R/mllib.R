@@ -1076,19 +1076,24 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' Collaborative Filtering}.
 #' Additional arguments can be passed to the methods.
 #' \describe{
-#'    \item{nonnegative}{logical value indicating whether to apply nonnegativity constraints}
-#'    \item{implicitPrefs}{logical value indicating whether to use implicit preference}
-#'    \item{alpha}{alpha parameter in the implicit preference formulation (>= 0)}
-#'    \item{seed}{seed for random number generation}
-#'    \item{numUserBlocks}{number of user blocks used to parallelize computation (> 0)}
-#'    \item{numItemBlocks}{number of item blocks used to parallelize computation (> 0)}
-#'    \item{checkpointInterval}{number of checkpoint intervals (>= 1) or disable checkpoint (-1)}
+#'    \item{nonnegative}{logical value indicating whether to apply nonnegativity constraints.
+#'                       Default: FALSE}
+#'    \item{implicitPrefs}{logical value indicating whether to use implicit preference.
+#'                         Default: FALSE}
+#'    \item{alpha}{alpha parameter in the implicit preference formulation (>= 0). Default: 1.0}
+#'    \item{seed}{integer seed for random number generation. Default: 0}
+#'    \item{numUserBlocks}{number of user blocks used to parallelize computation (> 0).
+#'                         Default: 10}
+#'    \item{numItemBlocks}{number of item blocks used to parallelize computation (> 0).
+#'                         Default: 10}
+#'    \item{checkpointInterval}{number of checkpoint intervals (>= 1) or disable checkpoint (-1).
+#'                              Default: 10}
 #'    }
 #'
 #' @param data A SparkDataFrame for training
 #' @param ratingCol column name for ratings
-#' @param userCol column name for user ids. Ids must be (or can be cast into) integers
-#' @param itemCol column name for item ids. Ids must be (or can be cast into) integers
+#' @param userCol column name for user ids. Ids must be (or can be coerced into) integers
+#' @param itemCol column name for item ids. Ids must be (or can be coerced into) integers
 #' @param rank rank of the matrix factorization (> 0)
 #' @param reg regularization parameter (>= 0)
 #' @param maxIter maximum number of iterations (>= 0)
@@ -1117,6 +1122,11 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' write.ml(model, path)
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
+#'
+#' # set other arguments
+#' modelS <- spark.als(df, "rating", "user", "item", rank = 20,
+#'                     reg = 0.1, nonnegative = TRUE)
+#' statsS <- summary(modelS)
 #' }
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
