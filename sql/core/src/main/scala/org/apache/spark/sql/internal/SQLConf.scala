@@ -499,7 +499,7 @@ object SQLConf {
       .intConf
       .createWithDefault(40)
 
-  val ENFORCE_FAST_AGG_MAP_IMPL =
+  val FAST_AGG_MAP_IMPL =
     SQLConfigBuilder("spark.sql.codegen.aggregate.map.enforce.impl")
       .internal()
       .doc("Sets the implementation for fast hash map during aggregation. Could be one of the " +
@@ -675,7 +675,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def enforceFastAggHashMapImpl: String = getConf(ENFORCE_FAST_AGG_MAP_IMPL)
+  def enforceFastAggHashMapImpl: String = getConf(FAST_AGG_MAP_IMPL)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
