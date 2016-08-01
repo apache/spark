@@ -19,24 +19,27 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+class CreateTableAsSelectSuite
+  extends DataSourceTest
+  with SharedSQLContext
+  with BeforeAndAfterEach {
 
   protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     spark.read.json(rdd).createOrReplaceTempView("jt")
   }
@@ -44,18 +47,21 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   override def afterAll(): Unit = {
     try {
       spark.catalog.dropTempView("jt")
-      if (path.exists()) {
-        Utils.deleteRecursively(path)
-      }
+      Utils.deleteRecursively(path)
     } finally {
       super.afterAll()
     }
   }
 
-  before {
-    if (path.exists()) {
-      Utils.deleteRecursively(path)
-    }
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    path = Utils.createTempDir()
+    path.delete()
+  }
+
+  override def afterEach(): Unit = {
+    Utils.deleteRecursively(path)
+    super.afterEach()
   }
 
   test("CREATE TABLE USING AS SELECT") {
@@ -199,7 +205,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
     }
   }
 
-  test("create table using as select - with bucket") {
+  test("create table using as select - with non-zero buckets") {
     val catalog = spark.sessionState.catalog
     withTable("t") {
       sql(
@@ -212,7 +218,23 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
-        Some(BucketSpec(5, Seq("a"), Seq("b"))))
+        Option(BucketSpec(5, Seq("a"), Seq("b"))))
+    }
+  }
+
+  test("create table using as select - with zero buckets") {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '${path.toString}')
+             |CLUSTERED BY (a) SORTED BY (b) INTO 0 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+      }.getMessage
+      assert(e.contains("Expected positive number of buckets, but got `0`"))
     }
   }
 }
