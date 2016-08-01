@@ -23,12 +23,16 @@ import java.util.List;
 
 import org.apache.spark.ml.regression.AFTSurvivalRegression;
 import org.apache.spark.ml.regression.AFTSurvivalRegressionModel;
-import org.apache.spark.mllib.linalg.*;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 // $example off$
 
 /**
