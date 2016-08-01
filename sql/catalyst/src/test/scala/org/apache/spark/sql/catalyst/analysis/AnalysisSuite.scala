@@ -221,9 +221,15 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers{
 
     // CreateStruct is a special case that we should not trim Alias for it.
     plan = testRelation.select(CreateStruct(Seq(a, (a + 1).as("a+1"))).as("col"))
-    checkAnalysis(plan, plan)
+    expected = testRelation.select(CreateNamedStruct(Seq(
+      Literal(a.name), a,
+      Literal("a+1"),(a + 1))).as("col"))
+    checkAnalysis(plan, expected)
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
-    checkAnalysis(plan, plan)
+    expected = testRelation.select(CreateNamedStructUnsafe(Seq(
+      Literal(a.name), a,
+      Literal("a+1"),(a + 1))).as("col"))
+    checkAnalysis(plan, expected)
   }
 
   test("Analysis may leave unnecassary aliases") {
