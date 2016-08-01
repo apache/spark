@@ -259,14 +259,7 @@ class SessionCatalog(
         identifier = tid,
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = tempTables(table).output.map { c =>
-          CatalogColumn(
-            name = c.name,
-            dataType = c.dataType.catalogString,
-            nullable = c.nullable,
-            comment = Option(c.name)
-          )
-        },
+        schema = tempTables(table).output.toStructType,
         properties = Map(),
         viewText = None)
     } else {

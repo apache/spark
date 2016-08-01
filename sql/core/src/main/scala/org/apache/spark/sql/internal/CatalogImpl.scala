@@ -157,8 +157,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val columns = tableMetadata.schema.map { c =>
       new Column(
         name = c.name,
-        description = c.comment.orNull,
-        dataType = c.dataType,
+        description = c.getComment().orNull,
+        dataType = c.dataType.catalogString,
         nullable = c.nullable,
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
