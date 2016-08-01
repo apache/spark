@@ -61,7 +61,7 @@ public class JavaWord2VecExample {
     Dataset<Row> result = model.transform(documentDF);
 
     for (Row row : result.collectAsList()) {
-      java.util.List text = row.getList(0);
+      List<String> text = row.getList(0);
       Vector vector = (Vector) row.get(1);
       System.out.println("Text: " + text + " => \nVector: " + vector + "\n");
     }

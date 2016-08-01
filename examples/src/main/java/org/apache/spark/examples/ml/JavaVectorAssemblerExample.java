@@ -55,7 +55,7 @@ public class JavaVectorAssemblerExample {
       .setOutputCol("features");
 
     Dataset<Row> output = assembler.transform(dataset);
-    System.out.println("Assembled columns 'hour','mobile', 'userFeatures' to vector column " +
+    System.out.println("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column " +
         "'features'");
     output.select("features", "clicked").show(false);
     // $example off$

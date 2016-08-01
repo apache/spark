@@ -31,7 +31,10 @@ import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 // $example off$
 
 // $example on:untyped_ops$
@@ -55,7 +58,7 @@ public class JavaTokenizerExample {
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.IntegerType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 

@@ -33,7 +33,7 @@ if __name__ == "__main__":
         (0, 0.1),
         (1, 0.8),
         (2, 0.2)
-    ], ["label", "feature"])
+    ], ["id", "feature"])
 
     binarizer = Binarizer(threshold=0.5, inputCol="feature", outputCol="binarized_feature")
 

@@ -33,9 +33,9 @@ object TfIdfExample {
 
     // $example on$
     val sentenceData = spark.createDataFrame(Seq(
-      (0, "Hi I heard about Spark"),
-      (0, "I wish Java could use case classes"),
-      (1, "Logistic regression models are neat")
+      (0.0, "Hi I heard about Spark"),
+      (0.0, "I wish Java could use case classes"),
+      (1.0, "Logistic regression models are neat")
     )).toDF("label", "sentence")
 
     val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
