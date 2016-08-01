@@ -510,7 +510,7 @@ test_that("spark.isotonicRegression", {
 
 test_that("spark.mvnormalmixEM", {
   # R code to reproduce the result.
-  #
+  # nolint start
   #' library(mvtnorm)
   #' set.seed(100)
   #' a <- rmvnorm(4, c(0, 0))
@@ -537,7 +537,7 @@ test_that("spark.mvnormalmixEM", {
   #  [,1]       [,2]
   #  [1,]  0.1641373 -0.1673806
   #  [2,] -0.1673806  0.7508951
-  #
+  # nolint end
   data <- list(list(-0.50219235, 0.1315312), list(-0.07891709, 0.8867848),
                list(0.11697127, 0.3186301), list(-0.58179068, 0.7145327),
                list(2.17474057, 3.6401379), list(3.08988614, 4.0962745),

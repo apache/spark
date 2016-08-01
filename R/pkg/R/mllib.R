@@ -804,6 +804,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @return \code{spark.mvnormalmixEM} returns a fitted multivariate gaussian mixture model
 #' @rdname spark.mvnormalmixEM
 #' @name spark.mvnormalmixEM
+#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
 #' @export
 #' @examples
 #' \dontrun{
@@ -830,7 +831,6 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.mvnormalmixEM since 2.1.0
-#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
 setMethod("spark.mvnormalmixEM", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 100, tol = 0.01) {
@@ -851,17 +851,16 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
           function(object, ...) {
             jobj <- object@jobj
             is.loaded <- callJMethod(jobj, "isLoaded")
-            lambda <- callJMethod(jobj, "lambda")
+            lambda <- unlist(callJMethod(jobj, "lambda"))
             muList <- callJMethod(jobj, "mu")
             sigmaList <- callJMethod(jobj, "sigma")
             k <- callJMethod(jobj, "k")
             dim <- callJMethod(jobj, "dim")
-            lambda <- as.vector(unlist(lambda))
             mu <- c()
             for (i in 1 : k) {
               start <- (i - 1) * dim + 1
               end <- i * dim
-              mu[[i]] <- as.vector(unlist(muList[start : end]))
+              mu[[i]] <- unlist(muList[start : end])
             }
             sigma <- c()
             for (i in 1 : k) {
