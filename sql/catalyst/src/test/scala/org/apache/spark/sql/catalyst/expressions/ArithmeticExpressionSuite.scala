@@ -194,56 +194,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("MaxOf basic") {
-    testNumericDataTypes { convert =>
-      val small = Literal(convert(1))
-      val large = Literal(convert(2))
-      checkEvaluation(MaxOf(small, large), convert(2))
-      checkEvaluation(MaxOf(large, small), convert(2))
-      checkEvaluation(MaxOf(Literal.create(null, small.dataType), large), convert(2))
-      checkEvaluation(MaxOf(large, Literal.create(null, small.dataType)), convert(2))
-    }
-    checkEvaluation(MaxOf(positiveShortLit, negativeShortLit), (positiveShort).toShort)
-    checkEvaluation(MaxOf(positiveIntLit, negativeIntLit), positiveInt)
-    checkEvaluation(MaxOf(positiveLongLit, negativeLongLit), positiveLong)
-
-    DataTypeTestUtils.ordered.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(MaxOf, tpe, tpe)
-    }
-  }
-
-  test("MaxOf for atomic type") {
-    checkEvaluation(MaxOf(true, false), true)
-    checkEvaluation(MaxOf("abc", "bcd"), "bcd")
-    checkEvaluation(MaxOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
-      Array(1.toByte, 3.toByte))
-  }
-
-  test("MinOf basic") {
-    testNumericDataTypes { convert =>
-      val small = Literal(convert(1))
-      val large = Literal(convert(2))
-      checkEvaluation(MinOf(small, large), convert(1))
-      checkEvaluation(MinOf(large, small), convert(1))
-      checkEvaluation(MinOf(Literal.create(null, small.dataType), large), convert(2))
-      checkEvaluation(MinOf(small, Literal.create(null, small.dataType)), convert(1))
-    }
-    checkEvaluation(MinOf(positiveShortLit, negativeShortLit), (negativeShort).toShort)
-    checkEvaluation(MinOf(positiveIntLit, negativeIntLit), negativeInt)
-    checkEvaluation(MinOf(positiveLongLit, negativeLongLit), negativeLong)
-
-    DataTypeTestUtils.ordered.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(MinOf, tpe, tpe)
-    }
-  }
-
-  test("MinOf for atomic type") {
-    checkEvaluation(MinOf(true, false), false)
-    checkEvaluation(MinOf("abc", "bcd"), "abc")
-    checkEvaluation(MinOf(Array(1.toByte, 2.toByte), Array(1.toByte, 3.toByte)),
-      Array(1.toByte, 2.toByte))
-  }
-
   test("pmod") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(7))
@@ -260,9 +210,5 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
-  }
-
-  DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-    checkConsistencyBetweenInterpretedAndCodegen(MinOf, tpe, tpe)
   }
 }

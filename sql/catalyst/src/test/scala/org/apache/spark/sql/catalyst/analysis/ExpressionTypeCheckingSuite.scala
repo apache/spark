@@ -78,8 +78,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(BitwiseAnd('intField, 'booleanField))
     assertErrorForDifferingTypes(BitwiseOr('intField, 'booleanField))
     assertErrorForDifferingTypes(BitwiseXor('intField, 'booleanField))
-    assertErrorForDifferingTypes(MaxOf('intField, 'booleanField))
-    assertErrorForDifferingTypes(MinOf('intField, 'booleanField))
 
     assertError(Add('booleanField, 'booleanField), "requires (numeric or calendarinterval) type")
     assertError(Subtract('booleanField, 'booleanField),
@@ -91,11 +89,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(BitwiseAnd('booleanField, 'booleanField), "requires integral type")
     assertError(BitwiseOr('booleanField, 'booleanField), "requires integral type")
     assertError(BitwiseXor('booleanField, 'booleanField), "requires integral type")
-
-    assertError(MaxOf('mapField, 'mapField),
-      s"requires ${TypeCollection.Ordered.simpleString} type")
-    assertError(MinOf('mapField, 'mapField),
-      s"requires ${TypeCollection.Ordered.simpleString} type")
   }
 
   test("check types for predicates") {
