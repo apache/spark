@@ -40,7 +40,7 @@ object MimaExcludes {
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
     ) ++  Seq(
-      // [SPARK-11171][SPARK-11237][SPARK-11241] Add PMML exportable to ML (TODO move to Spark 2.1 once master is updated to 2.1)
+      // [SPARK-11171][SPARK-11237][SPARK-11241] Add PMML exportable to ML
       ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.ml.util.MLWriter.saveImpl")
     )
   }
