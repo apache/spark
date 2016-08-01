@@ -27,6 +27,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -342,7 +343,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
   test("SPARK-15654 do not split non-splittable files") {
     // Check if a non-splittable file is not assigned into partitions
-    Seq("gz", "snappy", "lz4").map { suffix =>
+    Seq("gz", "snappy", "lz4").foreach { suffix =>
        val table = createTable(
         files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
       )
@@ -358,7 +359,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
 
     // Check if a splittable compressed file is assigned into multiple partitions
-    Seq("bz2").map { suffix =>
+    Seq("bz2").foreach { suffix =>
        val table = createTable(
          files = Seq(s"file1.${suffix}" -> 3, s"file2.${suffix}" -> 1, s"file3.${suffix}" -> 1)
       )
