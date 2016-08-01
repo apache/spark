@@ -318,6 +318,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'                 antitonic/decreasing (false)
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
 #'                     no effect otherwise
+#' @param weightCol The weight column name.
 #' @return \code{spark.isoreg} returns a fitted Isotonic Regression model
 #' @rdname spark.isoreg
 #' @aliases spark.isoreg,SparkDataFrame,formula-method
@@ -343,10 +344,15 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' }
 #' @note spark.isoreg since 2.1.0
 setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, isotonic = TRUE, featureIndex = 0) {
+          function(data, formula, isotonic = TRUE, featureIndex = 0, weightCol = NULL) {
             formula <- paste0(deparse(formula), collapse = "")
+
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
+
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
-            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex))
+            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex), weightCol)
             return(new("IsotonicRegressionModel", jobj = jobj))
           })
 

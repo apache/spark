@@ -54,7 +54,8 @@ private[r] object IsotonicRegressionWrapper
       data: DataFrame,
       formula: String,
       isotonic: Boolean,
-      featureIndex: Int): IsotonicRegressionWrapper = {
+      featureIndex: Int,
+      weightCol: String): IsotonicRegressionWrapper = {
 
     val rFormulaModel = new RFormula()
       .setFormula(formula)
@@ -72,6 +73,7 @@ private[r] object IsotonicRegressionWrapper
     val isotonicRegression = new IsotonicRegression()
       .setIsotonic(isotonic)
       .setFeatureIndex(featureIndex)
+      .setWeightCol(weightCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, isotonicRegression))

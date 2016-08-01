@@ -477,10 +477,14 @@ test_that("spark.survreg", {
 })
 
 test_that("spark.isotonicRegression", {
-  data <- list(list(7.0, 0.0), list(5.0, 1.0), list(3.0, 2.0),
-          list(5.0, 3.0), list(1.0, 4.0))
-  df <- createDataFrame(data, c("label", "feature"))
-  model <- spark.isoreg(df, label ~ feature, isotonic = FALSE)
+  label <- c(7.0, 5.0, 3.0, 5.0, 1.0)
+  feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)
+  weight <- c(1.0, 1.0, 1.0, 1.0, 1.0)
+  data <- as.data.frame(cbind(label, feature, weight))
+  df <- suppressWarnings(createDataFrame(data))
+
+  model <- spark.isoreg(df, label ~ feature, isotonic = FALSE,
+                        weightCol = "weight")
   # only allow one variable on the right hand side of the formula
   expect_error(model2 <- spark.isoreg(df, ~., isotonic = FALSE))
   result <- summary(model, df)
