@@ -47,7 +47,9 @@ compute <- function(mode, partition, serializer, deserializer, key,
     }
 
     if (mode == 2) {
-      output <- computeFunc(key, inputData)
+      outputKeys <- data.frame(key, stringsAsFactors = FALSE)
+      # prepend keys to R function's output
+      output <- cbind(outputKeys, computeFunc(key, inputData))
     } else {
       output <- computeFunc(inputData)
     }

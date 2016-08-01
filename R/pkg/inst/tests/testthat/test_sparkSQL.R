@@ -2289,20 +2289,20 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
     c("a", "b", "c", "d"))
   expected <- collect(df)
   df1 <- gapply(df, "a", function(key, x) { x }, schema(df))
-  actual <- collect(df1)
+  actual <- collect(df1)[-1]
   expect_identical(actual, expected)
 
   df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
-  expect_identical(df1Collect, expected)
+  expect_identical(df1Collect[-1], expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
-  schema <- structType(structField("a", "integer"), structField("e", "boolean"))
+  schema <- structType(structField("e", "boolean"))
   df2 <- gapply(
     df,
     c(df$"a", df$"c"),
     function(key, x) {
-      y <- data.frame(key[1], sum(x$b) > 2)
+      y <- data.frame(sum(x$b) > 2)
     },
     schema)
   actual <- collect(df2)$e
@@ -2322,13 +2322,12 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 
   # Computes the arithmetic mean of the second column by grouping
   # on the first and third columns. Output the groupping value and the average.
-  schema <-  structType(structField("a", "integer"), structField("c", "string"),
-               structField("avg", "double"))
+  schema <-  structType(structField("avg", "double"))
   df3 <- gapply(
     df,
     c("a", "c"),
     function(key, x) {
-      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+      y <- data.frame(mean(x$b), stringsAsFactors = FALSE)
     },
     schema)
   actual <- collect(df3)
@@ -2353,13 +2352,13 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   expect_identical(actual$avg, expected$avg)
 
   irisDF <- suppressWarnings(createDataFrame (iris))
-  schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
+  schema <-  structType(structField("Avg", "double"))
   # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
   df4 <- gapply(
     cols = "Sepal_Length",
     irisDF,
     function(key, x) {
-      y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
+      y <- data.frame(mean(x$Sepal_Width), stringsAsFactors = FALSE)
     },
     schema)
   actual <- collect(df4)

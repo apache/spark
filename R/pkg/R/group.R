@@ -231,6 +231,13 @@ setMethod("gapplyCollect",
             # which is a serialized data.frame corresponds to one group of the
             # SparkDataFrame.
             ldfs <- lapply(content, function(x) { unserialize(x[[1]]) })
+            ldfcolNames <- if (length(ldfs) > 0) colnames(ldfs[[1]]) else NULL
+
+            # set consistent column names before calling rbind, otherwise rbind fails
+            ldfs <- lapply(ldfs, function(df) {
+              colnames(df) <- ldfcolNames
+              df
+            })
             ldf <- do.call(rbind, ldfs)
             row.names(ldf) <- NULL
             ldf

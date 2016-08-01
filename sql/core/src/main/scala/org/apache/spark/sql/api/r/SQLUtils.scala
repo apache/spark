@@ -199,8 +199,7 @@ private[sql] object SQLUtils extends Logging {
       broadcastVars: Array[Object],
       schema: StructType): DataFrame = {
     val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
-    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
-    gd.flatMapGroupsInR(func, packageNames, bv, realSchema)
+    gd.flatMapGroupsInR(func, packageNames, bv, schema)
   }
 
 
