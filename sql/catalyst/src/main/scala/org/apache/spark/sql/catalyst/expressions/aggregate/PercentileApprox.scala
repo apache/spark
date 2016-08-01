@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
  * large numbers of rows where the regular percentile() UDAF might run out of memory.
  *
  * The input is a single double value or an array of double values representing the percentiles
- * requested. The output, corresponding to the input, is either an single double value or an
+ * requested. The output, corresponding to the input, is either a single double value or an
  * array of doubles that are the percentile values.
  */
 @ExpressionDescription(
@@ -177,26 +177,32 @@ object PercentileApprox {
   private[sql] def bToRelativeError(B: Int): Double = Math.max(1.0d / B, 0.001)
 
   /**
-   * Validates the percentile(s) expression and extract the percentile(s).
+   * Validates the percentile(s) expression and extracts the percentile(s).
    * Returns the extracted percentile(s) and an indicator of whether it's an array.
    */
   private def validatePercentilesLiteral(exp: Expression): (Seq[Double], Boolean) = {
     def withinRange(v: Double): Boolean = 0.0 <= v && v <= 1.0
-    exp match {
-      case Literal(f: Float, FloatType) if withinRange(f) => (Seq(f.toDouble), false)
-      case Literal(d: Double, DoubleType) if withinRange(d) => (Seq(d), false)
-      case Literal(dec: Decimal, _) if withinRange(dec.toDouble) => (Seq(dec.toDouble), false)
+    exp.eval() match {
+      case f: Float if withinRange(f) => (Seq(f.toDouble), false)
+      case d: Double if withinRange(d) => (Seq(d), false)
+      case dec: Decimal if withinRange(dec.toDouble) => (Seq(dec.toDouble), false)
 
-      case CreateArray(children: Seq[Expression]) if (children.length > 0) =>
-        (children.map(_ match {
-          case Literal(f: Float, FloatType) if withinRange(f) => f.toDouble
-          case Literal(d: Double, DoubleType) if withinRange(d) => d
-          case Literal(dec: Decimal, _) if withinRange(dec.toDouble) => dec.toDouble
-          case _ =>
-            throw new AnalysisException(
-              "The second argument should be a double literal or an array of doubles, and should " +
-                "be within range [0.0, 1.0]")
-        }), true)
+      case arrayData: GenericArrayData if arrayData.numElements() > 0 => {
+        val ret =
+          // arrayData.array.getClass.getComponentType() doesn't help here because it always gives
+          // us java.lang.Object
+          arrayData.array(0) match {
+            case _: Float => arrayData.toFloatArray().map(_.toDouble)
+            case _: Double => arrayData.toDoubleArray()
+            case _: Decimal => arrayData.array.map(_.asInstanceOf[Decimal].toDouble)
+          }
+        if (!ret.forall(withinRange)) {
+          throw new AnalysisException(
+            "The second argument should be a double literal or an array of doubles, and should " +
+              "be within range [0.0, 1.0]")
+        }
+        (ret, true)
+      }
 
       case _ =>
         throw new AnalysisException(
@@ -205,7 +211,7 @@ object PercentileApprox {
     }
   }
 
-  /** Validates the B expression and extract its value. */
+  /** Validates the B expression and extracts its value. */
   private def validateBLiteral(exp: Expression): Int = exp match {
     case Literal(i: Int, IntegerType) if i > 0 => i
 
