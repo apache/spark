@@ -2065,18 +2065,28 @@ object EliminateUnions extends Rule[LogicalPlan] {
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
-    var stop = false
     e.transformDown {
-      // CreateStruct is a special case, we need to retain its top level Aliases as they decide the
-      // name of StructField. We also need to stop transform down this expression, or the Aliases
-      // under CreateStruct will be mistakenly trimmed.
-      case c: CreateStruct if !stop =>
-        stop = true
-        c.copy(children = c.children.map(trimNonTopLevelAliases))
-      case c: CreateStructUnsafe if !stop =>
-        stop = true
-        c.copy(children = c.children.map(trimNonTopLevelAliases))
-      case Alias(child, _) if !stop => child
+      /**
+        *  [[CreateStruct]] is a special case as it uses its top level Aliases to decide the
+        *  name of StructField.
+        *  we tackle this by replacing [[CreateStruct]] with [[CreateNamedStruct]]
+        *  which encodes the field names as child literals.
+        */
+      case c @ CreateStruct(children) =>
+        CreateNamedStruct( mkNamedStructArgs(c.dataType, children))
+      case c @ CreateStructUnsafe(children) =>
+        CreateNamedStructUnsafe( mkNamedStructArgs(c.dataType, children))
+      case Alias(child, _) => child
+    }
+  }
+
+  private def mkNamedStructArgs( structType : StructType, attributeExpressions: Seq[Expression]) = {
+    for {
+      (name, expression) <- structType.fieldNames.zip(attributeExpressions)
+      nameLiteral = Literal(name)
+      newChild <- Seq(nameLiteral, expression)
+    } yield{
+      newChild
     }
   }
 
@@ -2109,15 +2119,12 @@ object CleanupAliases extends Rule[LogicalPlan] {
     case a: AppendColumns => a
 
     case other =>
-      var stop = false
       other transformExpressionsDown {
-        case c: CreateStruct if !stop =>
-          stop = true
-          c.copy(children = c.children.map(trimNonTopLevelAliases))
-        case c: CreateStructUnsafe if !stop =>
-          stop = true
-          c.copy(children = c.children.map(trimNonTopLevelAliases))
-        case Alias(child, _) if !stop => child
+        case c @ CreateStruct(children) =>
+          CreateNamedStruct( mkNamedStructArgs(c.dataType, children))
+        case c @ CreateStructUnsafe(children) =>
+          CreateNamedStructUnsafe( mkNamedStructArgs(c.dataType, children))
+        case Alias(child, _) => child
       }
   }
 }
