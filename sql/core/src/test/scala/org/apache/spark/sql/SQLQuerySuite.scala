@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.math.MathContext
 import java.sql.Timestamp
 
-import org.apache.spark.AccumulatorSuite
+import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -39,11 +39,23 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   test("having clause") {
-    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
-      .createOrReplaceTempView("hav")
-    checkAnswer(
-      sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
-      Row("one", 6) :: Row("three", 3) :: Nil)
+    withTempView("hav") {
+      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
+        .createOrReplaceTempView("hav")
+      checkAnswer(
+        sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
+        Row("one", 6) :: Row("three", 3) :: Nil)
+    }
+  }
+
+  test("having condition contains grouping column") {
+    withTempView("hav") {
+      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
+        .createOrReplaceTempView("hav")
+      checkAnswer(
+        sql("SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2"),
+        Row(1) :: Nil)
+    }
   }
 
   test("SPARK-8010: promote numeric to string") {
@@ -1325,6 +1337,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
     checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
+  }
+
+  testQuietly(
+    "SPARK-16748: SparkExceptions during planning should not wrapped in TreeNodeException") {
+    intercept[SparkException] {
+      val df = spark.range(0, 5).map(x => (1 / x).toString).toDF("a").orderBy("a")
+      df.queryExecution.toRdd // force physical planning, but not execution of the plan
+    }
   }
 
   test("Test to check we can use Long.MinValue") {
