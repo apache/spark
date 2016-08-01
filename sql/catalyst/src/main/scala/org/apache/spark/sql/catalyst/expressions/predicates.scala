@@ -69,8 +69,11 @@ trait PredicateHelper {
   protected def replaceAlias(
       condition: Expression,
       aliases: AttributeMap[Expression]): Expression = {
-    condition.transform {
-      case a: Attribute => aliases.getOrElse(a, a)
+    // Use transformUp to prevent infinite recursion when the replacement expression
+    // redefines the same ExprId,
+    condition.transformUp {
+      case a: Attribute =>
+        aliases.getOrElse(a, a)
     }
   }
 
@@ -129,6 +132,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
   }
 
   override def children: Seq[Expression] = value +: list
+  lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -390,13 +394,13 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 }
 
 
-private[sql] object BinaryComparison {
+object BinaryComparison {
   def unapply(e: BinaryComparison): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
 
 /** An extractor that matches both standard 3VL equality and null-safe equality. */
-private[sql] object Equality {
+object Equality {
   def unapply(e: BinaryComparison): Option[(Expression, Expression)] = e match {
     case EqualTo(l, r) => Some((l, r))
     case EqualNullSafe(l, r) => Some((l, r))

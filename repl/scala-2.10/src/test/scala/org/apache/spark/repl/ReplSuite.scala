@@ -107,13 +107,13 @@ class ReplSuite extends SparkFunSuite {
   test("simple foreach with accumulator") {
     val output = runInterpreter("local",
       """
-        |val accum = sc.accumulator(0)
-        |sc.parallelize(1 to 10).foreach(x => accum += x)
+        |val accum = sc.longAccumulator
+        |sc.parallelize(1 to 10).foreach(x => accum.add(x))
         |accum.value
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res1: Int = 55", output)
+    assertContains("res1: Long = 55", output)
   }
 
   test("external vars") {
@@ -233,7 +233,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
+    val output = runInterpreter("local",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -305,7 +305,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
-    val output = runInterpreter("local",
+    val output = runInterpreter("local-cluster[1,1,1024]",
     """
       |class TestClass() { def testMethod = 3 }
       |val t = new TestClass

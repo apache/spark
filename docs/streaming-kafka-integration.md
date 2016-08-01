@@ -111,7 +111,7 @@ Next, we discuss how to use this approach in your streaming application.
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
 
-		JavaPairReceiverInputDStream<String, String> directKafkaStream = 
+		JavaPairInputDStream<String, String> directKafkaStream =
 			KafkaUtils.createDirectStream(streamingContext,
 				[key class], [value class], [key decoder class], [value decoder class],
 				[map of Kafka parameters], [set of topics to consume]);

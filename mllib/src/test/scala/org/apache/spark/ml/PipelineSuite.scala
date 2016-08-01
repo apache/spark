@@ -27,9 +27,9 @@ import org.scalatest.mock.MockitoSugar.mock
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
 import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamPair}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType

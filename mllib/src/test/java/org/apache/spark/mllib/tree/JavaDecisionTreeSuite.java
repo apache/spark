@@ -17,17 +17,14 @@
 
 package org.apache.spark.mllib.tree;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -35,27 +32,8 @@ import org.apache.spark.mllib.tree.configuration.Algo;
 import org.apache.spark.mllib.tree.configuration.Strategy;
 import org.apache.spark.mllib.tree.impurity.Gini;
 import org.apache.spark.mllib.tree.model.DecisionTreeModel;
-import org.apache.spark.sql.SparkSession;
 
-
-public class JavaDecisionTreeSuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaDecisionTreeSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaDecisionTreeSuite extends SharedSparkSession {
 
   int validatePrediction(List<LabeledPoint> validationData, DecisionTreeModel model) {
     int numCorrect = 0;

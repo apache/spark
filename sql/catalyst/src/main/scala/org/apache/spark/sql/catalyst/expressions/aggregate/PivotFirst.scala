@@ -51,7 +51,7 @@ object PivotFirst {
 }
 
 /**
- * PivotFirst is a aggregate function used in the second phase of a two phase pivot to do the
+ * PivotFirst is an aggregate function used in the second phase of a two phase pivot to do the
  * required rearrangement of values into pivoted form.
  *
  * For example on an input of

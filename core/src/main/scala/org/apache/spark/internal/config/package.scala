@@ -17,6 +17,8 @@
 
 package org.apache.spark.internal
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 
@@ -80,6 +82,11 @@ package object config {
     .doc("Name of the Kerberos principal.")
     .stringConf.createOptional
 
+  private[spark] val TOKEN_RENEWAL_INTERVAL = ConfigBuilder("spark.yarn.token.renewal.interval")
+    .internal()
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createOptional
+
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .intConf
     .createOptional
@@ -96,4 +103,14 @@ package object config {
     .stringConf
     .checkValues(Set("hive", "in-memory"))
     .createWithDefault("in-memory")
+
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_SIZE =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
+      .intConf
+      .createWithDefault(10000)
+
+  // This property sets the root namespace for metrics reporting
+  private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
+    .stringConf
+    .createOptional
 }

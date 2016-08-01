@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{MathContext, RoundingMode}
+import java.lang.{Long => JLong}
+import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -129,6 +130,21 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
+   */
+  def set(bigintval: BigInteger): Decimal = {
+    // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
+    require(
+      bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 && bigintval.compareTo(LONG_MIN_BIG_INT) >= 0,
+      s"BigInteger $bigintval too large for decimal")
+    this.decimalVal = null
+    this.longVal = bigintval.longValue()
+    this._precision = DecimalType.MAX_PRECISION
+    this._scale = 0
+    this
+  }
+
+  /**
    * Set this Decimal to the given Decimal value.
    */
   def set(decimal: Decimal): Decimal = {
@@ -154,6 +170,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       java.math.BigDecimal.valueOf(longVal, _scale)
     }
   }
+
+  def toScalaBigInt: BigInt = BigInt(toLong)
+
+  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -302,7 +322,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  // HiveTypeCoercion will take care of the precision, scale of result
+  // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
@@ -346,7 +366,7 @@ object Decimal {
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
-  /** Maximum number of decimal digits a Int can represent */
+  /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */
@@ -361,6 +381,9 @@ object Decimal {
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
 
+  private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
+  private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
+
   def apply(value: Double): Decimal = new Decimal().set(value)
 
   def apply(value: Long): Decimal = new Decimal().set(value)
@@ -370,6 +393,10 @@ object Decimal {
   def apply(value: BigDecimal): Decimal = new Decimal().set(value)
 
   def apply(value: java.math.BigDecimal): Decimal = new Decimal().set(value)
+
+  def apply(value: java.math.BigInteger): Decimal = new Decimal().set(value)
+
+  def apply(value: scala.math.BigInt): Decimal = new Decimal().set(value.bigInteger)
 
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
@@ -387,6 +414,8 @@ object Decimal {
     value match {
       case j: java.math.BigDecimal => apply(j)
       case d: BigDecimal => apply(d)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
     }
   }

@@ -19,8 +19,8 @@
 package org.apache.spark.examples.ml
 
 // $example on$
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.regression.AFTSurvivalRegression
-import org.apache.spark.mllib.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 

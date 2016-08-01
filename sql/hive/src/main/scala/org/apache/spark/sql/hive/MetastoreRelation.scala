@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
+
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -30,16 +33,15 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.types.StructField
 
 
 private[hive] case class MetastoreRelation(
     databaseName: String,
-    tableName: String,
-    alias: Option[String])
+    tableName: String)
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
      @transient private val sparkSession: SparkSession)
@@ -49,19 +51,18 @@ private[hive] case class MetastoreRelation(
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
         tableName == relation.tableName &&
-        alias == relation.alias &&
         output == relation.output
     case _ => false
   }
 
   override def hashCode(): Int = {
-    Objects.hashCode(databaseName, tableName, alias, output)
+    Objects.hashCode(databaseName, tableName, output)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
-  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
-    new FieldSchema(c.name, c.dataType, c.comment.orNull)
+  private def toHiveColumn(c: StructField): FieldSchema = {
+    new FieldSchema(c.name, c.dataType.catalogString, c.getComment.orNull)
   }
 
   // TODO: merge this with HiveClientImpl#toHiveTable
@@ -102,7 +103,7 @@ private[hive] case class MetastoreRelation(
     sd.setSerdeInfo(serdeInfo)
 
     val serdeParameters = new java.util.HashMap[String, String]()
-    catalogTable.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+    catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
     serdeInfo.setParameters(serdeParameters)
 
     new HiveTable(tTable)
@@ -114,17 +115,31 @@ private[hive] case class MetastoreRelation(
       val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
-      // relatively cheap if parameters for the table are populated into the metastore.  An
-      // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
-      // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
-      // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
+      // relatively cheap if parameters for the table are populated into the metastore.
+      // Besides `totalSize`, there are also `numFiles`, `numRows`, `rawDataSize` keys
+      // (see StatsSetupConst in Hive) that we can look at in the future.
       BigInt(
         // When table is external,`totalSize` is always zero, which will influence join strategy
         // so when `totalSize` is zero, use `rawDataSize` instead
-        // if the size is still less than zero, we use default size
-        Option(totalSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-            .getOrElse(sparkSession.sessionState.conf.defaultSizeInBytes)))
+        // if the size is still less than zero, we try to get the file size from HDFS.
+        // given this is only needed for optimization, if the HDFS call fails we return the default.
+        if (totalSize != null && totalSize.toLong > 0L) {
+          totalSize.toLong
+        } else if (rawDataSize != null && rawDataSize.toLong > 0) {
+          rawDataSize.toLong
+        } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+          try {
+            val hadoopConf = sparkSession.sessionState.newHadoopConf()
+            val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
+            fs.getContentSummary(hiveQlTable.getPath).getLength
+          } catch {
+            case e: IOException =>
+              logWarning("Failed to get table size from hdfs.", e)
+              sparkSession.sessionState.conf.defaultSizeInBytes
+          }
+        } else {
+          sparkSession.sessionState.conf.defaultSizeInBytes
+        })
     }
   )
 
@@ -143,7 +158,7 @@ private[hive] case class MetastoreRelation(
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
-      tPartition.setValues(p.spec.values.toList.asJava)
+      tPartition.setValues(partitionKeys.map(a => p.spec(a.name)).asJava)
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
@@ -158,8 +173,8 @@ private[hive] case class MetastoreRelation(
       p.storage.serde.foreach(serdeInfo.setSerializationLib)
 
       val serdeParameters = new java.util.HashMap[String, String]()
-      catalogTable.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-      p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      catalogTable.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      p.storage.properties.foreach { case (k, v) => serdeParameters.put(k, v) }
       serdeInfo.setParameters(serdeParameters)
 
       new Partition(hiveQlTable, tPartition)
@@ -168,7 +183,7 @@ private[hive] case class MetastoreRelation(
 
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {
-    plan match {
+    plan.canonicalized match {
       case mr: MetastoreRelation =>
         mr.databaseName == databaseName && mr.tableName == tableName
       case _ => false
@@ -185,17 +200,17 @@ private[hive] case class MetastoreRelation(
     hiveQlTable.getMetadata
   )
 
-  implicit class SchemaAttribute(f: CatalogColumn) {
+  implicit class SchemaAttribute(f: StructField) {
     def toAttribute: AttributeReference = AttributeReference(
       f.name,
-      CatalystSqlParser.parseDataType(f.dataType),
+      f.dataType,
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
-    )(qualifier = Some(alias.getOrElse(tableName)))
+    )(qualifier = Some(tableName))
   }
 
   /** PartitionKey attributes */
-  val partitionKeys = catalogTable.partitionColumns.map(_.toAttribute)
+  val partitionKeys = catalogTable.partitionSchema.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
   // TODO: just make this hold the schema itself, not just non-partition columns
@@ -226,6 +241,6 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(catalogTable, client, sparkSession)
+    MetastoreRelation(databaseName, tableName)(catalogTable, client, sparkSession)
   }
 }

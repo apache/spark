@@ -34,7 +34,7 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
 
 // TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
- * An RDD that executes an SQL query on a JDBC connection and reads results.
+ * An RDD that executes a SQL query on a JDBC connection and reads results.
  * For usage example, see test case JdbcRDDSuite.
  *
  * @param getConnection a function that returns an open Connection.
@@ -138,7 +138,7 @@ object JdbcRDD {
   }
 
   /**
-   * Create an RDD that executes an SQL query on a JDBC connection and reads results.
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results.
    * For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
    *
    * @param connectionFactory a factory that returns an open Connection.
@@ -178,7 +178,7 @@ object JdbcRDD {
   }
 
   /**
-   * Create an RDD that executes an SQL query on a JDBC connection and reads results. Each row is
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results. Each row is
    * converted into a `Object` array. For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
    *
    * @param connectionFactory a factory that returns an open Connection.

@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
 
-/** An trait that represents the type of a resourced needed by a function. */
+/** A trait that represents the type of a resourced needed by a function. */
 abstract class FunctionResourceType(val resourceType: String)
 
 object JarResource extends FunctionResourceType("jar")
 
 object FileResource extends FunctionResourceType("file")
 
-// We do not allow users to specify a archive because it is YARN specific.
+// We do not allow users to specify an archive because it is YARN specific.
 // When loading resources, we will throw an exception and ask users to
 // use --archive with spark submit.
 object ArchiveResource extends FunctionResourceType("archive")

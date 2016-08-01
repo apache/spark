@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
@@ -142,9 +142,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     // To generate the predicates we will follow this algorithm.
     // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
-    // as necessary. For each of both attributes, if there is a IsNotNull predicate we will generate
-    // that check *before* the predicate. After all of these predicates, we will generate the
-    // remaining IsNotNull checks that were not part of other predicates.
+    // as necessary. For each of both attributes, if there is an IsNotNull predicate we will
+    // generate that check *before* the predicate. After all of these predicates, we will generate
+    // the remaining IsNotNull checks that were not part of other predicates.
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
@@ -305,21 +305,17 @@ case class SampleExec(
 
 
 /**
- * Physical plan for range (generating a range of 64 bit numbers.
- *
- * @param start first number in the range, inclusive.
- * @param step size of the step increment.
- * @param numSlices number of partitions.
- * @param numElements total number of elements to output.
- * @param output output attributes.
+ * Physical plan for range (generating a range of 64 bit numbers).
  */
-case class RangeExec(
-    start: Long,
-    step: Long,
-    numSlices: Int,
-    numElements: BigInt,
-    output: Seq[Attribute])
+case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
+
+  def start: Long = range.start
+  def step: Long = range.step
+  def numSlices: Int = range.numSlices
+  def numElements: BigInt = range.numElements
+
+  override val output: Seq[Attribute] = range.output
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -458,6 +454,8 @@ case class RangeExec(
         }
       }
   }
+
+  override def simpleString: String = range.simpleString
 }
 
 /**

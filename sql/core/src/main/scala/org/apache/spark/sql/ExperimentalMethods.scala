@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * regarding binary compatibility and source compatibility of methods here.
  *
  * {{{
- *   sqlContext.experimental.extraStrategies += ...
+ *   spark.experimental.extraStrategies += ...
  * }}}
  *
  * @since 1.3.0

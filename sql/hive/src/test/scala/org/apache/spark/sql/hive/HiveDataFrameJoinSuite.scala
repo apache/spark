@@ -21,7 +21,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveDataFrameJoinSuite extends QueryTest with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   // We should move this into SQL package if we make case sensitivity configurable in SQL.
   test("join - self join auto resolve ambiguity with case insensitivity") {

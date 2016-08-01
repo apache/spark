@@ -328,10 +328,10 @@ class HasSeed(Params):
 
 class HasTol(Params):
     """
-    Mixin for param tol: the convergence tolerance for iterative algorithms.
+    Mixin for param tol: the convergence tolerance for iterative algorithms (>= 0).
     """
 
-    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", typeConverter=TypeConverters.toFloat)
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms (>= 0).", typeConverter=TypeConverters.toFloat)
 
     def __init__(self):
         super(HasTol, self).__init__()
@@ -351,10 +351,10 @@ class HasTol(Params):
 
 class HasStepSize(Params):
     """
-    Mixin for param stepSize: Step size to be used for each iteration of optimization.
+    Mixin for param stepSize: Step size to be used for each iteration of optimization (>= 0).
     """
 
-    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization.", typeConverter=TypeConverters.toFloat)
+    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization (>= 0).", typeConverter=TypeConverters.toFloat)
 
     def __init__(self):
         super(HasStepSize, self).__init__()
@@ -374,10 +374,10 @@ class HasStepSize(Params):
 
 class HasHandleInvalid(Params):
     """
-    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
     """
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", typeConverter=TypeConverters.toString)
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()

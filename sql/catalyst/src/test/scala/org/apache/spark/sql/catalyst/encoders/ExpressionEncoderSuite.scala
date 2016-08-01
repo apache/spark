@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
@@ -26,11 +27,13 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -85,6 +88,25 @@ class JavaSerializable(val value: Int) extends Serializable {
   }
 }
 
+/** For testing UDT for a case class */
+@SQLUserDefinedType(udt = classOf[UDTForCaseClass])
+case class UDTCaseClass(uri: java.net.URI)
+
+class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
+
+  override def sqlType: DataType = StringType
+
+  override def serialize(obj: UDTCaseClass): UTF8String = {
+    UTF8String.fromString(obj.uri.toString)
+  }
+
+  override def userClass: Class[UDTCaseClass] = classOf[UDTCaseClass]
+
+  override def deserialize(datum: Any): UDTCaseClass = datum match {
+    case uri: UTF8String => UDTCaseClass(new java.net.URI(uri.toString))
+  }
+}
+
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
@@ -109,12 +131,14 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
-
+  encodeDecodeTest(BigInt("23134123123"), "scala biginteger")
+  encodeDecodeTest(new BigInteger("23134123123"), "java BigInteger")
   encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
   encodeDecodeTest(Timestamp.valueOf("2016-01-29 10:00:00"), "timestamp")
+  encodeDecodeTest(Array(Timestamp.valueOf("2016-01-29 10:00:00")), "array of timestamp")
   encodeDecodeTest(Array[Byte](13, 21, -23), "binary")
 
   encodeDecodeTest(Seq(31, -123, 4), "seq of int")
@@ -143,6 +167,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
   encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")
+
+  encodeDecodeTest(List(1, 2), "list of int")
+  encodeDecodeTest(List("a", null), "list with String and null")
+
+  encodeDecodeTest(
+    UDTCaseClass(new java.net.URI("http://spark.apache.org/")), "udt with case class")
 
   // Kryo encoders
   encodeDecodeTest("hello", "kryo string")(encoderFor(Encoders.kryo[String]))
@@ -298,6 +328,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     }
   }
 
+  test("null check for map key") {
+    val encoder = ExpressionEncoder[Map[String, Int]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
@@ -305,7 +341,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.defaultBinding
+      val boundEncoder = encoder.resolveAndBind()
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
@@ -321,12 +357,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       }
 
       // Test the correct resolution of serialization / deserialization.
-      val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
-      val inputPlan = LocalRelation(attr)
-      val plan =
-        Project(Alias(encoder.deserializer, "obj")() :: Nil,
-          Project(encoder.namedExpressions,
-            inputPlan))
+      val attr = AttributeReference("obj", encoder.deserializer.dataType)()
+      val plan = LocalRelation(attr).serialize[T].deserialize[T]
       assertAnalysisSuccess(plan)
 
       val isCorrect = (input, convertedBack) match {
@@ -336,7 +368,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
-        case (left: Comparable[Any], right: Comparable[Any]) => left.compareTo(right) == 0
+        case (left: Comparable[_], right: Comparable[_]) =>
+          left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
         case _ => input == convertedBack
       }
 

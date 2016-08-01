@@ -21,7 +21,7 @@ import java.text.NumberFormat
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.{AccumulatorV2, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
@@ -56,15 +56,13 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, true, true, Some(SQLMetrics.ACCUM_IDENTIFIER))
+    new AccumulableInfo(
+      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 }
 
 
 private[sql] object SQLMetrics {
-  // Identifier for distinguishing SQL metrics from other accumulators
-  private[sql] val ACCUM_IDENTIFIER = "sql"
-
   private[sql] val SUM_METRIC = "sum"
   private[sql] val SIZE_METRIC = "size"
   private[sql] val TIMING_METRIC = "timing"
@@ -103,7 +101,9 @@ private[sql] object SQLMetrics {
    */
   def stringValue(metricsType: String, values: Seq[Long]): String = {
     if (metricsType == SUM_METRIC) {
-      NumberFormat.getInstance().format(values.sum)
+      val numberFormat = NumberFormat.getInstance()
+      numberFormat.setGroupingUsed(false)
+      numberFormat.format(values.sum)
     } else {
       val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
         Utils.bytesToString
@@ -115,7 +115,7 @@ private[sql] object SQLMetrics {
 
       val validValues = values.filter(_ >= 0)
       val Seq(sum, min, med, max) = {
-        val metric = if (validValues.length == 0) {
+        val metric = if (validValues.isEmpty) {
           Seq.fill(4)(0L)
         } else {
           val sorted = validValues.sorted

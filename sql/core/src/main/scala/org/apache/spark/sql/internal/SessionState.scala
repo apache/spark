@@ -24,13 +24,14 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, _}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.AnalyzeTable
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.execution.command.AnalyzeTableCommand
+import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreprocessTableInsertion, ResolveDataSource}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -92,7 +93,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * Internal catalog for managing table and database states.
    */
   lazy val catalog = new SessionCatalog(
-    sparkSession.externalCatalog,
+    sparkSession.sharedState.externalCatalog,
     functionResourceLoader,
     functionRegistry,
     conf,
@@ -100,6 +101,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   /**
    * Interface exposed to the user for registering user-defined functions.
+   * Note that the user-defined functions must be deterministic.
    */
   lazy val udf: UDFRegistration = new UDFRegistration(functionRegistry)
 
@@ -109,9 +111,9 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        PreInsertCastAndRename ::
+        PreprocessTableInsertion(conf) ::
         new FindDataSourceTable(sparkSession) ::
-        DataSourceAnalysis ::
+        DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
@@ -141,10 +143,10 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
-   * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
+   * Interface to start and stop [[StreamingQuery]]s.
    */
-  lazy val continuousQueryManager: ContinuousQueryManager = {
-    new ContinuousQueryManager(sparkSession)
+  lazy val streamingQueryManager: StreamingQueryManager = {
+    new StreamingQueryManager(sparkSession)
   }
 
   private val jarClassLoader: NonClosableMutableURLClassLoader =
@@ -164,10 +166,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
-
-  def invalidateTable(tableName: String): Unit = {
-    catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
   }
 
   def addJar(path: String): Unit = {
@@ -193,6 +191,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * in the external catalog.
    */
   def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(sparkSession)
+    AnalyzeTableCommand(tableName).run(sparkSession)
   }
 }

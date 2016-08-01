@@ -117,6 +117,7 @@ object DecimalType extends AbstractDataType {
   private[sql] val LongDecimal = DecimalType(20, 0)
   private[sql] val FloatDecimal = DecimalType(14, 7)
   private[sql] val DoubleDecimal = DecimalType(30, 15)
+  private[sql] val BigIntDecimal = DecimalType(38, 0)
 
   private[sql] def forType(dataType: DataType): DecimalType = dataType match {
     case ByteType => ByteDecimal
@@ -151,7 +152,7 @@ object DecimalType extends AbstractDataType {
   }
 
   /**
-   * Returns if dt is a DecimalType that fits inside a int
+   * Returns if dt is a DecimalType that fits inside an int
    */
   def is32BitDecimalType(dt: DataType): Boolean = {
     dt match {

@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.linalg;
 
-import java.io.Serializable;
 import java.util.Random;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -25,7 +24,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-public class JavaMatricesSuite implements Serializable {
+public class JavaMatricesSuite {
 
   @Test
   public void randMatrixConstruction() {
