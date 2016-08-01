@@ -430,8 +430,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /**
-   * Get the receivers from the ReceiverInputDStreams, distributes them to the
-   * worker nodes as a parallel collection, and runs them.
+   * Get the receivers from the ReceiverInputDStreams, distribute them to the
+   * worker nodes as a parallel collection, and run them.
    */
   private def launchReceivers(): Unit = {
     val receivers = receiverInputStreams.map { nis =>
