@@ -1420,13 +1420,12 @@ setMethod("dapplyCollect",
 #'
 #' Here our output contains three columns, the key which is a combination of two
 #' columns with data types integer and string and the mean which is a double.
-#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
-#'   structField("avg", "double"))
+#' schema <-  structType(structField("avg", "double"))
 #' result <- gapply(
 #'   df,
 #'   c("a", "c"),
 #'   function(key, x) {
-#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#'     y <- data.frame(mean(x$b), stringsAsFactors = FALSE)
 #' }, schema)
 #'
 #' We can also group the data and afterwards call gapply on GroupedData.
@@ -1435,7 +1434,7 @@ setMethod("dapplyCollect",
 #' result <- gapply(
 #'   gdf,
 #'   function(key, x) {
-#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
+#'     y <- data.frame(mean(x$b), stringsAsFactors = FALSE)
 #' }, schema)
 #' collect(result)
 #'
@@ -1465,10 +1464,10 @@ setMethod("dapplyCollect",
 #'
 #' Result
 #' ---------
-#' Model  (Intercept)  Sepal_Width  Petal_Length  Petal_Width
-#' 1        0.699883    0.3303370    0.9455356    -0.1697527
-#' 2        1.895540    0.3868576    0.9083370    -0.6792238
-#' 3        2.351890    0.6548350    0.2375602     0.2521257
+#' Model  Species     (Intercept)  Sepal_Width  Petal_Length  Petal_Width
+#' 1      virginica    0.699883    0.3303370    0.9455356    -0.1697527
+#' 2      versicolor   1.895540    0.3868576    0.9083370    -0.6792238
+#' 3      setosa       2.351890    0.6548350    0.2375602     0.2521257
 #'
 #'}
 #' @note gapply(SparkDataFrame) since 2.0.0
@@ -1512,8 +1511,6 @@ setMethod("gapply",
 #'   c("a", "c"),
 #'   function(key, x) {
 #'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
-#'     colnames(y) <- c("key_a", "key_c", "mean_b")
-#'     y
 #'   })
 #'
 #' We can also group the data and afterwards call gapply on GroupedData.
@@ -1529,7 +1526,7 @@ setMethod("gapply",
 #'
 #' Result
 #' ------
-#' key_a key_c mean_b
+#' X3L X.3. mean.x.b.
 #' 3 3 3.0
 #' 1 1 1.5
 #'
@@ -1546,13 +1543,13 @@ setMethod("gapply",
 #'     Sepal_Width + Petal_Length + Petal_Width, x))
 #'     data.frame(t(coef(m)))
 #'   })
+#' colnames(result) <- c("Species", "Intercept", "Sepal_Width",
+#'   "Petal_Length", "Petal_Width")
 #'
-#' Result
-#'---------
-#' Model  X.Intercept.  Sepal_Width  Petal_Length  Petal_Width
-#' 1        0.699883    0.3303370    0.9455356    -0.1697527
-#' 2        1.895540    0.3868576    0.9083370    -0.6792238
-#' 3        2.351890    0.6548350    0.2375602     0.2521257
+#' Model  Species     (Intercept)  Sepal_Width  Petal_Length  Petal_Width
+#' 1      virginica    0.699883    0.3303370    0.9455356    -0.1697527
+#' 2      versicolor   1.895540    0.3868576    0.9083370    -0.6792238
+#' 3      setosa       2.351890    0.6548350    0.2375602     0.2521257
 #'
 #'}
 #' @note gapplyCollect(SparkDataFrame) since 2.0.0
