@@ -93,6 +93,10 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           SpecialLimits,
           InMemoryScans,
           HiveTableScans,
+<<<<<<< 0d4a4987f0bce2b4f9f2574eea02dcd82ca033b1
+=======
+          DataSinks,
+>>>>>>> remove exrta change
           HiveScripts,
           Aggregation,
           JoinSelection,
