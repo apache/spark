@@ -125,7 +125,7 @@ abstract class BinaryArithmetic extends BinaryOperator {
   }
 }
 
-private[sql] object BinaryArithmetic {
+object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 

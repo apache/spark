@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.sources.InsertableRelation
+import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 import org.apache.spark.sql.types._
 
 /**
@@ -52,7 +52,7 @@ case class CreateDataSourceTableCommand(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
-    partitionColumns: Array[String],
+    userSpecifiedPartitionColumns: Array[String],
     bucketSpec: Option[BucketSpec],
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
@@ -95,17 +95,39 @@ case class CreateDataSourceTableCommand(
       }
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
-    DataSource(
-      sparkSession = sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      bucketSpec = None,
-      options = optionsWithPath).resolveRelation(checkPathExist = false)
+    val dataSource: BaseRelation =
+      DataSource(
+        sparkSession = sparkSession,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = provider,
+        bucketSpec = None,
+        options = optionsWithPath).resolveRelation(checkPathExist = false)
+
+    val partitionColumns = if (userSpecifiedSchema.nonEmpty) {
+      userSpecifiedPartitionColumns
+    } else {
+      val res = dataSource match {
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames
+        case _ => Array.empty[String]
+      }
+      if (userSpecifiedPartitionColumns.length > 0) {
+        // The table does not have a specified schema, which means that the schema will be inferred
+        // when we load the table. So, we are not expecting partition columns and we will discover
+        // partitions when we load the table. However, if there are specified partition columns,
+        // we simply ignore them and provide a warning message.
+        logWarning(
+          s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
+            s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
+            s"Schema: ${dataSource.schema.simpleString}; " +
+            s"Partition columns: ${res.mkString("(", ", ", ")")}")
+      }
+      res
+    }
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
-      userSpecifiedSchema = userSpecifiedSchema,
+      schema = dataSource.schema,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
       provider = provider,
@@ -213,7 +235,7 @@ case class CreateDataSourceTableAsSelectCommand(
               }
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
+              existingSchema = Some(DDLUtils.getSchemaFromTableProperties(s.metadata))
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -256,7 +278,7 @@ case class CreateDataSourceTableAsSelectCommand(
       CreateDataSourceTableUtils.createDataSourceTable(
         sparkSession = sparkSession,
         tableIdent = tableIdent,
-        userSpecifiedSchema = Some(result.schema),
+        schema = result.schema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         provider = provider,
@@ -306,7 +328,7 @@ object CreateDataSourceTableUtils extends Logging {
   def createDataSourceTable(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
-      userSpecifiedSchema: Option[StructType],
+      schema: StructType,
       partitionColumns: Array[String],
       bucketSpec: Option[BucketSpec],
       provider: String,
@@ -315,28 +337,26 @@ object CreateDataSourceTableUtils extends Logging {
     val tableProperties = new mutable.HashMap[String, String]
     tableProperties.put(DATASOURCE_PROVIDER, provider)
 
-    // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
-    // stored into a single metastore SerDe property.  In this case, we split the JSON string and
-    // store each part as a separate SerDe property.
-    userSpecifiedSchema.foreach { schema =>
-      val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
-      val schemaJsonString = schema.json
-      // Split the JSON string.
-      val parts = schemaJsonString.grouped(threshold).toSeq
-      tableProperties.put(DATASOURCE_SCHEMA_NUMPARTS, parts.size.toString)
-      parts.zipWithIndex.foreach { case (part, index) =>
-        tableProperties.put(s"$DATASOURCE_SCHEMA_PART_PREFIX$index", part)
-      }
+    // Serialized JSON schema string may be too long to be stored into a single metastore table
+    // property. In this case, we split the JSON string and store each part as a separate table
+    // property.
+    val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
+    val schemaJsonString = schema.json
+    // Split the JSON string.
+    val parts = schemaJsonString.grouped(threshold).toSeq
+    tableProperties.put(DATASOURCE_SCHEMA_NUMPARTS, parts.size.toString)
+    parts.zipWithIndex.foreach { case (part, index) =>
+      tableProperties.put(s"$DATASOURCE_SCHEMA_PART_PREFIX$index", part)
     }
 
-    if (userSpecifiedSchema.isDefined && partitionColumns.length > 0) {
+    if (partitionColumns.length > 0) {
       tableProperties.put(DATASOURCE_SCHEMA_NUMPARTCOLS, partitionColumns.length.toString)
       partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
         tableProperties.put(s"$DATASOURCE_SCHEMA_PARTCOL_PREFIX$index", partCol)
       }
     }
 
-    if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
+    if (bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
       tableProperties.put(DATASOURCE_SCHEMA_NUMBUCKETS, numBuckets.toString)
@@ -353,16 +373,6 @@ object CreateDataSourceTableUtils extends Logging {
       }
     }
 
-    if (userSpecifiedSchema.isEmpty && partitionColumns.length > 0) {
-      // The table does not have a specified schema, which means that the schema will be inferred
-      // when we load the table. So, we are not expecting partition columns and we will discover
-      // partitions when we load the table. However, if there are specified partition columns,
-      // we simply ignore them and provide a warning message.
-      logWarning(
-        s"The schema and partitions of table $tableIdent will be inferred when it is loaded. " +
-          s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
-    }
-
     val tableType = if (isExternal) {
       tableProperties.put("EXTERNAL", "TRUE")
       CatalogTableType.EXTERNAL
@@ -375,7 +385,7 @@ object CreateDataSourceTableUtils extends Logging {
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
+        userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         className = provider,
@@ -385,14 +395,14 @@ object CreateDataSourceTableUtils extends Logging {
       CatalogTable(
         identifier = tableIdent,
         tableType = tableType,
-        schema = Nil,
+        schema = new StructType,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
           outputFormat = None,
           serde = None,
           compressed = false,
-          serdeProperties = options
+          properties = options
         ),
         properties = tableProperties.toMap)
     }
@@ -412,11 +422,9 @@ object CreateDataSourceTableUtils extends Logging {
           outputFormat = serde.outputFormat,
           serde = serde.serde,
           compressed = false,
-          serdeProperties = options
+          properties = options
         ),
-        schema = relation.schema.map { f =>
-          CatalogColumn(f.name, f.dataType.catalogString)
-        },
+        schema = relation.schema,
         properties = tableProperties.toMap,
         viewText = None)
     }

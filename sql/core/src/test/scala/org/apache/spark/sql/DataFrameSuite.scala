@@ -1571,4 +1571,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(joined, Row("x", null, null))
     checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
   }
+
+  test("SPARK-16664: persist with more than 200 columns") {
+    val size = 201L
+    val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
+    val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
+    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
+  }
 }
