@@ -130,7 +130,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           createNonBucketedReadRDD(readFile, selectedPartitions, fsRelation)
       }
 
+      // These metadata values make scan plans uniquely identifiable for equality checking.
       val meta = Map(
+        "PartitionFilters" -> partitionKeyFilters.mkString("[", ", ", "]"),
         "Format" -> fsRelation.fileFormat.toString,
         "ReadSchema" -> prunedDataSchema.simpleString,
         PUSHED_FILTERS -> pushedDownFilters.mkString("[", ", ", "]"),
