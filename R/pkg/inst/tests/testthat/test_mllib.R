@@ -673,7 +673,9 @@ test_that("spark.als", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-als", fileext = ".tmp")
+  write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
   expect_equal(stats2$maxIter, 5)
