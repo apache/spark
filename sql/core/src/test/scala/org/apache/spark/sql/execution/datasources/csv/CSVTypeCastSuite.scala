@@ -88,20 +88,28 @@ class CSVTypeCastSuite extends SparkFunSuite {
       CSVTypeCast.castTo("-", TimestampType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
       CSVTypeCast.castTo("-", DateType, nullable = true, CSVOptions("nullValue", "-")))
-
-    // special treatment for StringType
-    assert(
-      CSVTypeCast.castTo("-", StringType, nullable = true, CSVOptions("nullValue", "-")) ===
-        UTF8String.fromString("-"))
+    assertNull(
+      CSVTypeCast.castTo("-", StringType, nullable = true, CSVOptions("nullValue", "-")))
   }
 
-  test("String type should always return the same as the input") {
+  test("String type should also respect `nullValue`") {
     assert(
       CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions()) ==
-        UTF8String.fromString(""))
+        null)
     assert(
       CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions()) ==
         UTF8String.fromString(""))
+
+    assert(
+      CSVTypeCast.castTo("", StringType, nullable = true, CSVOptions("nullValue", "null")) ==
+        UTF8String.fromString(""))
+    assert(
+      CSVTypeCast.castTo("", StringType, nullable = false, CSVOptions("nullValue", "null")) ==
+        UTF8String.fromString(""))
+
+    assert(
+      CSVTypeCast.castTo(null, StringType, nullable = true, CSVOptions("nullValue", "null")) ==
+        null)
   }
 
   test("Throws exception for empty string with non null type") {

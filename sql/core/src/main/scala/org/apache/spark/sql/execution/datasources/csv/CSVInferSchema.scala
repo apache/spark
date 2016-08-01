@@ -238,7 +238,7 @@ private[csv] object CSVTypeCast {
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
 
-    if (datum == options.nullValue && nullable && (!castType.isInstanceOf[StringType])) {
+    if (datum == options.nullValue && nullable) {
       null
     } else {
       castType match {
