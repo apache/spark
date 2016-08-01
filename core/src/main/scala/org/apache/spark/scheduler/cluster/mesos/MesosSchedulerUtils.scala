@@ -239,8 +239,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Converts the attributes from the resource offer into a Map of name -> Attribute Value
    * The attribute values are the mesos attribute types and they are
-    *
-    * @param offerAttributes the attributes offered
+   *
+   * @param offerAttributes the attributes offered
    * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
@@ -378,19 +378,18 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Checks executor ports if they are within some range of the offered list of ports ranges,
    *
-   * @param sc the Spark Context
+   * @param conf the Spark Config
    * @param ports the list of ports to check
    * @return true if ports are within range false otherwise
    */
-  protected def checkPorts(sc: SparkContext, ports: List[(Long, Long)]): Boolean = {
+  protected def checkPorts(conf: SparkConf, ports: List[(Long, Long)]): Boolean = {
 
     def checkIfInRange(port: Long, ps: List[(Long, Long)]): Boolean = {
       ps.exists(r => r._1 <= port & r._2 >= port)
     }
 
-    val portsToCheck = ManagedPorts.getPortValues(sc.conf)
-    val nonZeroPorts = portsToCheck.filter(_ != 0)
-    val withinRange = nonZeroPorts.forall(p => checkIfInRange(p, ports))
+    val portsToCheck = nonZeroPortValuesFromConfig(conf)
+    val withinRange = portsToCheck.forall(p => checkIfInRange(p, ports))
     // make sure we have enough ports to allocate per offer
     ports.map(r => r._2 - r._1 + 1).sum >= portsToCheck.size && withinRange
   }
@@ -398,82 +397,74 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   /**
    * Partitions port resources.
    *
-   * @param conf the spark config
-   * @param ports the ports offered
-   * @return resources left, port resources to be used and the list of assigned ports
+   * @param requestedPorts non-zero ports to assign
+   * @param offeredResources the resources offered
+   * @return resources left, port resources to be used.
    */
-  def partitionPorts(
-      conf: SparkConf,
-      ports: List[Resource])
-    : (List[Resource], List[Resource], List[Long]) = {
-    val taskPortRanges = getRangeResourceWithRoleInfo(ports.asJava, "ports")
-    val portsToCheck = ManagedPorts.getPortValues(conf)
-    val nonZeroPorts = portsToCheck.filter(_ != 0)
-    // reserve non zero ports first
-    val nonZeroResources = reservePorts(taskPortRanges, nonZeroPorts)
-    // reserve actual port numbers for zero ports - not set by the user
-    val numOfZeroPorts = portsToCheck.count(_ == 0)
-    val randPorts = pickRandomPortsFromRanges(nonZeroResources._1, numOfZeroPorts)
-    val zeroResources = reservePorts(nonZeroResources._1, randPorts)
-    val (portResourcesLeft, portResourcesToBeUsed) =
-      createResources(nonZeroResources, zeroResources)
-    (portResourcesLeft, portResourcesToBeUsed, nonZeroPorts ++ randPorts)
-  }
-
-  private object ManagedPorts {
-    val portNames = List("spark.executor.port", "spark.blockManager.port")
-
-    def getPortValues(conf: SparkConf): List[Long] = {
-      portNames.map(conf.getLong(_, 0))
-    }
-  }
-
-  private def createResources(
-      nonZero: (List[PortRangeResourceInfo], List[PortRangeResourceInfo]),
-      zero: (List[PortRangeResourceInfo], List[PortRangeResourceInfo]))
+  def partitionPortResources(requestedPorts: List[Long], offeredResources: List[Resource])
     : (List[Resource], List[Resource]) = {
-    val resources = {
-      if (nonZero._2.isEmpty) { // no user ports were defined
-        (zero._1.flatMap{port => createMesosPortResource(port.range, Some(port.role))},
-          zero._2.flatMap{port => createMesosPortResource(port.range, Some(port.role))})
-
-      } else if (zero._2.isEmpty) { // no random ports were defined
-        (nonZero._1.flatMap{port => createMesosPortResource(port.range, Some(port.role))},
-          nonZero._2.flatMap{port => createMesosPortResource(port.range, Some(port.role))})
-      }
-      else {  // we have user defined and random ports defined
-        val left = zero._1.flatMap{port => createMesosPortResource(port.range, Some(port.role))}
-        val used = nonZero._2.flatMap{port =>
-          createMesosPortResource(port.range, Some(port.role))} ++
-          zero._2.flatMap{port => createMesosPortResource(port.range, Some(port.role))}
-        (left, used)
-      }
+    if (requestedPorts.isEmpty) {
+     return (offeredResources, List[Resource]())
     }
-    resources
+    // partition port offers
+    val (resourcesWithoutPorts, portResources) = filterPortResources(offeredResources)
+    val offeredPortRanges = getRangeResourceWithRoleInfo(portResources.asJava, "ports")
+    // reserve non-zero ports
+    val nonZeroResources = reservePorts(offeredPortRanges, requestedPorts)
+
+    val (leftPortResources, assignedPortResources) =
+      createResourcesFromAssignedPorts(nonZeroResources)
+
+    (resourcesWithoutPorts ++ leftPortResources, assignedPortResources)
   }
 
-  private case class PortRangeResourceInfo(role: String, range: List[(Long, Long)])
+  val managedPortNames = List("spark.executor.port", "spark.blockManager.port")
 
-  private def getRangeResourceWithRoleInfo(res: JList[Resource], name: String)
+  /**
+   * The values of the non-zero ports to be used by the executor process.
+   * @param conf the spark config to use
+   * @return the ono-zero values of the ports
+   */
+  def nonZeroPortValuesFromConfig(conf: SparkConf): List[Long] = {
+    managedPortNames.map(conf.getLong(_, 0)).filter( _ != 0)
+  }
+
+  /**
+   * It gets a tuple for the non-zero port assigned resources.
+   * First member of the tuple represents resources left while the second
+   * resources used. A tuple is returned with final resources left (fist member)
+   * and the resources used (second member).
+   */
+  private def createResourcesFromAssignedPorts(
+      nonZero: (List[PortRangeResourceInfo], List[PortRangeResourceInfo]))
+    : (List[Resource], List[Resource]) = {
+        (nonZero._1.flatMap{port => createMesosPortResource(port.ranges, Some(port.role))},
+          nonZero._2.flatMap{port => createMesosPortResource(port.ranges, Some(port.role))})
+  }
+
+  private case class PortRangeResourceInfo(role: String, ranges: List[(Long, Long)])
+
+  /**
+   * A resource can have multiple values in the offer since it can either be from
+   * a specific role or wildcard.
+   * Extract role info and port range for every port resource in the offer
+   */
+  private def getRangeResourceWithRoleInfo(resources: JList[Resource], name: String)
     : List[PortRangeResourceInfo] = {
-    // A resource can have multiple values in the offer since it can either be from
-    // a specific role or wildcard.
-    // Extract role info and port range for every port resource in the offer
-    res.asScala.filter(_.getName == name)
-      .map{res => PortRangeResourceInfo(res.getRole, res.getRanges.getRangeList.asScala
-        .map(r => (r.getBegin, r.getEnd)).toList) }.toList
+    resources.asScala.filter(_.getName == name).
+      map{resource =>
+        PortRangeResourceInfo(resource.getRole, resource.getRanges.getRangeList.asScala
+        .map(r => (r.getBegin, r.getEnd)).toList)
+      }.toList
   }
 
-  /** Helper method to get a pair of assigned and remaining ports along with role info */
+  /** Helper method to get a pair of remaining and assigned ports along with role info */
   private def reservePorts(
-      availablePortRanges: List[PortRangeResourceInfo],
-      wantedPorts: List[Long])
+      offeredPortRanges: List[PortRangeResourceInfo],
+      requestedPorts: List[Long])
     : (List[PortRangeResourceInfo], List[PortRangeResourceInfo]) = {
-    if (wantedPorts.isEmpty) { // port list is empty we didnt consume any resources
-      return (availablePortRanges, List())
-    }
-    var tmpLeft = availablePortRanges
-    val tmpRanges = for {port <- wantedPorts}
+    var tmpLeft = offeredPortRanges
+    val tmpRanges = for {port <- requestedPorts}
       yield {
         val ret = findPortAndSplitRange(port, tmpLeft)
         val rangeToRemove = ret._1
@@ -483,7 +474,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         ret
       }
     val rangesToRemove = tmpRanges.map(x => x._1)
-    val newRangesLeft = (availablePortRanges ++ tmpRanges.flatMap{x => x._2})
+    val newRangesLeft = (offeredPortRanges ++ tmpRanges.flatMap{x => x._2})
       .flatMap{r => removeRanges(r, rangesToRemove)}
     val newRanges = tmpRanges.map{r => PortRangeResourceInfo(r._1.role, List((r._3, r._3)))}
     // return a list of the resources left and one with the newly assigned ones
@@ -494,7 +485,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   private def removeRanges(
       rangeA: PortRangeResourceInfo,
       rangesToRemove: List[PortRangeResourceInfo]): Option[PortRangeResourceInfo] = {
-    val ranges = rangeA.range.filterNot(rangesToRemove.flatMap{_.range}.toSet)
+    val ranges = rangeA.ranges.filterNot(rangesToRemove.flatMap{_.ranges}.toSet)
     if (ranges.isEmpty) {
       None
     } else {
@@ -507,8 +498,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       role: Option[String] = None): List[Resource] = {
     ranges.map { range =>
       val rangeValue = Value.Range.newBuilder()
-      rangeValue.setBegin(range._1)
-      rangeValue.setEnd(range._2)
+        .setBegin(range._1)
+        .setEnd(range._2)
       val builder = Resource.newBuilder()
         .setName("ports")
         .setType(Value.Type.RANGES)
@@ -518,27 +509,13 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  private def pickRandomPortsFromRanges(
-      ranges: List[PortRangeResourceInfo],
-      numToPick: Int): List[Long] = {
-    if (numToPick == 0) {
-      return List()
-    }
-    val ports = scala.util.Random.
-      shuffle(ranges.flatMap(p => p.range.flatMap(r => (r._1 to r._2).toList))
-      .distinct
-    )
-    // we have previously checked in checkPorts() if an offer has enough ports to pick from.
-    ports.take(numToPick)
-  }
-
   private def findPortAndSplitRange(port: Long, ranges: List[PortRangeResourceInfo])
     : (PortRangeResourceInfo, Option[PortRangeResourceInfo], Long) = {
     val rangePortInfo = ranges
-      .map{p => val tmpList = List(p.range.filter(r => r._1 <= port & r._2 >= port))
-        PortRangeResourceInfo(p.role, tmpList.head)}.filterNot(p => p.range.isEmpty)
+      .map{p => val tmpList = List(p.ranges.filter(r => r._1 <= port & r._2 >= port))
+        PortRangeResourceInfo(p.role, tmpList.head)}.filterNot(p => p.ranges.isEmpty)
       .head
-    val range = rangePortInfo.range.head
+    val range = rangePortInfo.ranges.head
     val ret = {
       if (port == range._1 && port == range._2) {
         None
@@ -546,7 +523,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       else if (port == range._1 && port != range._2) {
         Some(PortRangeResourceInfo(rangePortInfo.role, List((port + 1, range._2))))
       }
-      else if (port == range._2 && port != range._2) {
+      else if (port == range._2 && port != range._1) {
         Some(PortRangeResourceInfo(rangePortInfo.role, List((range._1, port - 1))))
       }
       else {
@@ -566,42 +543,5 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    */
   def filterPortResources(resources: List[Resource]): (List[Resource], List[Resource]) = {
     resources.partition {r => !(r.getType == Value.Type.RANGES && r.getName == "ports")}
-  }
-
-  /**
-   * Checks if a range allocated for a port was a llocated for a random port
-   *
-   *  @param conf spark configuration
-   *  @param range the range to check
-   *  @return true if was assigned for a randome port false otherwise
-   */
-  def isRandPortRange(conf: SparkConf, range: (Long, Long)): Boolean = {
-    val nonZeroPortsToCheck = ManagedPorts.getPortValues(conf).filter(_ != 0)
-    val isInNonZero = (port: Long) => if (nonZeroPortsToCheck.isEmpty) {
-      false
-    } else {
-      nonZeroPortsToCheck.contains(port)
-    }
-    range._1 == range._2 && !isInNonZero(range._1)
-  }
-
-  /**
-   * Returns a string of the form portName1:port1,...,portNameN:portN where
-   * port names are spark config port names. This list will be passed to the executor
-   * so it can re-assign the ports there.
-   *
-   * @param conf the spark config
-   * @param ports the port list assigned so far according to the offers
-   * @return the string with port names and values assigned
-   */
-  def getAssignedPortString(conf: SparkConf, ports: List[Long]): String = {
-    val configPorts = ManagedPorts.portNames
-    val (zeroPorts, nonZeroPorts) = configPorts
-      .map{portName => (portName, conf.getInt(portName, 0).toLong)}.partition( _._2 == 0)
-    val randPorts = ports.filterNot(nonZeroPorts.map(_._2).toSet)
-    val assignedZeroPorts = zeroPorts
-      .zipWithIndex
-      .map{pair => (pair._1._1, if (pair._1._2 == 0) {randPorts(pair._2)} else {pair._1._2})}
-    assignedZeroPorts.++(nonZeroPorts).map(pair => s"${pair._1}:${pair._2}").mkString(",")
   }
 }

@@ -159,8 +159,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   def createCommand(
       offer: Offer,
       numCores: Int,
-      taskId: String,
-      ports: List[Long] = List())
+      taskId: String)
     : CommandInfo = {
     val executorSparkHome = conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome())
@@ -174,8 +173,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
     // Set the ports to be pickedup by the executor
-    val extraJavaOpts = {conf.get("spark.executor.extraJavaOptions", "") +
-      s" -Dspark.mesos.executor.preassigned.ports=${getAssignedPortString(conf, ports)}"}.trim()
+    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -303,9 +301,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val offerAttributes = toAttributeMap(offer.getAttributesList)
     val mem = getResource(offer.getResourcesList, "mem")
     val cpus = getResource(offer.getResourcesList, "cpus")
+    val ports = getRangeResource(offer.getResourcesList, "ports")
 
     logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem" +
-      s" cpu: $cpus for $refuseSeconds seconds" +
+      s" cpu: $cpus port: $ports for $refuseSeconds seconds  " +
       reason.map(r => s" (reason: $r)").getOrElse(""))
 
     refuseSeconds match {
@@ -402,17 +401,16 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
           slaves.getOrElseUpdate(slaveId, new Slave(offer.getHostname)).taskIDs.add(taskId)
 
-          val (resourcesLeft, resourcesToUse, portsToUse) =
-            getResources(resources, taskCPUs, taskMemory)
+          val (resourcesLeft, resourcesToUse) =
+            partitionTaskResources(resources, taskCPUs, taskMemory)
 
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId, portsToUse))
+            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
             .setName("Task " + taskId)
 
-          resourcesToUse.foreach(resourceList =>
-            taskBuilder.addAllResources(resourceList.asJava))
+          taskBuilder.addAllResources(resourcesToUse.asJava)
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
@@ -432,18 +430,20 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     tasks.toMap
   }
 
-  private def getResources(resources: JList[Resource], taskCPUs: Int, taskMemory: Int)
-    : (List[Resource], List[List[Resource]], List[Long]) = {
-    val (afterCPUResources, cpuResourcesToUse) =
-      partitionResources(resources, "cpus", taskCPUs)
+  /** Extracts task needed resources from a list of available resources. */
+  private def partitionTaskResources(resources: JList[Resource], taskCPUs: Int, taskMemory: Int)
+    : (List[Resource], List[Resource]) = {
+
+    // partition cpus & mem
+    val (afterCPUResources, cpuResourcesToUse) = partitionResources(resources, "cpus", taskCPUs)
     val (afterMemResources, memResourcesToUse) =
       partitionResources(afterCPUResources.asJava, "mem", taskMemory)
-    // process port offers
-    val (resourcesWithoutPorts, portResources) = filterPortResources(afterMemResources)
-    val (afterPortResources, portResourcesToUse, portsToUse) =
-      partitionPorts(conf, portResources)
-    (resourcesWithoutPorts ++ afterPortResources,
-      List(cpuResourcesToUse, memResourcesToUse, portResourcesToUse), portsToUse)
+
+    // partition ports
+    val (afterPortResources, portResourcesToUse) =
+      partitionPortResources(nonZeroPortValuesFromConfig(sc.conf), afterMemResources)
+
+    (afterPortResources, cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse)
   }
 
   private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
@@ -452,7 +452,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val cpus = executorCores(offerCPUs)
     val mem = executorMemory(sc)
     val ports = getRangeResource(resources, "ports")
-    val meetsPortRequirements = checkPorts(sc, ports)
+    val meetsPortRequirements = checkPorts(sc.conf, ports)
 
     cpus > 0 &&
       cpus <= offerCPUs &&

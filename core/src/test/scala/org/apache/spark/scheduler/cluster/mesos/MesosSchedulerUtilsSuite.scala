@@ -37,9 +37,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     when(sc.conf).thenReturn(sparkConf)
   }
 
-  def createTestPortResource(range: (Long, Long),
-                              role: Option[String] = None): Resource = {
-
+  def createTestPortResource(range: (Long, Long), role: Option[String] = None): Resource = {
     val rangeValue = Value.Range.newBuilder()
     rangeValue.setBegin(range._1)
     rangeValue.setEnd(range._2)
@@ -65,6 +63,12 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   def compareForEqualityOfPortArrays(array1: Array[Long], array2: Array[Long]):
   Boolean = {
     array1.sortBy(identity).deep == array2.sortBy(identity).deep
+  }
+
+  def getRangesFromResources(resources: List[Resource]): List[(Long, Long)] = {
+    resources.flatMap{ resource =>
+      resource.getRanges.getRangeList.asScala.toList.map{
+        range => (range.getBegin, range.getEnd)}}
   }
 
   val utils = new MesosSchedulerUtils { }
@@ -178,11 +182,14 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     conf.set("spark.blockManager.port", "4000")
     val portResource = createTestPortResource((3000, 5000), Some("my_role"))
 
-    val (resourcesLeft, resourcesToBeUsed, portsToUse) = utils
-      .partitionPorts(conf, List(portResource))
-    portsToUse.length shouldBe 2
+    val (resourcesLeft, resourcesToBeUsed) = utils
+      .partitionPortResources(List(3000, 4000), List(portResource))
+    resourcesToBeUsed.length shouldBe 2
 
-    compareForEqualityOfPortArrays(portsToUse.toArray, Array(3000L, 4000L)) shouldBe true
+    val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}.toArray
+
+    portsToUse.length shouldBe 2
+    compareForEqualityOfPortArrays(portsToUse, Array(3000L, 4000L)) shouldBe true
 
     val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
     val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
@@ -198,80 +205,24 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     conf.set("spark.executor.port", "3100" )
     val portResource = createTestPortResource((3000, 5000), Some("my_role"))
 
-    val (resourcesLeft, resourcesToBeUsed, portsToUse) = utils
-      .partitionPorts(conf, List(portResource))
-    portsToUse.length shouldBe 2
+    val (resourcesLeft, resourcesToBeUsed) = utils
+      .partitionPortResources(List(3100), List(portResource))
+
+    val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
+
+    portsToUse.length shouldBe 1
     portsToUse.contains(3100) shouldBe true
-    val randomPort = portsToUse.filterNot(_ == 3100).head
-    randomPort > 3000 shouldBe true
-    randomPort <= 5000 shouldBe true
-    randomPort != 3100 shouldBe true
-
-    val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
-    val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
-
-    if(randomPort > 3100) {
-      if (randomPort == 3101) {
-        val expectedLeft = Array((3000L, 3099L), (randomPort + 1, 5000L))
-        val expectedUsed = Array((3100L, 3100L), (randomPort, randomPort))
-
-        compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-        compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-
-      } else {
-        val expectedLeft = Array((3000L, 3099L), (3101L, randomPort - 1), (randomPort + 1, 5000L))
-        val expectedUsed = Array((3100L, 3100L), (randomPort, randomPort))
-
-        compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-        compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-      }
-
-    } else {
-      if (randomPort == 3000) {
-        val expectedLeft = Array((3001L, 3099L), (3101L, 5000L))
-        val expectedUsed = Array((3100L, 3100L), (randomPort, randomPort))
-
-        compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-        compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-
-      } else {
-        val expectedLeft = Array((3000L, randomPort - 1), (randomPort + 1, 3099L), (30101L, 5000L))
-        val expectedUsed = Array((3100L, 3100L), (randomPort, randomPort))
-
-        compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-        compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-      }
-    }
   }
 
   test("Port reservation is done correctly with all random ports") {
     val conf = new SparkConf()
-    conf.set("spark.blockmanager.port", "3600" )
     val portResource = createTestPortResource((3000L, 5000L), Some("my_role"))
 
-    val (resourcesLeft, resourcesToBeUsed, portsToUse) = utils
-      .partitionPorts(conf, List(portResource))
+    val (resourcesLeft, resourcesToBeUsed) = utils
+      .partitionPortResources(List(), List(portResource))
+    val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
 
-    portsToUse.length shouldBe 2
-
-    portsToUse.head != portsToUse(1) shouldBe true
-    val sortedPortsToUse = portsToUse.sortBy(identity)
-    val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
-    val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
-
-    if (!sortedPortsToUse.contains(3000L) && !sortedPortsToUse.contains(5000L)) {
-      val portLeftPair1 = (3000L, sortedPortsToUse.head - 1)
-      val portLeftPair2 = (sortedPortsToUse.head + 1, sortedPortsToUse(1) - 1)
-      val portLeftPair3 = (sortedPortsToUse(1) + 1, 5000L)
-      val expectedLeft = Array(portLeftPair1, portLeftPair2, portLeftPair3)
-
-      val portUsedPair1 = (sortedPortsToUse.head, sortedPortsToUse.head)
-      val portUsedPair2 = (sortedPortsToUse(1), sortedPortsToUse(1))
-      val expectedUsed = Array(portUsedPair1, portUsedPair2)
-
-      compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-      compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-    }
+    portsToUse.isEmpty shouldBe true
   }
 
   test("Port reservation is done correctly with user specified ports only - multiple ranges") {
@@ -280,9 +231,10 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     conf.set("spark.blockManager.port", "4000")
     val portResourceList = List(createTestPortResource((3000, 5000), Some("my_role")),
       createTestPortResource((2000, 2500), Some("other_role")))
+    val (resourcesLeft, resourcesToBeUsed) = utils
+      .partitionPortResources(List(2100, 4000), portResourceList)
+    val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
 
-    val (resourcesLeft, resourcesToBeUsed, portsToUse) = utils
-      .partitionPorts(conf, portResourceList)
     portsToUse.length shouldBe 2
     val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
     val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
@@ -296,53 +248,11 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   test("Port reservation is done correctly with all random ports - multiple ranges") {
     val conf = new SparkConf()
-    conf.set("spark.blockmanager.port", "3600" )
     val portResourceList = List(createTestPortResource((3000, 5000), Some("my_role")),
       createTestPortResource((2000, 2500), Some("other_role")))
-
-    val (resourcesLeft, resourcesToBeUsed, portsToUse) = utils
-      .partitionPorts(conf, portResourceList)
-
-    portsToUse.length shouldBe 2
-
-    portsToUse.head != portsToUse(1) shouldBe true
-    val sortedPortsToUse = portsToUse.sortBy(identity)
-    val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
-    val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
-
-    if (sortedPortsToUse.head > 3000 && sortedPortsToUse(1) > 3000 &&
-      !sortedPortsToUse.contains(5000)) {
-
-      val portLeftPair1 = (2000L, 2500L)
-      val portLeftPair2 = (3000L, sortedPortsToUse.head - 1)
-      val portLeftPair3 = (sortedPortsToUse.head + 1, sortedPortsToUse(1) - 1)
-      val portLeftPair4 = (sortedPortsToUse(1) + 1, 5000L)
-      val expectedLeft = Array(portLeftPair1, portLeftPair2, portLeftPair3, portLeftPair4)
-
-      val portUsedPair1 = (sortedPortsToUse.head, sortedPortsToUse.head)
-      val portUsedPair2 = (sortedPortsToUse(1), sortedPortsToUse(1))
-      val expectedUsed = Array(portUsedPair1, portUsedPair2)
-
-      compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-      compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-    }
-
-    if (sortedPortsToUse.exists(_ < 2500) && sortedPortsToUse.exists(_ > 3000) &&
-      !sortedPortsToUse.exists(port => port == 2000 || port == 5000)) {
-
-      val portLeftPair1 = (2000L, sortedPortsToUse.head -1)
-      val portLeftPair2 = (sortedPortsToUse.head + 1, 2500L)
-      val portLeftPair3 = (3000L, sortedPortsToUse(1) - 1)
-      val portLeftPair4 = (sortedPortsToUse(1) + 1, 5000L)
-      val expectedLeft = Array(portLeftPair1, portLeftPair2, portLeftPair3, portLeftPair4)
-
-      val portUsedPair1 = (sortedPortsToUse.head, sortedPortsToUse.head)
-      val portUsedPair2 = (sortedPortsToUse(1), sortedPortsToUse(1))
-      val expectedUsed = Array(portUsedPair1, portUsedPair2)
-
-      compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
-      compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-    }
+    val (resourcesLeft, resourcesToBeUsed) = utils
+      .partitionPortResources(List(), portResourceList)
+    val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
+    portsToUse.isEmpty shouldBe true
   }
 }
-
