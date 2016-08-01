@@ -256,7 +256,8 @@ private[spark] object TaskMetrics extends Logging {
   def empty: TaskMetrics = {
     val tm = new TaskMetrics
     tm.nameToAccums.foreach { case (name, acc) =>
-      acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), Some(name), true, false)
+      acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), Some(name),
+        countFailedValues = true, dataProperty = false)
     }
     tm
   }

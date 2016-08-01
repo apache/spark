@@ -1236,6 +1236,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *                     same RDD/partition. This adds some additional overhead for tracking and
    *                     is an experimental feature.
    */
+  @deprecated("use AccumulatorV2", "2.1.0")
   def accumulator[T](initialValue: T, dataProperty: Boolean)(implicit param: AccumulatorParam[T])
       : Accumulator[T] =
   {
@@ -1267,6 +1268,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *                     an experimental feature.
    * @param name The name of the accumulator. Named accumulators will show up in the Spark Web UI.
    */
+  @deprecated("use AccumulatorV2", "2.1.0")
   def accumulator[T](initialValue: T, name: String, dataProperty: Boolean)
     (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name), dataProperty = dataProperty)

@@ -81,7 +81,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val metrics = TaskMetrics.empty
     accumulatorUpdates.foreach { case (id, update) =>
       val acc = new LongAccumulator
-      acc.metadata = AccumulatorMetadata(id, Some(""), true, false)
+      acc.metadata = AccumulatorMetadata(id, Some(""), countFailedValues = true,
+        dataProperty = false)
       acc.add(update)
       metrics.registerAccumulator(acc)
     }
