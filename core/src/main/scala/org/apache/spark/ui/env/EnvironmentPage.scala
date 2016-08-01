@@ -27,11 +27,9 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
   private val listener = parent.listener
 
   private def removePass(kv: (String, String)): (String, String) = {
-    if (kv._1.toLowerCase.contains("password")) {
-      return (kv._1, "******")
-    }
-    kv
+    if (kv._1.toLowerCase.contains("password")) (kv._1, "******") else kv
   }
+
   def render(request: HttpServletRequest): Seq[Node] = {
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
