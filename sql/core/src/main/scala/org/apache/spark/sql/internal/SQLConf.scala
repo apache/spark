@@ -295,17 +295,13 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
-  // This is used to set the default data source
+  // This is used to set the default format for data source tables and Hive tables.
   val DEFAULT_DATA_SOURCE_NAME = SQLConfigBuilder("spark.sql.sources.default")
-    .doc("The default data source to use in input/output.")
+    .doc("The default format for data source tables to use in input/output and Hive tables in " +
+      "CREATE TABLE statement. If not specified, the default format for data source tables is " +
+      "parquet; the default format for hive tables is textfile")
     .stringConf
-    .createWithDefault("parquet")
-
-  val DEFAULT_FILE_FORMAT = SQLConfigBuilder("spark.sql.default.fileformat")
-    .doc("The default file format for CREATE TABLE statement. Options are TextFile, Parquet, " +
-      "SequenceFile, RCfile, ORC, and Avro.")
-    .stringConf
-    .createWithDefault("textfile")
+    .createOptional
 
   val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
     .internal()
@@ -649,9 +645,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
 
-  def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+  def defaultDataSourceName: String = {
+    getConf(DEFAULT_DATA_SOURCE_NAME).getOrElse("parquet")
+  }
 
-  def defaultFileFormat: String = getConf(DEFAULT_FILE_FORMAT)
+  def defaultFileFormat: String = {
+    getConf(DEFAULT_DATA_SOURCE_NAME).getOrElse("textfile")
+  }
 
   def convertCTAS: Boolean = getConf(CONVERT_CTAS)
 

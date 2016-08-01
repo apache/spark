@@ -98,8 +98,8 @@ private[sql] trait SQLTestUtils
     (keys, values).zipped.foreach(spark.conf.set)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
+        case (key, Some(value)) if value != "<undefined>" => spark.conf.set(key, value)
+        case (key, _) => spark.conf.unset(key)
       }
     }
   }

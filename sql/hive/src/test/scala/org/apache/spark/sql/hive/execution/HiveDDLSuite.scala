@@ -159,7 +159,7 @@ class HiveDDLSuite
     val tabName = "tab1"
     withTable(tabName) {
       // the format name should be case incensitive
-      withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "pArQuEt") {
+      withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "pArQuEt") {
         sql(s"CREATE TABLE $tabName(c1 int)")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val storage = tableMetadata.storage
@@ -176,7 +176,7 @@ class HiveDDLSuite
     val tabName = "tab1"
     withTable(tabName) {
       // the format name should be case insensitive
-      withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "nonExistent") {
+      withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "nonExistent") {
         sql(s"CREATE TABLE $tabName(c1 int)")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val storage = tableMetadata.storage
@@ -191,7 +191,7 @@ class HiveDDLSuite
     val catalog = spark.sessionState.catalog
     val tabName = "tab1"
     withTable(tabName) {
-      withSQLConf(SQLConf.DEFAULT_FILE_FORMAT.key -> "parquet") {
+      withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "parquet") {
         sql(s"CREATE TABLE $tabName(c1 int)")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val storage = tableMetadata.storage
