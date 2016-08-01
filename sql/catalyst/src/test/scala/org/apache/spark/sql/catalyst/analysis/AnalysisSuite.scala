@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.scalatest.ShouldMatchers
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,7 +27,8 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
-class AnalysisSuite extends AnalysisTest {
+
+class AnalysisSuite extends AnalysisTest with ShouldMatchers{
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
@@ -221,6 +224,35 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, plan)
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
+  }
+
+  test("Analysis may leave unnecassary aliases") {
+    val att1 = testRelation.output.head
+    var plan = testRelation.select(
+      CreateStructUnsafe(Seq(att1, ((att1 as "aa") + 1).as("a_plus_1"))).as("col"),
+      att1
+    )
+    val prevPlan = getAnalyzer(true).execute(plan)
+    plan = prevPlan.select(CreateArray(Seq(
+      CreateStructUnsafe(Seq(att1, (att1 + 1).as("a_plus_1"))),
+      /** alias should be eliminated by [[CleanupAliases]] */
+      "col".attr as "col2"
+    )) as "arr")
+    plan = getAnalyzer(true).execute(plan)
+
+    plan should be (a[Project])
+    val Project( projectExpressions, _) = plan
+    projectExpressions should have (size(1))
+    val Seq(expr1) = projectExpressions
+    expr1 should be (a[Alias])
+    val Alias(expr2, arrAlias) = expr1
+    arrAlias shouldBe "arr"
+    expr2 should be (a[CreateArray])
+    val CreateArray(arrElements) = expr2
+    arrElements should have (size(2))
+    val Seq(el1, el2) = arrElements
+    el1 should not be a[Alias]
+    el2 should not be a[Alias]
   }
 
   test("SPARK-10534: resolve attribute references in order by clause") {
