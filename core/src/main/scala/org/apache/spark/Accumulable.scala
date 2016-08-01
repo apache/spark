@@ -57,17 +57,8 @@ class Accumulable[R, T] private (
     param: AccumulableParam[R, T],
     val name: Option[String],
     private[spark] val countFailedValues: Boolean)
-  extends LegacyAccumulable[R, T](id, initialValue, param, name, countFailedValues) {
-}
-
-private[spark] class LegacyAccumulable[R, T] private[spark] (
-    val id: Long,
-    // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
-    @transient private val initialValue: R,
-    param: AccumulableParam[R, T],
-    val name: Option[String],
-    private[spark] val countFailedValues: Boolean)
   extends Serializable {
+
   private[spark] def this(
       initialValue: R,
       param: AccumulableParam[R, T],
@@ -179,9 +170,7 @@ private[spark] class LegacyAccumulable[R, T] private[spark] (
  * @tparam T partial data that can be added in
  */
 @deprecated("use AccumulatorV2", "2.0.0")
-trait AccumulableParam[R, T] extends LegacyAccumulableParam[R, T] {
-}
-private[spark] trait LegacyAccumulableParam[R, T] extends Serializable {
+trait AccumulableParam[R, T] extends Serializable {
   /**
    * Add additional data to the accumulator value. Is allowed to modify and return `r`
    * for efficiency (to avoid allocating objects).

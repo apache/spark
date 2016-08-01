@@ -1225,7 +1225,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] = {
-    val acc = new LegacyAccumulator(initialValue, param)
+    val acc = new Accumulator(initialValue, param)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1238,16 +1238,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    privateLegacyAccumulator(initialValue, name)(param)
-  }
-
-  /**
-   * Private Spark method to access the legacy accumulator API. Will be removed at the same time as
-   * accumulator.
-   */
-  private[spark] def privateLegacyAccumulator[T](initialValue: T, name: String)
-    (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
-    val acc = new LegacyAccumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Some(name))
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }

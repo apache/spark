@@ -57,15 +57,7 @@ class Accumulator[T] private[spark] (
     param: AccumulatorParam[T],
     name: Option[String] = None,
     countFailedValues: Boolean = false)
-  extends LegacyAccumulator[T](initialValue, param, name, countFailedValues)
-
-private[spark] class LegacyAccumulator[T] private[spark] (
-    // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
-    @transient private val initialValue: T,
-    param: AccumulatorParam[T],
-    name: Option[String] = None,
-    countFailedValues: Boolean = false)
-  extends LegacyAccumulable[T, T](initialValue, param, name, countFailedValues)
+  extends Accumulable[T, T](initialValue, param, name, countFailedValues)
 
 
 /**
@@ -76,10 +68,7 @@ private[spark] class LegacyAccumulator[T] private[spark] (
  * @tparam T type of value to accumulate
  */
 @deprecated("use AccumulatorV2", "2.0.0")
-trait AccumulatorParam[T] extends LegacyAccumulatorParam[T] {
-}
-
-private[spark] trait LegacyAccumulatorParam[T] extends LegacyAccumulableParam[T, T] {
+trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   def addAccumulator(t1: T, t2: T): T = {
     addInPlace(t1, t2)
   }
@@ -95,25 +84,25 @@ object AccumulatorParam {
   // compatibility, please update them accordingly if you modify the following implicit objects.
 
   @deprecated("use AccumulatorV2", "2.0.0")
-  implicit object DoubleAccumulatorParam extends LegacyAccumulatorParam[Double] {
+  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double): Double = 0.0
   }
 
   @deprecated("use AccumulatorV2", "2.0.0")
-  implicit object IntAccumulatorParam extends LegacyAccumulatorParam[Int] {
+  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int): Int = 0
   }
 
   @deprecated("use AccumulatorV2", "2.0.0")
-  implicit object LongAccumulatorParam extends LegacyAccumulatorParam[Long] {
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
     def addInPlace(t1: Long, t2: Long): Long = t1 + t2
     def zero(initialValue: Long): Long = 0L
   }
 
   @deprecated("use AccumulatorV2", "2.0.0")
-  implicit object FloatAccumulatorParam extends LegacyAccumulatorParam[Float] {
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
     def addInPlace(t1: Float, t2: Float): Float = t1 + t2
     def zero(initialValue: Float): Float = 0f
   }
@@ -122,7 +111,7 @@ object AccumulatorParam {
   // internally for things that shouldn't really be accumulated across tasks, like input
   // read method, which should be the same across all tasks in the same stage.
   @deprecated("use AccumulatorV2", "2.0.0")
-  private[spark] object StringAccumulatorParam extends LegacyAccumulatorParam[String] {
+  private[spark] object StringAccumulatorParam extends AccumulatorParam[String] {
     def addInPlace(t1: String, t2: String): String = t2
     def zero(initialValue: String): String = ""
   }
