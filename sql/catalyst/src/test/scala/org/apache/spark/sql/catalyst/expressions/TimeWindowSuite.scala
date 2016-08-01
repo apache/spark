@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
 
@@ -106,6 +106,18 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
   test("parse sql expression for duration in microseconds - invalid expression") {
     intercept[AnalysisException] {
       TimeWindow.invokePrivate(parseExpression(Rand(123)))
+    }
+  }
+
+  test("SPARK-16837: TimeWindow.apply equivalent to TimeWindow constructor") {
+    val slideLength = "1 second"
+    for (windowLength <- Seq("10 second", "1 minute", "2 hours")) {
+      val applyValue = TimeWindow(Literal(10L), windowLength, slideLength, "0 seconds")
+      val constructed = new TimeWindow(Literal(10L),
+        Literal(windowLength),
+        Literal(slideLength),
+        Literal("0 seconds"))
+      assert(applyValue == constructed)
     }
   }
 }
