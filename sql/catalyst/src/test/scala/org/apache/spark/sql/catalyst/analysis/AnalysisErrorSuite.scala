@@ -540,6 +540,6 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
       ),
       LocalRelation(a))
-    assertAnalysisError(plan4, "Accessing outer query column is not allowed in LIMIT" :: Nil)
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in a LIMIT" :: Nil)
   }
 }
