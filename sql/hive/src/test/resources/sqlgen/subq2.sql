@@ -5,4 +5,4 @@ FROM (SELECT b.key as k, count(1) as c
       GROUP BY b.key) a
 WHERE a.k >= 90
 --------------------------------------------------------------------------------
-SELECT `gen_attr_0` AS `k`, `gen_attr_1` AS `c` FROM (SELECT `gen_attr_0`, `gen_attr_1` FROM (SELECT `gen_attr_2` AS `gen_attr_0`, count(1) AS `gen_attr_1` FROM (SELECT `key` AS `gen_attr_2`, `value` AS `gen_attr_3` FROM `default`.`src`) AS gen_subquery_0 GROUP BY `gen_attr_2`) AS a WHERE (`gen_attr_0` >= 90)) AS a
+SELECT a.`k`, a.`c` FROM (SELECT b.`key` AS `k`, count(1) AS `c` FROM (`default`.`src`) AS b GROUP BY b.`key`) AS a WHERE (a.`k` >= 90)

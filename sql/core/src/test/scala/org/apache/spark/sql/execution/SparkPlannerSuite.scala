@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SparkPlannerSuite extends SharedSQLContext {
@@ -27,7 +27,7 @@ class SparkPlannerSuite extends SharedSQLContext {
 
   test("Ensure to go down only the first branch, not any other possible branches") {
 
-    case object NeverPlanned extends LeafNode {
+    case object NeverPlanned extends LeafNode with NonSQLPlan {
       override def output: Seq[Attribute] = Nil
     }
 

@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, NonSQLPlan}
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType}
 
 case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
@@ -34,7 +35,7 @@ case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFall
 }
 
 case class ComplexPlan(exprs: Seq[Seq[Expression]])
-  extends org.apache.spark.sql.catalyst.plans.logical.LeafNode {
+  extends LeafNode with NonSQLPlan {
   override def output: Seq[Attribute] = Nil
 }
 

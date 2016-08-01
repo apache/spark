@@ -79,7 +79,7 @@ object ExternalRDD {
 case class ExternalRDD[T](
     outputObjAttr: Attribute,
     rdd: RDD[T])(session: SparkSession)
-  extends LeafNode with ObjectProducer with MultiInstanceRelation {
+  extends LeafNode with ObjectProducer with MultiInstanceRelation with NonSQLPlan {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
@@ -131,7 +131,7 @@ case class ExternalRDDScanExec[T](
 case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow])(session: SparkSession)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with NonSQLPlan {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 

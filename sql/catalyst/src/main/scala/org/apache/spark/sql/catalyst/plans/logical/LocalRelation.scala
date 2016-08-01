@@ -88,4 +88,14 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
       " AS " + inlineTableName +
       output.map(_.name).mkString("(", ", ", ")")
   }
+
+  override def sql: String = {
+    require(data.nonEmpty)
+    val types = output.map(_.dataType)
+    val rows = data.map { row =>
+      val cells = row.toSeq(types).zip(types).map { case (v, tpe) => Literal(v, tpe).sql }
+      cells.mkString("(", ", ", ")")
+    }
+    "VALUES " + rows.mkString(", ")
+  }
 }

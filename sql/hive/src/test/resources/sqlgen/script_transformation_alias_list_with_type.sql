@@ -3,4 +3,4 @@ FROM
 (FROM parquet_t1 SELECT TRANSFORM(key, value) USING 'cat' AS (thing1 int, thing2 string)) t
 SELECT thing1 + 1
 --------------------------------------------------------------------------------
-SELECT `gen_attr_0` AS `(thing1 + 1)` FROM (SELECT (`gen_attr_1` + 1) AS `gen_attr_0` FROM (SELECT TRANSFORM (`gen_attr_2`, `gen_attr_3`) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES('field.delim' = '	') USING 'cat' AS (`gen_attr_1` int, `gen_attr_4` string) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES('field.delim' = '	') FROM (SELECT `key` AS `gen_attr_2`, `value` AS `gen_attr_3` FROM `default`.`parquet_t1`) AS gen_subquery_0) AS t) AS gen_subquery_1
+SELECT (t.`thing1` + 1) AS `(thing1 + 1)` FROM (SELECT TRANSFORM (parquet_t1.`key`, parquet_t1.`value`) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES('field.delim' = '	') USING 'cat' AS (`thing1` int, `thing2` string) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES('field.delim' = '	') FROM parquet_t1) AS t

@@ -1252,8 +1252,9 @@ class Analyzer(
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
-          val aliasedOrdering =
-            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
+          val aliasedOrdering = unresolvedSortOrders.zipWithIndex.map {
+            case (o, i) => Alias(o.child, s"aggOrder$i")(isGenerated = true)
+          }
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =

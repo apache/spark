@@ -6,4 +6,4 @@ having not exists (select a.key
                    from src a
                    where b.value = a.value  and a.key = b.key and a.value > 'val_12')
 --------------------------------------------------------------------------------
-SELECT `gen_attr_3` AS `key`, `gen_attr_0` AS `value` FROM (SELECT `gen_attr_3`, `gen_attr_0` FROM (SELECT `key` AS `gen_attr_3`, `value` AS `gen_attr_0` FROM `default`.`src`) AS gen_subquery_0 GROUP BY `gen_attr_3`, `gen_attr_0` HAVING (NOT EXISTS(SELECT `gen_attr_4` AS `1` FROM (SELECT 1 AS `gen_attr_4` FROM (SELECT `gen_attr_2`, `gen_attr_1` FROM (SELECT `key` AS `gen_attr_2`, `value` AS `gen_attr_1` FROM `default`.`src`) AS gen_subquery_2 WHERE (`gen_attr_1` > 'val_12')) AS gen_subquery_1 WHERE ((`gen_attr_0` = `gen_attr_1`) AND (`gen_attr_2` = `gen_attr_3`))) AS gen_subquery_3))) AS b
+SELECT b.`key`, b.`value` FROM (`default`.`src`) AS b GROUP BY b.`key`, b.`value` HAVING (NOT EXISTS (SELECT a.`key`, a.`value` FROM (`default`.`src`) AS a WHERE (a.`value` > 'val_12') AND (b.`value` = a.`value`) AND (a.`key` = b.`key`)))

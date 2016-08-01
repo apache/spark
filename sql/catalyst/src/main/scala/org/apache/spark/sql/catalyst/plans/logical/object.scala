@@ -75,7 +75,7 @@ trait ObjectConsumer extends UnaryNode {
 case class DeserializeToObject(
     deserializer: Expression,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer
+    child: LogicalPlan) extends UnaryNode with ObjectProducer with NonSQLPlan
 
 /**
  * Takes the input object from child and turns it into unsafe row using the given serializer
@@ -83,7 +83,7 @@ case class DeserializeToObject(
  */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer with NonSQLPlan {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 }
@@ -107,7 +107,7 @@ object MapPartitions {
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer with NonSQLPlan
 
 object MapPartitionsInR {
   def apply(
@@ -141,7 +141,7 @@ case class MapPartitionsInR(
     inputSchema: StructType,
     outputSchema: StructType,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer with NonSQLPlan {
   override lazy val schema = outputSchema
 
   override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
@@ -171,7 +171,7 @@ case class MapElements(
     argumentClass: Class[_],
     argumentSchema: StructType,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer with NonSQLPlan
 
 object TypedFilter {
   def apply[T : Encoder](func: AnyRef, child: LogicalPlan): TypedFilter = {
@@ -198,7 +198,7 @@ case class TypedFilter(
     argumentClass: Class[_],
     argumentSchema: StructType,
     deserializer: Expression,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with NonSQLPlan {
 
   override def output: Seq[Attribute] = child.output
 
@@ -245,7 +245,7 @@ case class AppendColumns(
     argumentSchema: StructType,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode with NonSQLPlan {
 
   override def output: Seq[Attribute] = child.output ++ newColumns
 
@@ -259,7 +259,7 @@ case class AppendColumnsWithObject(
     func: Any => Any,
     childSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: LogicalPlan) extends ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer with NonSQLPlan {
 
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 }
@@ -298,7 +298,7 @@ case class MapGroups(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer
+    child: LogicalPlan) extends UnaryNode with ObjectProducer with NonSQLPlan
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
 object FlatMapGroupsInR {
@@ -340,7 +340,7 @@ case class FlatMapGroupsInR(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer{
+    child: LogicalPlan) extends UnaryNode with ObjectProducer with NonSQLPlan {
 
   override lazy val schema = outputSchema
 
@@ -394,4 +394,4 @@ case class CoGroup(
     rightAttr: Seq[Attribute],
     outputObjAttr: Attribute,
     left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode with ObjectProducer
+    right: LogicalPlan) extends BinaryNode with ObjectProducer with NonSQLPlan

@@ -78,7 +78,8 @@ class LogicalPlanSuite extends SparkFunSuite {
       override def isStreaming(): Boolean = true
     }
 
-    case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+    case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan)
+      extends BinaryNode with NonSQLPlan {
       override def output: Seq[Attribute] = left.output ++ right.output
     }
 

@@ -3,4 +3,4 @@ SELECT key
 FROM src
 WHERE key in (SELECT max(key) FROM src)
 --------------------------------------------------------------------------------
-SELECT `gen_attr_0` AS `key` FROM (SELECT `gen_attr_0` FROM (SELECT `key` AS `gen_attr_0`, `value` AS `gen_attr_2` FROM `default`.`src`) AS gen_subquery_0 WHERE (`gen_attr_0` IN (SELECT `gen_attr_3` AS `_c0` FROM (SELECT `gen_attr_1` AS `gen_attr_3` FROM (SELECT max(`gen_attr_4`) AS `gen_attr_1` FROM (SELECT `key` AS `gen_attr_4`, `value` AS `gen_attr_5` FROM `default`.`src`) AS gen_subquery_2) AS gen_subquery_1) AS gen_subquery_3))) AS src
+SELECT src.`key` FROM `default`.`src` WHERE src.`key` IN (SELECT max(src.`key`) AS `max(key)` FROM `default`.`src`)

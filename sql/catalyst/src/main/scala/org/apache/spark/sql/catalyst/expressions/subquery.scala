@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types._
 
 /**
@@ -74,6 +74,7 @@ case class ScalarSubquery(
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(plan = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
+  override def sql: String = s"(${plan.sql})"
 }
 
 object ScalarSubquery {
@@ -108,6 +109,36 @@ case class PredicateSubquery(
     case _ => false
   }
   override def toString: String = s"predicate-subquery#${exprId.id} $conditionString"
+  override def sql: String = {
+    if (nullAware) {
+      val (in, correlated) = children.partition(_.isInstanceOf[EqualTo])
+      val (outer, inner) = in.zipWithIndex.map {
+        case (EqualTo(l, r), i) if plan.outputSet.intersect(r.references).nonEmpty =>
+          (l, Alias(r, s"_c$i")())
+        case (EqualTo(r, l), i) =>
+          (l, Alias(r, s"_c$i")())
+      }.unzip
+      val filtered = if (correlated.nonEmpty) {
+        Filter(children.reduce(And), plan)
+      } else {
+        plan
+      }
+      val value = outer match {
+        case Seq(expr) => expr
+        case exprs => CreateStruct(exprs)
+      }
+      children.head.map(_.sql).mkString(" AND ")
+      s"${value.sql} IN (${filtered.sql})"
+    } else {
+      val conditionSQL = children.map(_.sql).mkString(" AND ")
+      val subquery = if (conditionSQL.isEmpty) {
+        plan.sql
+      } else {
+        s"${plan.sql} ${if (plan.sql.contains("WHERE")) "AND" else "WHERE"} $conditionSQL"
+      }
+      s"EXISTS ($subquery)"
+    }
+  }
 }
 
 object PredicateSubquery {

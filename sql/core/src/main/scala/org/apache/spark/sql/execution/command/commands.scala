@@ -23,8 +23,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, NonSQLPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
@@ -35,7 +34,7 @@ import org.apache.spark.sql.types._
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
-trait RunnableCommand extends LogicalPlan with logical.Command {
+trait RunnableCommand extends LogicalPlan with Command with NonSQLPlan {
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
   def run(sparkSession: SparkSession): Seq[Row]

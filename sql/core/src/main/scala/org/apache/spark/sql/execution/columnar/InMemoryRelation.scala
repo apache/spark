@@ -65,7 +65,7 @@ case class InMemoryRelation(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val batchStats: CollectionAccumulator[InternalRow] =
       child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
-  extends logical.LeafNode with MultiInstanceRelation {
+  extends logical.LeafNode with MultiInstanceRelation with logical.NonSQLPlan {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 

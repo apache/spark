@@ -21,12 +21,13 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, NonSQLPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
 case class CreateTable(tableDesc: CatalogTable, mode: SaveMode, query: Option[LogicalPlan])
-  extends LogicalPlan with Command {
+  extends LogicalPlan with Command with NonSQLPlan {
   assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
 
   if (query.isEmpty) {
