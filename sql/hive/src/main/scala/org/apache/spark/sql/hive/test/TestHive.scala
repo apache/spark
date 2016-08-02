@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -40,7 +39,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -86,10 +84,6 @@ class TestHiveContext(
     new TestHiveContext(sparkSession.newSession())
   }
 
-  override def sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
-  }
-
   override def sessionState: TestHiveSessionState = sparkSession.sessionState
 
   def setCacheTables(c: Boolean): Unit = {
@@ -114,22 +108,13 @@ class TestHiveContext(
  * A [[SparkSession]] used in [[TestHiveContext]].
  *
  * @param sc SparkContext
- * @param existingSharedState optional [[HiveSharedState]]
  * @param loadTestTables if true, load the test tables. They can only be loaded when running
  *                       in the JVM, i.e when calling from Python this flag has to be false.
  */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
-    @transient private val existingSharedState: Option[HiveSharedState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
-
-  def this(sc: SparkContext, loadTestTables: Boolean) {
-    this(
-      sc,
-      None,
-      loadTestTables)
-  }
 
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
@@ -148,11 +133,6 @@ private[hive] class TestHiveSparkSession(
   // TODO: Let's remove TestHiveSessionState. Otherwise,
   // we are not really testing the reflection logic based on the setting of
   // CATALOG_IMPLEMENTATION.
-  @transient
-  override lazy val sharedState: HiveSharedState = {
-    existingSharedState.getOrElse(
-      new HiveSharedState(sc))
-  }
 
   @transient
   override lazy val sessionState: TestHiveSessionState =
@@ -160,7 +140,7 @@ private[hive] class TestHiveSparkSession(
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(
-      sc, Some(sharedState), loadTestTables)
+      sc, loadTestTables)
   }
 
   private var cacheTables: Boolean = false
