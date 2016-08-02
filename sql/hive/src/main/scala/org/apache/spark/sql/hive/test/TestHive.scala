@@ -139,8 +139,7 @@ private[hive] class TestHiveSparkSession(
     new TestHiveSessionState(self)
 
   override def newSession(): TestHiveSparkSession = {
-    new TestHiveSparkSession(
-      sc, loadTestTables)
+    new TestHiveSparkSession(sc, loadTestTables)
   }
 
   private var cacheTables: Boolean = false
