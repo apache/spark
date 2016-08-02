@@ -112,16 +112,12 @@ class TestHiveContext(
  * A [[SparkSession]] used in [[TestHiveContext]].
  *
  * @param sc SparkContext
- * @param scratchDirPath scratch directory used by Hive's metastore client
- * @param metastoreTemporaryConf configuration options for Hive's metastore
  * @param existingSharedState optional [[TestHiveSharedState]]
  * @param loadTestTables if true, load the test tables. They can only be loaded when running
  *                       in the JVM, i.e when calling from Python this flag has to be false.
  */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String],
     @transient private val existingSharedState: Option[TestHiveSharedState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
@@ -129,10 +125,18 @@ private[hive] class TestHiveSparkSession(
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
-      TestHiveContext.makeScratchDir(),
-      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false),
       None,
       loadTestTables)
+  }
+
+  val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
+    ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
+    // scratch directory used by Hive's metastore client
+    ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+    ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+
+  metastoreTempConf.foreach { case (k, v) =>
+    sc.hadoopConfiguration.set(k, v)
   }
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
@@ -143,7 +147,7 @@ private[hive] class TestHiveSparkSession(
   @transient
   override lazy val sharedState: TestHiveSharedState = {
     existingSharedState.getOrElse(
-      new TestHiveSharedState(sc, scratchDirPath, metastoreTemporaryConf))
+      new TestHiveSharedState(sc))
   }
 
   @transient
@@ -152,7 +156,7 @@ private[hive] class TestHiveSparkSession(
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(
-      sc, scratchDirPath, metastoreTemporaryConf, Some(sharedState), loadTestTables)
+      sc, Some(sharedState), loadTestTables)
   }
 
   private var cacheTables: Boolean = false
@@ -505,15 +509,11 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 }
 
 
-private[hive] class TestHiveSharedState(
-    sc: SparkContext,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String])
+private[hive] class TestHiveSharedState(sc: SparkContext)
   extends HiveSharedState(sc) {
 
   override lazy val metadataHive: HiveClient = {
-    TestHiveContext.newClientForMetadata(
-      sc.conf, sc.hadoopConfiguration, scratchDirPath, metastoreTemporaryConf)
+    TestHiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration)
   }
 }
 
@@ -565,26 +565,11 @@ private[hive] object TestHiveContext {
    */
   def newClientForMetadata(
       conf: SparkConf,
-      hadoopConf: Configuration,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]): HiveClient = {
+      hadoopConf: Configuration): HiveClient = {
     HiveUtils.newClientForMetadata(
       conf,
       hadoopConf,
-      hiveClientConfigurations(hadoopConf, scratchDirPath, metastoreTemporaryConf))
-  }
-
-  /**
-   * Configurations needed to create a [[HiveClient]].
-   */
-  def hiveClientConfigurations(
-      hadoopConf: Configuration,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
-      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
-      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+      HiveUtils.hiveClientConfigurations(hadoopConf))
   }
 
   def makeWarehouseDir(): File = {
