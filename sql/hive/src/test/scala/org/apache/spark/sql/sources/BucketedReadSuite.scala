@@ -353,7 +353,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
       val tableDir = new File(hiveContext
-        .sparkSession.warehousePath, "bucketed_table")
+        .sparkSession.getWarehousePath, "bucketed_table")
       Utils.deleteRecursively(tableDir)
       df1.write.parquet(tableDir.getAbsolutePath)
 

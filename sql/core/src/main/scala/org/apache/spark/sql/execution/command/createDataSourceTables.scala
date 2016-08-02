@@ -395,7 +395,7 @@ object CreateDataSourceTableUtils extends Logging {
       CatalogTable(
         identifier = tableIdent,
         tableType = tableType,
-        schema = Nil,
+        schema = new StructType,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -424,9 +424,7 @@ object CreateDataSourceTableUtils extends Logging {
           compressed = false,
           properties = options
         ),
-        schema = relation.schema.map { f =>
-          CatalogColumn(f.name, f.dataType.catalogString)
-        },
+        schema = relation.schema,
         properties = tableProperties.toMap,
         viewText = None)
     }
