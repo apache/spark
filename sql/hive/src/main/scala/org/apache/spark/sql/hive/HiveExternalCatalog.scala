@@ -30,11 +30,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 /**
@@ -45,6 +44,8 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   extends ExternalCatalog with Logging {
 
   import CatalogTypes.TablePartitionSpec
+  import HiveExternalCatalog._
+  import CatalogTableType._
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -91,6 +92,18 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
 
   private def requireTableExists(db: String, table: String): Unit = {
     withClient { getTable(db, table) }
+  }
+
+  /**
+   * If the given table properties contains datasource properties, throw an exception.
+   */
+  private def verifyTableProperties(table: CatalogTable): Unit = {
+    val datasourceKeys = table.properties.keys.filter(_.startsWith(DATASOURCE_PREFIX))
+    if (datasourceKeys.nonEmpty) {
+      throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
+        s"as table property keys may not start with '$DATASOURCE_PREFIX': " +
+        datasourceKeys.mkString("[", ", ", "]"))
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -156,13 +169,11 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
       ignoreIfExists: Boolean): Unit = withClient {
     requireDbExists(db)
     requireDbMatches(db, tableDefinition)
+    verifyTableProperties(tableDefinition)
 
-    if (tableDefinition.provider == Some("hive") ||
-      tableDefinition.tableType == CatalogTableType.VIEW) {
+    if (tableDefinition.provider == Some("hive") || tableDefinition.tableType == VIEW) {
       client.createTable(tableDefinition, ignoreIfExists)
     } else {
-      import CreateDataSourceTableUtils._
-
       val provider = tableDefinition.provider.get
       val partitionColumns = tableDefinition.partitionColumnNames
       val bucketSpec = tableDefinition.bucketSpec
@@ -212,7 +223,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
           tableType = tableDefinition.tableType,
           storage = tableDefinition.storage,
           schema = new StructType(),
-          properties = tableProperties.toMap)
+          properties = tableDefinition.properties ++ tableProperties.toMap)
       }
 
       def newHiveCompatibleMetastoreTable(serde: HiveSerDe, path: String): CatalogTable = {
@@ -248,7 +259,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
 
   private def saveTableIntoHive(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
     // If this is an external data source table...
-    if (tableDefinition.tableType == CatalogTableType.EXTERNAL &&
+    if (tableDefinition.tableType == EXTERNAL &&
       // ... that is not persisted as Hive compatible format (external tables in Hive compatible
       // format always set `locationUri` to the actual data location and should NOT be hacked as
       // following.)
@@ -305,6 +316,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = withClient {
     requireDbMatches(db, tableDefinition)
     requireTableExists(db, tableDefinition.identifier.table)
+    verifyTableProperties(tableDefinition)
     client.alterTable(tableDefinition)
   }
 
@@ -316,17 +328,39 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
     client.getTableOption(db, table).map(restoreTableMetadata)
   }
 
+  /**
+   * Restores table metadata from the table properties if it's a datasouce table. This method is
+   * kind of a opposite version of [[createTable]].
+   */
   private def restoreTableMetadata(table: CatalogTable): CatalogTable = {
-    if (table.tableType == CatalogTableType.VIEW) {
+    if (table.tableType == VIEW) {
       table
-    } else if (DDLUtils.isDatasourceTable(table.properties)) {
-      table.copy(
-        schema = DDLUtils.getSchemaFromTableProperties(table),
-        provider = table.properties.get(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
-        partitionColumnNames = DDLUtils.getPartitionColumnsFromTableProperties(table),
-        bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table))
     } else {
-      table.copy(provider = Some("hive"))
+      getProviderFromTableProperties(table).map { provider =>
+        // SPARK-15269: Persisted data source tables always store the location URI as a storage
+        // property named "path" instead of standard Hive `dataLocation`, because Hive only
+        // allows directory paths as location URIs while Spark SQL data source tables also
+        // allows file paths. So the standard Hive `dataLocation` is meaningless for Spark SQL
+        // data source tables.
+        // Spark SQL may also save external data source in Hive compatible format when
+        // possible, so that these tables can be directly accessed by Hive. For these tables,
+        // `dataLocation` is still necessary. Here we also check for input format because only
+        // these Hive compatible tables set this field.
+        val storage = if (table.tableType == EXTERNAL && table.storage.inputFormat.isEmpty) {
+          table.storage.copy(locationUri = None)
+        } else {
+          table.storage
+        }
+        table.copy(
+          storage = storage,
+          schema = getSchemaFromTableProperties(table),
+          provider = Some(provider),
+          partitionColumnNames = getPartitionColumnsFromTableProperties(table),
+          bucketSpec = getBucketSpecFromTableProperties(table),
+          properties = getOriginalTableProperties(table))
+      } getOrElse {
+        table.copy(provider = Some("hive"))
+      }
     }
   }
 
@@ -474,4 +508,83 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
     client.listFunctions(db, pattern)
   }
 
+}
+
+object HiveExternalCatalog {
+  val DATASOURCE_PREFIX = "spark.sql.sources."
+  val DATASOURCE_PROVIDER = DATASOURCE_PREFIX + "provider"
+  val DATASOURCE_SCHEMA = DATASOURCE_PREFIX + "schema"
+  val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_SCHEMA + "."
+  val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
+  val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
+  val DATASOURCE_SCHEMA_NUMSORTCOLS = DATASOURCE_SCHEMA_PREFIX + "numSortCols"
+  val DATASOURCE_SCHEMA_NUMBUCKETS = DATASOURCE_SCHEMA_PREFIX + "numBuckets"
+  val DATASOURCE_SCHEMA_NUMBUCKETCOLS = DATASOURCE_SCHEMA_PREFIX + "numBucketCols"
+  val DATASOURCE_SCHEMA_PART_PREFIX = DATASOURCE_SCHEMA_PREFIX + "part."
+  val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
+  val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
+  val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+
+  def getProviderFromTableProperties(metadata: CatalogTable): Option[String] = {
+    metadata.properties.get(DATASOURCE_PROVIDER)
+  }
+
+  def getOriginalTableProperties(metadata: CatalogTable): Map[String, String] = {
+    metadata.properties.filterNot { case (key, _) => key.startsWith(DATASOURCE_PREFIX) }
+  }
+
+  // A persisted data source table always store its schema in the catalog.
+  def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
+    val errorMessage = "Could not read schema from the hive metastore because it is corrupted."
+    val props = metadata.properties
+    props.get(DATASOURCE_SCHEMA).map { schema =>
+      // Originally, we used `spark.sql.sources.schema` to store the schema of a data source table.
+      // After SPARK-6024, we removed this flag.
+      // Although we are not using `spark.sql.sources.schema` any more, we need to still support.
+      DataType.fromJson(schema).asInstanceOf[StructType]
+    } getOrElse {
+      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
+          if (part == null) {
+            throw new AnalysisException(errorMessage +
+              s" (missing part $index of the schema, $numParts parts are expected).")
+          }
+          part
+        }
+        // Stick all parts back to a single schema string.
+        DataType.fromJson(parts.mkString).asInstanceOf[StructType]
+      } getOrElse {
+        throw new AnalysisException(errorMessage)
+      }
+    }
+  }
+
+  private def getColumnNamesByType(
+      props: Map[String, String],
+      colType: String,
+      typeName: String): Seq[String] = {
+    for {
+      numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
+      index <- 0 until numCols.toInt
+    } yield props.getOrElse(
+      s"$DATASOURCE_SCHEMA_PREFIX${colType}Col.$index",
+      throw new AnalysisException(
+        s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
+      )
+    )
+  }
+
+  def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
+    getColumnNamesByType(metadata.properties, "part", "partitioning columns")
+  }
+
+  def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
+    metadata.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { numBuckets =>
+      BucketSpec(
+        numBuckets.toInt,
+        getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
+        getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
+    }
+  }
 }

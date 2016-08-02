@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.regex.Pattern
-
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -59,12 +56,12 @@ case class CreateDataSourceTableCommand(
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
     // the metastore.
-    if (!CreateDataSourceTableUtils.validateName(tableIdent.table)) {
+    if (!DDLUtils.validateName(tableIdent.table)) {
       throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
         s"metastore. Metastore only accepts table name containing characters, numbers and _.")
     }
     if (tableIdent.database.isDefined &&
-      !CreateDataSourceTableUtils.validateName(tableIdent.database.get)) {
+      !DDLUtils.validateName(tableIdent.database.get)) {
       throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
         s"for metastore. Metastore only accepts database name containing " +
         s"characters, numbers and _.")
@@ -165,12 +162,12 @@ case class CreateDataSourceTableAsSelectCommand(
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
     // the metastore.
-    if (!CreateDataSourceTableUtils.validateName(tableIdent.table)) {
+    if (!DDLUtils.validateName(tableIdent.table)) {
       throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
         s"metastore. Metastore only accepts table name containing characters, numbers and _.")
     }
     if (tableIdent.database.isDefined &&
-      !CreateDataSourceTableUtils.validateName(tableIdent.database.get)) {
+      !DDLUtils.validateName(tableIdent.database.get)) {
       throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
         s"for metastore. Metastore only accepts database name containing " +
         s"characters, numbers and _.")
@@ -288,39 +285,5 @@ case class CreateDataSourceTableAsSelectCommand(
     // Refresh the cache of the table in the catalog.
     sessionState.catalog.refreshTable(tableIdent)
     Seq.empty[Row]
-  }
-}
-
-
-object CreateDataSourceTableUtils extends Logging {
-
-  val DATASOURCE_PREFIX = "spark.sql.sources."
-  val DATASOURCE_PROVIDER = DATASOURCE_PREFIX + "provider"
-  val DATASOURCE_WRITEJOBUUID = DATASOURCE_PREFIX + "writeJobUUID"
-  val DATASOURCE_OUTPUTPATH = DATASOURCE_PREFIX + "output.path"
-  val DATASOURCE_SCHEMA = DATASOURCE_PREFIX + "schema"
-  val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_SCHEMA + "."
-  val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
-  val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
-  val DATASOURCE_SCHEMA_NUMSORTCOLS = DATASOURCE_SCHEMA_PREFIX + "numSortCols"
-  val DATASOURCE_SCHEMA_NUMBUCKETS = DATASOURCE_SCHEMA_PREFIX + "numBuckets"
-  val DATASOURCE_SCHEMA_NUMBUCKETCOLS = DATASOURCE_SCHEMA_PREFIX + "numBucketCols"
-  val DATASOURCE_SCHEMA_PART_PREFIX = DATASOURCE_SCHEMA_PREFIX + "part."
-  val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
-  val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
-  val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
-
-  /**
-   * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
-   * i.e. if this name only contains characters, numbers, and _.
-   *
-   * This method is intended to have the same behavior of
-   * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
-   */
-  def validateName(name: String): Boolean = {
-    val tpat = Pattern.compile("[\\w_]+")
-    val matcher = tpat.matcher(name)
-
-    matcher.matches()
   }
 }

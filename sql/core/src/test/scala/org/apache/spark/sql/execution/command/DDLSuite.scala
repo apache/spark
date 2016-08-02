@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -964,9 +963,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties.filterKeys { k =>
-        !isDatasourceTable || !k.startsWith(DATASOURCE_PREFIX)
-      }
+      catalog.getTableMetadata(tableIdent).properties
     }
     assert(getProps.isEmpty)
     // set table properties
@@ -980,11 +977,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
     }
-    // datasource table property keys are not allowed
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
-    }
-    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
@@ -996,9 +988,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       convertToDatasourceTable(catalog, tableIdent)
     }
     def getProps: Map[String, String] = {
-      catalog.getTableMetadata(tableIdent).properties.filterKeys { k =>
-        !isDatasourceTable || !k.startsWith(DATASOURCE_PREFIX)
-      }
+      catalog.getTableMetadata(tableIdent).properties
     }
     // unset table properties
     sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
@@ -1020,11 +1010,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // property to unset does not exist, but "IF EXISTS" is specified
     sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(getProps == Map("x" -> "y"))
-    // datasource table property keys are not allowed
-    val e2 = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
-    }
-    assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testSetLocation(isDatasourceTable: Boolean): Unit = {
@@ -1129,11 +1114,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
     }
-    // serde properties must not be a datasource property
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 SET SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='wah')")
-    }
-    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
@@ -1432,12 +1412,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           "Expected explicit specification of table schema when using CLUSTERED BY clause"))
       }
     }
-  }
-
-  test("create table with datasource properties (not allowed)") {
-    assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
-    assertUnsupported("CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
-      "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
   test("drop current database") {

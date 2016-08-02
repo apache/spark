@@ -26,8 +26,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -761,7 +761,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTable(tableName) {
       df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
       sessionState.refreshTable(tableName)
-      val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
+      val metastoreTable = hiveClient.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
       val numPartCols = metastoreTable.properties(DATASOURCE_SCHEMA_NUMPARTCOLS).toInt
@@ -796,7 +796,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .sortBy("c")
         .saveAsTable(tableName)
       sessionState.refreshTable(tableName)
-      val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
+      val metastoreTable = hiveClient.getTable("default", tableName)
       val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
 
@@ -1034,7 +1034,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin
         )
 
-        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        val metastoreTable = hiveClient.getTable("default", "t")
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMPARTCOLS).toInt === 1)
         assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMBUCKETS))
         assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMBUCKETCOLS))
@@ -1058,7 +1058,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin
         )
 
-        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        val metastoreTable = hiveClient.getTable("default", "t")
         assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS))
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt === 2)
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
@@ -1080,7 +1080,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin
         )
 
-        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        val metastoreTable = hiveClient.getTable("default", "t")
         assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS))
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt === 2)
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
@@ -1105,7 +1105,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin
         )
 
-        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        val metastoreTable = hiveClient.getTable("default", "t")
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMPARTCOLS).toInt === 1)
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt === 2)
         assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
@@ -1172,7 +1172,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         )
         sql("insert into t values (2, 3, 4)")
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
-        val catalogTable = sharedState.externalCatalog.getTable("default", "t")
+        val catalogTable = hiveClient.getTable("default", "t")
         // there should not be a lowercase key 'path' now
         assert(catalogTable.storage.properties.get("path").isEmpty)
         assert(catalogTable.storage.properties.get("PATH").isDefined)
@@ -1211,7 +1211,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         sharedState.externalCatalog.getTable("default", "t")
       }.getMessage
-      assert(e.contains(s"Could not read schema from the metastore because it is corrupted"))
+      assert(e.contains(s"Could not read schema from the hive metastore because it is corrupted"))
     } finally {
       hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
     }

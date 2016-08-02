@@ -119,12 +119,9 @@ case class CreateTableLikeCommand(
 case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.properties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
-
 }
 
 
@@ -457,11 +454,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     append(buffer, "Table Type:", table.tableType.name, "")
 
     append(buffer, "Table Parameters:", "", "")
-    table.properties.filterNot {
-      // Hides schema properties that hold user-defined schema, partition columns, and bucketing
-      // information since they are already extracted and shown in other parts.
-      case (key, _) => key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA)
-    }.foreach { case (key, value) =>
+    table.properties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
 
@@ -854,7 +847,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val props = metadata.properties
 
-    builder ++= s"USING ${props(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)}\n"
+    builder ++= s"USING ${metadata.provider.get}\n"
 
     val dataSourceOptions = metadata.storage.properties.filterNot {
       case (key, value) =>
