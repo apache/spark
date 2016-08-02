@@ -332,10 +332,11 @@ private[sql] case class FileSourceScanExec(
   override val metadata: Map[String, String] = Map(
     "Format" -> relation.fileFormat.toString,
     "ReadSchema" -> outputSchema.catalogString,
+    "Batched" -> supportsBatch.toString,
     DataSourceScanExec.PUSHED_FILTERS -> dataFilters.mkString("[", ", ", "]"),
     DataSourceScanExec.INPUT_PATHS -> relation.location.paths.mkString(", "))
 
-  private def buildScan(): RDD[InternalRow] = {
+  private lazy val inputRDD: RDD[InternalRow] = {
     val selectedPartitions = relation.location.listFiles(partitionFilters)
 
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
@@ -357,7 +358,7 @@ private[sql] case class FileSourceScanExec(
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    buildScan() :: Nil
+    inputRDD :: Nil
   }
 
   private[sql] override lazy val metrics =
@@ -372,7 +373,7 @@ private[sql] case class FileSourceScanExec(
       WholeStageCodegenExec(this).execute()
     } else {
       val unsafeRows = {
-        val scan = buildScan()
+        val scan = inputRDD
         if (needsUnsafeRowConversion) {
           scan.mapPartitionsInternal { iter =>
             val proj = UnsafeProjection.create(schema)
