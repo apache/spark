@@ -146,7 +146,9 @@ object TypeCoercion {
   }
 
   /**
-   * Similar to [[findWiderCommonType]], but can't promote to string.
+   * Similar to [[findWiderCommonType]], but can't promote to string. This is also similar to
+   * [[findTightestCommonType]], but can handle decimal types. If the wider decimal type exceeds
+   * system limitation, this rule will truncate the decimal type before return it.
    */
   private def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
@@ -502,6 +504,9 @@ object TypeCoercion {
           case None => c
         }
 
+      // When finding wider type for `Greatest` and `Least`, we should handle decimal types even if
+      // we need to truncate, but we should not promote one side to string if the other side is
+      // string.g
       case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
         findWiderTypeWithoutStringPromotion(types) match {
