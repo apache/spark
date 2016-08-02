@@ -187,6 +187,8 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
       deadReasonList.add(reason)
     }
 
+    def masterChanged(masterWebUiUrl: String): Unit = { }
+
     def executorAdded(
         id: String,
         workerId: String,

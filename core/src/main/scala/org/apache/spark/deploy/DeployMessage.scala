@@ -127,7 +127,8 @@ private[deploy] object DeployMessages {
 
   // Master to AppClient
 
-  case class RegisteredApplication(appId: String, master: RpcEndpointRef) extends DeployMessage
+  case class RegisteredApplication(appId: String, master: RpcEndpointRef,
+    masterWebUiUrl: String) extends DeployMessage
 
   // TODO(matei): replace hostPort with host
   case class ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) {
@@ -176,6 +177,7 @@ private[deploy] object DeployMessages {
       host: String,
       port: Int,
       restPort: Option[Int],
+      webUiUrl: String,
       workers: Array[WorkerInfo],
       activeApps: Array[ApplicationInfo],
       completedApps: Array[ApplicationInfo],

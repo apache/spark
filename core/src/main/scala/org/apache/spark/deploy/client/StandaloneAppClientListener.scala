@@ -37,4 +37,6 @@ private[spark] trait StandaloneAppClientListener {
       fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int): Unit
 
   def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]): Unit
+
+  def masterChanged(masterWebUiUrl: String): Unit
 }

@@ -45,6 +45,8 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 @DeveloperApi
 class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
     extends SparkListener {
+  var masterWebUiUrl: Option[String] = None
+
   val executorToTotalCores = HashMap[String, Int]()
   val executorToTasksMax = HashMap[String, Int]()
   val executorToTasksActive = HashMap[String, Int]()
@@ -89,6 +91,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       }
       storageStatus.foreach { s => executorToLogUrls(s.blockManagerId.executorId) = logs.toMap }
     }
+    masterWebUiUrl = applicationStart.masterWebUiUrl
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {

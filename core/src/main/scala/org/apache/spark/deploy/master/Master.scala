@@ -233,7 +233,7 @@ private[deploy] class Master(
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
         persistenceEngine.addApplication(app)
-        driver.send(RegisteredApplication(app.id, self))
+        driver.send(RegisteredApplication(app.id, self, masterWebUiUrl))
         schedule()
       }
 
@@ -471,7 +471,7 @@ private[deploy] class Master(
 
     case RequestMasterState =>
       context.reply(MasterStateResponse(
-        address.host, address.port, restServerBoundPort,
+        address.host, address.port, restServerBoundPort, masterWebUiUrl,
         workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state))
 

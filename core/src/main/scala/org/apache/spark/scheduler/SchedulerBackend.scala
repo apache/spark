@@ -56,4 +56,6 @@ private[spark] trait SchedulerBackend {
    */
   def getDriverLogUrls: Option[Map[String, String]] = None
 
+  def getMasterWebUiUrl: Option[String] = None
+
 }
