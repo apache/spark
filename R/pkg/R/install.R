@@ -89,7 +89,7 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
 
   # can use dir.exists(packageLocalDir) under R 3.2.0 or later
   if (!is.na(file.info(packageLocalDir)$isdir) && !overwrite) {
-    fmt <- "Spark %s for Hadoop %s is found in %s"
+    fmt <- "Spark %s for Hadoop %s is found, and SPARK_HOME set to %s"
     msg <- sprintf(fmt, version, ifelse(hadoopVersion == "without", "Free build", hadoopVersion),
                    packageLocalDir)
     message(msg)
@@ -113,6 +113,7 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
   }
   message("DONE.")
   Sys.setenv(SPARK_HOME = packageLocalDir)
+  message(paste("SPARK_HOME set to", packageLocalDir))
   invisible(packageLocalDir)
 }
 
