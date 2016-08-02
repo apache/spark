@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -80,7 +80,8 @@ trait Catalog {
 }
 
 class SimpleCatalog(val conf: CatalystConf) extends Catalog {
-  private[this] val tables = new ConcurrentHashMap[String, LogicalPlan]
+  private[this] val tables: ConcurrentMap[String, LogicalPlan] =
+    new ConcurrentHashMap[String, LogicalPlan]
 
   override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
     tables.put(getTableName(tableIdent), plan)
