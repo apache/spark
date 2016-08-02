@@ -131,14 +131,16 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
-  val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
-    ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
-    // scratch directory used by Hive's metastore client
-    ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
-    ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+  { // set the metastore temporary configuration
+    val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
+      // scratch directory used by Hive's metastore client
+      ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
 
-  metastoreTempConf.foreach { case (k, v) =>
-    sc.hadoopConfiguration.set(k, v)
+    metastoreTempConf.foreach { case (k, v) =>
+      sc.hadoopConfiguration.set(k, v)
+    }
   }
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
