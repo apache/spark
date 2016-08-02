@@ -555,18 +555,6 @@ private[hive] object TestHiveContext {
       SQLConf.SHUFFLE_PARTITIONS.key -> "5"
     )
 
-  /**
-   * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
-   */
-  def newClientForMetadata(
-      conf: SparkConf,
-      hadoopConf: Configuration): HiveClient = {
-    HiveUtils.newClientForMetadata(
-      conf,
-      hadoopConf,
-      HiveUtils.hiveClientConfigurations(hadoopConf))
-  }
-
   def makeWarehouseDir(): File = {
     val warehouseDir = Utils.createTempDir(namePrefix = "warehouse")
     warehouseDir.delete()
