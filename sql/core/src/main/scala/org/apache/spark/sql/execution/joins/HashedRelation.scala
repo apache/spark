@@ -459,8 +459,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
     if (isDense) {
-      val idx = (key - minKey).toInt
-      if (idx >= 0 && key <= maxKey && array(idx) > 0) {
+      val idx = (key - minKey).toInt  // could overflow
+      if (key >= minKey && key <= maxKey && array(idx) > 0) {
         return getRow(array(idx), resultRow)
       }
     } else {
@@ -497,8 +497,8 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
     if (isDense) {
-      val idx = (key - minKey).toInt
-      if (idx >=0 && key <= maxKey && array(idx) > 0) {
+      val idx = (key - minKey).toInt  // could overflow
+      if (key >= minKey && key <= maxKey && array(idx) > 0) {
         return valueIter(array(idx), resultRow)
       }
     } else {
