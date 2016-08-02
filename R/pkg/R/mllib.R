@@ -844,6 +844,7 @@ setMethod("spark.mvnormalmixEM", signature(data = "SparkDataFrame", formula = "f
 
 #' @param object A fitted gaussian mixture model
 #' @return \code{summary} returns the model's lambda, mu, sigma and posterior
+#' @aliases spark.mvnormalmixEM,SparkDataFrame,formula-method
 #' @rdname spark.mvnormalmixEM
 #' @export
 #' @note summary(GaussianMixtureModel) since 2.1.0
@@ -879,7 +880,11 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 
 #  Predicted values based on a gaussian mixture model
 
+#' @param newData SparkDataFrame for testing
+#' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
+#'         "prediction"
 #' @return \code{predict} returns the predicted values based on a gaussian mixture model
+#' @aliases spark.mvnormalmixEM,SparkDataFrame,formula-method
 #' @rdname spark.mvnormalmixEM
 #' @export
 #' @note predict(GaussianMixtureModel) since 2.1.0
