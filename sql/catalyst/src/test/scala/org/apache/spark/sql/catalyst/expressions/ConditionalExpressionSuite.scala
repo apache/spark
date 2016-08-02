@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
@@ -181,6 +182,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2015-07-01 10:00:00")))),
       Timestamp.valueOf("2015-07-01 08:00:00"), InternalRow.empty)
 
+    // Type checking error
+    assert(
+      Least(Seq(Literal(1), Literal("1"))).checkInputDataTypes() ==
+        TypeCheckFailure("The expressions should all have the same type, " +
+          "got LEAST(int, string)."))
+
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
     }
@@ -226,6 +233,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2015-07-01 08:00:00")),
         Literal(Timestamp.valueOf("2015-07-01 10:00:00")))),
       Timestamp.valueOf("2015-07-01 10:00:00"), InternalRow.empty)
+
+    // Type checking error
+    assert(
+      Greatest(Seq(Literal(1), Literal("1"))).checkInputDataTypes() ==
+        TypeCheckFailure("The expressions should all have the same type, " +
+          "got GREATEST(int, string)."))
 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
