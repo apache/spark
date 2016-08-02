@@ -325,6 +325,8 @@ private[sql] class ParquetFileFormat
         None
       }
 
+    pushed.foreach(ParquetInputFormat.setFilterPredicate(hadoopConf, _))
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
