@@ -329,10 +329,12 @@ private[sql] case class FileSourceScanExec(
     }
   }
 
+  // These metadata values make scan plans uniquely identifiable for equality checking.
   override val metadata: Map[String, String] = Map(
     "Format" -> relation.fileFormat.toString,
     "ReadSchema" -> outputSchema.catalogString,
     "Batched" -> supportsBatch.toString,
+    "PartitionFilters" -> partitionFilters.mkString("[", ", ", "]"),
     DataSourceScanExec.PUSHED_FILTERS -> dataFilters.mkString("[", ", ", "]"),
     DataSourceScanExec.INPUT_PATHS -> relation.location.paths.mkString(", "))
 
