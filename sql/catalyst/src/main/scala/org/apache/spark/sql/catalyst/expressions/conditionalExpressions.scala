@@ -299,7 +299,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got LEAST (${children.map(_.dataType)}).")
+          s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
     }
@@ -359,7 +359,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
-          s" got GREATEST (${children.map(_.dataType)}).")
+          s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
       TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
     }
