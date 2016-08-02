@@ -43,7 +43,7 @@ export("setJobGroup",
        "cancelJobGroup")
 
 # Export Utility methods
-export("sc.setLogLevel")
+export("setLogLevel")
 
 exportClasses("SparkDataFrame")
 

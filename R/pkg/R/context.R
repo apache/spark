@@ -275,15 +275,15 @@ spark.lapply <- function(list, func) {
 #'
 #' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
 #'
-#' @rdname sc.setLogLevel
+#' @rdname setLogLevel
 #' @param level New log level
 #' @export
 #' @examples
 #'\dontrun{
-#' sc.setLogLevel("ERROR")
+#' setLogLevel("ERROR")
 #'}
-#' @note sc.setLogLevel since 2.0.0
-sc.setLogLevel <- function(level) {
+#' @note setLogLevel since 2.0.0
+setLogLevel <- function(level) {
   sc <- getSparkContext()
   callJMethod(sc, "setLogLevel", level)
 }

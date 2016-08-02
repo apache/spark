@@ -109,7 +109,7 @@ test_that("job group functions can be called", {
 
 test_that("utility function can be called", {
   sparkR.sparkContext()
-  sc.setLogLevel("ERROR")
+  setLogLevel("ERROR")
   sparkR.session.stop()
 })
 

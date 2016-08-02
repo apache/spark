@@ -133,9 +133,15 @@ private[spark] trait Logging {
         val rootLogger = LogManager.getRootLogger()
         val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
+        val callerClassName = this.getClass.getName
         if (replLevel != rootLogger.getEffectiveLevel()) {
           System.err.printf("Setting default log level to \"%s\".\n", replLevel)
-          System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
+          callerClassName match {
+            case "org.apache.spark.api.r.RBackend$" =>
+              System.err.println("To adjust logging level use setLogLevel(newLevel).")
+            case _ =>
+              System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
+          }
           rootLogger.setLevel(replLevel)
         }
       }
