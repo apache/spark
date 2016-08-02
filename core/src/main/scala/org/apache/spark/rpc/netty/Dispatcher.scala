@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
-import java.util.concurrent.{ThreadPoolExecutor, ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -41,8 +41,10 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val inbox = new Inbox(ref, endpoint)
   }
 
-  private val endpoints = new ConcurrentHashMap[String, EndpointData]
-  private val endpointRefs = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
+  private val endpoints: ConcurrentMap[String, EndpointData] =
+    new ConcurrentHashMap[String, EndpointData]
+  private val endpointRefs: ConcurrentMap[RpcEndpoint, RpcEndpointRef] =
+    new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]
 
   // Track the receivers whose inboxes may contain messages.
   private val receivers = new LinkedBlockingQueue[EndpointData]
