@@ -86,7 +86,9 @@ class TestHiveContext(
     new TestHiveContext(sparkSession.newSession())
   }
 
-  override def sharedState: TestHiveSharedState = sparkSession.sharedState
+  override def sharedState: HiveSharedState = {
+    sparkSession.sharedState.asInstanceOf[HiveSharedState]
+  }
 
   override def sessionState: TestHiveSessionState = sparkSession.sessionState
 
@@ -112,13 +114,13 @@ class TestHiveContext(
  * A [[SparkSession]] used in [[TestHiveContext]].
  *
  * @param sc SparkContext
- * @param existingSharedState optional [[TestHiveSharedState]]
+ * @param existingSharedState optional [[HiveSharedState]]
  * @param loadTestTables if true, load the test tables. They can only be loaded when running
  *                       in the JVM, i.e when calling from Python this flag has to be false.
  */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
-    @transient private val existingSharedState: Option[TestHiveSharedState],
+    @transient private val existingSharedState: Option[HiveSharedState],
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
@@ -141,13 +143,13 @@ private[hive] class TestHiveSparkSession(
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
-  // TODO: Let's remove TestHiveSharedState and TestHiveSessionState. Otherwise,
+  // TODO: Let's remove TestHiveSessionState. Otherwise,
   // we are not really testing the reflection logic based on the setting of
   // CATALOG_IMPLEMENTATION.
   @transient
-  override lazy val sharedState: TestHiveSharedState = {
+  override lazy val sharedState: HiveSharedState = {
     existingSharedState.getOrElse(
-      new TestHiveSharedState(sc))
+      new HiveSharedState(sc))
   }
 
   @transient
@@ -505,15 +507,6 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
     removedFunctions.foreach {
       case (name, (info, builder)) => registerFunction(name, info, builder)
     }
-  }
-}
-
-
-private[hive] class TestHiveSharedState(sc: SparkContext)
-  extends HiveSharedState(sc) {
-
-  override lazy val metadataHive: HiveClient = {
-    TestHiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration)
   }
 }
 
