@@ -15,7 +15,7 @@ like Kafka, Flume, Kinesis, or TCP sockets, and can be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's
-[machine learning](mllib-guide.html) and
+[machine learning](ml-guide.html) and
 [graph processing](graphx-programming-guide.html) algorithms on data streams.
 
 <p style="text-align: center;">
@@ -477,7 +477,7 @@ import org.apache.spark.*;
 import org.apache.spark.streaming.api.java.*;
 
 SparkConf conf = new SparkConf().setAppName(appName).setMaster(master);
-JavaStreamingContext ssc = new JavaStreamingContext(conf, Duration(1000));
+JavaStreamingContext ssc = new JavaStreamingContext(conf, new Duration(1000));
 {% endhighlight %}
 
 The `appName` parameter is a name for your application to show on the cluster UI.
@@ -1673,7 +1673,7 @@ See the [DataFrames and SQL](sql-programming-guide.html) guide to learn more abo
 ***
 
 ## MLlib Operations
-You can also easily use machine learning algorithms provided by [MLlib](mllib-guide.html). First of all, there are streaming machine learning algorithms (e.g. [Streaming Linear Regression](mllib-linear-methods.html#streaming-linear-regression), [Streaming KMeans](mllib-clustering.html#streaming-k-means), etc.) which can simultaneously learn from the streaming data as well as apply the model on the streaming data. Beyond these, for a much larger class of machine learning algorithms, you can learn a learning model offline (i.e. using historical data) and then apply the model online on streaming data. See the [MLlib](mllib-guide.html) guide for more details.
+You can also easily use machine learning algorithms provided by [MLlib](ml-guide.html). First of all, there are streaming machine learning algorithms (e.g. [Streaming Linear Regression](mllib-linear-methods.html#streaming-linear-regression), [Streaming KMeans](mllib-clustering.html#streaming-k-means), etc.) which can simultaneously learn from the streaming data as well as apply the model on the streaming data. Beyond these, for a much larger class of machine learning algorithms, you can learn a learning model offline (i.e. using historical data) and then apply the model online on streaming data. See the [MLlib](ml-guide.html) guide for more details.
 
 ***
 

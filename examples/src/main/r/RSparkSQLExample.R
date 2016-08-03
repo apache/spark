@@ -144,7 +144,7 @@ write.df(df1, "data/test_table/key=1", "parquet", "overwrite")
 write.df(df2, "data/test_table/key=2", "parquet", "overwrite")
 
 # Read the partitioned table
-df3 <- read.df("data/test_table", "parquet", mergeSchema="true")
+df3 <- read.df("data/test_table", "parquet", mergeSchema = "true")
 printSchema(df3)
 
 # The final schema consists of all 3 columns in the Parquet files together

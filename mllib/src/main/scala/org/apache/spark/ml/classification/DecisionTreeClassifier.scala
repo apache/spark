@@ -36,7 +36,7 @@ import org.apache.spark.sql.Dataset
 
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
+ * Decision tree learning algorithm (http://en.wikipedia.org/wiki/Decision_tree_learning)
  * for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
@@ -135,7 +135,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
 }
 
 /**
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for classification.
+ * Decision tree model (http://en.wikipedia.org/wiki/Decision_tree_learning) for classification.
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */

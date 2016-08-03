@@ -196,7 +196,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = {
-    validateAndTransformSchema(dataset.schema, fitting = true)
+    transformSchema(dataset.schema, logging = true)
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -244,12 +244,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         val msg = s"${optimizer.getClass.getName} failed."
         throw new SparkException(msg)
       }
-
-      if (!state.actuallyConverged) {
-        logWarning("AFTSurvivalRegression training fininshed but the result " +
-          s"is not converged because: ${state.convergedReason.get.reason}")
-      }
-
       state.x.toArray.clone()
     }
 
@@ -332,7 +326,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
     if (hasQuantilesCol) {

@@ -1124,11 +1124,11 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03,
+                 maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                  solver="l-bfgs", initialWeights=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03, \
+                 maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                  solver="l-bfgs", initialWeights=None)
         """
         super(MultilayerPerceptronClassifier, self).__init__()
@@ -1141,11 +1141,11 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     @keyword_only
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03,
+                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                   solver="l-bfgs", initialWeights=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03, \
+                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                   solver="l-bfgs", initialWeights=None)
         Sets params for MultilayerPerceptronClassifier.
         """
@@ -1299,7 +1299,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> [x.coefficients for x in model.models]
     [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
     >>> [x.intercept for x in model.models]
-    [-3.6474708290602034, 2.5507881951814495, -1.1016513228162115]
+    [-3.64747..., 2.55078..., -1.10165...]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
     >>> model.transform(test0).head().prediction
     1.0
