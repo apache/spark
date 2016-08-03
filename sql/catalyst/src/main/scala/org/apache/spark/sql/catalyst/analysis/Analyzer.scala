@@ -115,6 +115,9 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
+    Batch("StructsToNamedStructs", Once,
+      ReplaceStructWithNamedStruct
+    ),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -2059,25 +2062,16 @@ object EliminateUnions extends Rule[LogicalPlan] {
 }
 
 /**
- * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
- * expression in Project(project list) or Aggregate(aggregate expressions) or
- * Window(window expressions).
- */
-object CleanupAliases extends Rule[LogicalPlan] {
-  private def trimAliases(e: Expression): Expression = {
-    e.transformDown {
-      /**
-        *  [[CreateStruct]] is a special case as it uses its top level Aliases to decide the
-        *  name of StructField.
-        *  we tackle this by replacing [[CreateStruct]] with [[CreateNamedStruct]]
-        *  which encodes the field names as child literals.
-        */
-      case c @ CreateStruct(children) =>
-        CreateNamedStruct(mkNamedStructArgs(c.dataType, children))
-      case c @ CreateStructUnsafe(children) =>
-        CreateNamedStructUnsafe(mkNamedStructArgs(c.dataType, children))
-      case Alias(child, _) => child
-    }
+* Replaces [[CreateStruct]] and [[CreateStructUnsafe]] with
+* [[CreateNamedStruct]] and [[CreateNamedStructUnsafe]].
+* This eliminates the need for specual care in [[CleanupAliases]] when removing aliases.
+*/
+object ReplaceStructWithNamedStruct extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressionsDown {
+    case ct @ CreateStruct(children) =>
+      CreateNamedStruct(mkNamedStructArgs(ct.dataType, children))
+    case ct @ CreateStructUnsafe(children) =>
+      CreateNamedStructUnsafe(mkNamedStructArgs(ct.dataType, children))
   }
 
   private def mkNamedStructArgs( structType : StructType, attributeExpressions: Seq[Expression]) = {
@@ -2087,6 +2081,19 @@ object CleanupAliases extends Rule[LogicalPlan] {
       newChild <- Seq(nameLiteral, expression)
     } yield{
       newChild
+    }
+  }
+}
+
+/**
+ * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
+ * expression in Project(project list) or Aggregate(aggregate expressions) or
+ * Window(window expressions).
+ */
+object CleanupAliases extends Rule[LogicalPlan] {
+  private def trimAliases(e: Expression): Expression = {
+    e.transformDown {
+      case Alias(child, _) => child
     }
   }
 
@@ -2120,10 +2127,6 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
     case other =>
       other transformExpressionsDown {
-        case c @ CreateStruct(children) =>
-          CreateNamedStruct(mkNamedStructArgs(c.dataType, children))
-        case c @ CreateStructUnsafe(children) =>
-          CreateNamedStructUnsafe(mkNamedStructArgs(c.dataType, children))
         case Alias(child, _) => child
       }
   }
