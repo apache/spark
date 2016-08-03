@@ -682,7 +682,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def warehousePath: String = {
     new Path(getConf(WAREHOUSE_PATH).replace("${system:user.dir}",
-      System.getProperty("user.dir"))).toUri.toString
+      System.getProperty("user.dir"))).toString
   }
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
