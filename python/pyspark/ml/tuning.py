@@ -170,7 +170,6 @@ class CrossValidator(Estimator, ValidatorParams):
     0.5
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
-    >>> 
 
     .. versionadded:: 1.4.0
     """
