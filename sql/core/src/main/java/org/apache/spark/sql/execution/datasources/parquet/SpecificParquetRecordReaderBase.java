@@ -81,6 +81,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    */
   protected long totalRowCount;
 
+  /**
+   * The total number of row groups this RecordReader will eventually read. Only used for
+   * test purpose.
+   */
+  private int rowGroupCount;
+
   protected ParquetFileReader reader;
 
   @Override
@@ -141,7 +147,14 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }
+    // For test purpose.
+    rowGroupCount = blocks.size();
   }
+
+  /**
+   * Returns the total number of row groups to read. For test purpose only.
+   */
+  public int getRowGroupCount() { return rowGroupCount; }
 
   /**
    * Returns the list of files at 'path' recursively. This skips files that are ignored normally

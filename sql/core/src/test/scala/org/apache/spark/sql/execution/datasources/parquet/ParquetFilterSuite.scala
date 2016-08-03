@@ -17,11 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.JobID
+import org.apache.hadoop.mapreduce.TaskAttemptID
+import org.apache.hadoop.mapreduce.TaskID
+import org.apache.hadoop.mapreduce.TaskType
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, _}
+import org.apache.parquet.hadoop.ParquetInputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -555,6 +564,49 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       // The inner column name, `_1` and outer column name `_1` are the same.
       // Obviously this should not push down filters because the outer column is struct.
       assert(df.filter("_1 IS NOT NULL").count() === 4)
+    }
+  }
+
+  test("Fiters should be pushed down for vectorized Parquet reader at row group level") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/table"
+          (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
+
+          val requiredSchema = StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", IntegerType, nullable = false)
+          ))
+
+          val hadoopConf = new Configuration()
+          hadoopConf.setInt("parquet.block.size", 100)
+          hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+          hadoopConf.set(
+            ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+            ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
+
+          val filters = ParquetFilters.createFilter(requiredSchema, sources.LessThan("a", 100))
+          assert(filters.isDefined)
+
+          val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+          val hadoopAttemptContext =
+            new TaskAttemptContextImpl(hadoopConf, attemptId)
+
+          ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, filters.get)
+
+          new File(path).listFiles().filter(f => f.getPath().endsWith(".parquet")).map { f =>
+            val file = new File(f.getPath())
+            val split = new org.apache.parquet.hadoop.ParquetInputSplit(
+              new Path(f.getPath), 0L, file.length(), file.length(), Array.empty, null)
+
+            val vectorizedReader = new VectorizedParquetRecordReader()
+            vectorizedReader.initialize(split, hadoopAttemptContext)
+            assert(vectorizedReader.getRowGroupCount == 0)
+          }
+        }
+      }
     }
   }
 }

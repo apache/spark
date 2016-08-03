@@ -359,8 +359,8 @@ private[sql] class ParquetFileFormat
 
       // Try to push down filters when filter push-down is enabled.
       // Notice: This push-down is RowGroups level, not individual records.
-      pushed.foreach {
-        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, _)
+      if (pushed.isDefined) {
+        ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
       val parquetReader = if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader()
@@ -563,29 +563,6 @@ private[sql] class ParquetOutputWriter(
 }
 
 private[sql] object ParquetFileFormat extends Logging {
-  /**
-   * If parquet's block size (row group size) setting is larger than the min split size,
-   * we use parquet's block size setting as the min split size. Otherwise, we will create
-   * tasks processing nothing (because a split does not cover the starting point of a
-   * parquet block). See https://issues.apache.org/jira/browse/SPARK-10143 for more information.
-   */
-  private def overrideMinSplitSize(parquetBlockSize: Long, conf: Configuration): Unit = {
-    val minSplitSize =
-      math.max(
-        conf.getLong("mapred.min.split.size", 0L),
-        conf.getLong("mapreduce.input.fileinputformat.split.minsize", 0L))
-    if (parquetBlockSize > minSplitSize) {
-      val message =
-        s"Parquet's block size (row group size) is larger than " +
-          s"mapred.min.split.size/mapreduce.input.fileinputformat.split.minsize. Setting " +
-          s"mapred.min.split.size and mapreduce.input.fileinputformat.split.minsize to " +
-          s"$parquetBlockSize."
-      logDebug(message)
-      conf.set("mapred.min.split.size", parquetBlockSize.toString)
-      conf.set("mapreduce.input.fileinputformat.split.minsize", parquetBlockSize.toString)
-    }
-  }
-
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
