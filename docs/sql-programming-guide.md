@@ -995,6 +995,15 @@ The following options can be used to configure the version of Hive that is used 
       </p>
     </td>
   </tr>
+  <tr>
+    <td><code>spark.sql.broadcastTimeout</code></td>
+    <td><code>300</code></td>
+    <td>
+      <p>
+	Timeout in seconds for the broadcast wait time in broadcast joins
+      </p>
+    </td>
+  </tr>	
 </table>
 
 
