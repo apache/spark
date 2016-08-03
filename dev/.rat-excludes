@@ -99,4 +99,5 @@ spark-deps-.*
 .*tsv
 org.apache.spark.scheduler.ExternalClusterManager
 .*\.sql
+.*\.sql\.xml
 .Rbuildignore
