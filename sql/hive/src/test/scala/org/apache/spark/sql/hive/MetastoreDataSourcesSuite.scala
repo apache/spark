@@ -726,7 +726,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = Seq.empty,
+        schema = new StructType,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -998,7 +998,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
       assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
-        .forall(column => CatalystSqlParser.parseDataType(column.dataType) == StringType))
+        .forall(_.dataType == StringType))
 
       createDataSourceTable(
         sparkSession = spark,
@@ -1013,8 +1013,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       // As a proxy for verifying that the table was stored in SparkSQL format,
       // we verify that the table has a column type as array of StringType.
       assert(sharedState.externalCatalog.getTable("default", "skip_hive_metadata")
-        .schema.forall { c =>
-          CatalystSqlParser.parseDataType(c.dataType) == ArrayType(StringType) })
+        .schema.forall(_.dataType == ArrayType(StringType)))
     }
   }
 
