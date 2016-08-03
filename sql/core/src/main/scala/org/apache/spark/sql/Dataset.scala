@@ -1576,7 +1576,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
-    require(weights.forall(_ > 0),
+    require(weights.forall(_ >= 0),
       s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
     require(weights.sum > 0,
       s"Sum of weights must be positive, but got ${weights.mkString("[", ",", "]")}")
