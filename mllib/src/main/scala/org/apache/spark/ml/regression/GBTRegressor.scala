@@ -228,7 +228,7 @@ class GBTRegressionModel private[ml](
    * This may be replaced with a different mechanism to control code generation in future versions.
    */
   @Experimental
-  @Since("2.0.0")
+  @Since("2.1.0")
   def toCodeGen(): GBTRegressionModel = {
     if (!useCodeGen) {
       val extra = ParamMap.empty
