@@ -872,7 +872,8 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
 private[spark] class PythonAccumulatorV2(@transient private val serverHost: String, serverPort: Int)
   extends AccumulatorV2[JList[Array[Byte]], JList[Array[Byte]]] {
 
-  private[python] var _acc: JList[Array[Byte]] = new JArrayList[Array[Byte]]
+  private[python] var _acc: JList[Array[Byte]] = Collections.synchronizedList(
+    new JArrayList[Array[Byte]])
 
   Utils.checkHost(serverHost, "Expected hostname")
 
@@ -892,7 +893,7 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
   }
 
   override def reset(): Unit = {
-    this._acc = new JArrayList[Array[Byte]]
+    this._acc = Collections.synchronizedList(new JArrayList[Array[Byte]])
   }
 
   override def isZero: Boolean = {
@@ -908,7 +909,7 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
   }
 
   // This happens on the worker node, where we just want to remember all the updates
-  override def add(val2: JList[Array[Byte]]): Unit = synchronized {
+  override def add(val2: JList[Array[Byte]]): Unit = {
     _acc.addAll(val2)
   }
 
