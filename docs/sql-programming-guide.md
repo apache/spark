@@ -790,6 +790,15 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     </p>
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.broadcastTimeout</code></td>
+  <td>300</td>
+  <td>
+    <p>
+      Timeout in seconds for the broadcast wait time in broadcast joins
+    </p>
+  </td>
+</tr>
 </table>
 
 ## JSON Datasets
