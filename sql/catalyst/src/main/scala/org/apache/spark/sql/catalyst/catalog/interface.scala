@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.util.Date
-import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -26,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -78,28 +78,6 @@ object CatalogStorageFormat {
 }
 
 /**
- * A column in a table.
- */
-case class CatalogColumn(
-    name: String,
-    // TODO: make this type-safe; this is left as a string due to issues in converting Hive
-    // varchars to and from SparkSQL strings.
-    dataType: String,
-    nullable: Boolean = true,
-    comment: Option[String] = None) {
-
-  override def toString: String = {
-    val output =
-      Seq(s"`$name`",
-        dataType,
-        if (!nullable) "NOT NULL" else "",
-        comment.map("(" + _ + ")").getOrElse(""))
-    output.filter(_.nonEmpty).mkString(" ")
-  }
-
-}
-
-/**
  * A partition (Hive style) defined in the catalog.
  *
  * @param spec partition spec values indexed by column name
@@ -141,7 +119,7 @@ case class CatalogTable(
     identifier: TableIdentifier,
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
-    schema: Seq[CatalogColumn],
+    schema: StructType,
     partitionColumnNames: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     owner: String = "",
@@ -163,9 +141,10 @@ case class CatalogTable(
   requireSubsetOfSchema(bucketSpec.map(_.sortColumnNames).getOrElse(Nil), "sort")
   requireSubsetOfSchema(bucketSpec.map(_.bucketColumnNames).getOrElse(Nil), "bucket")
 
-  /** Columns this table is partitioned by. */
-  def partitionColumns: Seq[CatalogColumn] =
-    schema.filter { c => partitionColumnNames.contains(c.name) }
+  /** schema of this table's partition columns */
+  def partitionSchema: StructType = StructType(schema.filter {
+    c => partitionColumnNames.contains(c.name)
+  })
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
@@ -277,16 +256,13 @@ case class SimpleCatalogRelation(
   override lazy val resolved: Boolean = false
 
   override val output: Seq[Attribute] = {
-    val cols = catalogTable.schema
-      .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
-    (cols ++ catalogTable.partitionColumns).map { f =>
-      AttributeReference(
-        f.name,
-        CatalystSqlParser.parseDataType(f.dataType),
-        // Since data can be dumped in randomly with no validation, everything is nullable.
-        nullable = true
-      )(qualifier = Some(metadata.identifier.table))
-    }
+    val (partCols, dataCols) = metadata.schema.toAttributes
+      // Since data can be dumped in randomly with no validation, everything is nullable.
+      .map(_.withNullability(true).withQualifier(Some(metadata.identifier.table)))
+      .partition { a =>
+        metadata.partitionColumnNames.contains(a.name)
+      }
+    dataCols ++ partCols
   }
 
   require(
