@@ -894,7 +894,7 @@ private class LeastSquaresAggregator(
 
   private val dim = bcCoefficients.value.size
   @transient private lazy val featuresStd = bcFeaturesStd.value
-  @transient private lazy val coefAndOffset = {
+  @transient private lazy val effectiveCoefAndOffset = {
     val coefficientsArray = bcCoefficients.value.toArray.clone()
     val featuresMean = bcFeaturesMean.value
     var sum = 0.0
@@ -912,8 +912,8 @@ private class LeastSquaresAggregator(
     val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
     (Vectors.dense(coefficientsArray), offset)
   }
-  @transient private lazy val effectiveCoefficientsVector = coefAndOffset._1
-  @transient private lazy val offset = coefAndOffset._2
+  @transient private lazy val effectiveCoefficientsVector = effectiveCoefAndOffset._1
+  @transient private lazy val offset = effectiveCoefAndOffset._2
 
   private val gradientSumArray = Array.ofDim[Double](dim)
 
@@ -1011,10 +1011,11 @@ private class LeastSquaresCostFun(
     featuresMean: Array[Double],
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
 
+  val bcFeaturesStd = instances.context.broadcast(featuresStd)
+  val bcFeaturesMean = instances.context.broadcast(featuresMean)
+
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
-    val bcFeaturesMean = instances.context.broadcast(featuresMean)
     val bcCoeffs = instances.context.broadcast(coeffs)
 
     val leastSquaresAggregator = {
@@ -1027,6 +1028,7 @@ private class LeastSquaresCostFun(
     }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
+    bcCoeffs.destroy(blocking = false)
 
     val regVal = if (effectiveL2regParam == 0.0) {
       0.0
