@@ -333,7 +333,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
        */
       class ParquetWriterBuilder() extends
           ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
-        override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = testWriteSupport
+        override def getWriteSupport(conf: Configuration) = testWriteSupport
 
         override def self() = this
       }
