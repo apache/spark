@@ -288,7 +288,7 @@ case class HashAggregateExec(
   private var isVectorizedHashMapEnabled: Boolean = false
   private var isRowBasedHashMapEnabled: Boolean = false
   // auxiliary flag, true if any of two above is true
-  private var isFastHashMapEnabled: Boolean = false
+  private var isFastHashMapEnabled: Boolean = isVectorizedHashMapEnabled || isRowBasedHashMapEnabled
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
@@ -517,8 +517,8 @@ case class HashAggregateExec(
     sqlContext.conf.enforceFastAggHashMapImpl match {
       case "rowbased" =>
         if (!enableRowBasedHashMap(ctx)) {
-          if (modes.forall(mode => mode == Partial || mode == PartialMerge)) {
-            logWarning("spark.sql.codegen.aggregate.map.enforce.impl is set to rowbased, but "
+          if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
+            logWarning("spark.sql.codegen.aggregate.map.enforce.impl is set to rowbased, but"
               + " current version of codegened row-based hashmap does not support this aggregate.")
           }
         } else {
@@ -526,9 +526,9 @@ case class HashAggregateExec(
         }
       case "vectorized" =>
         if (!enableVectorizedHashMap(ctx)) {
-          if (modes.forall(mode => mode == Partial || mode == PartialMerge)) {
-            logWarning("spark.sql.codegen.aggregate.map.enforce.impl is set to vectorized, but "
-              + " current version of codegened row-based hashmap does not support this aggregate.")
+          if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
+            logWarning("spark.sql.codegen.aggregate.map.enforce.impl is set to vectorized, but"
+              + " current version of codegened vectorized hashmap does not support this aggregate.")
           }
         } else {
           isVectorizedHashMapEnabled = true
