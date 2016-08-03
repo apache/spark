@@ -43,7 +43,7 @@ object DatasetBenchmark {
       var res = rdd
       var i = 0
       while (i < numChains) {
-        res = rdd.map(func)
+        res = res.map(func)
         i += 1
       }
       res.foreach(_ => Unit)
@@ -84,7 +84,7 @@ object DatasetBenchmark {
       var res = rdd
       var i = 0
       while (i < numChains) {
-        res = rdd.map(func)
+        res = res.map(func)
         i += 1
       }
       res.foreach(_ => Unit)
@@ -128,7 +128,7 @@ object DatasetBenchmark {
       var res = rdd
       var i = 0
       while (i < numChains) {
-        res = rdd.filter(funcs(i))
+        res = res.filter(funcs(i))
         i += 1
       }
       res.foreach(_ => Unit)
@@ -212,48 +212,47 @@ object DatasetBenchmark {
     val benchmark4 = aggregate(spark, numRows)
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
     back-to-back map:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD                                           5144 / 5330         19.4          51.4       1.0X
-    DataFrame                                     6878 / 7133         14.5          68.8       0.7X
-    Dataset                                     13760 / 14076          7.3         137.6       0.4X
+    RDD                                         11034 / 11542          9.1         110.3       1.0X
+    DataFrame                                     9007 / 9555         11.1          90.1       1.2X
+    Dataset                                     16514 / 16641          6.1         165.1       0.7X
     */
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
     back-to-back map for primitive:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD                                           1963 / 2172         50.9          19.6       1.0X
-    DataFrame                                     1563 / 1746         64.0          15.6       1.3X
-    Dataset                                       5640 / 5810         17.7          56.4       0.3X
+    RDD                                           6847 / 6924         14.6          68.5       1.0X
+    DataFrame                                     1552 / 1650         64.5          15.5       4.4X
+    Dataset                                       6565 / 6669         15.2          65.7       1.0X
     */
     benchmark2.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-
     back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD                                           3854 / 3976         25.9          38.5       1.0X
-    DataFrame                                      249 /  301        401.2           2.5      15.5X
-    Dataset                                       8119 / 8425         12.3          81.2       0.5X
+    RDD                                           4527 / 4604         22.1          45.3       1.0X
+    DataFrame                                      169 /  197        592.6           1.7      26.8X
+    Dataset                                     10190 / 10218          9.8         101.9       0.4X
     */
     benchmark3.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
     Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
     aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD sum                                       4660 / 5167         21.5          46.6       1.0X
-    DataFrame sum                                  140 /  168        712.1           1.4      33.2X
-    Dataset sum using Aggregator                  7549 / 8149         13.2          75.5       0.6X
-    Dataset complex Aggregator                  20530 / 20770          4.9         205.3       0.2X
+    RDD sum                                       4460 / 4464         22.4          44.6       1.0X
+    DataFrame sum                                   87 /  107       1143.9           0.9      51.0X
+    Dataset sum using Aggregator                  9765 / 9766         10.2          97.7       0.5X
+    Dataset complex Aggregator                  24580 / 24757          4.1         245.8       0.2X
     */
     benchmark4.run()
   }
