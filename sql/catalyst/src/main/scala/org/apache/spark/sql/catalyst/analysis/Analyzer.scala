@@ -2073,9 +2073,9 @@ object CleanupAliases extends Rule[LogicalPlan] {
         *  which encodes the field names as child literals.
         */
       case c @ CreateStruct(children) =>
-        CreateNamedStruct( mkNamedStructArgs(c.dataType, children))
+        CreateNamedStruct(mkNamedStructArgs(c.dataType, children))
       case c @ CreateStructUnsafe(children) =>
-        CreateNamedStructUnsafe( mkNamedStructArgs(c.dataType, children))
+        CreateNamedStructUnsafe(mkNamedStructArgs(c.dataType, children))
       case Alias(child, _) => child
     }
   }
@@ -2121,9 +2121,9 @@ object CleanupAliases extends Rule[LogicalPlan] {
     case other =>
       other transformExpressionsDown {
         case c @ CreateStruct(children) =>
-          CreateNamedStruct( mkNamedStructArgs(c.dataType, children))
+          CreateNamedStruct(mkNamedStructArgs(c.dataType, children))
         case c @ CreateStructUnsafe(children) =>
-          CreateNamedStructUnsafe( mkNamedStructArgs(c.dataType, children))
+          CreateNamedStructUnsafe(mkNamedStructArgs(c.dataType, children))
         case Alias(child, _) => child
       }
   }

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
 
-class AnalysisSuite extends AnalysisTest with ShouldMatchers{
+class AnalysisSuite extends AnalysisTest with ShouldMatchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
@@ -228,7 +228,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers{
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     expected = testRelation.select(CreateNamedStructUnsafe(Seq(
       Literal(a.name), a,
-      Literal("a+1"),(a + 1))).as("col"))
+      Literal("a+1"), (a + 1))) as "col")
     checkAnalysis(plan, expected)
   }
 
@@ -247,7 +247,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers{
     plan = getAnalyzer(true).execute(plan)
 
     plan should be (a[Project])
-    val Project( projectExpressions, _) = plan
+    val Project(projectExpressions, _) = plan
     projectExpressions should have (size(1))
     val Seq(expr1) = projectExpressions
     expr1 should be (a[Alias])
