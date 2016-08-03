@@ -326,15 +326,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         """.stripMargin)
 
       val testWriteSupport = new TestGroupWriteSupport(schema)
+      /**
+       * Provide a builder for constructing a parquet writer - after PARQUET-248 directly
+       * constructing the writer is deprecated and should be done through a builder. The default
+       * builders include Avro - but for raw Parquet writing we must create our own builder.
+       */
       class ParquetWriterBuilder() extends
           ParquetWriter.Builder[Group, ParquetWriterBuilder](path) {
-        @Override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = {
-          testWriteSupport
-        }
+        override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = testWriteSupport
 
-        @Override def self() = {
-          this
-        }
+        override def self() = this
       }
 
       val writer = new ParquetWriterBuilder().build()

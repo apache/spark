@@ -120,15 +120,15 @@ private[sql] object ParquetCompatibilityTest {
       recordWriters: (RecordConsumer => Unit)*): Unit = {
     val messageType = MessageTypeParser.parseMessageType(schema)
     val testWriteSupport = new DirectWriteSupport(messageType, metadata)
+    /**
+     * Provide a builder for constructing a parquet writer - after PARQUET-248 directly constructing
+     * the writer is deprecated and should be done through a builder. The default builders include
+     * Avro - but for raw Parquet writing we must create our own builder.
+     */
     class ParquetWriterBuilder() extends
         ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](new Path(path)) {
-      @Override def getWriteSupport(conf: org.apache.hadoop.conf.Configuration) = {
-        testWriteSupport
-      }
-
-      @Override def self() = {
-        this
-      }
+      override def getWriteSupport(conf: Configuration) = testWriteSupport
+      override def self() = this
     }
     val parquetWriter = new ParquetWriterBuilder().build()
     try recordWriters.foreach(parquetWriter.write) finally parquetWriter.close()
