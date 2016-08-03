@@ -899,9 +899,11 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
     this._acc.isEmpty
   }
 
+  override def copyAndReset(): PythonAccumulatorV2 = new PythonAccumulatorV2(serverHost, serverPort)
+
   override def copy(): PythonAccumulatorV2 = {
     val newAcc = new PythonAccumulatorV2(serverHost, serverPort)
-    newAcc._acc = this._acc
+    newAcc._acc.addAll(this._acc)
     newAcc
   }
 
