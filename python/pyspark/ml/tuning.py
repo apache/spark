@@ -166,8 +166,11 @@ class CrossValidator(Estimator, ValidatorParams):
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> cvModel = cv.fit(dataset)
+    >>> cvModel.avgMetrics[0]
+    0.5
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
+    >>> 
 
     .. versionadded:: 1.4.0
     """
