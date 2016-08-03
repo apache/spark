@@ -78,7 +78,7 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   writerSettings.setNullValue(params.nullValue)
   writerSettings.setEmptyValue(params.nullValue)
   writerSettings.setSkipEmptyLines(true)
-  writerSettings.setQuoteAllFields(false)
+  writerSettings.setQuoteAllFields(params.quoteAll)
   writerSettings.setHeaders(headers: _*)
   writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
 

@@ -79,13 +79,15 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     assert(tr.analyze.constraints.isEmpty)
 
     val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
-      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a).analyze
+      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a, 'a3).analyze
 
+    // SPARK-16644: aggregate expression count(a) should not appear in the constraints.
     verifyConstraints(aliasedRelation.analyze.constraints,
       ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "c1") > 10,
         IsNotNull(resolveColumn(aliasedRelation.analyze, "c1")),
         resolveColumn(aliasedRelation.analyze, "a") < 5,
-        IsNotNull(resolveColumn(aliasedRelation.analyze, "a")))))
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "a")),
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "a3")))))
   }
 
   test("propagating constraints in expand") {

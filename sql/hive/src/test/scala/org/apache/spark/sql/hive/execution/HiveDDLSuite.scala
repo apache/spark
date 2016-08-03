@@ -356,7 +356,7 @@ class HiveDDLSuite
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) !=
+    assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -364,7 +364,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assume(newPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) ==
+    assume(newPart.storage.properties.filterKeys(expectedSerdeProps.contains) ==
       expectedSerdeProps)
   }
 
@@ -431,6 +431,22 @@ class HiveDDLSuite
     }
   }
 
+  test("desc table for Hive table - partitioned table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b int)")
+
+      assert(sql("DESC tbl").collect().containsSlice(
+        Seq(
+          Row("a", "int", null),
+          Row("b", "int", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("b", "int", null)
+        )
+      ))
+    }
+  }
+
   test("desc table for data source table using Hive Metastore") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
     val tabName = "tab1"
@@ -472,6 +488,7 @@ class HiveDDLSuite
       sql(s"DROP TABLE $tabName")
 
       assert(tmpDir.listFiles.isEmpty)
+      sql("USE default")
       sql(s"DROP DATABASE $dbName")
       assert(!fs.exists(new Path(tmpDir.toString)))
     }
@@ -526,6 +543,7 @@ class HiveDDLSuite
           assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
         }
 
+        sql(s"USE default")
         val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
         if (tableExists && !cascade) {
           val message = intercept[AnalysisException] {
@@ -610,15 +628,17 @@ class HiveDDLSuite
   }
 
   test("desc table for data source table - no user-defined schema") {
-    withTable("t1") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        spark.range(1).write.parquet(path)
-        sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
+    Seq("parquet", "json", "orc").foreach { fileFormat =>
+      withTable("t1") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(1).write.format(fileFormat).save(path)
+          sql(s"CREATE TABLE t1 USING $fileFormat OPTIONS (PATH '$path')")
 
-        val desc = sql("DESC FORMATTED t1").collect().toSeq
+          val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-        assert(desc.contains(Row("# Schema of this table is inferred at runtime", "", "")))
+          assert(desc.contains(Row("id", "bigint", null)))
+        }
       }
     }
   }
@@ -634,13 +654,13 @@ class HiveDDLSuite
 
       assert(formattedDesc.containsSlice(
         Seq(
-          Row("a", "bigint", ""),
-          Row("b", "bigint", ""),
-          Row("c", "bigint", ""),
-          Row("d", "bigint", ""),
+          Row("a", "bigint", null),
+          Row("b", "bigint", null),
+          Row("c", "bigint", null),
+          Row("d", "bigint", null),
           Row("# Partition Information", "", ""),
-          Row("# col_name", "", ""),
-          Row("d", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("d", "bigint", null),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
           Row("Database:", "default", "")

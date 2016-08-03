@@ -651,44 +651,44 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count", "4", "4"),
-      Row("mean", "33.0", "178.0"),
-      Row("stddev", "19.148542155126762", "11.547005383792516"),
-      Row("min", "16", "164"),
-      Row("max", "60", "192"))
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("max", "David", "60", "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count", "0", "0"),
-      Row("mean", null, null),
-      Row("stddev", null, null),
-      Row("min", null, null),
-      Row("max", null, null))
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("max", null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("age", "height")
-    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    val describeTwoCols = describeTestData.describe("name", "age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
     // All aggregate value should have been cast to string
     describeTwoCols.collect().foreach { row =>
-      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
       assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
     }
 
     val describeAllCols = describeTestData.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
 
     val describeOneCol = describeTestData.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
     val describeNoCol = describeTestData.select("name").describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
 
     val emptyDescription = describeTestData.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 

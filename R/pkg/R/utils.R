@@ -126,20 +126,16 @@ hashCode <- function(key) {
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
     # TODO: SPARK-7839 means we might not have the native library available
-    if (is.loaded("stringHashCode")) {
-      .Call("stringHashCode", key)
+    n <- nchar(key)
+    if (n == 0) {
+      0L
     } else {
-      n <- nchar(key)
-      if (n == 0) {
-        0L
-      } else {
-        asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
-        hashC <- 0
-        for (k in 1:length(asciiVals)) {
-          hashC <- mult31AndAdd(hashC, asciiVals[k])
-        }
-        as.integer(hashC)
+      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+      hashC <- 0
+      for (k in 1:length(asciiVals)) {
+        hashC <- mult31AndAdd(hashC, asciiVals[k])
       }
+      as.integer(hashC)
     }
   } else {
     warning(paste("Could not hash object, returning 0", sep = ""))

@@ -18,7 +18,7 @@
 context("basic RDD functions")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Data
@@ -800,3 +800,5 @@ test_that("Test correct concurrency of RRDD.compute()", {
   count <- callJMethod(zrdd, "count")
   expect_equal(count, 1000)
 })
+
+sparkR.session.stop()
