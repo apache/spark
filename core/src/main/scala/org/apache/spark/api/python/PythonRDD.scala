@@ -917,7 +917,7 @@ private[spark] class PythonAccumulatorV2(@transient private val serverHost: Stri
     // driver program - but that isn't gauranteed so incase this changes.
     if (serverHost == null) {
       // We are on the worker
-      _acc.addAll(otherPythonAccumulator._acc)
+      add(otherPythonAccumulator._acc)
     } else {
       // This happens on the master, where we pass the updates to Python through a socket
       val socket = openSocket()
