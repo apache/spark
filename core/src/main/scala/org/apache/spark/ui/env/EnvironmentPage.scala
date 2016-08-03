@@ -25,9 +25,13 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
   private val listener = parent.listener
+  // Spark Properties (lowercase). Their values will be changed to ***** in WebUI
+  private val propertiesToMask = Set("spark.authenticate.secret")
 
   private def removePass(kv: (String, String)): (String, String) = {
-    if (kv._1.toLowerCase.contains("password")) (kv._1, "******") else kv
+    if (kv._1.toLowerCase.contains("password") || propertiesToMask.contains(kv._1.toLowerCase)) {
+      (kv._1, "******")
+    } else kv
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
