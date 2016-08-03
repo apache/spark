@@ -51,6 +51,22 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("basic pipe with tokenization") {
+    if (testCommandAvailable("wc")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+
+      // verify that both RDD.pipe(command: String) and RDD.pipe(command: String, env) work good
+      for (piped <- Seq(nums.pipe("wc -l"), nums.pipe("wc -l", Map[String, String]()))) {
+        val c = piped.collect()
+        assert(c.size === 2)
+        assert(c(0).trim === "2")
+        assert(c(1).trim === "2")
+      }
+    } else {
+      assert(true)
+    }
+  }
+
   test("failure in iterating over pipe input") {
     if (testCommandAvailable("cat")) {
       val nums =
@@ -80,7 +96,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       val piped = nums.pipe(Seq("cat"),
         Map[String, String](),
         (f: String => Unit) => {
-          bl.value.map(f(_)); f("\u0001")
+          bl.value.foreach(f); f("\u0001")
         },
         (i: Int, f: String => Unit) => f(i + "_"))
 
@@ -101,7 +117,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
         pipe(Seq("cat"),
           Map[String, String](),
           (f: String => Unit) => {
-            bl.value.map(f(_)); f("\u0001")
+            bl.value.foreach(f); f("\u0001")
           },
           (i: Tuple2[String, Iterable[String]], f: String => Unit) => {
             for (e <- i._2) {
@@ -120,6 +136,14 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     } else {
       assert(true)
     }
+  }
+
+  test("pipe with empty partition") {
+    val data = sc.parallelize(Seq("foo", "bing"), 8)
+    val piped = data.pipe("wc -c")
+    assert(piped.count == 8)
+    val charCounts = piped.map(_.trim.toInt).collect().toSet
+    assert(Set(0, 4, 5) == charCounts)
   }
 
   test("pipe with env variable") {

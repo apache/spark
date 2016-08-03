@@ -109,7 +109,9 @@ object SQLConf {
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
       "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
       "Note that currently statistics are only supported for Hive Metastore tables where the " +
-      "command<code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.")
+      "command<code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been " +
+      "run, and file-based data source tables where the statistics are computed directly on " +
+      "the files of data.")
     .longConf
     .createWithDefault(10L * 1024 * 1024)
 
@@ -122,10 +124,10 @@ object SQLConf {
 
   val DEFAULT_SIZE_IN_BYTES = SQLConfigBuilder("spark.sql.defaultSizeInBytes")
     .internal()
-    .doc("The default table size used in query planning. By default, it is set to a larger " +
-      "value than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. That is to say " +
-      "by default the optimizer will not choose to broadcast a table unless it knows for sure " +
-      "its size is small enough.")
+    .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
+      "which is larger than `spark.sql.autoBroadcastJoinThreshold` to be more conservative. " +
+      "That is to say by default the optimizer will not choose to broadcast a table unless it " +
+      "knows for sure its size is small enough.")
     .longConf
     .createWithDefault(-1)
 
@@ -258,22 +260,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView")
-    .internal()
-    .doc("When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
-         "Note that this function is experimental and should ony be used when you are using " +
-         "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
-         "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
-         "possible, or you may get wrong result.")
-    .booleanConf
-    .createWithDefault(true)
-
-  val CANONICAL_NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView.canonical")
-    .internal()
-    .doc("When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
-         "CREATE VIEW statement using SQL query string generated from view definition logical " +
-         "plan.  If the logical plan doesn't have a SQL representation, we fallback to the " +
-         "original native view implementation.")
+  val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
+    .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
+      "to produce the partition columns instead of table scans. It applies when all the columns " +
+      "scanned are partition columns and the query has an aggregate operator that satisfies " +
+      "distinct semantics.")
     .booleanConf
     .createWithDefault(true)
 
@@ -613,7 +604,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  def nativeView: Boolean = getConf(NATIVE_VIEW)
+  def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
@@ -624,8 +615,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
-
-  def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
@@ -690,9 +679,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
-  def warehousePath: String = {
-    getConf(WAREHOUSE_PATH).replace("${system:user.dir}", System.getProperty("user.dir"))
-  }
+  def warehousePath: String = getConf(WAREHOUSE_PATH)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
@@ -751,8 +738,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    */
   def getConf[T](entry: ConfigEntry[T]): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.valueConverter).orElse(entry.defaultValue).
-      getOrElse(throw new NoSuchElementException(entry.key))
+    entry.readFrom(settings, System.getenv)
   }
 
   /**
@@ -761,7 +747,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    */
   def getConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.rawValueConverter)
+    entry.readFrom(settings, System.getenv)
   }
 
   /**

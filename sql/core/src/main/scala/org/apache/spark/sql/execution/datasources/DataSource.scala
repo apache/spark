@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -485,12 +486,11 @@ case class DataSource(
             data.logicalPlan,
             mode)
         sparkSession.sessionState.executePlan(plan).toRdd
+        // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
+        copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
-
-    // We replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
-    copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
   }
 }

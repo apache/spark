@@ -752,7 +752,7 @@ class JDBCSuite extends SparkFunSuite
     assertEmptyQuery(s"SELECT * FROM foobar WHERE $FALSE1 AND ($FALSE2 OR $TRUE)")
 
     // Tests JDBCPartition whereClause clause push down.
-    withTempTable("tempFrame") {
+    withTempView("tempFrame") {
       val jdbcPartitionWhereClause = s"$FALSE1 OR $TRUE"
       val df = spark.read.jdbc(
         urlWithUserAndPass,
@@ -763,5 +763,11 @@ class JDBCSuite extends SparkFunSuite
       df.createOrReplaceTempView("tempFrame")
       assertEmptyQuery(s"SELECT * FROM tempFrame where $FALSE2")
     }
+  }
+
+  test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
+    val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
+    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    assert(schema.contains("`order` TEXT"))
   }
 }

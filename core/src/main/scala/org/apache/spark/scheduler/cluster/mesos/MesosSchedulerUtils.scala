@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
+
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods and Mesos scheduler will use.
@@ -79,7 +80,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       credBuilder.setPrincipal(principal)
     }
     conf.getOption("spark.mesos.secret").foreach { secret =>
-      credBuilder.setSecret(ByteString.copyFromUtf8(secret))
+      credBuilder.setSecret(secret)
     }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(

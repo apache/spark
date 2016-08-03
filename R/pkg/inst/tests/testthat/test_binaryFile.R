@@ -18,7 +18,7 @@
 context("functions on binary files")
 
 # JavaSparkContext handle
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
@@ -88,3 +88,5 @@ test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
   unlink(fileName1, recursive = TRUE)
   unlink(fileName2, recursive = TRUE)
 })
+
+sparkR.session.stop()

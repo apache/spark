@@ -170,7 +170,7 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=SET kw4=FILEFORMAT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=ADD kw4=COLUMNS
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMNS?
+    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE kw4=COLUMN?
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=REPLACE kw4=COLUMNS
     | kw1=START kw2=TRANSACTION
     | kw1=COMMIT
@@ -249,11 +249,18 @@ tablePropertyList
     ;
 
 tableProperty
-    : key=tablePropertyKey (EQ? value=STRING)?
+    : key=tablePropertyKey (EQ? value=tablePropertyValue)?
     ;
 
 tablePropertyKey
     : identifier ('.' identifier)*
+    | STRING
+    ;
+
+tablePropertyValue
+    : INTEGER_VALUE
+    | DECIMAL_VALUE
+    | booleanValue
     | STRING
     ;
 
@@ -493,6 +500,7 @@ valueExpression
 
 primaryExpression
     : constant                                                                                 #constantDefault
+    | name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
     | ASTERISK                                                                                 #star
     | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
@@ -653,7 +661,7 @@ nonReserved
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
     ;
 
 SELECT: 'SELECT';
@@ -873,6 +881,8 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
+CURRENT_DATE: 'CURRENT_DATE';
+CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

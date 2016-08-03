@@ -138,7 +138,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    listColumns(currentDatabase, tableName)
+    listColumns(TableIdentifier(tableName, None))
   }
 
   /**
@@ -147,14 +147,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database or table does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
     requireTableExists(dbName, tableName)
-    val tableMetadata = sessionCatalog.getTableMetadata(TableIdentifier(tableName, Some(dbName)))
+    listColumns(TableIdentifier(tableName, Some(dbName)))
+  }
+
+  private def listColumns(tableIdentifier: TableIdentifier): Dataset[Column] = {
+    val tableMetadata = sessionCatalog.getTableMetadata(tableIdentifier)
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet
-    val bucketColumnNames = tableMetadata.bucketColumnNames.toSet
+    val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     val columns = tableMetadata.schema.map { c =>
       new Column(
         name = c.name,
-        description = c.comment.orNull,
-        dataType = c.dataType,
+        description = c.getComment().orNull,
+        dataType = c.dataType.catalogString,
         nullable = c.nullable,
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
@@ -293,7 +297,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Unit = {
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
-    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true, purge = false)
   }
 
   /**
@@ -348,13 +352,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
-   * is refreshed.
+   * is refreshed. For data source tables, the schema will not be inferred and refreshed.
    *
    * @group cachemgmt
    * @since 2.0.0
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
+    // Non-temp tables: refresh the metadata cache.
     sessionCatalog.refreshTable(tableIdent)
 
     // If this table is cached as an InMemoryRelation, drop the original
