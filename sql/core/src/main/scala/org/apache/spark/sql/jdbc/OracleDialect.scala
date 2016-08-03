@@ -29,7 +29,7 @@ private case object OracleDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.NUMERIC) {
-      val scale = md.build().getLong("scale")
+      val scale = if (null != md) md.build().getLong("scale") else 0L
       size match {
         // Handle NUMBER fields that have no precision/scale in special way
         // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
@@ -42,7 +42,7 @@ private case object OracleDialect extends JdbcDialect {
         // this to NUMERIC with -127 scale
         // Not sure if there is a more robust way to identify the field as a float (or other
         // numeric types that do not specify a scale.
-        case -127 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+        case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
         case 1 => Option(BooleanType)
         case 3 | 5 | 10 => Option(IntegerType)
         case 19 if scale == 0L => Option(LongType)
