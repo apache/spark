@@ -49,7 +49,7 @@ object TypeCoercion {
       InConversion ::
       WidenSetOperationTypes ::
       PromoteStrings ::
-      DecimalPrecision ::
+      DecimalPrecision ::  // DecimalPrecision must happen before ImplicitTypeCasts.
       BooleanEquality ::
       StringToIntegralCasts ::
       FunctionArgumentConversion ::
@@ -99,45 +99,13 @@ object TypeCoercion {
     case _ => None
   }
 
-  /** Similar to [[findTightestCommonType]], but can promote all the way to StringType. */
-  def findTightestCommonTypeToString(left: DataType, right: DataType): Option[DataType] = {
-    findTightestCommonTypeOfTwo(left, right).orElse((left, right) match {
-      case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-      case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
-      case _ => None
-    })
-  }
-
-  /**
-   * Similar to [[findTightestCommonType]], if can not find the TightestCommonType, try to use
-   * [[findTightestCommonTypeToString]] to find the TightestCommonType.
-   */
-  private def findTightestCommonTypeAndPromoteToString(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case None => None
-      case Some(d) =>
-        findTightestCommonTypeToString(d, c)
-    })
-  }
-
-  /**
-   * Find the tightest common type of a set of types by continuously applying
-   * `findTightestCommonTypeOfTwo` on these types.
-   */
-  private def findTightestCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case None => None
-      case Some(d) => findTightestCommonTypeOfTwo(d, c)
-    })
-  }
-
   /**
    * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
-   * loss of precision when widening decimal and double.
+   * loss of precision when widening decimal and double, and also widen all the way to string type.
    */
-  private def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
+  def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = (t1, t2) match {
     case (t1: DecimalType, t2: DecimalType) =>
       Some(DecimalPrecision.widerDecimalType(t1, t2))
     case (t: IntegralType, d: DecimalType) =>
@@ -147,7 +115,13 @@ object TypeCoercion {
     case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
       Some(DoubleType)
     case _ =>
-      findTightestCommonTypeToString(t1, t2)
+      findTightestCommonTypeOfTwo(t1, t2).orElse((t1, t2) match {
+        case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType =>
+          Some(StringType)
+        case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType =>
+          Some(StringType)
+        case _ => None
+      })
   }
 
   private def findWiderCommonType(types: Seq[DataType]) = {
@@ -440,7 +414,7 @@ object TypeCoercion {
 
       case a @ CreateArray(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonTypeAndPromoteToString(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
         }
@@ -451,7 +425,7 @@ object TypeCoercion {
           m.keys
         } else {
           val types = m.keys.map(_.dataType)
-          findTightestCommonTypeAndPromoteToString(types) match {
+          findWiderCommonType(types) match {
             case Some(finalDataType) => m.keys.map(Cast(_, finalDataType))
             case None => m.keys
           }
@@ -461,7 +435,7 @@ object TypeCoercion {
           m.values
         } else {
           val types = m.values.map(_.dataType)
-          findTightestCommonTypeAndPromoteToString(types) match {
+          findWiderCommonType(types) match {
             case Some(finalDataType) => m.values.map(Cast(_, finalDataType))
             case None => m.values
           }
@@ -496,14 +470,14 @@ object TypeCoercion {
 
       case g @ Greatest(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => Greatest(children.map(Cast(_, finalDataType)))
           case None => g
         }
 
       case l @ Least(children) if !haveSameType(children) =>
         val types = children.map(_.dataType)
-        findTightestCommonType(types) match {
+        findWiderCommonType(types) match {
           case Some(finalDataType) => Least(children.map(Cast(_, finalDataType)))
           case None => l
         }
