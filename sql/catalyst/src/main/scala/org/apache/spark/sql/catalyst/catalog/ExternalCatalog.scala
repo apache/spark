@@ -69,7 +69,7 @@ abstract class ExternalCatalog {
   // Tables
   // --------------------------------------------------------------------------
 
-  def createTable(db: String, tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
+  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit
 
   def dropTable(db: String, table: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
@@ -82,7 +82,7 @@ abstract class ExternalCatalog {
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  def alterTable(db: String, tableDefinition: CatalogTable): Unit
+  def alterTable(tableDefinition: CatalogTable): Unit
 
   def getTable(db: String, table: String): CatalogTable
 
