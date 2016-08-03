@@ -16,13 +16,12 @@
 #
 
 import sys
-if sys.version < '3':
-    range = xrange
-if sys.version > '3':
-    basestring = str
-
 import array as pyarray
 import warnings
+
+if sys.version > '3':
+    xrange = range
+    basestring = str
 
 from math import exp, log
 
@@ -259,7 +258,7 @@ class KMeansModel(Saveable, Loader):
             return x.map(self.predict)
 
         x = _convert_to_vector(x)
-        for i in range(len(self.centers)):
+        for i in xrange(len(self.centers)):
             distance = x.squared_distance(self.centers[i])
             if distance < best_distance:
                 best = i

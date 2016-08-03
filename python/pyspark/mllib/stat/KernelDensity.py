@@ -16,9 +16,9 @@
 #
 
 import sys
-if sys.version < '3':
-    range = xrange
 
+if sys.version > '3':
+    xrange = range
 
 import numpy as np
 

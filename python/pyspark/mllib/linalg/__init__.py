@@ -27,10 +27,9 @@ import sys
 import array
 import struct
 
-if sys.version < '3':
-    range = xrange
 if sys.version >= '3':
     basestring = str
+    xrange = range
     import copyreg as copy_reg
     long = int
 else:
@@ -71,7 +70,7 @@ except:
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, range):
+    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
         return DenseVector(l)
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
@@ -102,7 +101,7 @@ def _vector_size(v):
     """
     if isinstance(v, Vector):
         return len(v)
-    elif type(v) in (array.array, list, tuple, range):
+    elif type(v) in (array.array, list, tuple, xrange):
         return len(v)
     elif type(v) == np.ndarray:
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
@@ -455,7 +454,7 @@ class DenseVector(Vector):
         elif isinstance(other, SparseVector):
             if len(self) != other.size:
                 return False
-            return Vectors._equals(list(range(len(self))), self.array, other.indices, other.values)
+            return Vectors._equals(list(xrange(len(self))), self.array, other.indices, other.values)
         return False
 
     def __ne__(self, other):
@@ -550,7 +549,7 @@ class SparseVector(Vector):
                 self.indices = np.array(args[0], dtype=np.int32)
                 self.values = np.array(args[1], dtype=np.float64)
             assert len(self.indices) == len(self.values), "index and value arrays not same length"
-            for i in range(len(self.indices) - 1):
+            for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError(
                         "Indices %s and %s are not strictly increasing"
@@ -782,7 +781,7 @@ class SparseVector(Vector):
         inds = self.indices
         vals = self.values
         entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
-                             for i in range(len(inds))])
+                             for i in xrange(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -792,7 +791,7 @@ class SparseVector(Vector):
         elif isinstance(other, DenseVector):
             if self.size != len(other):
                 return False
-            return Vectors._equals(self.indices, self.values, list(range(len(other))), other.array)
+            return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
         return False
 
     def __getitem__(self, index):
@@ -1272,7 +1271,7 @@ class SparseMatrix(Matrix):
         Return an numpy.ndarray
         """
         A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
-        for k in range(self.colPtrs.size - 1):
+        for k in xrange(self.colPtrs.size - 1):
             startptr = self.colPtrs[k]
             endptr = self.colPtrs[k + 1]
             if self.isTransposed:
