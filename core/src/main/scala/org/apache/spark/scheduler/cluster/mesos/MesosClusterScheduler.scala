@@ -381,7 +381,6 @@ private[spark] class MesosClusterScheduler(
         v => s"$v -Dspark.mesos.driver.frameworkId=${getDriverFrameworkID(desc)}"
       )
 
-
       driverEnv ++ executorEnv ++ commandEnv
     }
 

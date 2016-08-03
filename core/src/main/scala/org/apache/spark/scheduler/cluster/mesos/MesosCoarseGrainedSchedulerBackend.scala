@@ -153,8 +153,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.appName,
       sc.conf,
       sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress)),
-      Option.empty,
-      Option.empty,
+      None,
+      None,
       sc.conf.getOption("spark.mesos.driver.frameworkId")
     )
 

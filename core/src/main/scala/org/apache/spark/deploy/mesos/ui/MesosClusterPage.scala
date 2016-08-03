@@ -34,7 +34,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val state = parent.scheduler.getSchedulerState()
 
     val driverHeader = Seq("Driver ID")
-    val historyHeader = if (historyServerURL.isDefined) Seq("History") else Nil
+    val historyHeader = historyServerURL.map(url => Seq("History")).getOrElse(Nil)
     val submissionHeader = Seq("Submit Date", "Main Class", "Driver Resources")
 
     val queuedHeaders = driverHeader ++ submissionHeader

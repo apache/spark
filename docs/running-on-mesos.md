@@ -472,9 +472,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
   <td><code>(none)</code></td>
   <td>
-    Set the URL of the <a
-    href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
-    server>.  The dispatcher will then link each driver to its entry
+    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    server</a>.  The dispatcher will then link each driver to its entry
     in the history server.
   </td>
 </tr>
