@@ -21,7 +21,10 @@ import java.io.*;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import org.apache.spark.SparkEnv;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
@@ -31,6 +34,8 @@ import org.apache.spark.unsafe.Platform;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
+  private final static Logger logger = LoggerFactory.getLogger(UnsafeSorterSpillReader.class);
+  private final static int DEFAULT_BUFFER_SIZE_BYTES = 8192;
 
   private InputStream in;
   private DataInputStream din;
@@ -50,7 +55,19 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
-    final BufferedInputStream bs = new BufferedInputStream(new FileInputStream(file));
+    long bufferSizeBytes =
+        SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
+                                             DEFAULT_BUFFER_SIZE_BYTES);
+    if (bufferSizeBytes > Integer.MAX_VALUE) {
+      // fall back to a sane default value
+      logger.error("Value of config \"spark.unsafe.sorter.spill.reader.buffer.size\" exceeds " +
+                       "Integer max : {}. Falling to default value : {} bytes",
+                   bufferSizeBytes, DEFAULT_BUFFER_SIZE_BYTES);
+      bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
+    }
+
+    final BufferedInputStream bs =
+        new BufferedInputStream(new FileInputStream(file), (int) bufferSizeBytes);
     try {
       this.in = serializerManager.wrapForCompression(blockId, bs);
       this.din = new DataInputStream(this.in);
