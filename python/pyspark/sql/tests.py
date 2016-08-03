@@ -20,10 +20,6 @@
 Unit tests for pyspark.sql; additional tests are implemented as doctests in
 individual modules.
 """
-
-if sys.version < '3':
-    range = xrange
-
 import os
 import sys
 import subprocess
@@ -36,6 +32,10 @@ import time
 import datetime
 
 import py4j
+
+if sys.version < '3':
+    range = xrange
+
 try:
     import xmlrunner
 except ImportError:
