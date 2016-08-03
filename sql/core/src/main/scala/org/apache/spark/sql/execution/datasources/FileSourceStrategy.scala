@@ -86,15 +86,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
-      val dataColumns = l.resolve(fsRelation.dataSchema,
-        fsRelation.sparkSession.sessionState.analyzer.resolver).map { c =>
-          fsRelation.dataSchema.find(_.name == c.name).map { f =>
-            c match {
-              case a: AttributeReference => a.withMetadata(f.metadata)
-              case _ => c
-            }
-          }.getOrElse(c)
-        }
+      val dataColumns =
+        l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)

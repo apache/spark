@@ -377,73 +377,75 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
     import testImplicits._
+    Seq("true", "false").map { vectorized =>
+      withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+        withTempPath { dir =>
+          val pathOne = s"${dir.getCanonicalPath}/table1"
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathOne)
+          val pathTwo = s"${dir.getCanonicalPath}/table2"
+          (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(pathTwo)
 
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val pathOne = s"${dir.getCanonicalPath}/table1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathOne)
-        val pathTwo = s"${dir.getCanonicalPath}/table2"
-        (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(pathTwo)
+          // If the "c = 1" filter gets pushed down, this query will throw an exception which
+          // Parquet emits. This is a Parquet issue (PARQUET-389).
+          val df = spark.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
+          checkAnswer(
+            df,
+            Row(1, "1", null))
 
-        // If the "c = 1" filter gets pushed down, this query will throw an exception which
-        // Parquet emits. This is a Parquet issue (PARQUET-389).
-        val df = spark.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
-        checkAnswer(
-          df,
-          Row(1, "1", null))
+          // The fields "a" and "c" only exist in one Parquet file.
+          assert(df.schema("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+          assert(df.schema("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
 
-        // The fields "a" and "c" only exist in one Parquet file.
-        assert(df.schema("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-        assert(df.schema("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+          val pathThree = s"${dir.getCanonicalPath}/table3"
+          df.write.parquet(pathThree)
 
-        val pathThree = s"${dir.getCanonicalPath}/table3"
-        df.write.parquet(pathThree)
+          // We will remove the temporary metadata when writing Parquet file.
+          val schema = spark.read.parquet(pathThree).schema
+          assert(schema.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
 
-        // We will remove the temporary metadata when writing Parquet file.
-        val schema = spark.read.parquet(pathThree).schema
-        assert(schema.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
+          val pathFour = s"${dir.getCanonicalPath}/table4"
+          val dfStruct = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
+          dfStruct.select(struct("a").as("s")).write.parquet(pathFour)
 
-        val pathFour = s"${dir.getCanonicalPath}/table4"
-        val dfStruct = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
-        dfStruct.select(struct("a").as("s")).write.parquet(pathFour)
+          val pathFive = s"${dir.getCanonicalPath}/table5"
+          val dfStruct2 = sparkContext.parallelize(Seq((1, 1))).toDF("c", "b")
+          dfStruct2.select(struct("c").as("s")).write.parquet(pathFive)
 
-        val pathFive = s"${dir.getCanonicalPath}/table5"
-        val dfStruct2 = sparkContext.parallelize(Seq((1, 1))).toDF("c", "b")
-        dfStruct2.select(struct("c").as("s")).write.parquet(pathFive)
+          // If the "s.c = 1" filter gets pushed down, this query will throw an exception which
+          // Parquet emits.
+          val dfStruct3 = spark.read.parquet(pathFour, pathFive).filter("s.c = 1")
+            .selectExpr("s")
+          checkAnswer(dfStruct3, Row(Row(null, 1)))
 
-        // If the "s.c = 1" filter gets pushed down, this query will throw an exception which
-        // Parquet emits.
-        val dfStruct3 = spark.read.parquet(pathFour, pathFive).filter("s.c = 1")
-          .selectExpr("s")
-        checkAnswer(dfStruct3, Row(Row(null, 1)))
+          // The fields "s.a" and "s.c" only exist in one Parquet file.
+          val field = dfStruct3.schema("s").dataType.asInstanceOf[StructType]
+          assert(field("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+          assert(field("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
 
-        // The fields "s.a" and "s.c" only exist in one Parquet file.
-        val field = dfStruct3.schema("s").dataType.asInstanceOf[StructType]
-        assert(field("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-        assert(field("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+          val pathSix = s"${dir.getCanonicalPath}/table6"
+          dfStruct3.write.parquet(pathSix)
 
-        val pathSix = s"${dir.getCanonicalPath}/table6"
-        dfStruct3.write.parquet(pathSix)
+          // We will remove the temporary metadata when writing Parquet file.
+          val forPathSix = spark.read.parquet(pathSix).schema
+          assert(forPathSix.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
 
-        // We will remove the temporary metadata when writing Parquet file.
-        val forPathSix = spark.read.parquet(pathSix).schema
-        assert(forPathSix.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
+          // sanity test: make sure optional metadata field is not wrongly set.
+          val pathSeven = s"${dir.getCanonicalPath}/table7"
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathSeven)
+          val pathEight = s"${dir.getCanonicalPath}/table8"
+          (4 to 6).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathEight)
 
-        // sanity test: make sure optional metadata field is not wrongly set.
-        val pathSeven = s"${dir.getCanonicalPath}/table7"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathSeven)
-        val pathEight = s"${dir.getCanonicalPath}/table8"
-        (4 to 6).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathEight)
+          val df2 = spark.read.parquet(pathSeven, pathEight).filter("a = 1").selectExpr("a", "b")
+          checkAnswer(
+            df2,
+            Row(1, "1"))
 
-        val df2 = spark.read.parquet(pathSeven, pathEight).filter("a = 1").selectExpr("a", "b")
-        checkAnswer(
-          df2,
-          Row(1, "1"))
-
-        // The fields "a" and "b" exist in both two Parquet files. No metadata is set.
-        assert(!df2.schema("a").metadata.contains(StructType.metadataKeyForOptionalField))
-        assert(!df2.schema("b").metadata.contains(StructType.metadataKeyForOptionalField))
+          // The fields "a" and "b" exist in both two Parquet files. No metadata is set.
+          assert(!df2.schema("a").metadata.contains(StructType.metadataKeyForOptionalField))
+          assert(!df2.schema("b").metadata.contains(StructType.metadataKeyForOptionalField))
+        }
       }
     }
   }
@@ -549,7 +551,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       ))
 
       val hadoopConf = new Configuration()
-      hadoopConf.setInt("parquet.block.size", 1)
+
+      // Set up parquet block size to make sure many row groups produced.
+      hadoopConf.setInt("parquet.block.size", 8)
       hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
       hadoopConf.set(
         ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -559,10 +563,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       assert(filters.isDefined)
 
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-      val hadoopAttemptContext =
+      val hadoopAttemptContext1 =
+        new TaskAttemptContextImpl(hadoopConf, attemptId)
+      val hadoopAttemptContext2 =
         new TaskAttemptContextImpl(hadoopConf, attemptId)
 
-      ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, filters.get)
+      ParquetInputFormat.setFilterPredicate(hadoopAttemptContext1.getConfiguration, filters.get)
 
       new File(path).listFiles().filter(f => f.getPath().endsWith(".parquet")).map { f =>
         val file = new File(f.getPath())
@@ -570,8 +576,15 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           new Path(f.getPath), 0L, file.length(), file.length(), Array.empty, null)
 
         val vectorizedReader = new VectorizedParquetRecordReader()
-        vectorizedReader.initialize(split, hadoopAttemptContext)
-        assert(vectorizedReader.getRowGroupCount == 0)
+        // Use the context with filters pushed down.
+        vectorizedReader.initialize(split, hadoopAttemptContext1)
+        // Row groups are filtered.
+        assert(vectorizedReader.getRowGroupCount() == 0)
+
+        // Use the context without filters pushed down.
+        vectorizedReader.initialize(split, hadoopAttemptContext2)
+        // Row groups are not filtered.
+        assert(vectorizedReader.getRowGroupCount() > 0)
       }
     }
   }
