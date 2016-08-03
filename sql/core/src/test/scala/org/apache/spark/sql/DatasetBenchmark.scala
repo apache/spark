@@ -212,13 +212,13 @@ object DatasetBenchmark {
     val benchmark4 = aggregate(spark, numRows)
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
     back-to-back map:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD                                         11034 / 11542          9.1         110.3       1.0X
-    DataFrame                                     9007 / 9555         11.1          90.1       1.2X
-    Dataset                                     16514 / 16641          6.1         165.1       0.7X
+    RDD                                           3448 / 3646         29.0          34.5       1.0X
+    DataFrame                                     2647 / 3116         37.8          26.5       1.3X
+    Dataset                                       4781 / 5155         20.9          47.8       0.7X
     */
     benchmark.run()
 
@@ -234,25 +234,25 @@ object DatasetBenchmark {
     benchmark2.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
     back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD                                           4527 / 4604         22.1          45.3       1.0X
-    DataFrame                                      169 /  197        592.6           1.7      26.8X
-    Dataset                                     10190 / 10218          9.8         101.9       0.4X
+    RDD                                           1346 / 1618         74.3          13.5       1.0X
+    DataFrame                                       59 /   72       1695.4           0.6      22.8X
+    Dataset                                       2777 / 2805         36.0          27.8       0.5X
     */
     benchmark3.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
+    Intel Xeon E3-12xx v2 (Ivy Bridge)
     aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    RDD sum                                       4460 / 4464         22.4          44.6       1.0X
-    DataFrame sum                                   87 /  107       1143.9           0.9      51.0X
-    Dataset sum using Aggregator                  9765 / 9766         10.2          97.7       0.5X
-    Dataset complex Aggregator                  24580 / 24757          4.1         245.8       0.2X
+    RDD sum                                       1420 / 1523         70.4          14.2       1.0X
+    DataFrame sum                                   31 /   49       3214.3           0.3      45.6X
+    Dataset sum using Aggregator                  3216 / 3257         31.1          32.2       0.4X
+    Dataset complex Aggregator                    7948 / 8461         12.6          79.5       0.2X
     */
     benchmark4.run()
   }
