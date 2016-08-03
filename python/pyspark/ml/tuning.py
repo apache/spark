@@ -108,6 +108,8 @@ class CrossValidator(Estimator):
     >>> evaluator = BinaryClassificationEvaluator()
     >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> cvModel = cv.fit(dataset)
+    >>> cvModel.avgMetrics[0]
+    0.5
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
 
@@ -239,7 +241,7 @@ class CrossValidator(Estimator):
                 model = est.fit(train, epm[j])
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
-                metrics[j] += metric
+                metrics[j] += metric/nFolds
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
