@@ -54,7 +54,7 @@ object JdbcUtils extends Logging {
       DriverManager.getDriver(url).getClass.getCanonicalName
     }
     () => {
-      userSpecifiedDriverClass.foreach(DriverRegistry.register)
+      DriverRegistry.register(driverClass)
       val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
         case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
         case d if d.getClass.getCanonicalName == driverClass => d
