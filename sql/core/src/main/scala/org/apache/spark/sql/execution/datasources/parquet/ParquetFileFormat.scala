@@ -370,11 +370,11 @@ private[sql] class ParquetFileFormat
         logDebug(s"Falling back to parquet-mr")
         val reader = pushed match {
           case Some(filter) =>
-            new ParquetRecordReader[InternalRow](
+            new ParquetRecordReader[UnsafeRow](
               new ParquetReadSupport,
               FilterCompat.get(filter, null))
           case _ =>
-            new ParquetRecordReader[InternalRow](new ParquetReadSupport)
+            new ParquetRecordReader[UnsafeRow](new ParquetReadSupport)
         }
         reader.initialize(split, hadoopAttemptContext)
         reader
