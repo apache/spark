@@ -539,43 +539,39 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("Fiters should be pushed down for vectorized Parquet reader at row group level") {
     import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/table"
-          (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/table"
+      (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-          val requiredSchema = StructType(Seq(
-            StructField("a", IntegerType, nullable = false),
-            StructField("b", IntegerType, nullable = false)
-          ))
+      val requiredSchema = StructType(Seq(
+        StructField("a", IntegerType, nullable = false),
+        StructField("b", IntegerType, nullable = false)
+      ))
 
-          val hadoopConf = new Configuration()
-          hadoopConf.setInt("parquet.block.size", 100)
-          hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
-          hadoopConf.set(
-            ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-            ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
+      val hadoopConf = new Configuration()
+      hadoopConf.setInt("parquet.block.size", 1)
+      hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
+      hadoopConf.set(
+        ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
+        ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
 
-          val filters = ParquetFilters.createFilter(requiredSchema, sources.LessThan("a", 100))
-          assert(filters.isDefined)
+      val filters = ParquetFilters.createFilter(requiredSchema, sources.LessThan("a", 100))
+      assert(filters.isDefined)
 
-          val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-          val hadoopAttemptContext =
-            new TaskAttemptContextImpl(hadoopConf, attemptId)
+      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+      val hadoopAttemptContext =
+        new TaskAttemptContextImpl(hadoopConf, attemptId)
 
-          ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, filters.get)
+      ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, filters.get)
 
-          new File(path).listFiles().filter(f => f.getPath().endsWith(".parquet")).map { f =>
-            val file = new File(f.getPath())
-            val split = new org.apache.parquet.hadoop.ParquetInputSplit(
-              new Path(f.getPath), 0L, file.length(), file.length(), Array.empty, null)
+      new File(path).listFiles().filter(f => f.getPath().endsWith(".parquet")).map { f =>
+        val file = new File(f.getPath())
+        val split = new org.apache.parquet.hadoop.ParquetInputSplit(
+          new Path(f.getPath), 0L, file.length(), file.length(), Array.empty, null)
 
-            val vectorizedReader = new VectorizedParquetRecordReader()
-            vectorizedReader.initialize(split, hadoopAttemptContext)
-            assert(vectorizedReader.getRowGroupCount == 0)
-          }
-        }
+        val vectorizedReader = new VectorizedParquetRecordReader()
+        vectorizedReader.initialize(split, hadoopAttemptContext)
+        assert(vectorizedReader.getRowGroupCount == 0)
       }
     }
   }
