@@ -393,6 +393,24 @@ class TypeCoercionSuite extends PlanTest {
           :: Literal.create(null, DecimalType(10, 5)).cast(DoubleType)
           :: Literal(1).cast(DoubleType)
           :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(null, DecimalType(15, 0))
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Literal(1)
+          :: Nil),
+        operator(Literal.create(null, DecimalType(15, 0)).cast(DecimalType(20, 5))
+          :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(20, 5))
+          :: Literal(1).cast(DecimalType(20, 5))
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(2L, LongType)
+          :: Literal(1)
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Nil),
+        operator(Literal.create(2L, LongType).cast(DecimalType(25, 5))
+          :: Literal(1).cast(DecimalType(25, 5))
+          :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(25, 5))
+          :: Nil))
     }
   }
 
