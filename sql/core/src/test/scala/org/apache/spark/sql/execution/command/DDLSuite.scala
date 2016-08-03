@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
