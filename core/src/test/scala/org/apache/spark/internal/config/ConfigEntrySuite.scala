@@ -210,6 +210,12 @@ class ConfigEntrySuite extends SparkFunSuite {
     // Make sure SparkConf's env override works.
     conf.set(refConf, "${env:ENV1}")
     assert(conf.get(refConf) === env("ENV1"))
+
+    // Conf with null default value is not expanded.
+    val nullConf = ConfigBuilder(testKey("nullString"))
+      .stringConf
+      .createWithDefault(null)
+    testEntryRef(nullConf, ref(nullConf))
   }
 
 }
