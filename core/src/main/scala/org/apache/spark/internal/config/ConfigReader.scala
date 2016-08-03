@@ -48,7 +48,7 @@ private object ConfigReader {
  *
  * @param conf The config provider for the default namespace (no prefix).
  */
-class ConfigReader(conf: ConfigProvider) {
+private[spark] class ConfigReader(conf: ConfigProvider) {
 
   def this(conf: JMap[String, String]) = this(new MapProvider(conf))
 
