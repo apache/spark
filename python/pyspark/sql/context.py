@@ -245,7 +245,7 @@ class SQLContext(object):
             ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
             We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
         :param samplingRatio: the sample ratio of rows used for inferring
-        :param verifySchema: verify data types of very row against schema.
+        :param verifySchema: verify data types of every row against schema.
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.0
