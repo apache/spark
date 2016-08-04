@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.SparkPlan
 
-private[sql] case class CommonSubqueryAlias(
+private[sql] case class CommonSubquery(
     output: Seq[Attribute],
     @transient child: SparkPlan)(
     private[sql] val _statistics: Statistics,
@@ -44,8 +44,8 @@ private[sql] case class CommonSubqueryAlias(
 
   lazy val numRows: Long = computedOutput.count
 
-  def withOutput(newOutput: Seq[Attribute]): CommonSubqueryAlias = {
-    CommonSubqueryAlias(newOutput, child)(_statistics, _computedOutput)
+  def withOutput(newOutput: Seq[Attribute]): CommonSubquery = {
+    CommonSubquery(newOutput, child)(_statistics, _computedOutput)
   }
 
   def computedOutput: RDD[InternalRow] = _computedOutput

@@ -21,35 +21,35 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.SparkSession
 
 /** Holds a subquery logical plan and its data */
-private[sql] case class CommonSubquery(plan: LogicalPlan, subquery: CommonSubqueryAlias)
+private[sql] case class CommonSubqueryItem(plan: LogicalPlan, subquery: CommonSubquery)
 
 /**
  * Provides support to eliminate unnecessary subqueries execution. Unlike the queries that need to
  * be cached with [[CacheManager]], the subqueries are only used in a single query but could be
- * executed multiple times during the query execution. [[CommonSubqueryAlias]] is used to keep the
+ * executed multiple times during the query execution. [[CommonSubquery]] is used to keep the
  * common [[SparkPlan]] for the duplicate subqueries in a query.
  */
 private[sql] class SubqueryDedup {
 
-  private val subqueryData = new scala.collection.mutable.ArrayBuffer[CommonSubquery]
+  private val subqueryData = new scala.collection.mutable.ArrayBuffer[CommonSubqueryItem]
 
   /**
-   * Creates a [[CommonSubqueryAlias]] for the given logical plan. A [[CommonSubqueryAlias]]
+   * Creates a [[CommonSubquery]] for the given logical plan. A [[CommonSubquery]]
    * wraps the output of the logical plan, the [[SparkPlan]] of the logical plan and its statistic.
    * This method will first look up if there is already logical plan with the same results in the
-   * subqueries list. If so, it returns the previously created [[CommonSubqueryAlias]]. If not,
-   * this method will create a new [[CommonSubqueryAlias]]. Thus, all the logical plans which
+   * subqueries list. If so, it returns the previously created [[CommonSubquery]]. If not,
+   * this method will create a new [[CommonSubquery]]. Thus, all the logical plans which
    * produce the same results, will refer to the same [[SparkPlan]] which will be executed
    * only once at running stage.
    */
   private[sql] def createCommonSubquery(
       sparkSession: SparkSession,
-      planToDedup: LogicalPlan): CommonSubqueryAlias = {
+      planToDedup: LogicalPlan): CommonSubquery = {
     lookupCommonSubquery(planToDedup).map(_.subquery).getOrElse {
       val common =
-        CommonSubquery(
+        CommonSubqueryItem(
           planToDedup,
-          CommonSubqueryAlias(planToDedup.output,
+          CommonSubquery(planToDedup.output,
             sparkSession.sessionState.executePlan(planToDedup).executedPlan)
             (planToDedup.statistics))
       subqueryData += common
@@ -58,7 +58,7 @@ private[sql] class SubqueryDedup {
   }
 
   /** Optionally returns common subquery for the given [[LogicalPlan]]. */
-  private[sql] def lookupCommonSubquery(plan: LogicalPlan): Option[CommonSubquery] = {
+  private[sql] def lookupCommonSubquery(plan: LogicalPlan): Option[CommonSubqueryItem] = {
     subqueryData.find(cd => plan.sameResult(cd.plan))
   }
 }

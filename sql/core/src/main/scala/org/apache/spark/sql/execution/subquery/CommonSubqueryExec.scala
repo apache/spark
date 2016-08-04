@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 
 private[sql] case class CommonSubqueryExec(
     attributes: Seq[Attribute],
-    @transient subquery: CommonSubqueryAlias)
+    @transient subquery: CommonSubquery)
   extends LeafExecNode {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(subquery) ++ super.innerChildren

@@ -590,5 +590,13 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       case c: CommonSubqueryExec => c.subquery.child
     }.distinct
     assert(commonSubqueries2.length == 1)
+
+    val df3 =
+      sql("WITH t1 AS (SELECT 1 AS id FROM t) SELECT * FROM t1 a, t1 b WHERE a.id = 1 AND b.id > 0")
+
+    val commonSubqueries3 = df3.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries3.length == 1)
   }
 }

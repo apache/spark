@@ -138,7 +138,7 @@ class Analyzer(
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(SubqueryAlias(_, relation))
+            val withAlias = u.alias.map(CommonSubqueryAlias(_, relation))
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)

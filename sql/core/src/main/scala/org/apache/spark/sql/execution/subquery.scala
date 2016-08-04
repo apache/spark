@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CommonSubqueryAlias, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.subquery.SubqueryDedup
 import org.apache.spark.sql.types.DataType
@@ -88,8 +88,8 @@ case class DedupCommonSubqueries(sparkSession: SparkSession) extends Rule[Logica
   def apply(plan: LogicalPlan): LogicalPlan = {
     val dedup = new SubqueryDedup()
     plan.transformDown {
-      case SubqueryAlias(_, child) =>
-        dedup.createCommonSubquery(sparkSession, child)
+      case s: CommonSubqueryAlias =>
+        dedup.createCommonSubquery(sparkSession, s.child)
     }
   }
 }

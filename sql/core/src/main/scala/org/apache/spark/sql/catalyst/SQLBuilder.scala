@@ -154,6 +154,8 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
     case p: SubqueryAlias => build("(" + toSQL(p.child) + ")", "AS", p.alias)
 
+    case p: CommonSubqueryAlias => build("(" + toSQL(p.child) + ")", "AS", p.alias)
+
     case p: Join =>
       build(
         toSQL(p.left),

@@ -49,7 +49,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-      EliminateOneTimeSubqueryAliases,
+      EliminateSubqueryAliases,
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -2054,8 +2054,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes the [[SubqueryAlias]] operators which are used only once from the plan and use
- * [[CommonSubqueryAlias]] to replace these operators.
+ * Removes the [[CommonSubqueryAlias]] operators which are used only once from the plan.
  */
 object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -2064,14 +2063,14 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     val noRecursiveSubqueryPlan = plan.transformDown {
       // Eliminate the recursive subqueries which have the same output.
-      case s @ SubqueryAlias(_, child)
+      case s @ CommonSubqueryAlias(_, child)
           if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
         child
     }
 
     noRecursiveSubqueryPlan.foreach {
       // Collect the subqueries that are used more than once in the query.
-      case SubqueryAlias(_, child) =>
+      case CommonSubqueryAlias(_, child) =>
         if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
           // If the plan with same results can be found.
           duplicateSubqueries += child
@@ -2084,7 +2083,7 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     noRecursiveSubqueryPlan.transformDown {
       // Only eliminate the subqueries that are used only once in the query.
-      case SubqueryAlias(_, child)
+      case CommonSubqueryAlias(_, child)
           if duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0 =>
         child
     }

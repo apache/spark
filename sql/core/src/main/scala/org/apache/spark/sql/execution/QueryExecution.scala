@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.optimizer.EliminateOneTimeSubqueryAliases
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -71,14 +72,17 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     sparkSession.sharedState.cacheManager.useCachedData(analyzed)
   }
 
-  lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
+  lazy val optimizedPlan: LogicalPlan = {
+    val noOneTimeCommonSubqueries = EliminateOneTimeSubqueryAliases(withCachedData)
+    val dedupSubqueries = DedupCommonSubqueries(sparkSession)(noOneTimeCommonSubqueries)
+    sparkSession.sessionState.optimizer.execute(dedupSubqueries)
+  }
 
   lazy val sparkPlan: SparkPlan = {
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
-    val dedupSubqueries = DedupCommonSubqueries(sparkSession)(optimizedPlan)
-    planner.plan(ReturnAnswer(dedupSubqueries)).next()
+    planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
