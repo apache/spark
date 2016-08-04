@@ -159,55 +159,81 @@ sparkR.sparkContext <- function(
       warning(paste("sparkPackages has no effect when using spark-submit or sparkR shell",
                     " please use the --packages commandline instead", sep = ","))
     }
+    host <- "localhost"
     backendPort <- existingPort
   } else {
-    path <- tempfile(pattern = "backend_port")
-    submitOps <- getClientModeSparkSubmitOpts(
+
+    if (!nzchar(master) || is_master_local(master)) {
+      path <- tempfile(pattern = "backend_port")
+      submitOps <- getClientModeSparkSubmitOpts(
         Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
         sparkEnvirMap)
-    launchBackend(
+      launchBackend(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
         sparkSubmitOpts = submitOps,
         packages = packages)
-    # wait atmost 100 seconds for JVM to launch
-    wait <- 0.1
-    for (i in 1:25) {
-      Sys.sleep(wait)
-      if (file.exists(path)) {
-        break
+      # wait atmost 100 seconds for JVM to launch
+      wait <- 0.1
+      for (i in 1:25) {
+        Sys.sleep(wait)
+        if (file.exists(path)) {
+          break
+        }
+        wait <- wait * 1.25
       }
-      wait <- wait * 1.25
+      if (!file.exists(path)) {
+        stop("JVM is not ready after 10 seconds")
+      }
+      f <- file(path, open = "rb")
+      backendPort <- readInt(f)
+      monitorPort <- readInt(f)
+      rLibPath <- readString(f)
+      close(f)
+      file.remove(path)
+      if (length(backendPort) == 0 || backendPort == 0 ||
+          length(monitorPort) == 0 || monitorPort == 0 ||
+          length(rLibPath) != 1) {
+        stop("JVM failed to launch")
+      }
+      if (rLibPath != "") {
+        assign(".libPath", rLibPath, envir = .sparkREnv)
+        .libPaths(c(rLibPath, .libPaths()))
+      }
+      host = "localhost"
+    } else {
+      backendPort <- if (!is.null(sparkEnvirMap[["backend.port"]])) {
+        sparkEnvirMap[["backend.port"]]
+      } else {
+        "8000"
+      }
+      monitorPort <- if (!is.null(sparkEnvirMap[["monitor.port"]])) {
+        sparkEnvirMap[["monitor.port"]]
+      } else {
+        "8001"
+      }
+      host <- getRemoteMasterInfo(master)$host
+      port <- getRemoteMasterInfo(master)$port
+      if (is.null(port)) {
+        message(sprintf("Use backend port %s.", backendPort))
+      } else {
+        message(sprintf("Use backedn port %s parsed from master.", port))
+        backendPort <- port
+      }
+      master <- "local"   # have connected to RBackend, use local mode
     }
-    if (!file.exists(path)) {
-      stop("JVM is not ready after 10 seconds")
-    }
-    f <- file(path, open = "rb")
-    backendPort <- readInt(f)
-    monitorPort <- readInt(f)
-    rLibPath <- readString(f)
-    close(f)
-    file.remove(path)
-    if (length(backendPort) == 0 || backendPort == 0 ||
-        length(monitorPort) == 0 || monitorPort == 0 ||
-        length(rLibPath) != 1) {
-      stop("JVM failed to launch")
-    }
-    assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
+    assign(".monitorConn", socketConnection(host = host, port = monitorPort),
+           envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
-    if (rLibPath != "") {
-      assign(".libPath", rLibPath, envir = .sparkREnv)
-      .libPaths(c(rLibPath, .libPaths()))
-    }
   }
 
   .sparkREnv$backendPort <- backendPort
   tryCatch({
-    connectBackend("localhost", backendPort)
+    connectBackend(host, backendPort)
   },
   error = function(err) {
-    stop("Failed to connect JVM\n")
+    stop(paste0("Failed to connect JVM\n", existingPort))
   })
 
   if (nchar(sparkHome) != 0) {
@@ -386,7 +412,7 @@ sparkR.session <- function(
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     sparkExecutorEnvMap <- new.env()
     sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorEnvMap,
-       sparkJars, sparkPackages)
+                        sparkJars, sparkPackages)
     stopifnot(exists(".sparkRjsc", envir = .sparkREnv))
   }
 
