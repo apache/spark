@@ -41,7 +41,7 @@ if not exist "%SPARK_JARS_DIR%"\ (
   exit /b 1
 )
 
-set LAUNCH_CLASSPATH=%SPARK_JARS_DIR%\*
+set LAUNCH_CLASSPATH="%SPARK_JARS_DIR%\*;%SPARK_DIST_CLASSPATH%"
 
 rem Add the launcher build dir to the classpath if requested.
 if not "x%SPARK_PREPEND_CLASSES%"=="x" (
