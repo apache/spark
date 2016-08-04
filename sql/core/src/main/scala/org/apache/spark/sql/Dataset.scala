@@ -171,8 +171,7 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
       case _: Command |
-           _: InsertIntoTable |
-           _: CreateTable => true
+           _: InsertIntoTable => true
       case _ => false
     }
 
