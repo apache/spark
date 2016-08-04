@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -361,7 +360,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val markedFilters = for (filter <- pushedFilters) yield {
             if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
         }
-        pairs += (PUSHED_FILTERS -> markedFilters.mkString("[", ", ", "]"))
+        pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
       }
       pairs.toMap
     }
