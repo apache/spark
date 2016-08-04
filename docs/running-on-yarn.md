@@ -467,18 +467,8 @@ To use a custom metrics.properties for the application master and executors, upd
   Controls whether to obtain credentials for services when security is enabled.
   By default, credentials for all supported services are retrieved when those services are
   configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run. For the details please see
+  application being run. For further details please see
   [Running in a Secure Cluster](running-on-yarn.html#running-in-a-secure-cluster)
-  <p/>
-  Currently supported services are: <code>hdfs</code>, <code>hive</code>, <code>hbase</code>
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.security.tokens.${service}.enabled</code></td>
-  <td><code>true</code></td>
-  <td>
-  See <code>spark.yarn.security.credentials.${service}.enabled</code>. This configuration is
-  deprecated.
   </td>
 </tr>
 <tr>
@@ -546,9 +536,9 @@ launch time. This is done by listing them in the `spark.yarn.access.namenodes` p
 
 Spark supports integrating with other security-aware services through Java Services mechanism (see
 `java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
- should be available to Spark by listing their names in the corresponding file in the jar's
- `META-INF/services` directory. These plug-ins can be disabled by setting
- `spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
+should be available to Spark by listing their names in the corresponding file in the jar's
+`META-INF/services` directory. These plug-ins can be disabled by setting
+`spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
 
 ```

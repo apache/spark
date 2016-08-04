@@ -33,11 +33,11 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * The following methods are primarily meant to make sure long-running apps like Spark
- * Streaming apps can run without interruption while accessing security services. The
+ * Streaming apps can run without interruption while accessing secured services. The
  * scheduleLoginFromKeytab method is called on the AM to get the new credentials.
  * This method wakes up a thread that logs into the KDC
  * once 75% of the renewal interval of the original credentials used for the container
- * has elapsed. It then obtain new credentials and writes them to HDFS in a
+ * has elapsed. It then obtains new credentials and writes them to HDFS in a
  * pre-specified location - the prefix of which is specified in the sparkConf by
  * spark.yarn.credentials.file (so the file(s) would be named c-timestamp1-1, c-timestamp2-2 etc.
  * - each update goes to a new file, with a monotonically increasing suffix), also the
