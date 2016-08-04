@@ -101,7 +101,7 @@ class NaiveBayes @Since("1.5.0") (
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    val numClasses: Int = getNumClasses(dataset)
+    val numClasses = getNumClasses(dataset)
 
     if (isDefined(thresholds)) {
       require($(thresholds).length == numClasses, this.getClass.getSimpleName +
