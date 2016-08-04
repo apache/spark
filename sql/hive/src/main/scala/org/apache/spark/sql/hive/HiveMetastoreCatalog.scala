@@ -69,64 +69,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
-        val table = client.getTable(in.database, in.name)
+        val table = sparkSession.sharedState.externalCatalog.getTable(in.database, in.name)
 
-        // TODO: the following code is duplicated with FindDataSourceTable.readDataSourceTable
-
-        def schemaStringFromParts: Option[String] = {
-          table.properties.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
-            val parts = (0 until numParts.toInt).map { index =>
-              val part = table.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
-              if (part == null) {
-                throw new AnalysisException(
-                  "Could not read schema from the metastore because it is corrupted " +
-                    s"(missing part $index of the schema, $numParts parts are expected).")
-              }
-
-              part
-            }
-            // Stick all parts back to a single schema string.
-            parts.mkString
-          }
-        }
-
-        def getColumnNames(colType: String): Seq[String] = {
-          table.properties.get(s"$DATASOURCE_SCHEMA.num${colType.capitalize}Cols").map {
-            numCols => (0 until numCols.toInt).map { index =>
-              table.properties.getOrElse(s"$DATASOURCE_SCHEMA_PREFIX${colType}Col.$index",
-                throw new AnalysisException(
-                  s"Could not read $colType columns from the metastore because it is corrupted " +
-                    s"(missing part $index of it, $numCols parts are expected)."))
-            }
-          }.getOrElse(Nil)
-        }
-
-        // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
-        // After SPARK-6024, we removed this flag.
-        // Although we are not using spark.sql.sources.schema any more, we need to still support.
-        val schemaString = table.properties.get(DATASOURCE_SCHEMA).orElse(schemaStringFromParts)
-
-        val userSpecifiedSchema =
-          schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
-
-        // We only need names at here since userSpecifiedSchema we loaded from the metastore
-        // contains partition columns. We can always get data types of partitioning columns
-        // from userSpecifiedSchema.
-        val partitionColumns = getColumnNames("part")
-
-        val bucketSpec = table.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { n =>
-          BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
-        }
-
-        val options = table.storage.properties
         val dataSource =
           DataSource(
             sparkSession,
-            userSpecifiedSchema = userSpecifiedSchema,
-            partitionColumns = partitionColumns,
-            bucketSpec = bucketSpec,
-            className = table.properties(DATASOURCE_PROVIDER),
-            options = options)
+            userSpecifiedSchema = Some(table.schema),
+            partitionColumns = table.partitionColumnNames,
+            bucketSpec = table.bucketSpec,
+            className = table.provider.get,
+            options = table.storage.properties)
 
         LogicalRelation(
           dataSource.resolveRelation(checkPathExist = true),
