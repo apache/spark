@@ -2418,7 +2418,6 @@ private[spark] object Utils extends Logging {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
     }
   }
-}
 
   /**
    * Replaces all the @execid@ occurrences with the Executor Id.
@@ -2426,6 +2425,7 @@ private[spark] object Utils extends Logging {
   def substituteExecIdWildCard(opt: String, execId: String): String = {
     opt.replace("@execid@", execId)
   }
+}
 
 /**
  * A utility class to redirect the child process's stdout or stderr.
