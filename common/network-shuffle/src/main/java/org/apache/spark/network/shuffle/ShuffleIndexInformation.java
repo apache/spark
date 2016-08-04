@@ -17,11 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.google.common.cache.LoadingCache;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import sun.nio.ch.IOUtil;
-
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
