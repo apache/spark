@@ -176,7 +176,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
  */
 @ExpressionDescription(
   usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-case class CreateStruct(children: Seq[Expression]) extends Expression {
+case class CreateStruct(children: Seq[Expression]) extends Expression with Unevaluable {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -193,35 +193,6 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   }
 
   override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
-
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      this.$values = new Object[${children.size}];""" +
-      ctx.splitExpressions(
-        ctx.INPUT_ROW,
-        children.zipWithIndex.map { case (e, i) =>
-          val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
-            } else {
-              $values[$i] = ${eval.value};
-            }"""
-        }) +
-      s"""
-        final InternalRow ${ev.value} = new $rowClass($values);
-        this.$values = null;
-      """)
-  }
 
   override def prettyName: String = "struct"
 }
@@ -321,7 +292,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
  * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
  * this expression automatically at runtime.
  */
-case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
+case class CreateStructUnsafe(children: Seq[Expression]) extends Expression with Unevaluable {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -340,15 +311,6 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
   }
 
   override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    InternalRow(children.map(_.eval(input)): _*)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = GenerateUnsafeProjection.createCode(ctx, children)
-    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
-  }
 
   override def prettyName: String = "struct_unsafe"
 }
