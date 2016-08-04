@@ -409,11 +409,15 @@ case class RepairTableCommand(tableName: TableIdentifier) extends RunnableComman
       throw new AnalysisException(
         s"Operation not allowed: MSCK REPAIR TABLE on temporary tables: $tableName")
     }
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        s"Operation not allowed: MSCK REPAIR TABLE on datasource tables: $tableName")
+    }
     if (table.tableType != CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
         s"Operation not allowed: MSCK REPAIR TABLE only works on external tables: $tableName")
     }
-    if (table.partitionColumnNames.isEmpty) {
+    if (DDLUtils.isTablePartitioned(table)) {
       throw new AnalysisException(
         s"Operation not allowed: MSCK REPAIR TABLE only works on partitioned tables: $tableName")
     }

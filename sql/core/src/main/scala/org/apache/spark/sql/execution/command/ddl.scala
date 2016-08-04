@@ -453,12 +453,16 @@ case class AlterTableRecoverPartitionsCommand(
       throw new AnalysisException(
         s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS on temporary tables: $tableName")
     }
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS on datasource tables: $tableName")
+    }
     if (table.tableType != CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
         s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on external " +
           s"tables: $tableName")
     }
-    if (table.partitionColumnNames.isEmpty) {
+    if (DDLUtils.isTablePartitioned(table)) {
       throw new AnalysisException(
         s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on partitioned " +
           s"tables: $tableName")
