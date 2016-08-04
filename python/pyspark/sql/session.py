@@ -501,7 +501,7 @@ class SparkSession(object):
             def prepare(obj):
                 verify_func(obj, schema)
                 return obj
-        if isinstance(schema, DataType):
+        elif isinstance(schema, DataType):
             dataType = schema
             schema = StructType().add("value", schema)
 
