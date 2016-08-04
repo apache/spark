@@ -122,17 +122,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql(s"CREATE DATABASE db1 LOCATION '$pathWithForwardSlash'")
       val pathInCatalog = new Path(catalog.getDatabaseMetadata("db1").locationUri).toUri
       assert("file" === pathInCatalog.getScheme)
-      val expectedPath = new Path(path).toUri.toString
-      assert(expectedPath === pathInCatalog.getPath)
+      val expectedPath = new Path(path).toUri
+      assert(expectedPath.getPath === pathInCatalog.getPath)
 
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         sql(s"CREATE DATABASE db2")
         val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
         assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db")
-          .toUri
-          .toString
-        assert(expectedPath2 === pathInCatalog2.getPath)
+        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
+        assert(expectedPath2.getPath === pathInCatalog2.getPath)
       }
 
       sql("DROP DATABASE db1")
@@ -269,12 +267,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val partitionClause =
         userSpecifiedPartitionCols.map(p => s"PARTITIONED BY ($p)").getOrElse("")
       val schemaClause = userSpecifiedSchema.map(s => s"($s)").getOrElse("")
+      val uri = path.toURI.toString
       sql(
         s"""
            |CREATE TABLE $tabName $schemaClause
            |USING parquet
            |OPTIONS (
-           |  path '$path'
+           |  path '$uri'
            |)
            |$partitionClause
          """.stripMargin)
@@ -373,6 +372,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val path = dir.getCanonicalPath
       val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("col1", "col2")
       df.write.format("json").save(path)
+      val uri = dir.toURI.toString
 
       withTable(tabName) {
         sql(
@@ -380,7 +380,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |CREATE TABLE $tabName
              |USING json
              |OPTIONS (
-             |  path '$path'
+             |  path '$uri'
              |)
            """.stripMargin)
 
@@ -413,6 +413,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .add("col2", StringType).add("col4", LongType)
         .add("col1", IntegerType).add("col3", IntegerType)
       val partitionCols = Seq("col1", "col3")
+      val uri = dir.toURI.toString
 
       withTable(tabName) {
         spark.sql(
@@ -420,7 +421,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |CREATE TABLE $tabName
              |USING json
              |OPTIONS (
-             |  path '$path'
+             |  path '$uri'
              |)
            """.stripMargin)
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
