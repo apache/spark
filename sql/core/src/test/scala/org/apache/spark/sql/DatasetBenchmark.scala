@@ -72,47 +72,6 @@ object DatasetBenchmark {
     benchmark
   }
 
-  def backToBackMapPrimitive(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
-    import spark.implicits._
-
-    val df = spark.range(1, numRows).select($"id".as("l"))
-    val benchmark = new Benchmark("back-to-back map for primitive", numRows)
-    val func = (d: Long) => d + 1
-
-    val rdd = spark.sparkContext.range(1, numRows).map(l => l.toLong)
-    benchmark.addCase("RDD") { iter =>
-      var res = rdd
-      var i = 0
-      while (i < numChains) {
-        res = res.map(func)
-        i += 1
-      }
-      res.foreach(_ => Unit)
-    }
-
-    benchmark.addCase("DataFrame") { iter =>
-      var res = df
-      var i = 0
-      while (i < numChains) {
-        res = res.select($"l" + 1 as "l")
-        i += 1
-      }
-      res.queryExecution.toRdd.foreach(_ => Unit)
-    }
-
-    benchmark.addCase("Dataset") { iter =>
-      var res = df.as[Long]
-      var i = 0
-      while (i < numChains) {
-        res = res.map(func)
-        i += 1
-      }
-      res.queryExecution.toRdd.foreach(_ => Unit)
-    }
-
-    benchmark
-  }
-  
   def backToBackFilter(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
@@ -207,9 +166,8 @@ object DatasetBenchmark {
     val numChains = 10
 
     val benchmark = backToBackMap(spark, numRows, numChains)
-    val benchmark2 = backToBackMapPrimitive(spark, numRows, numChains)
-    val benchmark3 = backToBackFilter(spark, numRows, numChains)
-    val benchmark4 = aggregate(spark, numRows)
+    val benchmark2 = backToBackFilter(spark, numRows, numChains)
+    val benchmark3 = aggregate(spark, numRows)
 
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
@@ -223,17 +181,6 @@ object DatasetBenchmark {
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_101-b13 on Mac OS X 10.11.6
-    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
-    back-to-back map for primitive:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    RDD                                           6847 / 6924         14.6          68.5       1.0X
-    DataFrame                                     1552 / 1650         64.5          15.5       4.4X
-    Dataset                                       6565 / 6669         15.2          65.7       1.0X
-    */
-    benchmark2.run()
-
-    /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
     Intel Xeon E3-12xx v2 (Ivy Bridge)
     back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
@@ -242,7 +189,7 @@ object DatasetBenchmark {
     DataFrame                                       59 /   72       1695.4           0.6      22.8X
     Dataset                                       2777 / 2805         36.0          27.8       0.5X
     */
-    benchmark3.run()
+    benchmark2.run()
 
     /*
     OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 3.10.0-327.18.2.el7.x86_64
@@ -254,6 +201,6 @@ object DatasetBenchmark {
     Dataset sum using Aggregator                  3216 / 3257         31.1          32.2       0.4X
     Dataset complex Aggregator                    7948 / 8461         12.6          79.5       0.2X
     */
-    benchmark4.run()
+    benchmark3.run()
   }
 }
