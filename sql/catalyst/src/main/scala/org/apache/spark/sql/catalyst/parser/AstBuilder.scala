@@ -669,7 +669,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         (st, (e: Expression) => e)
       case dt =>
         val st = CreateStruct(Seq(expressions.head)).dataType
-        (st, (e: Expression) => CreateStruct(Seq(e)))
+        (st, (e: Expression) => CreateStruct(Seq(e)).toCreateNamedStruct)
     }
     val rows = expressions.map {
       case expression =>
@@ -1101,7 +1101,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[CreateStruct]] expression.
    */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
-    CreateStruct(ctx.expression.asScala.map(expression))
+    CreateStruct(ctx.expression.asScala.map(expression)).toCreateNamedStruct
   }
 
   /**

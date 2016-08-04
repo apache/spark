@@ -133,7 +133,7 @@ object ExpressionEncoder {
         // input tuple and can be null. So instead of creating a struct directly here, we should add
         // a null/None check and return a null struct if the null/None check fails.
         val struct = CreateStruct(newSerializer)
-        val namedStruct = struct transformDown ResolveCreateStruct.expressionTransformer
+        val namedStruct = struct.toCreateNamedStruct
         val nullCheck = Or(
           IsNull(newInputObject),
           Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))

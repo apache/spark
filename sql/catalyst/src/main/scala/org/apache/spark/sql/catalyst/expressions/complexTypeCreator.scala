@@ -172,11 +172,30 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 }
 
 /**
+* a helper mixin to encapsulate [[CreateStruct]] => [[CreateNamedStruct]] transformation.
+*/
+sealed trait CreateStructLike{
+  def dataType : StructType
+  def children : Seq[Expression]
+
+  protected def mkNamedStructArgs = {
+    for {
+      (name, expression) <- dataType.fieldNames.zip(children)
+      nameLiteral = Literal(name)
+      newChild <- Seq(nameLiteral, expression)
+    } yield{
+      newChild
+    }
+  }
+}
+
+/**
  * Returns a Row containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
   usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
-case class CreateStruct(children: Seq[Expression]) extends Expression with Unevaluable {
+case class CreateStruct(children: Seq[Expression]) extends Expression
+  with Unevaluable with CreateStructLike {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -195,6 +214,8 @@ case class CreateStruct(children: Seq[Expression]) extends Expression with Uneva
   override def nullable: Boolean = false
 
   override def prettyName: String = "struct"
+
+  def toCreateNamedStruct : CreateNamedStruct = CreateNamedStruct(mkNamedStructArgs)
 }
 
 
@@ -292,7 +313,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
  * returns UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
  * this expression automatically at runtime.
  */
-case class CreateStructUnsafe(children: Seq[Expression]) extends Expression with Unevaluable {
+case class CreateStructUnsafe(children: Seq[Expression]) extends Expression
+  with Unevaluable with CreateStructLike {
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -313,6 +335,9 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression with
   override def nullable: Boolean = false
 
   override def prettyName: String = "struct_unsafe"
+
+  def toCreateNamedStructUnsafe : CreateNamedStructUnsafe =
+    CreateNamedStructUnsafe(mkNamedStructArgs)
 }
 
 
