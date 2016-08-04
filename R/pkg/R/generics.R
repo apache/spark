@@ -428,7 +428,7 @@ setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
 
 #' @rdname coltypes
 #' @export
-setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
+setGeneric("coltypes<-", function(y, value) { standardGeneric("coltypes<-") })
 
 #' @rdname columns
 #' @export

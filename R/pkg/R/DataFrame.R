@@ -358,7 +358,7 @@ setMethod("colnames<-",
 #'
 #' Get column types of a SparkDataFrame
 #'
-#' @param x A SparkDataFrame
+#' @param x A SparkDataFrame whose column types to be get
 #' @return value A character vector with the column types of the given SparkDataFrame
 #' @rdname coltypes
 #' @aliases coltypes,SparkDataFrame-method
@@ -411,7 +411,7 @@ setMethod("coltypes",
 #'
 #' Set the column types of a SparkDataFrame.
 #'
-#' @param x A SparkDataFrame
+#' @param y A SparkDataFrame whose column types to be set
 #' @param value A character vector with the target column types for the given
 #'    SparkDataFrame. Column types can be one of integer, numeric/double, character, logical, or NA
 #'    to keep that column as-is.
@@ -429,9 +429,9 @@ setMethod("coltypes",
 #'}
 #' @note coltypes<- since 1.6.0
 setMethod("coltypes<-",
-          signature(x = "SparkDataFrame", value = "character"),
-          function(x, value) {
-            cols <- columns(x)
+          signature(y = "SparkDataFrame", value = "character"),
+          function(y, value) {
+            cols <- columns(y)
             ncols <- length(cols)
             if (length(value) == 0) {
               stop("Cannot set types of an empty SparkDataFrame with no Column")
@@ -440,7 +440,7 @@ setMethod("coltypes<-",
               stop("Length of type vector should match the number of columns for SparkDataFrame")
             }
             newCols <- lapply(seq_len(ncols), function(i) {
-              col <- getColumn(x, cols[i])
+              col <- getColumn(y, cols[i])
               if (!is.na(value[i])) {
                 stype <- rToSQLTypes[[value[i]]]
                 if (is.null(stype)) {
@@ -451,7 +451,7 @@ setMethod("coltypes<-",
                 col
               }
             })
-            nx <- select(x, newCols)
+            nx <- select(y, newCols)
             dataFrame(nx@sdf)
           })
 
