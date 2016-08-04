@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{typeTag, TypeTag}
-
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, ResolveCreateStruct, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
@@ -134,10 +133,11 @@ object ExpressionEncoder {
         // input tuple and can be null. So instead of creating a struct directly here, we should add
         // a null/None check and return a null struct if the null/None check fails.
         val struct = CreateStruct(newSerializer)
+        val namedStruct = struct transformDown ResolveCreateStruct.expressionTransformer
         val nullCheck = Or(
           IsNull(newInputObject),
           Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
-        If(nullCheck, Literal.create(null, struct.dataType), struct)
+        If(nullCheck, Literal.create(null, struct.dataType), namedStruct)
       }
     }
 
