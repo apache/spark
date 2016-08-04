@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
 /**
@@ -126,7 +126,19 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
  * @param hasIntercept whether the formula specifies fitting with an intercept.
  */
 private[ml] case class ResolvedRFormula(
-  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean)
+  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean) {
+
+  override def toString: String = {
+    val ts = terms.map {
+      case t if t.length > 1 =>
+        s"${t.mkString("{", ",", "}")}"
+      case t =>
+        t.mkString
+    }
+    val termStr = ts.mkString("[", ",", "]")
+    s"ResolvedRFormula(label=$label, terms=$termStr, hasIntercept=$hasIntercept)"
+  }
+}
 
 /**
  * R formula terms. See the R formula docs here for more information:

@@ -100,8 +100,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // instance across threads
     private val ser = SparkEnv.get.closureSerializer.newInstance()
 
-    override protected def log = CoarseGrainedSchedulerBackend.this.log
-
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
     private val reviveThread =
@@ -148,7 +146,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
-      case RegisterExecutor(executorId, executorRef, cores, logUrls) =>
+      case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls) =>
         if (executorDataMap.contains(executorId)) {
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
@@ -164,7 +162,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
-          val data = new ExecutorData(executorRef, executorRef.address, executorAddress.host,
+          val data = new ExecutorData(executorRef, executorRef.address, hostname,
             cores, cores, logUrls)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
@@ -178,7 +176,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
-          executorRef.send(RegisteredExecutor(executorAddress.host))
+          executorRef.send(RegisteredExecutor)
           // Note: some tests expect the reply to come after we put the executor in the map
           context.reply(true)
           listenerBus.post(
@@ -289,7 +287,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           scheduler.executorLost(executorId, if (killed) ExecutorKilled else reason)
           listenerBus.post(
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
-        case None => logInfo(s"Asked to remove non-existent executor $executorId")
+        case None =>
+          // SPARK-15262: If an executor is still alive even after the scheduler has removed
+          // its metadata, we may receive a heartbeat from that executor and tell its block
+          // manager to reregister itself. If that happens, the block manager master will know
+          // about the executor, but the scheduler will not. Therefore, we should remove the
+          // executor from the block manager when we hit this case.
+          scheduler.sc.env.blockManager.master.removeExecutorAsync(executorId)
+          logInfo(s"Asked to remove non-existent executor $executorId")
       }
     }
 

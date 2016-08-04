@@ -94,8 +94,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
   }
 
   test("UDTs and UDFs") {
-    sqlContext.udf.register("testType", (d: UDT.MyDenseVector) => d.isInstanceOf[UDT.MyDenseVector])
-    pointsRDD.registerTempTable("points")
+    spark.udf.register("testType", (d: UDT.MyDenseVector) => d.isInstanceOf[UDT.MyDenseVector])
+    pointsRDD.createOrReplaceTempView("points")
     checkAnswer(
       sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
@@ -106,7 +106,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       val path = dir.getCanonicalPath
       pointsRDD.write.parquet(path)
       checkAnswer(
-        sqlContext.read.parquet(path),
+        spark.read.parquet(path),
         Seq(
           Row(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
           Row(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))))
@@ -118,7 +118,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
       val path = dir.getCanonicalPath
       pointsRDD.repartition(1).write.parquet(path)
       checkAnswer(
-        sqlContext.read.parquet(path),
+        spark.read.parquet(path),
         Seq(
           Row(1.0, new UDT.MyDenseVector(Array(0.1, 1.0))),
           Row(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))))
@@ -146,7 +146,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     ))
 
     val stringRDD = sparkContext.parallelize(data)
-    val jsonRDD = sqlContext.read.schema(schema).json(stringRDD)
+    val jsonRDD = spark.read.schema(schema).json(stringRDD)
     checkAnswer(
       jsonRDD,
       Row(1, new UDT.MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
@@ -167,7 +167,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     ))
 
     val stringRDD = sparkContext.parallelize(data)
-    val jsonDataset = sqlContext.read.schema(schema).json(stringRDD)
+    val jsonDataset = spark.read.schema(schema).json(stringRDD)
       .as[(Int, UDT.MyDenseVector)]
     checkDataset(
       jsonDataset,
@@ -188,6 +188,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
 
     val toCatalystConverter = CatalystTypeConverters.createToCatalystConverter(udt)
     assert(toCatalystConverter(null) === null)
+  }
 
+  test("SPARK-15658: Analysis exception if Dataset.map returns UDT object") {
+    // call `collect` to make sure this query can pass analysis.
+    pointsRDD.as[MyLabeledPoint].map(_.copy(label = 2.0)).collect()
   }
 }

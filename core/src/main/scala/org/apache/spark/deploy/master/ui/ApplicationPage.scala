@@ -75,7 +75,11 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             </li>
             <li><strong>Submit Date:</strong> {app.submitDate}</li>
             <li><strong>State:</strong> {app.state}</li>
-            <li><strong><a href={app.curAppUIUrl}>Application Detail UI</a></strong></li>
+            {
+              if (!app.isFinished) {
+                <li><strong><a href={app.desc.appUiUrl}>Application Detail UI</a></strong></li>
+              }
+            }
           </ul>
         </div>
       </div>

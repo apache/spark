@@ -26,12 +26,12 @@ import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
 import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -42,7 +42,7 @@ import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
@@ -53,24 +53,43 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 private[recommendation] trait ALSModelParams extends Params with HasPredictionCol {
   /**
-   * Param for the column name for user ids.
+   * Param for the column name for user ids. Ids must be integers. Other
+   * numeric types are supported for this column, but will be cast to integers as long as they
+   * fall within the integer value range.
    * Default: "user"
    * @group param
    */
-  val userCol = new Param[String](this, "userCol", "column name for user ids")
+  val userCol = new Param[String](this, "userCol", "column name for user ids. Ids must be within " +
+    "the integer value range.")
 
   /** @group getParam */
   def getUserCol: String = $(userCol)
 
   /**
-   * Param for the column name for item ids.
+   * Param for the column name for item ids. Ids must be integers. Other
+   * numeric types are supported for this column, but will be cast to integers as long as they
+   * fall within the integer value range.
    * Default: "item"
    * @group param
    */
-  val itemCol = new Param[String](this, "itemCol", "column name for item ids")
+  val itemCol = new Param[String](this, "itemCol", "column name for item ids. Ids must be within " +
+    "the integer value range.")
 
   /** @group getParam */
   def getItemCol: String = $(itemCol)
+
+  /**
+   * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
+   * out of integer range.
+   */
+  protected val checkedCast = udf { (n: Double) =>
+    if (n > Int.MaxValue || n < Int.MinValue) {
+      throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
+        s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
+    } else {
+      n.toInt
+    }
+  }
 }
 
 /**
@@ -80,7 +99,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   with HasPredictionCol with HasCheckpointInterval with HasSeed {
 
   /**
-   * Param for rank of the matrix factorization (>= 1).
+   * Param for rank of the matrix factorization (positive).
    * Default: 10
    * @group param
    */
@@ -90,7 +109,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getRank: Int = $(rank)
 
   /**
-   * Param for number of user blocks (>= 1).
+   * Param for number of user blocks (positive).
    * Default: 10
    * @group param
    */
@@ -101,7 +120,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNumUserBlocks: Int = $(numUserBlocks)
 
   /**
-   * Param for number of item blocks (>= 1).
+   * Param for number of item blocks (positive).
    * Default: 10
    * @group param
    */
@@ -122,7 +141,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getImplicitPrefs: Boolean = $(implicitPrefs)
 
   /**
-   * Param for the alpha parameter in the implicit preference formulation (>= 0).
+   * Param for the alpha parameter in the implicit preference formulation (nonnegative).
    * Default: 1.0
    * @group param
    */
@@ -155,13 +174,13 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * [[StorageLevel]]. Cannot be "NONE".
+   * `StorageLevel`. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
    */
   val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
+    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
 
   /** @group expertGetParam */
@@ -169,13 +188,13 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
 
   /**
    * Param for StorageLevel for ALS model factors. Pass in a string representation of
-   * [[StorageLevel]].
+   * `StorageLevel`.
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
    */
   val finalStorageLevel = new Param[String](this, "finalStorageLevel",
-    "StorageLevel for ALS model factors. Default: 'MEMORY_AND_DISK'.",
+    "StorageLevel for ALS model factors.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess)
 
   /** @group expertGetParam */
@@ -193,23 +212,22 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
-    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
-    val ratingType = schema($(ratingCol)).dataType
-    require(ratingType == FloatType || ratingType == DoubleType)
+    // user and item will be cast to Int
+    SchemaUtils.checkNumericType(schema, $(userCol))
+    SchemaUtils.checkNumericType(schema, $(itemCol))
+    // rating will be cast to Float
+    SchemaUtils.checkNumericType(schema, $(ratingCol))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 }
 
 /**
- * :: Experimental ::
  * Model fitted by ALS.
  *
  * @param rank rank of the matrix factorization model
  * @param userFactors a DataFrame that stores user factors in two columns: `id` and `features`
  * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
  */
-@Experimental
 @Since("1.3.0")
 class ALSModel private[ml] (
     @Since("1.4.0") override val uid: String,
@@ -232,6 +250,7 @@ class ALSModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema)
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
     val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
@@ -242,16 +261,19 @@ class ALSModel private[ml] (
       }
     }
     dataset
-      .join(userFactors, dataset($(userCol)) === userFactors("id"), "left")
-      .join(itemFactors, dataset($(itemCol)) === itemFactors("id"), "left")
+      .join(userFactors,
+        checkedCast(dataset($(userCol)).cast(DoubleType)) === userFactors("id"), "left")
+      .join(itemFactors,
+        checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
 
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
-    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+    // user and item will be cast to Int
+    SchemaUtils.checkNumericType(schema, $(userCol))
+    SchemaUtils.checkNumericType(schema, $(itemCol))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 
@@ -296,9 +318,9 @@ object ALSModel extends MLReadable[ALSModel] {
       implicit val format = DefaultFormats
       val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
-      val userFactors = sqlContext.read.format("parquet").load(userPath)
+      val userFactors = sparkSession.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
-      val itemFactors = sqlContext.read.format("parquet").load(itemPath)
+      val itemFactors = sparkSession.read.format("parquet").load(itemPath)
 
       val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
 
@@ -309,7 +331,6 @@ object ALSModel extends MLReadable[ALSModel] {
 }
 
 /**
- * :: Experimental ::
  * Alternating Least Squares (ALS) matrix factorization.
  *
  * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
@@ -330,15 +351,14 @@ object ALSModel extends MLReadable[ALSModel] {
  *
  * For implicit preference data, the algorithm used is based on
  * "Collaborative Filtering for Implicit Feedback Datasets", available at
- * [[http://dx.doi.org/10.1109/ICDM.2008.22]], adapted for the blocked approach used here.
+ * http://dx.doi.org/10.1109/ICDM.2008.22, adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
- * r > 0 and 0 if r <= 0. The ratings then act as 'confidence' values related to strength of
+ * r &gt; 0 and 0 if r &lt;= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-@Experimental
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
   with DefaultParamsWritable {
@@ -406,15 +426,11 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setIntermediateStorageLevel(value: String): this.type = {
-    set(intermediateStorageLevel, value)
-  }
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setFinalStorageLevel(value: String): this.type = {
-    set(finalStorageLevel, value)
-  }
+  def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
@@ -430,10 +446,13 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ALSModel = {
+    transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
+
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
+      .select(checkedCast(col($(userCol)).cast(DoubleType)),
+        checkedCast(col($(itemCol)).cast(DoubleType)), r)
       .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))

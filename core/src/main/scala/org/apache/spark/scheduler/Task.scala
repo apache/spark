@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
@@ -155,7 +156,14 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.accumulators().filter { a => !taskFailed || a.countFailedValues }
+      context.taskMetrics.internalAccums.filter { a =>
+        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
+        // value will be updated at driver side.
+        // Note: internal accumulators representing task metrics always count failed values
+        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
+      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
+      // them out.
+      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
       Seq.empty
     }
@@ -191,8 +199,8 @@ private[spark] object Task {
    */
   def serializeWithDependencies(
       task: Task[_],
-      currentFiles: HashMap[String, Long],
-      currentJars: HashMap[String, Long],
+      currentFiles: mutable.Map[String, Long],
+      currentJars: mutable.Map[String, Long],
       serializer: SerializerInstance)
     : ByteBuffer = {
 

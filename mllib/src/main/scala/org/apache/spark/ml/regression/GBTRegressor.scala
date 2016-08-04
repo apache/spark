@@ -24,13 +24,13 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
@@ -38,7 +38,6 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
- * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
@@ -56,7 +55,6 @@ import org.apache.spark.sql.functions._
  *    [https://issues.apache.org/jira/browse/SPARK-4240]
  */
 @Since("1.4.0")
-@Experimental
 class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTRegressorParams with DefaultParamsWritable with Logging {
@@ -135,7 +133,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 }
 
 @Since("1.4.0")
-@Experimental
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
@@ -147,8 +144,6 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
 }
 
 /**
- * :: Experimental ::
- *
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * model for regression.
  * It supports both continuous and categorical features.
@@ -156,7 +151,6 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
 @Since("1.4.0")
-@Experimental
 class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
@@ -252,7 +246,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
       val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
         "numTrees" -> instance.getNumTrees)
-      EnsembleModelReadWrite.saveImpl(instance, path, sqlContext, extraMetadata)
+      EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }
 
@@ -265,7 +259,7 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
     override def load(path: String): GBTRegressionModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
 
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]

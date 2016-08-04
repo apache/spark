@@ -17,21 +17,22 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import Bucketizer
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="BucketizerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("BucketizerExample")\
+        .getOrCreate()
 
     # $example on$
     splits = [-float("inf"), -0.5, 0.0, 0.5, float("inf")]
 
     data = [(-0.5,), (-0.3,), (0.0,), (0.2,)]
-    dataFrame = sqlContext.createDataFrame(data, ["features"])
+    dataFrame = spark.createDataFrame(data, ["features"])
 
     bucketizer = Bucketizer(splits=splits, inputCol="features", outputCol="bucketedFeatures")
 
@@ -40,4 +41,4 @@ if __name__ == "__main__":
     bucketedData.show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

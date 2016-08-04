@@ -29,7 +29,7 @@ public interface ServiceStateChangeListener {
    * have changed state before this callback is invoked.
    *
    * This operation is invoked on the thread that initiated the state change,
-   * while the service itself in in a sychronized section.
+   * while the service itself in in a synchronized section.
    * <ol>
    *   <li>Any long-lived operation here will prevent the service state
    *   change from completing in a timely manner.</li>

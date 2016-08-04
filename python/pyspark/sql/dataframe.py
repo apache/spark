@@ -34,6 +34,7 @@ from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
+from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -62,8 +63,6 @@ class DataFrame(object):
 
         people.filter(people.age > 30).join(department, people.deptId == department.id)\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
-
-    .. note:: Experimental
 
     .. versionadded:: 1.3
     """
@@ -121,26 +120,83 @@ class DataFrame(object):
         that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
-        >>> df2 = sqlContext.sql("select * from people")
+        >>> df2 = spark.sql("select * from people")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
+        >>> spark.catalog.dropTempView("people")
+
+        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
         """
-        self._jdf.registerTempTable(name)
+        self._jdf.createOrReplaceTempView(name)
+
+    @since(2.0)
+    def createTempView(self, name):
+        """Creates a temporary view with this DataFrame.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        >>> df.createTempView("people")
+        >>> df2 = spark.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ...
+        AnalysisException: u"Temporary table 'people' already exists;"
+        >>> spark.catalog.dropTempView("people")
+
+        """
+        self._jdf.createTempView(name)
+
+    @since(2.0)
+    def createOrReplaceTempView(self, name):
+        """Creates or replaces a temporary view with this DataFrame.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        >>> df.createOrReplaceTempView("people")
+        >>> df2 = df.filter(df.age > 3)
+        >>> df2.createOrReplaceTempView("people")
+        >>> df3 = spark.sql("select * from people")
+        >>> sorted(df3.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropTempView("people")
+
+        """
+        self._jdf.createOrReplaceTempView(name)
 
     @property
     @since(1.4)
     def write(self):
         """
-        Interface for saving the content of the :class:`DataFrame` out into external storage.
+        Interface for saving the content of the non-streaming :class:`DataFrame` out into external
+        storage.
 
         :return: :class:`DataFrameWriter`
         """
         return DataFrameWriter(self)
 
     @property
+    @since(2.0)
+    def writeStream(self):
+        """
+        Interface for saving the content of the streaming :class:`DataFrame` out into external
+        storage.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamWriter`
+        """
+        return DataStreamWriter(self)
+
+    @property
     @since(1.3)
     def schema(self):
-        """Returns the schema of this :class:`DataFrame` as a :class:`types.StructType`.
+        """Returns the schema of this :class:`DataFrame` as a :class:`pyspark.sql.types.StructType`.
 
         >>> df.schema
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
@@ -202,10 +258,12 @@ class DataFrame(object):
     def isStreaming(self):
         """Returns true if this :class:`Dataset` contains one or more sources that continuously
         return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
-        :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
+        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
+        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
+
+        .. note:: Experimental
         """
         return self._jdf.isStreaming()
 
@@ -214,7 +272,9 @@ class DataFrame(object):
         """Prints the first ``n`` rows to the console.
 
         :param n: Number of rows to show.
-        :param truncate: Whether truncate long strings and align cells right.
+        :param truncate: If set to True, truncate strings longer than 20 chars by default.
+            If set to a number greater than one, truncates long strings to length ``truncate``
+            and align cells right.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -225,8 +285,18 @@ class DataFrame(object):
         |  2|Alice|
         |  5|  Bob|
         +---+-----+
+        >>> df.show(truncate=3)
+        +---+----+
+        |age|name|
+        +---+----+
+        |  2| Ali|
+        |  5| Bob|
+        +---+----+
         """
-        print(self._jdf.showString(n, truncate))
+        if isinstance(truncate, bool) and truncate:
+            print(self._jdf.showString(n, 20))
+        else:
+            print(self._jdf.showString(n, int(truncate)))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -364,15 +434,6 @@ class DataFrame(object):
         return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
 
     @since(1.3)
-    def repartition(self, numPartitions):
-        """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
-
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
-        """
-        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
-
-    @since(1.3)
     def repartition(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
@@ -403,10 +464,10 @@ class DataFrame(object):
         +---+-----+
         |age| name|
         +---+-----+
-        |  5|  Bob|
+        |  2|Alice|
         |  5|  Bob|
         |  2|Alice|
-        |  2|Alice|
+        |  5|  Bob|
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
@@ -542,7 +603,7 @@ class DataFrame(object):
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
         >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age").collect()
-        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
+        [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
         """
         assert isinstance(alias, basestring), "alias should be a string"
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
@@ -552,15 +613,15 @@ class DataFrame(object):
     def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
-        The following performs a full outer join between ``df1`` and ``df2``.
-
         :param other: Right side of the join
-        :param on: a string for join column name, a list of column names,
-            , a join expression (Column) or a list of Columns.
-            If `on` is a string or a list of string indicating the name of the join column(s),
+        :param on: a string for the join column name, a list of column names,
+            a join expression (Column), or a list of Columns.
+            If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+
+        The following performs a full outer join between ``df1`` and ``df2``.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
@@ -690,15 +751,15 @@ class DataFrame(object):
 
     @since("1.3.1")
     def describe(self, *cols):
-        """Computes statistics for numeric columns.
+        """Computes statistics for numeric and string columns.
 
         This include count, mean, stddev, min, and max. If no columns are
-        given, this function computes statistics for all numerical columns.
+        given, this function computes statistics for all numerical or string columns.
 
         .. note:: This function is meant for exploratory data analysis, as we make no \
         guarantee about the backward compatibility of the schema of the resulting DataFrame.
 
-        >>> df.describe().show()
+        >>> df.describe(['age']).show()
         +-------+------------------+
         |summary|               age|
         +-------+------------------+
@@ -708,7 +769,7 @@ class DataFrame(object):
         |    min|                 2|
         |    max|                 5|
         +-------+------------------+
-        >>> df.describe(['age', 'name']).show()
+        >>> df.describe().show()
         +-------+------------------+-----+
         |summary|               age| name|
         +-------+------------------+-----+
@@ -984,10 +1045,10 @@ class DataFrame(object):
         :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
 
         >>> from pyspark.sql import Row
-        >>> df = sc.parallelize([ \
-            Row(name='Alice', age=5, height=80), \
-            Row(name='Alice', age=5, height=80), \
-            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df = sc.parallelize([ \\
+        ...     Row(name='Alice', age=5, height=80), \\
+        ...     Row(name='Alice', age=5, height=80), \\
+        ...     Row(name='Alice', age=10, height=80)]).toDF()
         >>> df.dropDuplicates().show()
         +---+------+-----+
         |age|height| name|
@@ -1327,6 +1388,7 @@ class DataFrame(object):
     @since(1.3)
     def withColumnRenamed(self, existing, new):
         """Returns a new :class:`DataFrame` by renaming an existing column.
+        This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
         :param col: string, new name of the column.
@@ -1338,11 +1400,12 @@ class DataFrame(object):
 
     @since(1.4)
     @ignore_unicode_prefix
-    def drop(self, col):
+    def drop(self, *cols):
         """Returns a new :class:`DataFrame` that drops the specified column.
+        This is a no-op if schema doesn't contain the given column name(s).
 
-        :param col: a string name of the column to drop, or a
-            :class:`Column` to drop.
+        :param cols: a string name of the column to drop, or a
+            :class:`Column` to drop, or a list of string name of the columns to drop.
 
         >>> df.drop('age').collect()
         [Row(name=u'Alice'), Row(name=u'Bob')]
@@ -1355,13 +1418,24 @@ class DataFrame(object):
 
         >>> df.join(df2, df.name == df2.name, 'inner').drop(df2.name).collect()
         [Row(age=5, name=u'Bob', height=85)]
+
+        >>> df.join(df2, 'name', 'inner').drop('age', 'height').collect()
+        [Row(name=u'Bob')]
         """
-        if isinstance(col, basestring):
-            jdf = self._jdf.drop(col)
-        elif isinstance(col, Column):
-            jdf = self._jdf.drop(col._jc)
+        if len(cols) == 1:
+            col = cols[0]
+            if isinstance(col, basestring):
+                jdf = self._jdf.drop(col)
+            elif isinstance(col, Column):
+                jdf = self._jdf.drop(col._jc)
+            else:
+                raise TypeError("col should be a string or a Column")
         else:
-            raise TypeError("col should be a string or a Column")
+            for col in cols:
+                if not isinstance(col, basestring):
+                    raise TypeError("each col in the param list should be a string")
+            jdf = self._jdf.drop(self._jseq(cols))
+
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
@@ -1488,12 +1562,13 @@ class DataFrameStatFunctions(object):
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
+    globs['spark'] = SparkSession(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))

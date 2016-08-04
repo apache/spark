@@ -21,12 +21,14 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.
-  {BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -39,23 +41,27 @@ private[clustering] trait BisectingKMeansParams extends Params
   with HasMaxIter with HasFeaturesCol with HasSeed with HasPredictionCol {
 
   /**
-   * Set the number of clusters to create (k). Must be > 1. Default: 2.
+   * The desired number of leaf clusters. Must be > 1. Default: 4.
+   * The actual number could be smaller if there are no divisible leaf clusters.
    * @group param
    */
   @Since("2.0.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "The desired number of leaf clusters. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")
   def getK: Int = $(k)
 
-  /** @group expertParam */
+  /**
+   * The minimum number of points (if >= 1.0) or the minimum proportion
+   * of points (if < 1.0) of a divisible cluster (default: 1.0).
+   * @group expertParam
+   */
   @Since("2.0.0")
-  final val minDivisibleClusterSize = new DoubleParam(
-    this,
-    "minDivisibleClusterSize",
-    "the minimum number of points (if >= 1.0) or the minimum proportion",
-    (value: Double) => value > 0)
+  final val minDivisibleClusterSize = new DoubleParam(this, "minDivisibleClusterSize",
+    "The minimum number of points (if >= 1.0) or the minimum proportion " +
+      "of points (if < 1.0) of a divisible cluster.", ParamValidators.gt(0.0))
 
   /** @group expertGetParam */
   @Since("2.0.0")
@@ -76,7 +82,7 @@ private[clustering] trait BisectingKMeansParams extends Params
  * :: Experimental ::
  * Model fitted by BisectingKMeans.
  *
- * @param parentModel a model trained by spark.mllib.clustering.BisectingKMeans.
+ * @param parentModel a model trained by [[org.apache.spark.mllib.clustering.BisectingKMeans]].
  */
 @Since("2.0.0")
 @Experimental
@@ -93,6 +99,7 @@ class BisectingKMeansModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -105,7 +112,7 @@ class BisectingKMeansModel private[ml] (
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
-  def clusterCenters: Array[Vector] = parentModel.clusterCenters
+  def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
   /**
    * Computes the sum of squared distances between the input points and their corresponding cluster
@@ -115,7 +122,7 @@ class BisectingKMeansModel private[ml] (
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
-    parentModel.computeCost(data)
+    parentModel.computeCost(data.map(OldVectors.fromML))
   }
 
   @Since("2.0.0")
@@ -216,7 +223,10 @@ class BisectingKMeans @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    transformSchema(dataset.schema, logging = true)
+    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))

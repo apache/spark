@@ -202,7 +202,7 @@ sealed trait BufferSetterGetterUtils {
 }
 
 /**
- * A Mutable [[Row]] representing an mutable aggregation buffer.
+ * A Mutable [[Row]] representing a mutable aggregation buffer.
  */
 private[sql] class MutableAggregationBufferImpl (
     schema: StructType,

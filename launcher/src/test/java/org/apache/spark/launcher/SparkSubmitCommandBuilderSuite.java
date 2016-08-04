@@ -59,6 +59,26 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testCliHelpAndNoArg() throws Exception {
+    List<String> helpArgs = Arrays.asList(parser.HELP);
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(helpArgs, env);
+    assertTrue("--help should be contained in the final cmd.", cmd.contains(parser.HELP));
+
+    List<String> sparkEmptyArgs = Collections.emptyList();
+    cmd = buildCommand(sparkEmptyArgs, env);
+    assertTrue(
+      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
+      cmd.contains("org.apache.spark.deploy.SparkSubmit"));
+  }
+
+  @Test
+  public void testCliKillAndStatus() throws Exception {
+    testCLIOpts(parser.STATUS);
+    testCLIOpts(parser.KILL_SUBMISSION);
+  }
+
+  @Test
   public void testCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.MASTER,
@@ -72,7 +92,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       parser.CONF,
       "spark.randomOption=foo",
       parser.CONF,
-      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH + "=/driverLibPath");
+      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH + "=/driverLibPath",
+      SparkLauncher.NO_RESOURCE);
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
 
@@ -109,7 +130,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.CLASS + "=org.my.Class",
       parser.MASTER + "=foo",
-      parser.DEPLOY_MODE + "=bar");
+      parser.DEPLOY_MODE + "=bar",
+      SparkLauncher.NO_RESOURCE);
 
     List<String> cmd = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     assertEquals("org.my.Class", findArgValue(cmd, parser.CLASS));
@@ -166,6 +188,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
       findArgValue(cmd, parser.CLASS));
     assertEquals("42", cmd.get(cmd.size() - 1));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testMissingAppResource() {
+    new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
   }
 
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
@@ -303,6 +330,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
     return newCommandBuilder(args).buildCommand(env);
+  }
+
+  private void testCLIOpts(String opt) throws Exception {
+    List<String> helpArgs = Arrays.asList(opt, "driver-20160531171222-0000");
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(helpArgs, env);
+    assertTrue(opt + " should be contained in the final cmd.",
+      cmd.contains(opt));
   }
 
 }

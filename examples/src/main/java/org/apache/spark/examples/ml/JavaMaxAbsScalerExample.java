@@ -17,28 +17,30 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.feature.MaxAbsScaler;
 import org.apache.spark.ml.feature.MaxAbsScalerModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaMaxAbsScalerExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaMaxAbsScalerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaMaxAbsScalerExample")
+      .getOrCreate();
 
     // $example on$
-    Dataset<Row> dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame = spark
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
     MaxAbsScaler scaler = new MaxAbsScaler()
-        .setInputCol("features")
-        .setOutputCol("scaledFeatures");
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures");
 
     // Compute summary statistics and generate MaxAbsScalerModel
     MaxAbsScalerModel scalerModel = scaler.fit(dataFrame);
@@ -47,7 +49,7 @@ public class JavaMaxAbsScalerExample {
     Dataset<Row> scaledData = scalerModel.transform(dataFrame);
     scaledData.show();
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 
 }

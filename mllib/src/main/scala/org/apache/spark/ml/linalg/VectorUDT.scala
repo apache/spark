@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
  * User-defined type for [[Vector]] in [[mllib-local]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
-private[ml] class VectorUDT extends UserDefinedType[Vector] {
+private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense

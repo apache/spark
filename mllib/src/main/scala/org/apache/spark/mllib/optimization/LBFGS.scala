@@ -200,7 +200,7 @@ object LBFGS extends Logging {
     val lbfgs = new BreezeLBFGS[BDV[Double]](maxNumIterations, numCorrections, convergenceTol)
 
     val states =
-      lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
+      lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.asBreeze.toDenseVector)
 
     /**
      * NOTE: lossSum and loss is computed using the weights from the previous iteration
@@ -212,6 +212,7 @@ object LBFGS extends Logging {
       state = states.next()
     }
     lossHistory += state.value
+
     val weights = Vectors.fromBreeze(state.x)
 
     val lossHistoryArray = lossHistory.result()
@@ -281,7 +282,7 @@ object LBFGS extends Logging {
       // gradientTotal = gradientSum / numExamples + gradientTotal
       axpy(1.0 / numExamples, gradientSum, gradientTotal)
 
-      (loss, gradientTotal.toBreeze.asInstanceOf[BDV[Double]])
+      (loss, gradientTotal.asBreeze.asInstanceOf[BDV[Double]])
     }
   }
 }

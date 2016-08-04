@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -44,6 +45,7 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
     var maxOrdinal = -1
     result foreach {
       case b: BoundReference if b.ordinal > maxOrdinal => maxOrdinal = b.ordinal
+      case _ =>
     }
     if (maxOrdinal > children.length) {
       return TypeCheckFailure(s"The result expression need $maxOrdinal input expressions, but " +

@@ -21,6 +21,7 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
@@ -36,7 +37,7 @@ private[sql] case class JDBCPartitioningInfo(
     upperBound: Long,
     numPartitions: Int)
 
-private[sql] object JDBCRelation {
+private[sql] object JDBCRelation extends Logging {
   /**
    * Given a partitioning schematic (a column of integral type, a number of
    * partitions, and upper and lower bounds on the column's value), generate
@@ -52,29 +53,46 @@ private[sql] object JDBCRelation {
    * @return an array of partitions with where clause for each partition
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
-    if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
+    if (partitioning == null || partitioning.numPartitions <= 1 ||
+      partitioning.lowerBound == partitioning.upperBound) {
+      return Array[Partition](JDBCPartition(null, 0))
+    }
 
-    val numPartitions = partitioning.numPartitions
-    val column = partitioning.column
-    if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
+    val lowerBound = partitioning.lowerBound
+    val upperBound = partitioning.upperBound
+    require (lowerBound <= upperBound,
+      "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
+      s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
+
+    val numPartitions =
+      if ((upperBound - lowerBound) >= partitioning.numPartitions) {
+        partitioning.numPartitions
+      } else {
+        logWarning("The number of partitions is reduced because the specified number of " +
+          "partitions is less than the difference between upper bound and lower bound. " +
+          s"Updated number of partitions: ${upperBound - lowerBound}; Input number of " +
+          s"partitions: ${partitioning.numPartitions}; Lower bound: $lowerBound; " +
+          s"Upper bound: $upperBound.")
+        upperBound - lowerBound
+      }
     // Overflow and silliness can happen if you subtract then divide.
     // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = (partitioning.upperBound / numPartitions
-                      - partitioning.lowerBound / numPartitions)
+    val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
+    val column = partitioning.column
     var i: Int = 0
-    var currentValue: Long = partitioning.lowerBound
+    var currentValue: Long = lowerBound
     var ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
-      val lowerBound = if (i != 0) s"$column >= $currentValue" else null
+      val lBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride
-      val upperBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
+      val uBound = if (i != numPartitions - 1) s"$column < $currentValue" else null
       val whereClause =
-        if (upperBound == null) {
-          lowerBound
-        } else if (lowerBound == null) {
-          s"$upperBound or $column is null"
+        if (uBound == null) {
+          lBound
+        } else if (lBound == null) {
+          s"$uBound or $column is null"
         } else {
-          s"$lowerBound AND $upperBound"
+          s"$lBound AND $uBound"
         }
       ans += JDBCPartition(whereClause, i)
       i = i + 1
@@ -92,7 +110,7 @@ private[sql] case class JDBCRelation(
   with PrunedFilteredScan
   with InsertableRelation {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override val needConversion: Boolean = false
 

@@ -64,8 +64,25 @@ fi
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
 # an array that will be used to exec the final command.
+#
+# The exit code of the launcher is appended to the output, so the parent shell removes it from the
+# command array and checks the value to see if the launcher succeeded.
+build_command() {
+  "$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
+  printf "%d\0" $?
+}
+
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <("$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@")
+done < <(build_command "$@")
+
+COUNT=${#CMD[@]}
+LAST=$((COUNT - 1))
+LAUNCHER_EXIT_CODE=${CMD[$LAST]}
+if [ $LAUNCHER_EXIT_CODE != 0 ]; then
+  exit $LAUNCHER_EXIT_CODE
+fi
+
+CMD=("${CMD[@]:0:$LAST}")
 exec "${CMD[@]}"

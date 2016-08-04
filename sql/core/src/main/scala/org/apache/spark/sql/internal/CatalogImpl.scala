@@ -50,14 +50,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def makeDataset[T <: DefinedByConstructorParams: TypeTag](data: Seq[T]): Dataset[T] = {
-    val enc = ExpressionEncoder[T]()
-    val encoded = data.map(d => enc.toRow(d).copy())
-    val plan = new LocalRelation(enc.schema.toAttributes, encoded)
-    val queryExecution = sparkSession.executePlan(plan)
-    new Dataset[T](sparkSession, queryExecution, enc)
-  }
-
   /**
    * Returns the current default database in this session.
    */
@@ -83,7 +75,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         description = metadata.description,
         locationUri = metadata.locationUri)
     }
-    makeDataset(databases)
+    CatalogImpl.makeDataset(databases, sparkSession)
   }
 
   /**
@@ -111,7 +103,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         tableType = metadata.map(_.tableType.name).getOrElse("TEMPORARY"),
         isTemporary = isTemp)
     }
-    makeDataset(tables)
+    CatalogImpl.makeDataset(tables, sparkSession)
   }
 
   /**
@@ -129,15 +121,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
     requireDatabaseExists(dbName)
-    val functions = sessionCatalog.listFunctions(dbName).map { funcIdent =>
+    val functions = sessionCatalog.listFunctions(dbName).map { case (funcIdent, _) =>
       val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
       new Function(
         name = funcIdent.identifier,
+        database = funcIdent.database.orNull,
         description = null, // for now, this is always undefined
         className = metadata.getClassName,
         isTemporary = funcIdent.database.isEmpty)
     }
-    makeDataset(functions)
+    CatalogImpl.makeDataset(functions, sparkSession)
   }
 
   /**
@@ -145,7 +138,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    listColumns(currentDatabase, tableName)
+    listColumns(TableIdentifier(tableName, None))
   }
 
   /**
@@ -154,19 +147,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   @throws[AnalysisException]("database or table does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
     requireTableExists(dbName, tableName)
-    val tableMetadata = sessionCatalog.getTableMetadata(TableIdentifier(tableName, Some(dbName)))
+    listColumns(TableIdentifier(tableName, Some(dbName)))
+  }
+
+  private def listColumns(tableIdentifier: TableIdentifier): Dataset[Column] = {
+    val tableMetadata = sessionCatalog.getTableMetadata(tableIdentifier)
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet
-    val bucketColumnNames = tableMetadata.bucketColumnNames.toSet
+    val bucketColumnNames = tableMetadata.bucketSpec.map(_.bucketColumnNames).getOrElse(Nil).toSet
     val columns = tableMetadata.schema.map { c =>
       new Column(
         name = c.name,
-        description = c.comment.orNull,
-        dataType = c.dataType,
+        description = c.getComment().orNull,
+        dataType = c.dataType.catalogString,
         nullable = c.nullable,
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
     }
-    makeDataset(columns)
+    CatalogImpl.makeDataset(columns, sparkSession)
   }
 
   /**
@@ -233,10 +230,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         userSpecifiedSchema = None,
         source,
         temporary = false,
-        options,
+        options = options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
-    sparkSession.executePlan(cmd).toRdd
+    sparkSession.sessionState.executePlan(cmd).toRdd
     sparkSession.table(tableIdent)
   }
 
@@ -280,23 +279,25 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         source,
         temporary = false,
         options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
-    sparkSession.executePlan(cmd).toRdd
+    sparkSession.sessionState.executePlan(cmd).toRdd
     sparkSession.table(tableIdent)
   }
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached/persisted before, it's also unpersisted.
    *
-   * @param tableName the name of the table to be unregistered.
+   * @param viewName the name of the view to be dropped.
    * @group ddl_ops
    * @since 2.0.0
    */
-  override def dropTempTable(tableName: String): Unit = {
-    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName))
-    sessionCatalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
+  override def dropTempView(viewName: String): Unit = {
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(viewName))
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true, purge = false)
   }
 
   /**
@@ -306,7 +307,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def isCached(tableName: String): Boolean = {
-    sparkSession.cacheManager.lookupCachedData(sparkSession.table(tableName)).nonEmpty
+    sparkSession.sharedState.cacheManager.lookupCachedData(sparkSession.table(tableName)).nonEmpty
   }
 
   /**
@@ -316,7 +317,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
   }
 
   /**
@@ -326,7 +327,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession.cacheManager.uncacheQuery(sparkSession.table(tableName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(query = sparkSession.table(tableName))
   }
 
   /**
@@ -336,7 +337,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def clearCache(): Unit = {
-    sparkSession.cacheManager.clearCache()
+    sparkSession.sharedState.cacheManager.clearCache()
   }
 
   /**
@@ -346,7 +347,61 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   protected[sql] def isCached(qName: Dataset[_]): Boolean = {
-    sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
+    sparkSession.sharedState.cacheManager.lookupCachedData(qName).nonEmpty
+  }
+
+  /**
+   * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
+   * is refreshed. For data source tables, the schema will not be inferred and refreshed.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshTable(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    // Temp tables: refresh (or invalidate) any metadata/data cached in the plan recursively.
+    // Non-temp tables: refresh the metadata cache.
+    sessionCatalog.refreshTable(tableIdent)
+
+    // If this table is cached as an InMemoryRelation, drop the original
+    // cached version and make the new version cached lazily.
+    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
+    // Use lookupCachedData directly since RefreshTable also takes databaseName.
+    val isCached = sparkSession.sharedState.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    if (isCached) {
+      // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
+      val df = Dataset.ofRows(sparkSession, logicalPlan)
+      // Uncache the logicalPlan.
+      sparkSession.sharedState.cacheManager.uncacheQuery(df, blocking = true)
+      // Cache it again.
+      sparkSession.sharedState.cacheManager.cacheQuery(df, Some(tableIdent.table))
+    }
+  }
+
+  /**
+   * Refresh the cache entry and the associated metadata for all dataframes (if any), that contain
+   * the given data source path.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshByPath(resourcePath: String): Unit = {
+    sparkSession.sharedState.cacheManager.invalidateCachedPath(sparkSession, resourcePath)
+  }
+}
+
+
+private[sql] object CatalogImpl {
+
+  def makeDataset[T <: DefinedByConstructorParams: TypeTag](
+      data: Seq[T],
+      sparkSession: SparkSession): Dataset[T] = {
+    val enc = ExpressionEncoder[T]()
+    val encoded = data.map(d => enc.toRow(d).copy())
+    val plan = new LocalRelation(enc.schema.toAttributes, encoded)
+    val queryExecution = sparkSession.sessionState.executePlan(plan)
+    new Dataset[T](sparkSession, queryExecution, enc)
   }
 
 }

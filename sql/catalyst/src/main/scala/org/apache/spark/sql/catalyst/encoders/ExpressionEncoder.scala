@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.util.concurrent.ConcurrentMap
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.sql.{AnalysisException, Encoder}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
+import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -51,8 +50,15 @@ object ExpressionEncoder {
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = false)
-    val serializer = ScalaReflection.serializerFor[T](inputObject)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val nullSafeInput = if (flat) {
+      inputObject
+    } else {
+      // For input object of non-flat type, we can't encode it to row if it's null, as Spark SQL
+      // doesn't allow top-level row to be null, only its columns can be null.
+      AssertNotNull(inputObject, Seq("top level non-flat input object"))
+    }
+    val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
     val deserializer = ScalaReflection.deserializerFor[T]
 
     val schema = ScalaReflection.schemaFor[T] match {
@@ -104,32 +110,51 @@ object ExpressionEncoder {
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
-    val serializer = encoders.map {
-      case e if e.flat => e.serializer.head
-      case other => CreateStruct(other.serializer)
-    }.zipWithIndex.map { case (expr, index) =>
-      expr.transformUp {
-        case BoundReference(0, t, _) =>
-          Invoke(
-            BoundReference(0, ObjectType(cls), nullable = true),
-            s"_${index + 1}",
-            t)
+    val serializer = encoders.zipWithIndex.map { case (enc, index) =>
+      val originalInputObject = enc.serializer.head.collect { case b: BoundReference => b }.head
+      val newInputObject = Invoke(
+        BoundReference(0, ObjectType(cls), nullable = true),
+        s"_${index + 1}",
+        originalInputObject.dataType)
+
+      val newSerializer = enc.serializer.map(_.transformUp {
+        case b: BoundReference if b == originalInputObject => newInputObject
+      })
+
+      if (enc.flat) {
+        newSerializer.head
+      } else {
+        // For non-flat encoder, the input object is not top level anymore after being combined to
+        // a tuple encoder, thus it can be null and we should wrap the `CreateStruct` with `If` and
+        // null check to handle null case correctly.
+        // e.g. for Encoder[(Int, String)], the serializer expressions will create 2 columns, and is
+        // not able to handle the case when the input tuple is null. This is not a problem as there
+        // is a check to make sure the input object won't be null. However, if this encoder is used
+        // to create a bigger tuple encoder, the original input object becomes a filed of the new
+        // input tuple and can be null. So instead of creating a struct directly here, we should add
+        // a null/None check and return a null struct if the null/None check fails.
+        val struct = CreateStruct(newSerializer)
+        val nullCheck = Or(
+          IsNull(newInputObject),
+          Invoke(Literal.fromObject(None), "equals", BooleanType, newInputObject :: Nil))
+        If(nullCheck, Literal.create(null, struct.dataType), struct)
       }
     }
 
     val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
       if (enc.flat) {
         enc.deserializer.transform {
-          case b: BoundReference => b.copy(ordinal = index)
+          case g: GetColumnByOrdinal => g.copy(ordinal = index)
         }
       } else {
-        val input = BoundReference(index, enc.schema, nullable = true)
-        enc.deserializer.transformUp {
+        val input = GetColumnByOrdinal(index, enc.schema)
+        val deserialized = enc.deserializer.transformUp {
           case UnresolvedAttribute(nameParts) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
-          case BoundReference(ordinal, dt, _) => GetStructField(input, ordinal)
+          case GetColumnByOrdinal(ordinal, _) => GetStructField(input, ordinal)
         }
+        If(IsNull(input), Literal.create(null, deserialized.dataType), deserialized)
       }
     }
 
@@ -143,6 +168,10 @@ object ExpressionEncoder {
       deserializer,
       ClassTag(cls))
   }
+
+  // Tuple1
+  def tuple[T](e: ExpressionEncoder[T]): ExpressionEncoder[Tuple1[T]] =
+    tuple(Seq(e)).asInstanceOf[ExpressionEncoder[Tuple1[T]]]
 
   def tuple[T1, T2](
       e1: ExpressionEncoder[T1],
@@ -190,6 +219,39 @@ case class ExpressionEncoder[T](
 
   if (flat) require(serializer.size == 1)
 
+  // serializer expressions are used to encode an object to a row, while the object is usually an
+  // intermediate value produced inside an operator, not from the output of the child operator. This
+  // is quite different from normal expressions, and `AttributeReference` doesn't work here
+  // (intermediate value is not an attribute). We assume that all serializer expressions use a same
+  // `BoundReference` to refer to the object, and throw exception if they don't.
+  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
+  assert(serializer.flatMap { ser =>
+    val boundRefs = ser.collect { case b: BoundReference => b }
+    assert(boundRefs.nonEmpty,
+      "each serializer expression should contains at least one `BoundReference`")
+    boundRefs
+  }.distinct.length <= 1, "all serializer expressions must use the same BoundReference.")
+
+  /**
+   * Returns a new copy of this encoder, where the `deserializer` is resolved and bound to the
+   * given schema.
+   *
+   * Note that, ideally encoder is used as a container of serde expressions, the resolution and
+   * binding stuff should happen inside query framework.  However, in some cases we need to
+   * use encoder as a function to do serialization directly(e.g. Dataset.collect), then we can use
+   * this method to do resolution and binding outside of query framework.
+   */
+  def resolveAndBind(
+      attrs: Seq[Attribute] = schema.toAttributes,
+      analyzer: Analyzer = SimpleAnalyzer): ExpressionEncoder[T] = {
+    val dummyPlan = CatalystSerde.deserialize(LocalRelation(attrs))(this)
+    val analyzedPlan = analyzer.execute(dummyPlan)
+    analyzer.checkAnalysis(analyzedPlan)
+    val resolved = SimplifyCasts(analyzedPlan).asInstanceOf[DeserializeToObject].deserializer
+    val bound = BindReferences.bindReference(resolved, attrs)
+    copy(deserializer = bound)
+  }
+
   @transient
   private lazy val extractProjection = GenerateUnsafeProjection.generate(serializer)
 
@@ -198,16 +260,6 @@ case class ExpressionEncoder[T](
 
   @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)
-
-  /**
-   * Returns this encoder where it has been bound to its own output (i.e. no remaping of columns
-   * is performed).
-   */
-  def defaultBinding: ExpressionEncoder[T] = {
-    val attrs = schema.toAttributes
-    resolve(attrs, OuterScopes.outerScopes).bind(attrs)
-  }
-
 
   /**
    * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
@@ -234,7 +286,7 @@ case class ExpressionEncoder[T](
 
   /**
    * Returns an object of type `T`, extracting the required values from the provided row.  Note that
-   * you must `resolve` and `bind` an encoder to a specific schema before you can call this
+   * you must `resolveAndBind` an encoder to a specific schema before you can call this
    * function.
    */
   def fromRow(row: InternalRow): T = try {
@@ -254,94 +306,6 @@ case class ExpressionEncoder[T](
       case a: AttributeReference if a.name != "loopVar" =>
         sys.error(s"Unresolved encoder expected, but $a was found.")
       case _ =>
-    })
-  }
-
-  /**
-   * Validates `deserializer` to make sure it can be resolved by given schema, and produce
-   * friendly error messages to explain why it fails to resolve if there is something wrong.
-   */
-  def validate(schema: Seq[Attribute]): Unit = {
-    def fail(st: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${st.simpleString} to Tuple${maxOrdinal + 1}, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: " + StructType.fromAttributes(schema).simpleString + "\n" +
-        " - Target schema: " + this.schema.simpleString)
-    }
-
-    // If this is a tuple encoder or tupled encoder, which means its leaf nodes are all
-    // `BoundReference`, make sure their ordinals are all valid.
-    var maxOrdinal = -1
-    deserializer.foreach {
-      case b: BoundReference => if (b.ordinal > maxOrdinal) maxOrdinal = b.ordinal
-      case _ =>
-    }
-    if (maxOrdinal >= 0 && maxOrdinal != schema.length - 1) {
-      fail(StructType.fromAttributes(schema), maxOrdinal)
-    }
-
-    // If we have nested tuple, the `fromRowExpression` will contains `GetStructField` instead of
-    // `UnresolvedExtractValue`, so we need to check if their ordinals are all valid.
-    // Note that, `BoundReference` contains the expected type, but here we need the actual type, so
-    // we unbound it by the given `schema` and propagate the actual type to `GetStructField`, after
-    // we resolve the `fromRowExpression`.
-    val resolved = SimpleAnalyzer.resolveExpression(
-      deserializer,
-      LocalRelation(schema),
-      throws = true)
-
-    val unbound = resolved transform {
-      case b: BoundReference => schema(b.ordinal)
-    }
-
-    val exprToMaxOrdinal = scala.collection.mutable.HashMap.empty[Expression, Int]
-    unbound.foreach {
-      case g: GetStructField =>
-        val maxOrdinal = exprToMaxOrdinal.getOrElse(g.child, -1)
-        if (maxOrdinal < g.ordinal) {
-          exprToMaxOrdinal.update(g.child, g.ordinal)
-        }
-      case _ =>
-    }
-    exprToMaxOrdinal.foreach {
-      case (expr, maxOrdinal) =>
-        val schema = expr.dataType.asInstanceOf[StructType]
-        if (maxOrdinal != schema.length - 1) {
-          fail(schema, maxOrdinal)
-        }
-    }
-  }
-
-  /**
-   * Returns a new copy of this encoder, where the `deserializer` is resolved to the given schema.
-   */
-  def resolve(
-      schema: Seq[Attribute],
-      outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
-    // Make a fake plan to wrap the deserializer, so that we can go though the whole analyzer, check
-    // analysis, go through optimizer, etc.
-    val plan = Project(
-      Alias(UnresolvedDeserializer(deserializer, schema), "")() :: Nil,
-      LocalRelation(schema))
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    SimpleAnalyzer.checkAnalysis(analyzedPlan)
-    copy(deserializer = SimplifyCasts(analyzedPlan).expressions.head.children.head)
-  }
-
-  /**
-   * Returns a copy of this encoder where the `deserializer` has been bound to the
-   * ordinals of the given schema.  Note that you need to first call resolve before bind.
-   */
-  def bind(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    copy(deserializer = BindReferences.bindReference(deserializer, schema))
-  }
-
-  /**
-   * Returns a new encoder with input columns shifted by `delta` ordinals
-   */
-  def shift(delta: Int): ExpressionEncoder[T] = {
-    copy(deserializer = deserializer transform {
-      case r: BoundReference => r.copy(ordinal = r.ordinal + delta)
     })
   }
 

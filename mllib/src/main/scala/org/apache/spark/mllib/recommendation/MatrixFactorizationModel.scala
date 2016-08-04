@@ -37,7 +37,7 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -354,8 +354,8 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
      */
     def save(model: MatrixFactorizationModel, path: String): Unit = {
       val sc = model.userFeatures.sparkContext
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      import spark.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
@@ -365,16 +365,16 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
-      val userFeatures = sqlContext.read.parquet(userPath(path)).rdd.map {
+      val userFeatures = spark.read.parquet(userPath(path)).rdd.map {
         case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
       }
-      val productFeatures = sqlContext.read.parquet(productPath(path)).rdd.map {
+      val productFeatures = spark.read.parquet(productPath(path)).rdd.map {
         case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
       }
