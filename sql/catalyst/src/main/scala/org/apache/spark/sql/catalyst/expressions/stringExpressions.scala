@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.net.{MalformedURLException, URI}
+import java.net.{URI, URISyntaxException}
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
@@ -753,20 +753,39 @@ case class ParseUrl(children: Seq[Expression])
     try {
       new URI(url.toString)
     } catch {
-      case e: MalformedURLException => null
+      case e: URISyntaxException => null
     }
   }
 
   private def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
+
+    // partToExtract match {
+    //   case HOST => _.toURL().getHost
+    //   case PATH => _.toURL().getPath
+    //   case QUERY => _.toURL().getQuery
+    //   case REF => _.toURL().getRef
+    //   case PROTOCOL => _.toURL().getProtocol
+    //   case FILE => _.toURL().getFile
+    //   case AUTHORITY => _.toURL().getAuthority
+    //   case USERINFO => _.toURL().getUserInfo
+    //   case _ => (url: URI) => null
+    // }
+
     partToExtract match {
       case HOST => _.getHost
-      case PATH => _.getPath
-      case QUERY => _.getQuery
+      case PATH => _.getRawPath
+      case QUERY => _.getRawQuery
       case REF => _.getRawFragment
       case PROTOCOL => _.getScheme
-      case FILE => _.toURL().getFile
-      case AUTHORITY => _.getAuthority
-      case USERINFO => _.getUserInfo
+      case FILE =>
+        (url: URI) =>
+          if (url.getRawQuery ne null) {
+            url.getRawPath + "?" + url.getRawQuery
+          } else {
+            url.getRawPath
+          }
+      case AUTHORITY => _.getRawAuthority
+      case USERINFO => _.getRawUserInfo
       case _ => (url: URI) => null
     }
   }
