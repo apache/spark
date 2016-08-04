@@ -368,7 +368,7 @@ setMethod("colnames<-",
 #' @examples
 #'\dontrun{
 #' irisDF <- createDataFrame(iris)
-#' coltypes(irisDF)
+#' coltypes(irisDF) # get column types
 #'}
 #' @note coltypes since 1.6.0
 setMethod("coltypes",
@@ -424,8 +424,8 @@ setMethod("coltypes",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' coltypes(df) <- c("character", "integer")
-#' coltypes(df) <- c(NA, "numeric")
+#' coltypes(df) <- c("character", "integer") # set column types
+#' coltypes(df) <- c(NA, "numeric") # set column types
 #'}
 #' @note coltypes<- since 1.6.0
 setMethod("coltypes<-",
