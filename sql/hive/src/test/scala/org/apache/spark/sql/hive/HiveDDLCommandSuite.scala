@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.types.StructType
 
 class HiveDDLCommandSuite extends PlanTest {
   val parser = TestHive.sessionState.sqlParser
@@ -37,7 +38,6 @@ class HiveDDLCommandSuite extends PlanTest {
     parser.parsePlan(sql).collect {
       case c: CreateTableCommand => (c.table, c.ifNotExists)
       case c: CreateHiveTableAsSelectLogicalPlan => (c.tableDesc, c.allowExisting)
-      case c: CreateViewCommand => (c.tableDesc, c.allowExisting)
     }.head
   }
 
@@ -68,7 +68,7 @@ class HiveDDLCommandSuite extends PlanTest {
     // TODO will be SQLText
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.partitionColumns == Seq.empty[CatalogColumn])
+    assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde ==
@@ -99,7 +99,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.comment == Some("This is the staging page view table"))
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.partitionColumns == Seq.empty[CatalogColumn])
+    assert(desc.partitionColumnNames.isEmpty)
     assert(desc.storage.properties == Map())
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
     assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
@@ -115,7 +115,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.MANAGED)
     assert(desc.storage.locationUri == None)
-    assert(desc.schema == Seq.empty[CatalogColumn])
+    assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.properties == Map())
@@ -151,7 +151,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.identifier.table == "ctas2")
     assert(desc.tableType == CatalogTableType.MANAGED)
     assert(desc.storage.locationUri == None)
-    assert(desc.schema == Seq.empty[CatalogColumn])
+    assert(desc.schema.isEmpty)
     assert(desc.viewText == None) // TODO will be SQLText
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.properties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
@@ -292,11 +292,9 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.identifier.database.isEmpty)
     assert(desc.identifier.table == "my_table")
     assert(desc.tableType == CatalogTableType.MANAGED)
-    assert(desc.schema == Seq(CatalogColumn("id", "int"), CatalogColumn("name", "string")))
+    assert(desc.schema == new StructType().add("id", "int").add("name", "string"))
     assert(desc.partitionColumnNames.isEmpty)
-    assert(desc.sortColumnNames.isEmpty)
-    assert(desc.bucketColumnNames.isEmpty)
-    assert(desc.numBuckets == -1)
+    assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
@@ -345,10 +343,10 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create table - partitioned columns") {
     val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (month int)"
     val (desc, _) = extractTableDesc(query)
-    assert(desc.schema == Seq(
-      CatalogColumn("id", "int"),
-      CatalogColumn("name", "string"),
-      CatalogColumn("month", "int")))
+    assert(desc.schema == new StructType()
+      .add("id", "int")
+      .add("name", "string")
+      .add("month", "int"))
     assert(desc.partitionColumnNames == Seq("month"))
   }
 
@@ -449,14 +447,12 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.identifier.database == Some("dbx"))
     assert(desc.identifier.table == "my_table")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
-    assert(desc.schema == Seq(
-      CatalogColumn("id", "int"),
-      CatalogColumn("name", "string"),
-      CatalogColumn("month", "int")))
+    assert(desc.schema == new StructType()
+      .add("id", "int")
+      .add("name", "string")
+      .add("month", "int"))
     assert(desc.partitionColumnNames == Seq("month"))
-    assert(desc.sortColumnNames.isEmpty)
-    assert(desc.bucketColumnNames.isEmpty)
-    assert(desc.numBuckets == -1)
+    assert(desc.bucketSpec.isEmpty)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.locationUri == Some("/path/to/mercury"))
@@ -470,47 +466,30 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("create view -- basic") {
     val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
-    val (desc, exists) = extractTableDesc(v1)
-    assert(!exists)
-    assert(desc.identifier.database.isEmpty)
-    assert(desc.identifier.table == "view1")
-    assert(desc.tableType == CatalogTableType.VIEW)
-    assert(desc.storage.locationUri.isEmpty)
-    assert(desc.schema == Seq.empty[CatalogColumn])
-    assert(desc.viewText == Option("SELECT * FROM tab1"))
-    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat.isEmpty)
-    assert(desc.storage.outputFormat.isEmpty)
-    assert(desc.storage.serde.isEmpty)
-    assert(desc.properties == Map())
+    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(!command.allowExisting)
+    assert(command.name.database.isEmpty)
+    assert(command.name.table == "view1")
+    assert(command.originalText == Some("SELECT * FROM tab1"))
+    assert(command.userSpecifiedColumns.isEmpty)
   }
 
   test("create view - full") {
     val v1 =
       """
         |CREATE OR REPLACE VIEW view1
-        |(col1, col3)
+        |(col1, col3 COMMENT 'hello')
         |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
-    val (desc, exists) = extractTableDesc(v1)
-    assert(desc.identifier.database.isEmpty)
-    assert(desc.identifier.table == "view1")
-    assert(desc.tableType == CatalogTableType.VIEW)
-    assert(desc.storage.locationUri.isEmpty)
-    assert(desc.schema ==
-      CatalogColumn("col1", null, nullable = true, None) ::
-        CatalogColumn("col3", null, nullable = true, None) :: Nil)
-    assert(desc.viewText == Option("SELECT * FROM tab1"))
-    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
-    assert(desc.storage.properties == Map())
-    assert(desc.storage.inputFormat.isEmpty)
-    assert(desc.storage.outputFormat.isEmpty)
-    assert(desc.storage.serde.isEmpty)
-    assert(desc.properties == Map("prop1Key" -> "prop1Val"))
-    assert(desc.comment == Option("BLABLA"))
+    val command = parser.parsePlan(v1).asInstanceOf[CreateViewCommand]
+    assert(command.name.database.isEmpty)
+    assert(command.name.table == "view1")
+    assert(command.userSpecifiedColumns == Seq("col1" -> None, "col3" -> Some("hello")))
+    assert(command.originalText == Some("SELECT * FROM tab1"))
+    assert(command.properties == Map("prop1Key" -> "prop1Val"))
+    assert(command.comment == Some("BLABLA"))
   }
 
   test("create view -- partitioned view") {

@@ -196,7 +196,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = {
-    validateAndTransformSchema(dataset.schema, fitting = true)
+    transformSchema(dataset.schema, logging = true)
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -326,7 +326,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
+    transformSchema(dataset.schema, logging = true)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
     if (hasQuantilesCol) {
@@ -412,50 +412,72 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
  * Two AFTAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * Given the values of the covariates x^{'}, for random lifetime t_{i} of subjects i = 1, ..., n,
+ * Given the values of the covariates $x^{'}$, for random lifetime $t_{i}$ of subjects i = 1,..,n,
  * with possible right-censoring, the likelihood function under the AFT model is given as
- * {{{
- *   L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}
- *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}
- *   (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
- * }}}
- * Where \delta_{i} is the indicator of the event has occurred i.e. uncensored or not.
- * Using \epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}, the log-likelihood function
+ *
+ * <p><blockquote>
+ *    $$
+ *    L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}
+ *      (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}
+ *    (\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
+ *    $$
+ * </blockquote></p>
+ *
+ * Where $\delta_{i}$ is the indicator of the event has occurred i.e. uncensored or not.
+ * Using $\epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}$, the log-likelihood function
  * assumes the form
- * {{{
- *   \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+
- *   \delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
- * }}}
- * Where S_{0}(\epsilon_{i}) is the baseline survivor function,
- * and f_{0}(\epsilon_{i}) is corresponding density function.
+ *
+ * <p><blockquote>
+ *    $$
+ *    \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+
+ *    \delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
+ *    $$
+ * </blockquote></p>
+ * Where $S_{0}(\epsilon_{i})$ is the baseline survivor function,
+ * and $f_{0}(\epsilon_{i})$ is corresponding density function.
  *
  * The most commonly used log-linear survival regression method is based on the Weibull
  * distribution of the survival time. The Weibull distribution for lifetime corresponding
  * to extreme value distribution for log of the lifetime,
- * and the S_{0}(\epsilon) function is
- * {{{
- *   S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
- * }}}
- * the f_{0}(\epsilon_{i}) function is
- * {{{
- *   f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
- * }}}
+ * and the $S_{0}(\epsilon)$ function is
+ *
+ * <p><blockquote>
+ *    $$
+ *    S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
+ *    $$
+ * </blockquote></p>
+ *
+ * and the $f_{0}(\epsilon_{i})$ function is
+ *
+ * <p><blockquote>
+ *    $$
+ *    f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
+ *    $$
+ * </blockquote></p>
+ *
  * The log-likelihood function for Weibull distribution of lifetime is
- * {{{
- *   \iota(\beta,\sigma)=
- *   -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
- * }}}
+ *
+ * <p><blockquote>
+ *    $$
+ *    \iota(\beta,\sigma)=
+ *    -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
+ *    $$
+ * </blockquote></p>
+ *
  * Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
- * the loss function we use to optimize is -\iota(\beta,\sigma).
- * The gradient functions for \beta and \log\sigma respectively are
- * {{{
- *   \frac{\partial (-\iota)}{\partial \beta}=
- *   \sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
- * }}}
- * {{{
- *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
- *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
- * }}}
+ * the loss function we use to optimize is $-\iota(\beta,\sigma)$.
+ * The gradient functions for $\beta$ and $\log\sigma$ respectively are
+ *
+ * <p><blockquote>
+ *    $$
+ *    \frac{\partial (-\iota)}{\partial \beta}=
+ *    \sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma} \\
+ *
+ *    \frac{\partial (-\iota)}{\partial (\log\sigma)}=
+ *    \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
+ *    $$
+ * </blockquote></p>
+ *
  * @param parameters including three part: The log of scale parameter, the intercept and
  *                regression coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.

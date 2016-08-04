@@ -582,25 +582,43 @@ private[execution] final class OffsetWindowFunctionFrame(
   /** Row used to combine the offset and the current row. */
   private[this] val join = new JoinedRow
 
-  /** Create the projection. */
+  /**
+   * Create the projection used when the offset row exists.
+   * Please note that this project always respect null input values (like PostgreSQL).
+   */
   private[this] val projection = {
+    // Collect the expressions and bind them.
+    val inputAttrs = inputSchema.map(_.withNullability(true))
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map {
+      case e: OffsetWindowFunction =>
+        val input = BindReferences.bindReference(e.input, inputAttrs)
+        input
+      case e =>
+        BindReferences.bindReference(e, inputAttrs)
+    }
+
+    // Create the projection.
+    newMutableProjection(boundExpressions, Nil).target(target)
+  }
+
+  /** Create the projection used when the offset row DOES NOT exists. */
+  private[this] val fillDefaultValue = {
     // Collect the expressions and bind them.
     val inputAttrs = inputSchema.map(_.withNullability(true))
     val numInputAttributes = inputAttrs.size
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map {
       case e: OffsetWindowFunction =>
-        val input = BindReferences.bindReference(e.input, inputAttrs)
         if (e.default == null || e.default.foldable && e.default.eval() == null) {
-          // Without default value.
-          input
+          // The default value is null.
+          Literal.create(null, e.dataType)
         } else {
-          // With default value.
+          // The default value is an expression.
           val default = BindReferences.bindReference(e.default, inputAttrs).transform {
             // Shift the input reference to its default version.
             case BoundReference(o, dataType, nullable) =>
               BoundReference(o + numInputAttributes, dataType, nullable)
           }
-          org.apache.spark.sql.catalyst.expressions.Coalesce(input :: default :: Nil)
+          default
         }
       case e =>
         BindReferences.bindReference(e, inputAttrs)
@@ -625,10 +643,12 @@ private[execution] final class OffsetWindowFunctionFrame(
     if (inputIndex >= 0 && inputIndex < input.size) {
       val r = input.next()
       join(r, current)
+      projection(join)
     } else {
       join(emptyRow, current)
+      // Use default values since the offset row does not exist.
+      fillDefaultValue(join)
     }
-    projection(join)
     inputIndex += 1
   }
 }

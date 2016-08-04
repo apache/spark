@@ -21,12 +21,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 
@@ -519,34 +518,32 @@ object DDLUtils {
   }
 
   def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumns.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
+    table.partitionColumnNames.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
   }
 
-  // A persisted data source table may not store its schema in the catalog. In this case, its schema
-  // will be inferred at runtime when the table is referenced.
-  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
+  // A persisted data source table always store its schema in the catalog.
+  def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {
     require(isDatasourceTable(metadata))
+    val msgSchemaCorrupted = "Could not read schema from the metastore because it is corrupted."
     val props = metadata.properties
-    if (props.isDefinedAt(DATASOURCE_SCHEMA)) {
+    props.get(DATASOURCE_SCHEMA).map { schema =>
       // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using spark.sql.sources.schema any more, we need to still support.
-      props.get(DATASOURCE_SCHEMA).map(DataType.fromJson(_).asInstanceOf[StructType])
-    } else {
-      metadata.properties.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
+      DataType.fromJson(schema).asInstanceOf[StructType]
+    } getOrElse {
+      props.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
         val parts = (0 until numParts.toInt).map { index =>
           val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
           if (part == null) {
-            throw new AnalysisException(
-              "Could not read schema from the metastore because it is corrupted " +
-                s"(missing part $index of the schema, $numParts parts are expected).")
+            throw new AnalysisException(msgSchemaCorrupted +
+              s" (missing part $index of the schema, $numParts parts are expected).")
           }
-
           part
         }
         // Stick all parts back to a single schema string.
         DataType.fromJson(parts.mkString).asInstanceOf[StructType]
-      }
+      } getOrElse(throw new AnalysisException(msgSchemaCorrupted))
     }
   }
 
