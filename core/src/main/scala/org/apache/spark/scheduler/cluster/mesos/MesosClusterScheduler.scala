@@ -114,7 +114,8 @@ private[spark] class MesosDriverState(
  */
 private[spark] class MesosClusterScheduler(
     engineFactory: MesosClusterPersistenceEngineFactory,
-    conf: SparkConf)
+    conf: SparkConf,
+    driverFailOver: Boolean = true)
   extends Scheduler with MesosSchedulerUtils {
   var frameworkUrl: String = _
   private val metricsSystem =
@@ -306,8 +307,8 @@ private[spark] class MesosClusterScheduler(
       appName,
       conf,
       Some(frameworkUrl),
-      Some(true),
-      Some(Integer.MAX_VALUE),
+      Some(driverFailOver), // with checkpoint data if failOver is true
+      Some(if (driverFailOver) Double.MaxValue else 0.0), // timeout, 0.0 means no recovery
       fwId)
 
     startScheduler(driver)
