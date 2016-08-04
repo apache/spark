@@ -51,7 +51,7 @@ object StructuredNetworkWordCount {
 
     import spark.implicits._
 
-    // Create DataFrame representing the stream of input lines from connection to host:port
+    // Create Dataset representing the stream of input lines from connection to host:port
     val lines = spark.readStream
       .format("socket")
       .option("host", host)

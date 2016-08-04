@@ -74,7 +74,7 @@ public final class JavaStructuredNetworkWordCountWindowed {
       .appName("JavaStructuredNetworkWordCountWindowed")
       .getOrCreate();
 
-    // Create DataFrame representing the stream of input lines from connection to host:port
+    // Create Dataset representing the stream of input lines from connection to host:port
     Dataset<Tuple2<String, Timestamp>> lines = spark
       .readStream()
       .format("socket")
