@@ -223,7 +223,7 @@ setMethod("showDF",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' df
+#' show(df)
 #'}
 #' @note show(SparkDataFrame) since 1.4.0
 setMethod("show", "SparkDataFrame",
