@@ -358,11 +358,11 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       df1.write.parquet(tableDir.getAbsolutePath)
 
       val agged = spark.table("bucketed_table").groupBy("i").count()
-      val error = intercept[RuntimeException] {
+      val error = intercept[Exception] {
         agged.count()
       }
 
-      assert(error.toString contains "Invalid bucket file")
+      assert(error.getCause().toString contains "Invalid bucket file")
     }
   }
 
