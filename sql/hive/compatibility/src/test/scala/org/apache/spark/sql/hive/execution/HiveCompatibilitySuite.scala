@@ -188,6 +188,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input42",
     "input_dfs",
     "metadata_export_drop",
+    "repair",
 
     // Uses a serde that isn't on the classpath... breaks other tests.
     "bucketizedhiveinputformat",
@@ -936,7 +937,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "reduce_deduplicate_exclude_gby",
     "reduce_deduplicate_exclude_join",
     "reduce_deduplicate_extended",
-    "repair",
     "router_join_ppr",
     "select_as_omitted",
     "select_unquote_and",
