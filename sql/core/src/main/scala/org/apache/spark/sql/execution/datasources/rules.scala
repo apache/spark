@@ -119,7 +119,9 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
     }
     checkDuplication(normalizedPartitionCols, "partition")
 
-    if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
+    // skip this check for hive serde tables, as table schema may be inferred in hive metastore.
+    if (tableDesc.provider.get != "hive" && schema.nonEmpty &&
+      normalizedPartitionCols.length == schema.length) {
       failAnalysis("Cannot use all columns for partition columns")
     }
 
