@@ -122,17 +122,15 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql(s"CREATE DATABASE db1 LOCATION '$pathWithForwardSlash'")
       val pathInCatalog = new Path(catalog.getDatabaseMetadata("db1").locationUri).toUri
       assert("file" === pathInCatalog.getScheme)
-      val expectedPath = new Path(path).toUri.toString
-      assert(expectedPath === pathInCatalog.getPath)
+      val expectedPath = new Path(path).toUri
+      assert(expectedPath.getPath === pathInCatalog.getPath)
 
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         sql(s"CREATE DATABASE db2")
         val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
         assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db")
-          .toUri
-          .toString
-        assert(expectedPath2 === pathInCatalog2.getPath)
+        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
+        assert(expectedPath2.getPath === pathInCatalog2.getPath)
       }
 
       sql("DROP DATABASE db1")
