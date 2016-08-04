@@ -124,7 +124,12 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-14793: split wide struct creation into blocks due to JVM code size limit") {
+  /**
+  *  [[CreateStruct]] is now [[Unevaluable]],
+  *  it's resolved into a [[CreateNamedStruct]]
+  *  by [[org.apache.spark.sql.catalyst.analysis.ResolveCreateStruct]].
+  */
+  ignore("SPARK-14793: split wide struct creation into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = Seq(CreateStruct(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
     val plan = GenerateMutableProjection.generate(expressions)
