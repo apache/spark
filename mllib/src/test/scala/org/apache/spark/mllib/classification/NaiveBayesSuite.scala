@@ -307,7 +307,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).map {
+    Seq(NaiveBayesSuite.binaryBernoulliModel, NaiveBayesSuite.binaryMultinomialModel).foreach {
       model =>
         // Save model, load it back, and compare.
         try {
