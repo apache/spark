@@ -21,6 +21,8 @@ import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Success, Failure}
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
@@ -83,6 +85,9 @@ private[spark] class StandaloneAppClient(
     // event loop.
     private val askAndReplyThreadPool =
       ThreadUtils.newDaemonCachedThreadPool("appclient-receive-and-reply-threadpool")
+
+    private val askAndReplyExecutionContext =
+      ExecutionContext.fromExecutorService(askAndReplyThreadPool)
 
     override def onStart(): Unit = {
       try {
@@ -220,19 +225,13 @@ private[spark] class StandaloneAppClient(
         endpointRef: RpcEndpointRef,
         context: RpcCallContext,
         msg: T): Unit = {
-      // Create a thread to ask a message and reply with the result.  Allow thread to be
+      // Ask a message and create a thread to reply with the result.  Allow thread to be
       // interrupted during shutdown, otherwise context must be notified of NonFatal errors.
-      askAndReplyThreadPool.execute(new Runnable {
-        override def run(): Unit = {
-          try {
-            context.reply(endpointRef.askWithRetry[Boolean](msg))
-          } catch {
-            case ie: InterruptedException => // Cancelled
-            case NonFatal(t) =>
-              context.sendFailure(t)
-          }
-        }
-      })
+      endpointRef.ask[Boolean](msg).andThen {
+        case Success(b) => context.reply(b)
+        case Failure(ie: InterruptedException) => // Cancelled
+        case Failure(NonFatal(t)) => context.sendFailure(t)
+      }(askAndReplyExecutionContext)
     }
 
     override def onDisconnected(address: RpcAddress): Unit = {
@@ -301,12 +300,12 @@ private[spark] class StandaloneAppClient(
    *
    * @return whether the request is acknowledged.
    */
-  def requestTotalExecutors(requestedTotal: Int): Boolean = {
+  def requestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
     if (endpoint.get != null && appId.get != null) {
-      endpoint.get.askWithRetry[Boolean](RequestExecutors(appId.get, requestedTotal))
+      endpoint.get.ask[Boolean](RequestExecutors(appId.get, requestedTotal))
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
-      false
+      Future.successful(false)
     }
   }
 
@@ -314,12 +313,12 @@ private[spark] class StandaloneAppClient(
    * Kill the given list of executors through the Master.
    * @return whether the kill request is acknowledged.
    */
-  def killExecutors(executorIds: Seq[String]): Boolean = {
+  def killExecutors(executorIds: Seq[String]): Future[Boolean] = {
     if (endpoint.get != null && appId.get != null) {
-      endpoint.get.askWithRetry[Boolean](KillExecutors(appId.get, executorIds))
+      endpoint.get.ask[Boolean](KillExecutors(appId.get, executorIds))
     } else {
       logWarning("Attempted to kill executors before driver fully initialized.")
-      false
+      Future.successful(false)
     }
   }
 
