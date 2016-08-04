@@ -309,7 +309,7 @@ class LogisticRegression @Since("1.2.0") (
         throw new SparkException(msg)
       }
 
-      if (numClasses > 2) {
+      if (numClasses != 2) {
         val msg = s"Currently, LogisticRegression with ElasticNet in ML package only supports " +
           s"binary classification. Found $numClasses in the input dataset."
         logError(msg)
