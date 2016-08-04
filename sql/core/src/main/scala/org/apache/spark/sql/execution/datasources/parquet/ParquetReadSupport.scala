@@ -29,12 +29,12 @@ import org.apache.parquet.schema._
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types._
 
 /**
  * A Parquet [[ReadSupport]] implementation for reading Parquet records as Catalyst
- * [[InternalRow]]s.
+ * [[UnsafeRow]]s.
  *
  * The API interface of [[ReadSupport]] is a little bit over complicated because of historical
  * reasons.  In older versions of parquet-mr (say 1.6.0rc3 and prior), [[ReadSupport]] need to be
@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with Logging {
+private[parquet] class ParquetReadSupport extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
   /**
@@ -72,13 +72,13 @@ private[parquet] class ParquetReadSupport extends ReadSupport[InternalRow] with 
   /**
    * Called on executor side after [[init()]], before instantiating actual Parquet record readers.
    * Responsible for instantiating [[RecordMaterializer]], which is used for converting Parquet
-   * records to Catalyst [[InternalRow]]s.
+   * records to Catalyst [[UnsafeRow]]s.
    */
   override def prepareForRead(
       conf: Configuration,
       keyValueMetaData: JMap[String, String],
       fileSchema: MessageType,
-      readContext: ReadContext): RecordMaterializer[InternalRow] = {
+      readContext: ReadContext): RecordMaterializer[UnsafeRow] = {
     log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
     val parquetRequestedSchema = readContext.getRequestedSchema
 

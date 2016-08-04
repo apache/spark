@@ -701,8 +701,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           // We will need 80 splits for this schema if the threshold is 4000.
           val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType)))
 
-          val tableDef = CatalogTable(
-            identifier = TableIdentifier("wide_schema", Some("default")),
+          val tableDesc = CatalogTable(
+            identifier = TableIdentifier("wide_schema"),
             tableType = CatalogTableType.EXTERNAL,
             storage = CatalogStorageFormat.empty.copy(
               properties = Map("path" -> tempDir.getCanonicalPath)
@@ -710,7 +710,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             schema = schema,
             provider = Some("json")
           )
-          sharedState.externalCatalog.createTable("default", tableDef, ignoreIfExists = false)
+          spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
 
           sessionState.refreshTable("wide_schema")
 
@@ -987,8 +987,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTempDir { tempPath =>
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
-      val tableDef1 = CatalogTable(
-        identifier = TableIdentifier("not_skip_hive_metadata", Some("default")),
+      val tableDesc1 = CatalogTable(
+        identifier = TableIdentifier("not_skip_hive_metadata"),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
           properties = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false")
@@ -996,14 +996,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         schema = schema,
         provider = Some("parquet")
       )
-      sharedState.externalCatalog.createTable("default", tableDef1, ignoreIfExists = false)
+      spark.sessionState.catalog.createTable(tableDesc1, ignoreIfExists = false)
 
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
       assert(hiveClient.getTable("default", "not_skip_hive_metadata").schema
         .forall(_.dataType == StringType))
 
-      val tableDef2 = CatalogTable(
+      val tableDesc2 = CatalogTable(
         identifier = TableIdentifier("skip_hive_metadata", Some("default")),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
@@ -1012,7 +1012,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         schema = schema,
         provider = Some("parquet")
       )
-      sharedState.externalCatalog.createTable("default", tableDef2, ignoreIfExists = false)
+      spark.sessionState.catalog.createTable(tableDesc2, ignoreIfExists = false)
 
       // As a proxy for verifying that the table was stored in SparkSQL format,
       // we verify that the table has a column type as array of StringType.
