@@ -54,19 +54,15 @@ private[hive] object SparkSQLEnv extends Logging {
           "spark.kryo.referenceTracking",
           maybeKryoReferenceTracking.getOrElse("false"))
 
-      sparkContext = new SparkContext(sparkConf)
-      sqlContext = SparkSession.withHiveSupport(sparkContext).wrapped
-      val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+      val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
+      sparkContext = sparkSession.sparkContext
+      sqlContext = sparkSession.sqlContext
+
+      val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
       sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
       sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
-
-      sqlContext.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-
-      if (log.isDebugEnabled) {
-        sessionState.hiveconf.getAllProperties.asScala.toSeq.sorted
-          .foreach { case (k, v) => logDebug(s"HiveConf var: $k=$v") }
-      }
+      sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     }
   }
 

@@ -41,13 +41,11 @@ private[spark] object TaskState extends Enumeration {
   }
 
   def fromMesos(mesosState: MesosTaskState): TaskState = mesosState match {
-    case MesosTaskState.TASK_STAGING => LAUNCHING
-    case MesosTaskState.TASK_STARTING => LAUNCHING
-    case MesosTaskState.TASK_RUNNING => RUNNING
+    case MesosTaskState.TASK_STAGING | MesosTaskState.TASK_STARTING => LAUNCHING
+    case MesosTaskState.TASK_RUNNING | MesosTaskState.TASK_KILLING => RUNNING
     case MesosTaskState.TASK_FINISHED => FINISHED
     case MesosTaskState.TASK_FAILED => FAILED
     case MesosTaskState.TASK_KILLED => KILLED
-    case MesosTaskState.TASK_LOST => LOST
-    case MesosTaskState.TASK_ERROR => LOST
+    case MesosTaskState.TASK_LOST | MesosTaskState.TASK_ERROR => LOST
   }
 }

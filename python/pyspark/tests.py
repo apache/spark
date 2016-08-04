@@ -960,13 +960,13 @@ class RDDTests(ReusedPySparkTestCase):
         ]
         data_rdd = self.sc.parallelize(data)
         data_java_rdd = data_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        data_python_rdd = self.sc._jvm.SerDeUtil.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 
         # conversion between python and java RDD threw exceptions
         data_java_rdd = converted_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        data_python_rdd = self.sc._jvm.SerDeUtil.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 
@@ -1920,6 +1920,14 @@ class ContextTests(unittest.TestCase):
             rdd = sc.parallelize([0, 1, 2])
             post_parallalize_temp_files = os.listdir(sc._temp_dir)
             self.assertEqual(temp_files, post_parallalize_temp_files)
+
+    def test_set_conf(self):
+        # This is for an internal use case. When there is an existing SparkContext,
+        # SparkSession's builder needs to set configs into SparkContext's conf.
+        sc = SparkContext()
+        sc._conf.set("spark.test.SPARK16224", "SPARK16224")
+        self.assertEqual(sc._jsc.sc().conf().get("spark.test.SPARK16224"), "SPARK16224")
+        sc.stop()
 
     def test_stop(self):
         sc = SparkContext()

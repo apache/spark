@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.expressions.scala.typed
+import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Benchmark
@@ -31,14 +31,14 @@ object DatasetBenchmark {
 
   case class Data(l: Long, s: String)
 
-  def backToBackMap(sqlContext: SQLContext, numRows: Long, numChains: Int): Benchmark = {
-    import sqlContext.implicits._
+  def backToBackMap(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
 
-    val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back map", numRows)
     val func = (d: Data) => Data(d.l + 1, d.s)
 
-    val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD") { iter =>
       var res = rdd
       var i = 0
@@ -72,17 +72,17 @@ object DatasetBenchmark {
     benchmark
   }
 
-  def backToBackFilter(sqlContext: SQLContext, numRows: Long, numChains: Int): Benchmark = {
-    import sqlContext.implicits._
+  def backToBackFilter(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
 
-    val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back filter", numRows)
     val func = (d: Data, i: Int) => d.l % (100L + i) == 0L
     val funcs = 0.until(numChains).map { i =>
       (d: Data) => func(d, i)
     }
 
-    val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD") { iter =>
       var res = rdd
       var i = 0
@@ -130,13 +130,13 @@ object DatasetBenchmark {
     override def outputEncoder: Encoder[Long] = Encoders.scalaLong
   }
 
-  def aggregate(sqlContext: SQLContext, numRows: Long): Benchmark = {
-    import sqlContext.implicits._
+  def aggregate(spark: SparkSession, numRows: Long): Benchmark = {
+    import spark.implicits._
 
-    val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
+    val df = spark.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("aggregate", numRows)
 
-    val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    val rdd = spark.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD sum") { iter =>
       rdd.aggregate(0L)(_ + _.l, _ + _)
     }
@@ -157,15 +157,17 @@ object DatasetBenchmark {
   }
 
   def main(args: Array[String]): Unit = {
-    val sparkContext = new SparkContext("local[*]", "Dataset benchmark")
-    val sqlContext = new SQLContext(sparkContext)
+    val spark = SparkSession.builder
+      .master("local[*]")
+      .appName("Dataset benchmark")
+      .getOrCreate()
 
     val numRows = 100000000
     val numChains = 10
 
-    val benchmark = backToBackMap(sqlContext, numRows, numChains)
-    val benchmark2 = backToBackFilter(sqlContext, numRows, numChains)
-    val benchmark3 = aggregate(sqlContext, numRows)
+    val benchmark = backToBackMap(spark, numRows, numChains)
+    val benchmark2 = backToBackFilter(spark, numRows, numChains)
+    val benchmark3 = aggregate(spark, numRows)
 
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4

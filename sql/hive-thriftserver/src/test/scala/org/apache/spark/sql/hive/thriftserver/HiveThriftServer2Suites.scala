@@ -533,7 +533,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         }
 
         assert(rs1.next())
-        assert(rs1.getString(1) === "Usage: To be added.")
+        assert(rs1.getString(1) === "Usage: N/A.")
 
         val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
 
@@ -607,7 +607,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
           }
 
           assert(rs2.next())
-          assert(rs2.getString(1) === "Usage: To be added.")
+          assert(rs2.getString(1) === "Usage: N/A.")
         } finally {
           statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
         }

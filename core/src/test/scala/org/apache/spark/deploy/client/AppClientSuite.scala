@@ -166,7 +166,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
   }
 
   /** Application Listener to collect events */
-  private class AppClientCollector extends AppClientListener with Logging {
+  private class AppClientCollector extends StandaloneAppClientListener with Logging {
     val connectedIdList = new ConcurrentLinkedQueue[String]()
     @volatile var disconnectedCount: Int = 0
     val deadReasonList = new ConcurrentLinkedQueue[String]()
@@ -208,7 +208,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
       List(), Map(), Seq(), Seq(), Seq())
     private val desc = new ApplicationDescription("AppClientSuite", Some(1), 512, cmd, "ignored")
     val listener = new AppClientCollector
-    val client = new AppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
+    val client = new StandaloneAppClient(rpcEnv, Array(masterUrl), desc, listener, new SparkConf)
   }
 
 }

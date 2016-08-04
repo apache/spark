@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
-import org.apache.hadoop.hive.serde2.io.DateWritable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types._
 
 /**
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
@@ -56,29 +55,35 @@ import org.apache.spark.sql.sources._
  * known to be convertible.
  */
 private[orc] object OrcFilters extends Logging {
-  def createFilter(filters: Array[Filter]): Option[SearchArgument] = {
+  def createFilter(schema: StructType, filters: Array[Filter]): Option[SearchArgument] = {
+    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+
     // First, tries to convert each filter individually to see whether it's convertible, and then
     // collect all convertible ones to build the final `SearchArgument`.
     val convertibleFilters = for {
       filter <- filters
-      _ <- buildSearchArgument(filter, SearchArgumentFactory.newBuilder())
+      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
     } yield filter
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
       conjunction <- convertibleFilters.reduceOption(And)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
-      builder <- buildSearchArgument(conjunction, SearchArgumentFactory.newBuilder())
+      builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
   }
 
-  private def buildSearchArgument(expression: Filter, builder: Builder): Option[Builder] = {
+  private def buildSearchArgument(
+      dataTypeMap: Map[String, DataType],
+      expression: Filter,
+      builder: Builder): Option[Builder] = {
     def newBuilder = SearchArgumentFactory.newBuilder()
 
-    def isSearchableLiteral(value: Any): Boolean = value match {
-      // These are types recognized by the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
-      case _: String | _: Long | _: Double | _: Byte | _: Short | _: Integer | _: Float => true
-      case _: DateWritable | _: HiveDecimal | _: HiveChar | _: HiveVarchar => true
+    def isSearchableType(dataType: DataType): Boolean = dataType match {
+      // Only the values in the Spark types below can be recognized by
+      // the `SearchArgumentImpl.BuilderImpl.boxLiteral()` method.
+      case ByteType | ShortType | FloatType | DoubleType => true
+      case IntegerType | LongType | StringType | BooleanType => true
       case _ => false
     }
 
@@ -92,55 +97,55 @@ private[orc] object OrcFilters extends Logging {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          _ <- buildSearchArgument(left, newBuilder)
-          _ <- buildSearchArgument(right, newBuilder)
-          lhs <- buildSearchArgument(left, builder.startAnd())
-          rhs <- buildSearchArgument(right, lhs)
+          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
+          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
+          lhs <- buildSearchArgument(dataTypeMap, left, builder.startAnd())
+          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Or(left, right) =>
         for {
-          _ <- buildSearchArgument(left, newBuilder)
-          _ <- buildSearchArgument(right, newBuilder)
-          lhs <- buildSearchArgument(left, builder.startOr())
-          rhs <- buildSearchArgument(right, lhs)
+          _ <- buildSearchArgument(dataTypeMap, left, newBuilder)
+          _ <- buildSearchArgument(dataTypeMap, right, newBuilder)
+          lhs <- buildSearchArgument(dataTypeMap, left, builder.startOr())
+          rhs <- buildSearchArgument(dataTypeMap, right, lhs)
         } yield rhs.end()
 
       case Not(child) =>
         for {
-          _ <- buildSearchArgument(child, newBuilder)
-          negate <- buildSearchArgument(child, builder.startNot())
+          _ <- buildSearchArgument(dataTypeMap, child, newBuilder)
+          negate <- buildSearchArgument(dataTypeMap, child, builder.startNot())
         } yield negate.end()
 
       // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
       // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
-      case EqualTo(attribute, value) if isSearchableLiteral(value) =>
+      case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startAnd().equals(attribute, value).end())
 
-      case EqualNullSafe(attribute, value) if isSearchableLiteral(value) =>
+      case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startAnd().nullSafeEquals(attribute, value).end())
 
-      case LessThan(attribute, value) if isSearchableLiteral(value) =>
+      case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startAnd().lessThan(attribute, value).end())
 
-      case LessThanOrEqual(attribute, value) if isSearchableLiteral(value) =>
+      case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startAnd().lessThanEquals(attribute, value).end())
 
-      case GreaterThan(attribute, value) if isSearchableLiteral(value) =>
+      case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startNot().lessThanEquals(attribute, value).end())
 
-      case GreaterThanOrEqual(attribute, value) if isSearchableLiteral(value) =>
+      case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startNot().lessThan(attribute, value).end())
 
-      case IsNull(attribute) =>
+      case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startAnd().isNull(attribute).end())
 
-      case IsNotNull(attribute) =>
+      case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startNot().isNull(attribute).end())
 
-      case In(attribute, values) if values.forall(isSearchableLiteral) =>
+      case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
         Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None

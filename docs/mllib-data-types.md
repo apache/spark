@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Data Types - MLlib
-displayTitle: Data Types - MLlib
+title: Data Types - RDD-based API
+displayTitle: Data Types - RDD-based API
 ---
 
 * Table of contents
@@ -33,7 +33,7 @@ implementations: [`DenseVector`](api/scala/index.html#org.apache.spark.mllib.lin
 using the factory methods implemented in
 [`Vectors`](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) to create local vectors.
 
-Refer to the [`Vector` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors) for details on the API.
+Refer to the [`Vector` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vector) and [`Vectors` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Vectors$) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -199,7 +199,7 @@ After loading, the feature indices are converted to zero-based.
 [`MLUtils.loadLibSVMFile`](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) reads training
 examples stored in LIBSVM format.
 
-Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils) for details on the API.
+Refer to the [`MLUtils` Scala docs](api/scala/index.html#org.apache.spark.mllib.util.MLUtils$) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -264,7 +264,7 @@ We recommend using the factory methods implemented
 in [`Matrices`](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) to create local
 matrices. Remember, local matrices in MLlib are stored in column-major order.
 
-Refer to the [`Matrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix) and [`Matrices` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices) for details on the API.
+Refer to the [`Matrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrix) and [`Matrices` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.Matrices$) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.{Matrix, Matrices}
@@ -314,12 +314,12 @@ matrices. Remember, local matrices in MLlib are stored in column-major order.
 Refer to the [`Matrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrix) and [`Matrices` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.Matrices) for more details on the API.
 
 {% highlight python %}
-import org.apache.spark.mllib.linalg.{Matrix, Matrices}
+from pyspark.mllib.linalg import Matrix, Matrices
 
-// Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
+# Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
 dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
 
-// Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
+# Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
 sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
 {% endhighlight %}
 </div>
@@ -331,7 +331,7 @@ sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
 A distributed matrix has long-typed row and column indices and double-typed values, stored
 distributively in one or more RDDs.  It is very important to choose the right format to store large
 and distributed matrices.  Converting a distributed matrix to a different format may require a
-global shuffle, which is quite expensive.  Three types of distributed matrices have been implemented
+global shuffle, which is quite expensive. Four types of distributed matrices have been implemented
 so far.
 
 The basic type is called `RowMatrix`. A `RowMatrix` is a row-oriented distributed
@@ -344,6 +344,8 @@ An `IndexedRowMatrix` is similar to a `RowMatrix` but with row indices,
 which can be used for identifying rows and executing joins.
 A `CoordinateMatrix` is a distributed matrix stored in [coordinate list (COO)](https://en.wikipedia.org/wiki/Sparse_matrix#Coordinate_list_.28COO.29) format,
 backed by an RDD of its entries.
+A `BlockMatrix` is a distributed matrix backed by an RDD of `MatrixBlock`
+which is a tuple of `(Int, Int, Matrix)`.
 
 ***Note***
 
@@ -535,12 +537,6 @@ rowsRDD = mat.rows
 
 # Convert to a RowMatrix by dropping the row indices.
 rowMat = mat.toRowMatrix()
-
-# Convert to a CoordinateMatrix.
-coordinateMat = mat.toCoordinateMatrix()
-
-# Convert to a BlockMatrix.
-blockMat = mat.toBlockMatrix()
 {% endhighlight %}
 </div>
 

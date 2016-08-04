@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -52,7 +53,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateTableAsSelect",
+      "CreateHiveTableAsSelect",
       "InsertIntoHiveTable",
       "Limit",
       "src")
@@ -70,28 +71,28 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateTableAsSelect",
+      "CreateHiveTableAsSelect",
       "InsertIntoHiveTable",
       "Limit",
       "src")
   }
 
   test("SPARK-6212: The EXPLAIN output of CTAS only shows the analyzed plan") {
-    withTempTable("jt") {
+    withTempView("jt") {
       val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-      hiveContext.read.json(rdd).registerTempTable("jt")
+      spark.read.json(rdd).createOrReplaceTempView("jt")
       val outputs = sql(
         s"""
            |EXPLAIN EXTENDED
            |CREATE TABLE t1
            |AS
            |SELECT * FROM jt
-      """.stripMargin).collect().map(_.mkString).mkString
+         """.stripMargin).collect().map(_.mkString).mkString
 
       val shouldContain =
         "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
         "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
-        "CreateTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
+        "CreateHiveTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
       for (key <- shouldContain) {
         assert(outputs.contains(key), s"$key doesn't exist in result")
       }
@@ -115,19 +116,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Physical Plan =="
     )
 
-    checkKeywordsExist(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"),
-      "WholeStageCodegen",
-      "Generated code:",
-      "/* 001 */ public Object generate(Object[] references) {",
-      "/* 002 */   return new GeneratedIterator(references);",
-      "/* 003 */ }"
-    )
-
-    checkKeywordsNotExist(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"),
-      "== Parsed Logical Plan ==",
-      "== Analyzed Logical Plan ==",
-      "== Optimized Logical Plan ==",
-      "== Physical Plan =="
-    )
+    intercept[ParseException] {
+      sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
+    }
   }
 }

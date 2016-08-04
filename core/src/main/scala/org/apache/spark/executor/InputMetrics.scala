@@ -17,8 +17,8 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.LongAccumulator
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.LongAccumulator
 
 
 /**

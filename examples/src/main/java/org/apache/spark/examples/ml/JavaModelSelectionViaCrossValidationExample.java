@@ -21,8 +21,6 @@ package org.apache.spark.examples.ml;
 import java.util.Arrays;
 // $example off$
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 // $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineStage;
@@ -37,21 +35,21 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Java example for Model Selection via Cross Validation.
  */
 public class JavaModelSelectionViaCrossValidationExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("JavaModelSelectionViaCrossValidationExample");
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sqlContext = new SQLContext(sc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaModelSelectionViaCrossValidationExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training documents, which are labeled.
-    Dataset<Row> training = sqlContext.createDataFrame(Arrays.asList(
+    Dataset<Row> training = spark.createDataFrame(Arrays.asList(
       new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
       new JavaLabeledDocument(1L, "b d", 0.0),
       new JavaLabeledDocument(2L,"spark f g h", 1.0),
@@ -102,7 +100,7 @@ public class JavaModelSelectionViaCrossValidationExample {
     CrossValidatorModel cvModel = cv.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    Dataset<Row> test = sqlContext.createDataFrame(Arrays.asList(
+    Dataset<Row> test = spark.createDataFrame(Arrays.asList(
       new JavaDocument(4L, "spark i j k"),
       new JavaDocument(5L, "l m n"),
       new JavaDocument(6L, "mapreduce spark"),
@@ -117,6 +115,6 @@ public class JavaModelSelectionViaCrossValidationExample {
     }
     // $example off$
 
-    sc.stop();
+    spark.stop();
   }
 }

@@ -146,7 +146,7 @@ class ExpressionParserSuite extends PlanTest {
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      InSubQuery('a, table("c").select('b)))
+      In('a, Seq(ListQuery(table("c").select('b)))))
   }
 
   test("like expressions") {
@@ -501,5 +501,10 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
+  }
+
+  test("current date/timestamp braceless expressions") {
+    assertEqual("current_date", CurrentDate())
+    assertEqual("current_timestamp", CurrentTimestamp())
   }
 }

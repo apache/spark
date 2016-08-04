@@ -21,8 +21,8 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.RandomForestParams
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.Strategy

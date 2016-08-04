@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
-import org.scalatest.Ignore
-
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.tags.DockerTest
 
@@ -46,12 +44,11 @@ import org.apache.spark.tags.DockerTest
  * repository.
  */
 @DockerTest
-@Ignore
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:latest"
+    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )

@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.execution.streaming.HDFSMetadataLog.{FileContextManager, FileManager, FileSystemManager}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.UninterruptibleThread
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
@@ -56,66 +57,67 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("HDFSMetadataLog: basic") {
+  testWithUninterruptibleThread("HDFSMetadataLog: basic") {
     withTempDir { temp =>
       val dir = new File(temp, "dir") // use non-existent directory to test whether log make the dir
-      val metadataLog = new HDFSMetadataLog[String](sqlContext.sparkSession, dir.getAbsolutePath)
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+      assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
 
       assert(metadataLog.add(1, "batch1"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.get(None, Some(1)) === Array(0 -> "batch0", 1 -> "batch1"))
 
       // Adding the same batch does nothing
       metadataLog.add(1, "batch1-duplicated")
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.get(None, Some(1)) === Array(0 -> "batch0", 1 -> "batch1"))
     }
   }
 
-  testQuietly("HDFSMetadataLog: fallback from FileContext to FileSystem") {
-    sqlContext.conf.setConfString(
+  testWithUninterruptibleThread(
+    "HDFSMetadataLog: fallback from FileContext to FileSystem", quietly = true) {
+    spark.conf.set(
       s"fs.$scheme.impl",
       classOf[FakeFileSystem].getName)
     withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](sqlContext.sparkSession, s"$scheme://$temp")
+      val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://$temp")
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.getLatest() === Some(0 -> "batch0"))
       assert(metadataLog.get(0) === Some("batch0"))
-      assert(metadataLog.get(None, 0) === Array(0 -> "batch0"))
+      assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
 
 
-      val metadataLog2 = new HDFSMetadataLog[String](sqlContext.sparkSession, s"$scheme://$temp")
+      val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://$temp")
       assert(metadataLog2.get(0) === Some("batch0"))
       assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog2.get(None, 0) === Array(0 -> "batch0"))
+      assert(metadataLog2.get(None, Some(0)) === Array(0 -> "batch0"))
 
     }
   }
 
-  test("HDFSMetadataLog: restart") {
+  testWithUninterruptibleThread("HDFSMetadataLog: restart") {
     withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](sqlContext.sparkSession, temp.getAbsolutePath)
+      val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
       assert(metadataLog.add(1, "batch1"))
       assert(metadataLog.get(0) === Some("batch0"))
       assert(metadataLog.get(1) === Some("batch1"))
       assert(metadataLog.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog.get(None, Some(1)) === Array(0 -> "batch0", 1 -> "batch1"))
 
-      val metadataLog2 = new HDFSMetadataLog[String](sqlContext.sparkSession, temp.getAbsolutePath)
+      val metadataLog2 = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog2.get(0) === Some("batch0"))
       assert(metadataLog2.get(1) === Some("batch1"))
       assert(metadataLog2.getLatest() === Some(1 -> "batch1"))
-      assert(metadataLog2.get(None, 1) === Array(0 -> "batch0", 1 -> "batch1"))
+      assert(metadataLog2.get(None, Some(1)) === Array(0 -> "batch0", 1 -> "batch1"))
     }
   }
 
@@ -124,10 +126,10 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       val waiter = new Waiter
       val maxBatchId = 100
       for (id <- 0 until 10) {
-        new Thread() {
+        new UninterruptibleThread(s"HDFSMetadataLog: metadata directory collision - thread $id") {
           override def run(): Unit = waiter {
             val metadataLog =
-              new HDFSMetadataLog[String](sqlContext.sparkSession, temp.getAbsolutePath)
+              new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
             try {
               var nextBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
               nextBatchId += 1
@@ -146,9 +148,10 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       }
 
       waiter.await(timeout(10.seconds), dismissals(10))
-      val metadataLog = new HDFSMetadataLog[String](sqlContext.sparkSession, temp.getAbsolutePath)
+      val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.getLatest() === Some(maxBatchId -> maxBatchId.toString))
-      assert(metadataLog.get(None, maxBatchId) === (0 to maxBatchId).map(i => (i, i.toString)))
+      assert(
+        metadataLog.get(None, Some(maxBatchId)) === (0 to maxBatchId).map(i => (i, i.toString)))
     }
   }
 

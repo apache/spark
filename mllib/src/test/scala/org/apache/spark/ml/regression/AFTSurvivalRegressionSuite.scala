@@ -20,12 +20,12 @@ package org.apache.spark.ml.regression
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class AFTSurvivalRegressionSuite
@@ -37,13 +37,13 @@ class AFTSurvivalRegressionSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    datasetUnivariate = sqlContext.createDataFrame(
+    datasetUnivariate = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
         1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0, 2.0)))
-    datasetMultivariate = sqlContext.createDataFrame(
+    datasetMultivariate = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
         2, Array(0.9, -1.3), Array(0.7, 1.2), 1000, 42, 1.5, 2.5, 2.0)))
-    datasetUnivariateScaled = sqlContext.createDataFrame(
+    datasetUnivariateScaled = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
         1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0, 2.0)).map { x =>
           AFTPoint(Vectors.dense(x.features(0) * 1.0E3), x.label, x.censor)
@@ -356,7 +356,7 @@ class AFTSurvivalRegressionSuite
   test("should support all NumericType labels") {
     val aft = new AFTSurvivalRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[AFTSurvivalRegressionModel, AFTSurvivalRegression](
-      aft, isClassification = false, sqlContext) { (expected, actual) =>
+      aft, spark, isClassification = false) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
@@ -389,6 +389,18 @@ class AFTSurvivalRegressionSuite
     val aft = new AFTSurvivalRegression()
     testEstimatorAndModelReadWrite(aft, datasetMultivariate,
       AFTSurvivalRegressionSuite.allParamSettings, checkModelData)
+  }
+
+  test("SPARK-15892: Incorrectly merged AFTAggregator with zero total count") {
+    // This `dataset` will contain an empty partition because it has two rows but
+    // the parallelism is bigger than that. Because the issue was about `AFTAggregator`s
+    // being merged incorrectly when it has an empty partition, running the codes below
+    // should not throw an exception.
+    val dataset = spark.createDataFrame(
+      sc.parallelize(generateAFTInput(
+        1, Array(5.5), Array(0.8), 2, 42, 1.0, 2.0, 2.0), numSlices = 3))
+    val trainer = new AFTSurvivalRegression()
+    trainer.fit(dataset)
   }
 }
 

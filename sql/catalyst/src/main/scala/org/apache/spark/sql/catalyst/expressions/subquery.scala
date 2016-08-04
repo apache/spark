@@ -26,10 +26,10 @@ import org.apache.spark.sql.types._
  * An interface for subquery that is used in expressions.
  */
 abstract class SubqueryExpression extends Expression {
+  /**  The id of the subquery expression. */
+  def exprId: ExprId
 
-  /**
-   * The logical plan of the query.
-   */
+  /** The logical plan of the query. */
   def query: LogicalPlan
 
   /**
@@ -38,46 +38,52 @@ abstract class SubqueryExpression extends Expression {
    */
   def plan: QueryPlan[_]
 
-  /**
-   * Updates the query with new logical plan.
-   */
+  /** Updates the query with new logical plan. */
   def withNewPlan(plan: LogicalPlan): SubqueryExpression
+
+  protected def conditionString: String = children.mkString("[", " && ", "]")
+}
+
+object SubqueryExpression {
+  def hasCorrelatedSubquery(e: Expression): Boolean = {
+    e.find {
+      case e: SubqueryExpression if e.children.nonEmpty => true
+      case _ => false
+    }.isDefined
+  }
 }
 
 /**
  * A subquery that will return only one row and one column. This will be converted into a physical
  * scalar subquery during planning.
  *
- * Note: `exprId` is used to have unique name in explain string output.
+ * Note: `exprId` is used to have a unique name in explain string output.
  */
 case class ScalarSubquery(
     query: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression with Unevaluable {
-
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
-
-  override lazy val resolved: Boolean = query.resolved
-
-  override def dataType: DataType = query.schema.fields.head.dataType
-
-  override def children: Seq[Expression] = Nil
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (query.schema.length != 1) {
-      TypeCheckResult.TypeCheckFailure("Scalar subquery must return only one column, but got " +
-        query.schema.length.toString)
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
+  override lazy val resolved: Boolean = childrenResolved && query.resolved
+  override lazy val references: AttributeSet = {
+    if (query.resolved) super.references -- query.outputSet
+    else super.references
   }
-
+  override def dataType: DataType = query.schema.fields.head.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = true
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(query = plan)
+  override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
+}
 
-  override def withNewPlan(plan: LogicalPlan): ScalarSubquery = ScalarSubquery(plan, exprId)
-
-  override def toString: String = s"subquery#${exprId.id}"
+object ScalarSubquery {
+  def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
+    e.find {
+      case e: ScalarSubquery if e.children.nonEmpty => true
+      case _ => false
+    }.isDefined
+  }
 }
 
 /**
@@ -85,18 +91,47 @@ case class ScalarSubquery(
  * [[PredicateSubquery]] expressions within a Filter plan (i.e. WHERE or a HAVING clause). This will
  * be rewritten into a left semi/anti join during analysis.
  */
-abstract class PredicateSubquery extends SubqueryExpression with Unevaluable with Predicate {
-  override def nullable: Boolean = false
+case class PredicateSubquery(
+    query: LogicalPlan,
+    children: Seq[Expression] = Seq.empty,
+    nullAware: Boolean = false,
+    exprId: ExprId = NamedExpression.newExprId)
+  extends SubqueryExpression with Predicate with Unevaluable {
+  override lazy val resolved = childrenResolved && query.resolved
+  override lazy val references: AttributeSet = super.references -- query.outputSet
+  override def nullable: Boolean = nullAware
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def withNewPlan(plan: LogicalPlan): PredicateSubquery = copy(query = plan)
+  override def toString: String = s"predicate-subquery#${exprId.id} $conditionString"
 }
 
 object PredicateSubquery {
   def hasPredicateSubquery(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[PredicateSubquery]).isDefined
+    e.find {
+      case _: PredicateSubquery | _: ListQuery | _: Exists => true
+      case _ => false
+    }.isDefined
+  }
+
+  /**
+   * Returns whether there are any null-aware predicate subqueries inside Not. If not, we could
+   * turn the null-aware predicate into not-null-aware predicate.
+   */
+  def hasNullAwarePredicateWithinNot(e: Expression): Boolean = {
+    e.find{ x =>
+      x.isInstanceOf[Not] && e.find {
+        case p: PredicateSubquery => p.nullAware
+        case _ => false
+      }.isDefined
+    }.isDefined
   }
 }
 
 /**
- * The [[InSubQuery]] predicate checks the existence of a value in a sub-query. For example (SQL):
+ * A [[ListQuery]] expression defines the query which we want to search in an IN subquery
+ * expression. It should and can only be used in conjunction with an IN expression.
+ *
+ * For example (SQL):
  * {{{
  *   SELECT  *
  *   FROM    a
@@ -104,47 +139,15 @@ object PredicateSubquery {
  *                    FROM    b)
  * }}}
  */
-case class InSubQuery(
-    value: Expression,
-    query: LogicalPlan,
-    exprId: ExprId = NamedExpression.newExprId) extends PredicateSubquery {
-  override def children: Seq[Expression] = value :: Nil
-  override lazy val resolved: Boolean = value.resolved && query.resolved
-  override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(value, plan, exprId)
-  override def plan: LogicalPlan = SubqueryAlias(s"subquery#${exprId.id}", query)
-
-  /**
-   * The unwrapped value side expressions.
-   */
-  lazy val expressions: Seq[Expression] = value match {
-    case CreateStruct(cols) => cols
-    case col => Seq(col)
-  }
-
-  /**
-   * Check if the number of columns and the data types on both sides match.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    // Check the number of arguments.
-    if (expressions.length != query.output.length) {
-      return TypeCheckResult.TypeCheckFailure(
-        s"The number of fields in the value (${expressions.length}) does not match with " +
-          s"the number of columns in the subquery (${query.output.length})")
-    }
-
-    // Check the argument types.
-    expressions.zip(query.output).zipWithIndex.foreach {
-      case ((e, a), i) if e.dataType != a.dataType =>
-        return TypeCheckResult.TypeCheckFailure(
-          s"The data type of value[$i] (${e.dataType}) does not match " +
-            s"subquery column '${a.name}' (${a.dataType}).")
-      case _ =>
-    }
-
-    TypeCheckResult.TypeCheckSuccess
-  }
-
-  override def toString: String = s"$value IN subquery#${exprId.id}"
+case class ListQuery(query: LogicalPlan, exprId: ExprId = NamedExpression.newExprId)
+  extends SubqueryExpression with Unevaluable {
+  override lazy val resolved = false
+  override def children: Seq[Expression] = Seq.empty
+  override def dataType: DataType = ArrayType(NullType)
+  override def nullable: Boolean = false
+  override def withNewPlan(plan: LogicalPlan): ListQuery = copy(query = plan)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def toString: String = s"list#${exprId.id}"
 }
 
 /**
@@ -158,11 +161,12 @@ case class InSubQuery(
  *                   WHERE   b.id = a.id)
  * }}}
  */
-case class Exists(
-    query: LogicalPlan,
-    exprId: ExprId = NamedExpression.newExprId) extends PredicateSubquery {
-  override def children: Seq[Expression] = Nil
-  override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan, exprId)
+case class Exists(query: LogicalPlan, exprId: ExprId = NamedExpression.newExprId)
+    extends SubqueryExpression with Predicate with Unevaluable {
+  override lazy val resolved = false
+  override def children: Seq[Expression] = Seq.empty
+  override def nullable: Boolean = false
+  override def withNewPlan(plan: LogicalPlan): Exists = copy(query = plan)
   override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def toString: String = s"exists#${exprId.id}"
 }

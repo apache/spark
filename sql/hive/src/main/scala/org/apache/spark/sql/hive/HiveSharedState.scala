@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SharedState
 
 
@@ -29,14 +29,7 @@ import org.apache.spark.sql.internal.SharedState
 private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   extends SharedState(sparkContext) {
 
-  // TODO: just share the IsolatedClientLoader instead of the client instances themselves
-
-  /**
-   * A Hive client used for execution.
-   */
-  val executionHive: HiveClientImpl = {
-    HiveUtils.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
-  }
+  // TODO: just share the IsolatedClientLoader instead of the client instance itself
 
   /**
    * A Hive client used to interact with the metastore.
@@ -49,6 +42,6 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   /**
    * A catalog that interacts with the Hive metastore.
    */
-  override lazy val externalCatalog = new HiveExternalCatalog(metadataHive)
-
+  override lazy val externalCatalog =
+    new HiveExternalCatalog(metadataHive, sparkContext.hadoopConfiguration)
 }

@@ -17,22 +17,23 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.classification import NaiveBayes
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-
-    sc = SparkContext(appName="naive_bayes_example")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("NaiveBayesExample")\
+        .getOrCreate()
 
     # $example on$
     # Load training data
-    data = sqlContext.read.format("libsvm") \
+    data = spark.read.format("libsvm") \
         .load("data/mllib/sample_libsvm_data.txt")
+
     # Split the data into train and test
     splits = data.randomSplit([0.6, 0.4], 1234)
     train = splits[0]
@@ -43,11 +44,12 @@ if __name__ == "__main__":
 
     # train the model
     model = nb.fit(train)
-    # compute precision on the test set
+
+    # compute accuracy on the test set
     result = model.transform(test)
     predictionAndLabels = result.select("prediction", "label")
-    evaluator = MulticlassClassificationEvaluator(metricName="precision")
-    print("Precision:" + str(evaluator.evaluate(predictionAndLabels)))
+    evaluator = MulticlassClassificationEvaluator(metricName="accuracy")
+    print("Accuracy: " + str(evaluator.evaluate(predictionAndLabels)))
     # $example off$
 
-    sc.stop()
+    spark.stop()

@@ -155,8 +155,8 @@ public final class Platform {
   @SuppressWarnings("unchecked")
   public static ByteBuffer allocateDirectBuffer(int size) {
     try {
-      Class cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
       constructor.setAccessible(true);
       Field cleanerField = cls.getDeclaredField("cleaner");
       cleanerField.setAccessible(true);
@@ -174,6 +174,10 @@ public final class Platform {
       throwException(e);
     }
     throw new IllegalStateException("unreachable");
+  }
+
+  public static void setMemory(Object object, long offset, long size, byte value) {
+    _UNSAFE.setMemory(object, offset, size, value);
   }
 
   public static void setMemory(long address, byte value, long size) {

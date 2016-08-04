@@ -18,22 +18,22 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.regression.LinearRegression
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object LinearRegressionWithElasticNetExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LinearRegressionWithElasticNetExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("LinearRegressionWithElasticNetExample")
+      .getOrCreate()
 
     // $example on$
     // Load training data
-    val training = sqlContext.read.format("libsvm")
+    val training = spark.read.format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt")
 
     val lr = new LinearRegression()
@@ -56,7 +56,7 @@ object LinearRegressionWithElasticNetExample {
     println(s"r2: ${trainingSummary.r2}")
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

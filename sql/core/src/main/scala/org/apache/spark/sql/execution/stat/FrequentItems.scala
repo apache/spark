@@ -40,7 +40,7 @@ private[sql] object FrequentItems extends Logging {
         if (baseMap.size < size) {
           baseMap += key -> count
         } else {
-          val minCount = baseMap.values.min
+          val minCount = if (baseMap.values.isEmpty) 0 else baseMap.values.min
           val remainder = count - minCount
           if (remainder >= 0) {
             baseMap += key -> count // something will get kicked out, so we can add this
@@ -83,7 +83,7 @@ private[sql] object FrequentItems extends Logging {
       df: DataFrame,
       cols: Seq[String],
       support: Double): DataFrame = {
-    require(support >= 1e-4, s"support ($support) must be greater than 1e-4.")
+    require(support >= 1e-4 && support <= 1.0, s"Support must be in [1e-4, 1], but got $support.")
     val numCols = cols.length
     // number of max items to keep counts for
     val sizeOfMap = (1 / support).toInt

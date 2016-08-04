@@ -27,11 +27,6 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-Spark's Standalone Mode cluster manager also has its own
-[web UI](spark-standalone.html#monitoring-and-logging). If an application has logged events over
-the course of its lifetime, then the Standalone master's web UI will automatically re-render the
-application's UI after the application has finished.
-
 If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
 application through Spark's history server, provided that the application's event logs exist.
 You can start the history server by executing:
@@ -162,8 +157,8 @@ The history server can be configured as follows:
       If enabled, access control checks are made regardless of what the individual application had
       set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
       will always have authorization to view their own application and any users specified via
-      <code>spark.ui.view.acls</code> when the application was run will also have authorization
-      to view that application.
+      <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
+      when the application was run will also have authorization to view that application.
       If disabled, no access control checks are made.
     </td>
   </tr>
@@ -230,9 +225,10 @@ for the history server, they would typically be accessible at `http://<server-ur
 for a running application, at `http://localhost:4040/api/v1`.
 
 In the API, an application is referenced by its application ID, `[app-id]`.
-When running on YARN, each application may have multiple attempts; each identified by their `[attempt-id]`.
-In the API listed below, `[app-id]` will actually be `[base-app-id]/[attempt-id]`,
-where `[base-app-id]` is the YARN application ID.
+When running on YARN, each application may have multiple attempts, but there are attempt IDs
+only for applications in cluster mode, not applications in client mode. Applications in YARN cluster mode
+can be identified by their `[attempt-id]`. In the API listed below, when running in YARN cluster mode,
+`[app-id]` will actually be `[base-app-id]/[attempt-id]`, where `[base-app-id]` is the YARN application ID.
 
 <table class="table">
   <tr><th>Endpoint</th><th>Meaning</th></tr>
@@ -293,7 +289,11 @@ where `[base-app-id]` is the YARN application ID.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/executors</code></td>
-    <td>A list of all executors for the given application.</td>
+    <td>A list of all active executors for the given application.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/allexecutors</code></td>
+    <td>A list of all(active and dead) executors for the given application.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/storage/rdd</code></td>
@@ -341,11 +341,23 @@ keep the paths consistent in both modes.
 # Metrics
 
 Spark has a configurable metrics system based on the
-[Coda Hale Metrics Library](http://metrics.codahale.com/).
+[Dropwizard Metrics Library](http://metrics.dropwizard.io/).
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV
 files. The metrics system is configured via a configuration file that Spark expects to be present
 at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the
 `spark.metrics.conf` [configuration property](configuration.html#spark-properties).
+By default, the root namespace used for driver or executor metrics is 
+the value of `spark.app.id`. However, often times, users want to be able to track the metrics 
+across apps for driver and executors, which is hard to do with application ID 
+(i.e. `spark.app.id`) since it changes with every invocation of the app. For such use cases,
+a custom namespace can be specified for metrics reporting using `spark.metrics.namespace`
+configuration property. 
+If, say, users wanted to set the metrics namespace to the name of the application, they
+can set the `spark.metrics.namespace` property to a value like `${spark.app.name}`. This value is
+then expanded appropriately by Spark and is used as the root namespace of the metrics system. 
+Non driver and executor metrics are never prefixed with `spark.app.id`, nor does the 
+`spark.metrics.namespace` property have any such affect on such metrics.
+
 Spark's metrics are decoupled into different
 _instances_ corresponding to Spark components. Within each instance, you can configure a
 set of sinks to which metrics are reported. The following instances are currently supported:

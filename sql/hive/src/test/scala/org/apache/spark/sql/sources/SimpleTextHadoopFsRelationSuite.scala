@@ -60,7 +60,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        hiveContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -69,7 +69,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
   test("test hadoop conf option propagation") {
     withTempPath { file =>
       // Test write side
-      val df = sqlContext.range(10).selectExpr("cast(id as string)")
+      val df = spark.range(10).selectExpr("cast(id as string)")
       df.write
         .option("some-random-write-option", "hahah-WRITE")
         .option("some-null-value-option", null)  // test null robustness
@@ -78,7 +78,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       assert(SimpleTextRelation.lastHadoopConf.get.get("some-random-write-option") == "hahah-WRITE")
 
       // Test read side
-      val df1 = sqlContext.read
+      val df1 = spark.read
         .option("some-random-read-option", "hahah-READ")
         .option("some-null-value-option", null)  // test null robustness
         .option("dataSchema", df.schema.json)

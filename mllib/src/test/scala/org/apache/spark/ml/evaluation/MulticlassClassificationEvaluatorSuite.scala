@@ -33,11 +33,11 @@ class MulticlassClassificationEvaluatorSuite
     val evaluator = new MulticlassClassificationEvaluator()
       .setPredictionCol("myPrediction")
       .setLabelCol("myLabel")
-      .setMetricName("recall")
+      .setMetricName("accuracy")
     testDefaultReadWrite(evaluator)
   }
 
   test("should support all NumericType labels and not support other types") {
-    MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, sqlContext)
+    MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
   }
 }
