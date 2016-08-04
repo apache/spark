@@ -107,6 +107,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      ResolveCreateStruct ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -115,9 +116,6 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("FixNullability", Once,
       FixNullability),
-    Batch("StructsToNamedStructs", Once,
-      ReplaceStructWithNamedStruct
-    ),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -2066,7 +2064,7 @@ object EliminateUnions extends Rule[LogicalPlan] {
 * [[CreateNamedStruct]] and [[CreateNamedStructUnsafe]].
 * This eliminates the need for specual care in [[CleanupAliases]] when removing aliases.
 */
-object ReplaceStructWithNamedStruct extends Rule[LogicalPlan] {
+object ResolveCreateStruct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressionsDown {
     case ct @ CreateStruct(children) =>
       CreateNamedStruct(mkNamedStructArgs(ct.dataType, children))
