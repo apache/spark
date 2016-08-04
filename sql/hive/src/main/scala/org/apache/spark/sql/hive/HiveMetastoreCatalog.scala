@@ -446,6 +446,14 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
         val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableDesc)
 
+        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
+        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
+        // tables yet.
+        if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
+          throw new AnalysisException("" +
+            "CTAS for hive serde tables does not support append or overwrite semantics.")
+        }
+
         execution.CreateHiveTableAsSelectCommand(
           newTableDesc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
           query,

@@ -272,19 +272,21 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
+  // This regex is used to check if the table name and database name is valid for `CreateTable`.
+  private val validNameFormat = Pattern.compile("[\\w_]+")
+
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case c @ CreateTable(tableDesc, mode, query) if c.resolved =>
         // Since we are saving table metadata to metastore, we should make sure the table name
         // and database name don't break some common restrictions, e.g. special chars except
         // underscore are not allowed.
-        val pattern = Pattern.compile("[\\w_]+")
         val tblIdent = tableDesc.identifier
-        if (!pattern.matcher(tblIdent.table).matches()) {
+        if (!validNameFormat.matcher(tblIdent.table).matches()) {
           failAnalysis(s"Table name ${tblIdent.table} is not a valid name for " +
             s"metastore. Metastore only accepts table name containing characters, numbers and _.")
         }
-        if (tblIdent.database.isDefined && !pattern.matcher(tblIdent.database.get).matches()) {
+        if (tblIdent.database.exists(db => !validNameFormat.matcher(db).matches())) {
           failAnalysis(s"Database name ${tblIdent.database.get} is not a valid name for " +
             s"metastore. Metastore only accepts table name containing characters, numbers and _.")
         }
