@@ -1061,15 +1061,17 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    new Dataset[U1](
-      sparkSession,
-      Project(
-        c1.withInputType(
-          exprEnc.deserializer,
-          logicalPlan.output).named :: Nil,
-        logicalPlan),
-      implicitly[Encoder[U1]])
+  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
+    implicit val encoder = c1.encoder
+    val project = Project(c1.withInputType(exprEnc.deserializer, logicalPlan.output).named :: Nil,
+      logicalPlan)
+
+    if (encoder.flat) {
+      new Dataset[U1](sparkSession, project, encoder)
+    } else {
+      // Flattens inner fields of U1
+      new Dataset[Tuple1[U1]](sparkSession, project, ExpressionEncoder.tuple(encoder)).map(_._1)
+    }
   }
 
   /**

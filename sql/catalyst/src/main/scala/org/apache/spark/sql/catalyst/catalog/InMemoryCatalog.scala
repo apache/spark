@@ -192,9 +192,10 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   // --------------------------------------------------------------------------
 
   override def createTable(
-      db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
@@ -266,7 +267,9 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     catalog(db).tables.remove(oldName)
   }
 
-  override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
+  override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     catalog(db).tables(tableDefinition.identifier.table).table = tableDefinition
   }
