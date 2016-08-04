@@ -109,7 +109,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *   Note that values greater than 1 are accepted but give the same result as 1.
    * @return the approximate quantiles at the given probabilities of each column
    *
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def approxQuantile(
       cols: Array[String],
