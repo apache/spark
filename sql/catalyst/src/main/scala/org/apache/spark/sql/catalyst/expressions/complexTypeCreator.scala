@@ -175,12 +175,20 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 * a helper mixin to encapsulate [[CreateStruct]] => [[CreateNamedStruct]] transformation.
 */
 sealed trait CreateStructLike{
-  def dataType : StructType
   def children : Seq[Expression]
+
+  protected def attributeNames = for {
+    (child, idx) <- children.zipWithIndex
+  } yield {
+    child match {
+      case ne: NamedExpression => ne.name
+      case _ => s"col${idx + 1}"
+    }
+  }
 
   protected def mkNamedStructArgs = {
     for {
-      (name, expression) <- dataType.fieldNames.zip(children)
+      (name, expression) <- attributeNames.zip(children)
       nameLiteral = Literal(name)
       newChild <- Seq(nameLiteral, expression)
     } yield{
@@ -199,17 +207,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-      }
-    }
-    StructType(fields)
-  }
+  override lazy val dataType: StructType = toCreateNamedStruct.dataType
 
   override def nullable: Boolean = false
 
@@ -320,17 +318,7 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression
 
   override lazy val resolved: Boolean = childrenResolved
 
-  override lazy val dataType: StructType = {
-    val fields = children.zipWithIndex.map { case (child, idx) =>
-      child match {
-        case ne: NamedExpression =>
-          StructField(ne.name, ne.dataType, ne.nullable, ne.metadata)
-        case _ =>
-          StructField(s"col${idx + 1}", child.dataType, child.nullable, Metadata.empty)
-      }
-    }
-    StructType(fields)
-  }
+  override lazy val dataType: StructType = toCreateNamedStructUnsafe.dataType
 
   override def nullable: Boolean = false
 
