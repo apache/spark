@@ -60,7 +60,8 @@ class BlockManagerMasterEndpoint(
       "spark.replication.topologyawareness.topologyMapper",
       "org.apache.spark.storage.DefaultTopologyMapper")
     val clazz = Utils.classForName(topologyMapperClassName)
-    val mapper = clazz.newInstance.asInstanceOf[TopologyMapper]
+    val mapper =
+      clazz.getConstructor(conf.getClass).newInstance(conf).asInstanceOf[TopologyMapper]
     logInfo(s"Using $topologyMapperClassName for getting topology information")
     mapper
   }

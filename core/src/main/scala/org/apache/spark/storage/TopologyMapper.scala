@@ -17,15 +17,19 @@
 
 package org.apache.spark.storage
 
+import java.util.Properties
+
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 
 /**
  * ::DeveloperApi::
  * TopologyMapper provides topology information for a given host
+ * @param conf SparkConf to get required properties, if needed
  */
 @DeveloperApi
-trait TopologyMapper {
+abstract class TopologyMapper(conf: SparkConf) {
   /**
    * Gets the topology information given the host name
    *
@@ -39,9 +43,10 @@ trait TopologyMapper {
 }
 
 @DeveloperApi
-class DefaultTopologyMapper extends TopologyMapper with Logging {
+class DefaultTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Logging {
   override def getTopologyForHost(hostname: String): String = {
     logDebug(s"Got a request for $hostname")
     "DefaultRack"
   }
 }
+

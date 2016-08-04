@@ -1155,69 +1155,55 @@ private[spark] class BlockManager(
 
     val numPeersToReplicateTo = level.replication - 1
 
-    @tailrec def replicateBlock(
-      numFailures: Int,
-      peersForReplication: Seq[BlockManagerId],
-      peersReplicatedTo: Set[BlockManagerId],
-      peersFailedToReplicateTo: Set[BlockManagerId]): Set[BlockManagerId] = {
+    val startTime = System.currentTimeMillis
 
-      if (numFailures > maxReplicationFailures
+    var peersForReplication =
+      blockReplicationPrioritizer.prioritize(blockManagerId, getPeers(false), Set.empty, blockId)
+    var peersReplicatedTo = Set.empty[BlockManagerId]
+    var peersFailedToReplicateTo = Set.empty[BlockManagerId]
+    var numFailures = 0
+
+    while(!(numFailures > maxReplicationFailures
           || peersForReplication.isEmpty
-          || peersReplicatedTo.size == numPeersToReplicateTo) {
-        // This selection of a peer and replication is continued in a loop until one of the
-        // following 3 conditions is fulfilled:
-        // (i) specified number of peers have been replicated to
-        // (ii) too many failures in replicating to peers
-        // (iii) no peer left to replicate to
-        peersReplicatedTo
-      } else {
-        val peer = peersForReplication.head
-        val (updatedNumFailures, updatedPeers, updatedReplicatedPeers, updatedFailedPeers) = try {
-          val onePeerStartTime = System.currentTimeMillis
-          logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
-          blockTransferService.uploadBlockSync(
-            peer.host,
-            peer.port,
-            peer.executorId,
-            blockId,
-            new NettyManagedBuffer(data.toNetty),
-            tLevel,
-            classTag)
-          logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
-            s" in ${System.currentTimeMillis - onePeerStartTime} ms")
-          // the block was replicated, lets update state and move ahead
-          (numFailures,
-            peersForReplication.tail,
-            peersReplicatedTo + peer,
-            peersFailedToReplicateTo)
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
-            val updatedFailedPeers = peersFailedToReplicateTo + peer
-            // we have a failed replication, so we get the list of peers again
-            // we don't want peers we have already replicated to and the ones that
-            // have failed previously
-            val filteredPeers = getPeers(true).filter { p =>
-              !(updatedFailedPeers.contains(p) || peersReplicatedTo.contains(p))
-            }
-            val updatedPeers = blockReplicationPrioritizer.prioritize(
-              blockManagerId,
-              filteredPeers,
-              peersReplicatedTo,
-              blockId)
-            (numFailures + 1, updatedPeers, peersReplicatedTo, updatedFailedPeers)
-        }
+          || peersReplicatedTo.size == numPeersToReplicateTo)) {
+      val peer = peersForReplication.head
+      try {
+        val onePeerStartTime = System.currentTimeMillis
+        logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
+        blockTransferService.uploadBlockSync(
+          peer.host,
+          peer.port,
+          peer.executorId,
+          blockId,
+          new NettyManagedBuffer(data.toNetty),
+          tLevel,
+          classTag)
+        logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
+          s" in ${System.currentTimeMillis - onePeerStartTime} ms")
+        // the block was replicated, lets update state and move ahead
 
-        replicateBlock(updatedNumFailures, updatedPeers, updatedReplicatedPeers, updatedFailedPeers)
+        peersForReplication = peersForReplication.tail
+        peersReplicatedTo += peer
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
+          peersFailedToReplicateTo += peer
+          // we have a failed replication, so we get the list of peers again
+          // we don't want peers we have already replicated to and the ones that
+          // have failed previously
+          val filteredPeers = getPeers(true).filter { p =>
+            !(peersFailedToReplicateTo.contains(p) || peersReplicatedTo.contains(p))
+          }
+
+          numFailures += 1
+          peersForReplication = blockReplicationPrioritizer.prioritize(
+            blockManagerId,
+            filteredPeers,
+            peersReplicatedTo,
+            blockId)
       }
     }
 
-    val startTime = System.currentTimeMillis
-    val peersReplicatedTo = replicateBlock(
-      0,
-      blockReplicationPrioritizer.prioritize(blockManagerId, getPeers(false), Set.empty, blockId),
-      Set.empty,
-      Set.empty)
     logDebug(s"Replicating $blockId of ${data.size} bytes to " +
       s"${peersReplicatedTo.size} peer(s) took ${System.currentTimeMillis - startTime} ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
