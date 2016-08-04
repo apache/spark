@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.{PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -384,6 +384,46 @@ case class TruncateTableCommand(
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table $tableName", e)
     }
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * A command to repair a table by discovery all the partitions in the directory.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   MSCK REPAIR TABLE table_name;
+ * }}}
+ *
+ * This command is the same as AlterTableRecoverPartitions
+ */
+case class RepairTableCommand(tableName: TableIdentifier) extends RunnableCommand {
+  override def run(spark: SparkSession): Seq[Row] = {
+    val catalog = spark.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    if (!catalog.tableExists(tableName)) {
+      throw new AnalysisException(s"Table $tableName in MSCK REPAIR TABLE does not exist.")
+    }
+    if (catalog.isTemporaryTable(tableName)) {
+      throw new AnalysisException(
+        s"Operation not allowed: MSCK REPAIR TABLE on temporary tables: $tableName")
+    }
+    if (table.tableType != CatalogTableType.EXTERNAL) {
+      throw new AnalysisException(
+        s"Operation not allowed: MSCK REPAIR TABLE only works on external tables: $tableName")
+    }
+    if (table.partitionColumnNames.isEmpty) {
+      throw new AnalysisException(
+        s"Operation not allowed: MSCK REPAIR TABLE only works on partitioned tables: $tableName")
+    }
+    if (table.storage.locationUri.isEmpty) {
+      throw new AnalysisException(
+        s"Operation not allowed: MSCK REPAIR TABLE only works on tables with location provided: " +
+          s"$tableName")
+    }
+
+    AlterTableRecoverPartitionsCommand(tableName).recoverPartitions(spark, table)
     Seq.empty[Row]
   }
 }

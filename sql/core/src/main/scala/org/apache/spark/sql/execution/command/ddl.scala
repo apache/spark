@@ -17,13 +17,19 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+
+import scala.collection.GenSeq
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.types._
@@ -423,6 +429,92 @@ case class AlterTableDropPartitionCommand(
     Seq.empty[Row]
   }
 
+}
+
+/**
+ * Discover Partitions in ALTER TABLE: discover all the partition in the directory of a table and
+ * update the catalog.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table DISCOVER PARTITIONS;
+ * }}}
+ */
+case class AlterTableRecoverPartitionsCommand(
+    tableName: TableIdentifier) extends RunnableCommand {
+  override def run(spark: SparkSession): Seq[Row] = {
+    val catalog = spark.sessionState.catalog
+    if (!catalog.tableExists(tableName)) {
+      throw new AnalysisException(
+        s"Table $tableName in ALTER TABLE RECOVER PARTITIONS does not exist.")
+    }
+    val table = catalog.getTableMetadata(tableName)
+    if (catalog.isTemporaryTable(tableName)) {
+      throw new AnalysisException(
+        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS on temporary tables: $tableName")
+    }
+    if (table.tableType != CatalogTableType.EXTERNAL) {
+      throw new AnalysisException(
+        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on external " +
+          s"tables: $tableName")
+    }
+    if (table.partitionColumnNames.isEmpty) {
+      throw new AnalysisException(
+        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on partitioned " +
+          s"tables: $tableName")
+    }
+    if (table.storage.locationUri.isEmpty) {
+      throw new AnalysisException(
+        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on tables with " +
+          s"location provided: $tableName")
+    }
+
+    recoverPartitions(spark, table)
+    Seq.empty[Row]
+  }
+
+  def recoverPartitions(spark: SparkSession, table: CatalogTable): Unit = {
+    val root = new Path(table.storage.locationUri.get)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val partitionSpecsAndLocs = scanPartitions(spark, fs, root, Map(), table.partitionSchema.size)
+    val parts = partitionSpecsAndLocs.map { case (spec, location) =>
+      // inherit table storage format (possibly except for location)
+      CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
+    }
+    spark.sessionState.catalog.createPartitions(tableName,
+      parts.toArray[CatalogTablePartition], ignoreIfExists = true)
+  }
+
+  @transient private lazy val evalTaskSupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
+
+  private def scanPartitions(
+      spark: SparkSession,
+      fs: FileSystem,
+      path: Path,
+      spec: TablePartitionSpec,
+      numPartitionsLeft: Int): GenSeq[(TablePartitionSpec, Path)] = {
+    if (numPartitionsLeft == 0) {
+      return Seq(spec -> path)
+    }
+
+    val statuses = fs.listStatus(path)
+    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val statusPar: GenSeq[FileStatus] =
+      if (numPartitionsLeft > 1 && statuses.length > threshold || numPartitionsLeft > 2) {
+        val parArray = statuses.par
+        parArray.tasksupport = evalTaskSupport
+        parArray
+      } else {
+        statuses
+      }
+    statusPar.flatMap { st =>
+      val ps = st.getPath.getName.split("=", 2)
+      if (ps.length != 2) {
+        throw new AnalysisException(s"Invalid partition path: ${st.getPath}")
+      }
+      scanPartitions(spark, fs, st.getPath, spec ++ Map(ps(0) -> ps(1)), numPartitionsLeft - 1)
+    }
+  }
 }
 
 
