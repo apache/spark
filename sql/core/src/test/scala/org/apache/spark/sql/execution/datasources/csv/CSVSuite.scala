@@ -366,6 +366,32 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save csv with quoteAll enabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data)
+
+      // escapeQuotes should be true by default
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\"")
+        .option("quoteAll", "true")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = "\"test \"\"quote\"\"\",\"123\",\"it \"\"works\"\"!\",\"\"\"very\"\" well\""
+
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
+    }
+  }
+
   test("save csv with quote escaping enabled") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -654,5 +680,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
     }
+  }
+
+  test("SPARK-15585 turn off quotations") {
+    val cars = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("quote", "")
+      .load(testFile(carsUnbalancedQuotesFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
   }
 }

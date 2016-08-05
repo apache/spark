@@ -16,13 +16,17 @@
  */
 package org.apache.spark.network.yarn
 
-import java.io.{DataOutputStream, File, FileOutputStream}
+import java.io.{DataOutputStream, File, FileOutputStream, IOException}
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission._
+import java.util.EnumSet
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.service.ServiceStateException
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
@@ -45,7 +49,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.setInt("spark.shuffle.service.port", 0)
     val localDir = Utils.createTempDir()
-    yarnConfig.set("yarn.nodemanager.local-dirs", localDir.getAbsolutePath)
+    yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
   }
 
   var s1: YarnShuffleService = null
@@ -316,4 +320,28 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     s2.stop()
   }
- }
+
+  test("service throws error if cannot start") {
+    // Create a different config with a read-only local dir.
+    val roConfig = new YarnConfiguration(yarnConfig)
+    val roDir = Utils.createTempDir()
+    Files.setPosixFilePermissions(roDir.toPath(), EnumSet.of(OWNER_READ, OWNER_EXECUTE))
+    roConfig.set(YarnConfiguration.NM_LOCAL_DIRS, roDir.getAbsolutePath())
+    roConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
+
+    // Try to start the shuffle service, it should fail.
+    val service = new YarnShuffleService()
+
+    try {
+      val error = intercept[ServiceStateException] {
+        service.init(roConfig)
+      }
+      assert(error.getCause().isInstanceOf[IOException])
+    } finally {
+      service.stop()
+      Files.setPosixFilePermissions(roDir.toPath(),
+        EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE))
+    }
+  }
+
+}

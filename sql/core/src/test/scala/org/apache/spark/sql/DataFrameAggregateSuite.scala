@@ -457,6 +457,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("collect_set functions cannot have maps") {
+    val df = Seq((1, 3, 0), (2, 3, 0), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", map($"x", $"y").as("b"))
+    val error = intercept[AnalysisException] {
+      df.select(collect_set($"a"), collect_set($"b"))
+    }
+    assert(error.message.contains("collect_set() cannot have map type data"))
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),

@@ -179,6 +179,7 @@ private[ui] trait PagedTable[T] {
           Splitter
             .on('&')
             .trimResults()
+            .omitEmptyStrings()
             .withKeyValueSeparator("=")
             .split(querystring)
             .asScala

@@ -60,6 +60,7 @@ import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.StructType$;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -136,7 +137,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    this.sparkSchema = new CatalystSchemaConverter(configuration).convert(requestedSchema);
+    String sparkRequestedSchemaString =
+        configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
+    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
@@ -195,12 +198,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
           }
           builder.addFields(fileSchema.getType(s));
         }
-        this.requestedSchema = builder.named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
+        this.requestedSchema = builder.named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
       } else {
-        this.requestedSchema = CatalystSchemaConverter.EMPTY_MESSAGE();
+        this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
-    this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
+    this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();

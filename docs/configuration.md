@@ -522,6 +522,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.index.cache.entries</code></td>
+  <td>1024</td>
+  <td>
+    Max number of entries to keep in the index cache of the shuffle service.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
   <td>200</td>
   <td>
@@ -778,14 +785,15 @@ Apart from these, the following properties are also available, and may be useful
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.memory.fraction</code></td>
-  <td>0.75</td>
+  <td>0.6</td>
   <td>
     Fraction of (heap space - 300MB) used for execution and storage. The lower this is, the
     more frequently spills and cached data eviction occur. The purpose of this config is to set
     aside memory for internal metadata, user data structures, and imprecise size estimation
     in the case of sparse, unusually large records. Leaving this at the default value is
-    recommended. For more detail, see <a href="tuning.html#memory-management-overview">
-    this description</a>.
+    recommended. For more detail, including important information about correctly tuning JVM
+    garbage collection when increasing this value, see
+    <a href="tuning.html#memory-management-overview">this description</a>.
   </td>
 </tr>
 <tr>
@@ -1173,7 +1181,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.quantile</code></td>
   <td>0.75</td>
   <td>
-    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
+    Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
 </tr>
 <tr>
@@ -1187,7 +1195,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.maxFailures</code></td>
   <td>4</td>
   <td>
-    Number of individual task failures before giving up on the job.
+    Number of failures of any particular task before giving up on the job.
+    The total number of failures spread across different tasks will not cause the job
+    to fail; a particular task has to fail this number of attempts.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
@@ -1235,6 +1245,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
   <td>
     Initial number of executors to run if dynamic allocation is enabled.
+    <br /><br />
+    If `--num-executors` (or `spark.executor.instances`) is set and larger than this value, it will
+    be used as the initial number of executors.
   </td>
 </tr>
 <tr>
@@ -1560,8 +1573,8 @@ spark.sql("SET -v").show(n=200, truncate=False)
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-# sqlContext is an existing sqlContext.
-properties <- sql(sqlContext, "SET -v")
+sparkR.session()
+properties <- sql("SET -v")
 showDF(properties, numRows = 200, truncate = FALSE)
 {% endhighlight %}
 

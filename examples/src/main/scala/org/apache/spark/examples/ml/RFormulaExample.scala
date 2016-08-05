@@ -36,10 +36,12 @@ object RFormulaExample {
       (8, "CA", 12, 0.0),
       (9, "NZ", 15, 0.0)
     )).toDF("id", "country", "hour", "clicked")
+
     val formula = new RFormula()
       .setFormula("clicked ~ country + hour")
       .setFeaturesCol("features")
       .setLabelCol("label")
+
     val output = formula.fit(dataset).transform(dataset)
     output.select("features", "label").show()
     // $example off$

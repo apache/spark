@@ -32,7 +32,6 @@ import com.google.common.base.Objects;
 import org.junit.*;
 import org.junit.rules.ExpectedException;
 
-import org.apache.spark.Accumulator;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
@@ -40,6 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.util.LongAccumulator;
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.types.DataTypes.*;
@@ -157,7 +157,7 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testForeach() {
-    final Accumulator<Integer> accum = jsc.accumulator(0);
+    final LongAccumulator accum = jsc.sc().longAccumulator();
     List<String> data = Arrays.asList("a", "b", "c");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
 
@@ -497,6 +497,8 @@ public class JavaDatasetSuite implements Serializable {
     private String[] d;
     private List<String> e;
     private List<Long> f;
+    private Map<Integer, String> g;
+    private Map<List<Long>, Map<String, String>> h;
 
     public boolean isA() {
       return a;
@@ -546,6 +548,22 @@ public class JavaDatasetSuite implements Serializable {
       this.f = f;
     }
 
+    public Map<Integer, String> getG() {
+      return g;
+    }
+
+    public void setG(Map<Integer, String> g) {
+      this.g = g;
+    }
+
+    public Map<List<Long>, Map<String, String>> getH() {
+      return h;
+    }
+
+    public void setH(Map<List<Long>, Map<String, String>> h) {
+      this.h = h;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -558,7 +576,10 @@ public class JavaDatasetSuite implements Serializable {
       if (!Arrays.equals(c, that.c)) return false;
       if (!Arrays.equals(d, that.d)) return false;
       if (!e.equals(that.e)) return false;
-      return f.equals(that.f);
+      if (!f.equals(that.f)) return false;
+      if (!g.equals(that.g)) return false;
+      return h.equals(that.h);
+
     }
 
     @Override
@@ -569,6 +590,8 @@ public class JavaDatasetSuite implements Serializable {
       result = 31 * result + Arrays.hashCode(d);
       result = 31 * result + e.hashCode();
       result = 31 * result + f.hashCode();
+      result = 31 * result + g.hashCode();
+      result = 31 * result + h.hashCode();
       return result;
     }
   }
@@ -648,6 +671,17 @@ public class JavaDatasetSuite implements Serializable {
     obj1.setD(new String[]{"hello", null});
     obj1.setE(Arrays.asList("a", "b"));
     obj1.setF(Arrays.asList(100L, null, 200L));
+    Map<Integer, String> map1 = new HashMap<Integer, String>();
+    map1.put(1, "a");
+    map1.put(2, "b");
+    obj1.setG(map1);
+    Map<String, String> nestedMap1 = new HashMap<String, String>();
+    nestedMap1.put("x", "1");
+    nestedMap1.put("y", "2");
+    Map<List<Long>, Map<String, String>> complexMap1 = new HashMap<>();
+    complexMap1.put(Arrays.asList(1L, 2L), nestedMap1);
+    obj1.setH(complexMap1);
+
     SimpleJavaBean obj2 = new SimpleJavaBean();
     obj2.setA(false);
     obj2.setB(30);
@@ -655,6 +689,16 @@ public class JavaDatasetSuite implements Serializable {
     obj2.setD(new String[]{null, "world"});
     obj2.setE(Arrays.asList("x", "y"));
     obj2.setF(Arrays.asList(300L, null, 400L));
+    Map<Integer, String> map2 = new HashMap<Integer, String>();
+    map2.put(3, "c");
+    map2.put(4, "d");
+    obj2.setG(map2);
+    Map<String, String> nestedMap2 = new HashMap<String, String>();
+    nestedMap2.put("q", "1");
+    nestedMap2.put("w", "2");
+    Map<List<Long>, Map<String, String>> complexMap2 = new HashMap<>();
+    complexMap2.put(Arrays.asList(3L, 4L), nestedMap2);
+    obj2.setH(complexMap2);
 
     List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
     Dataset<SimpleJavaBean> ds = spark.createDataset(data, Encoders.bean(SimpleJavaBean.class));
@@ -673,21 +717,27 @@ public class JavaDatasetSuite implements Serializable {
       new byte[]{1, 2},
       new String[]{"hello", null},
       Arrays.asList("a", "b"),
-      Arrays.asList(100L, null, 200L)});
+      Arrays.asList(100L, null, 200L),
+      map1,
+      complexMap1});
     Row row2 = new GenericRow(new Object[]{
       false,
       30,
       new byte[]{3, 4},
       new String[]{null, "world"},
       Arrays.asList("x", "y"),
-      Arrays.asList(300L, null, 400L)});
+      Arrays.asList(300L, null, 400L),
+      map2,
+      complexMap2});
     StructType schema = new StructType()
       .add("a", BooleanType, false)
       .add("b", IntegerType, false)
       .add("c", BinaryType)
       .add("d", createArrayType(StringType))
       .add("e", createArrayType(StringType))
-      .add("f", createArrayType(LongType));
+      .add("f", createArrayType(LongType))
+      .add("g", createMapType(IntegerType, StringType))
+      .add("h",createMapType(createArrayType(LongType), createMapType(StringType, StringType)));
     Dataset<SimpleJavaBean> ds3 = spark.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds3.collectAsList());
