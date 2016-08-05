@@ -328,6 +328,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     val tableDesc = CatalogTable(
       identifier = table,
+      // TODO: actually the table type may be EXTERNAL if we have `path` in options. However, the
+      // physical plan `CreateDataSourceTableCommand` doesn't take table type as parameter, but a
+      // boolean flag called `managedIfNoPath`. We set the table type to MANAGED here to simulate
+      // setting the `managedIfNoPath` flag. In the future we should refactor the physical plan and
+      // make it take `CatalogTable` directly.
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat.empty.copy(properties = options),
       schema = schema.getOrElse(new StructType),

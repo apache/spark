@@ -119,10 +119,16 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
     }
     checkDuplication(normalizedPartitionCols, "partition")
 
-    // skip this check for hive serde tables, as table schema may be inferred in hive metastore.
-    if (tableDesc.provider.get != "hive" && schema.nonEmpty &&
-      normalizedPartitionCols.length == schema.length) {
-      failAnalysis("Cannot use all columns for partition columns")
+    if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
+      if (tableDesc.provider.get == "hive") {
+        // When we hit this branch, it means users didn't specify schema for the table to be
+        // created, as we always include partition columns in table schema for hive serde tables.
+        // The real schema will be inferred at hive metastore by hive serde, plus the given
+        // partition columns, so we should not fail the analysis here.
+      } else {
+        failAnalysis("Cannot use all columns for partition columns")
+      }
+
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
