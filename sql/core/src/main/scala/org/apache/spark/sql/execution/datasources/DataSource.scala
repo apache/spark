@@ -174,6 +174,25 @@ case class DataSource(
   private def inferFileFormatSchema(format: FileFormat): StructType = {
     userSpecifiedSchema.orElse {
       val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+
+      // we need to check this inferSchema option from both places
+      val udpatedCaseInsensitiveOptions =
+        if (sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE) ||
+        caseInsensitiveOptions.getOrElse("inferSchema", "false") == "true") {
+          caseInsensitiveOptions + ("inferSchema" -> "true")
+        } else {
+          val isTextSource = providingClass == classOf[text.TextFileFormat]
+          if(!isTextSource) {
+            throw new IllegalArgumentException(
+              "Schema must be specified when creating a streaming source DataFrame. " +
+                "If some files already exist in the directory, then depending on the file format " +
+                "you may be able to create a static DataFrame on that directory with " +
+                "'spark.read.load(directory)' and infer schema from it.")
+          } else {
+            caseInsensitiveOptions
+          }
+        }
+
       val allPaths = caseInsensitiveOptions.get("path")
       val globbedPaths = allPaths.toSeq.flatMap { path =>
         val hdfsPath = new Path(path)
@@ -184,7 +203,7 @@ case class DataSource(
       val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
       format.inferSchema(
         sparkSession,
-        caseInsensitiveOptions,
+        udpatedCaseInsensitiveOptions,
         fileCatalog.allFiles())
     }.getOrElse {
       throw new AnalysisException("Unable to infer schema. It must be specified manually.")
@@ -216,16 +235,6 @@ case class DataSource(
           }
         }
 
-        val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
-        val isTextSource = providingClass == classOf[text.TextFileFormat]
-        // If the schema inference is disabled, only text sources require schema to be specified
-        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
-          throw new IllegalArgumentException(
-            "Schema must be specified when creating a streaming source DataFrame. " +
-              "If some files already exist in the directory, then depending on the file format " +
-              "you may be able to create a static DataFrame on that directory with " +
-              "'spark.read.load(directory)' and infer schema from it.")
-        }
         SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
 
       case _ =>
