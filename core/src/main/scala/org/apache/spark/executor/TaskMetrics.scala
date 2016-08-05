@@ -233,14 +233,14 @@ class TaskMetrics private[spark] () extends Serializable {
   }
 
   private[spark] def hasDataPropertyAccumulators(): Boolean = {
-    !dataPropertyAccums.isEmpty
+    dataPropertyAccums.nonEmpty
   }
 
   /**
    * Mark an rdd/shuffle/and partition as fully processed for all dataProperty accumulators.
    */
   private[spark] def markFullyProcessed(rddId: Int, shuffleWriteId: Int, partitionId: Int) = {
-    dataPropertyAccums.map(_.markFullyProcessed(rddId, shuffleWriteId, partitionId))
+    dataPropertyAccums.foreach(_.markFullyProcessed(rddId, shuffleWriteId, partitionId))
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
