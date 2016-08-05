@@ -1021,16 +1021,19 @@ class Analyzer(
         case e: Expand =>
           failOnOuterReferenceInSubTree(e, "an EXPAND")
           e
-        case l @ LocalLimit(_, child) =>
+        case l @ LocalLimit(_, _) =>
           failOnOuterReferenceInSubTree(l, "a LIMIT")
           l
         // Since LIMIT <n> is represented as GlobalLimit(<n>, (LocalLimit (<n>, child))
         // and we are walking bottom up, we will fail on LocalLimit before
         // reaching GlobalLimit.
         // The code below is just a safety net.
-        case g @ GlobalLimit(_, child) =>
+        case g @ GlobalLimit(_, _) =>
           failOnOuterReferenceInSubTree(g, "a LIMIT")
           g
+        case s @ Sample(_, _, _, _, _) =>
+          failOnOuterReferenceInSubTree(s, "a TABLESAMPLE")
+          s
         case p =>
           failOnOuterReference(p)
           p
