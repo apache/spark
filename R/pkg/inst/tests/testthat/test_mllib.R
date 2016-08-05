@@ -662,8 +662,7 @@ test_that("spark.als", {
                list(2, 1, 1.0), list(2, 2, 5.0))
   df <- createDataFrame(data, c("user", "item", "rating"))
   model <- spark.als(df, ratingCol = "rating", userCol = "user", itemCol = "item",
-                     rank = 10, maxIter = 5, seed = 0, reg = 0.1,
-                     numUserBlocks = 1, numItemBlocks = 1)
+                     rank = 10, maxIter = 5, seed = 0, reg = 0.1)
   stats <- summary(model)
   expect_equal(stats$rank, 10)
   test <- createDataFrame(list(list(0, 2), list(1, 0), list(2, 0)), c("user", "item"))
@@ -684,12 +683,16 @@ test_that("spark.als", {
   itemFactors <- collect(stats$itemFactors)
   userFactors2 <- collect(stats2$userFactors)
   itemFactors2 <- collect(stats2$itemFactors)
-  print(userFactors)
-  print(userFactors2)
-  expect_equal(unlist(userFactors$features), unlist(userFactors2$features))
-  expect_equal(unlist(userFactors$id), unlist(userFactors2$id))
-  expect_equal(unlist(itemFactors$features), unlist(itemFactors2$features))
-  expect_equal(unlist(itemFactors$id), unlist(itemFactors2$id))
+
+  orderUser <- order(userFactors$id)
+  orderUser2 <- order(userFactors2$id)
+  expect_equal(userFactors$id[orderUser], userFactors2$id[orderUser2])
+  expect_equal(userFactors$features[orderUser], userFactors2$features[orderUser2])
+
+  orderItem <- order(itemFactors$id)
+  orderItem2 <- order(itemFactors2$id)
+  expect_equal(itemFactors$id[orderItem], itemFactors2$id[orderItem2])
+  expect_equal(itemFactors$features[orderItem], itemFactors2$features[orderItem2])
 
   unlink(modelPath)
 })
