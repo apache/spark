@@ -188,13 +188,19 @@ private[sql] case class FileSourceScanExec(
 
   // Only for test purpose to get the number of row groups to read in vectorized Parquet reader.
   // Since the relation is not serialized, we obtain the file format object here.
-  private val fileFormat = relation.fileFormat
+  private val fileFormat: ParquetSource =
+    // A few file formats are not serializable...
+    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+      relation.fileFormat.asInstanceOf[ParquetSource]
+    } else {
+      null
+    }
 
   private lazy val inputRDD: RDD[InternalRow] = {
     val selectedPartitions = relation.location.listFiles(partitionFilters)
 
     val readFile: (PartitionedFile) => Iterator[InternalRow] = {
-      val func = fileFormat.buildReaderWithPartitionValues(
+      val func = relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
@@ -208,9 +214,9 @@ private[sql] case class FileSourceScanExec(
         // Only for test purpose.
         // Once the vectorized Parquet reader is initialized in the above method, we can read its
         // variable numRowGroups.
-        if (fileFormat.isInstanceOf[ParquetSource]) {
+        if (fileFormat != null) {
           val numRowGroups = longMetric("numRowGroups")
-          numRowGroups.add(fileFormat.asInstanceOf[ParquetSource].numRowGroups)
+          numRowGroups.add(fileFormat.numRowGroups)
         }
         iter
       }
