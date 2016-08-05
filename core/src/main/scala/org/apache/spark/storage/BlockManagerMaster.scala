@@ -235,10 +235,6 @@ class BlockManagerMaster(
     }
   }
 
-  def getTopologyInfo(host: String): String = {
-    driverEndpoint.askWithRetry[String](GetTopologyInfo(host))
-  }
-
   /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
   private def tell(message: Any) {
     if (!driverEndpoint.askWithRetry[Boolean](message)) {

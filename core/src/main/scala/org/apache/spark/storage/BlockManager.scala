@@ -1163,9 +1163,9 @@ private[spark] class BlockManager(
     var peersFailedToReplicateTo = Set.empty[BlockManagerId]
     var numFailures = 0
 
-    while(!(numFailures > maxReplicationFailures
-          || peersForReplication.isEmpty
-          || peersReplicatedTo.size == numPeersToReplicateTo)) {
+    while(numFailures <= maxReplicationFailures
+          && !peersForReplication.isEmpty
+          && peersReplicatedTo.size != numPeersToReplicateTo) {
       val peer = peersForReplication.head
       try {
         val onePeerStartTime = System.currentTimeMillis
