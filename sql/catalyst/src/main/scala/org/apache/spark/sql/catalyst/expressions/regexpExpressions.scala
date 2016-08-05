@@ -329,7 +329,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val m = pattern.matcher(s.toString)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
-      UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
+      val group = mr.group(r.asInstanceOf[Int])
+      if (group == null) { // Pattern matched, but not optional group
+        UTF8String.EMPTY_UTF8
+      } else {
+        UTF8String.fromString(group)
+      }
     } else {
       UTF8String.EMPTY_UTF8
     }
