@@ -40,7 +40,8 @@ trait BlockReplicationPrioritization {
    *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  def prioritize(blockManagerId: BlockManagerId,
+  def prioritize(
+    blockManagerId: BlockManagerId,
     peers: Seq[BlockManagerId],
     peersReplicatedTo: Set[BlockManagerId],
     blockId: BlockId): Seq[BlockManagerId]
@@ -62,7 +63,8 @@ class DefaultBlockReplicationPrioritization
    *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  override def prioritize(blockManagerId: BlockManagerId,
+  override def prioritize(
+    blockManagerId: BlockManagerId,
     peers: Seq[BlockManagerId],
     peersReplicatedTo: Set[BlockManagerId],
     blockId: BlockId): Seq[BlockManagerId] = {

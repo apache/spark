@@ -73,8 +73,8 @@ class BlockManagerId private (
     out.writeUTF(host_)
     out.writeInt(port_)
     out.writeBoolean(topologyInfo_.isDefined)
-    // if we don't keep topology information, we just write an empty string.
-    out.writeUTF(topologyInfo_.getOrElse(""))
+    // we only write topologyInfo if we have it
+    topologyInfo.foreach(out.writeUTF(_))
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -85,8 +85,6 @@ class BlockManagerId private (
     topologyInfo_ = if (isTopologyInfoAvailable) {
       Some(in.readUTF())
     } else {
-      // we would read an empty string in this case
-      in.readUTF()
       None
     }
   }
@@ -121,7 +119,8 @@ private[spark] object BlockManagerId {
    * @param port Port of the block manager.
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
-  def apply(execId: String,
+  def apply(
+    execId: String,
     host: String,
     port: Int,
     topologyInfo: Option[String] = None): BlockManagerId =
