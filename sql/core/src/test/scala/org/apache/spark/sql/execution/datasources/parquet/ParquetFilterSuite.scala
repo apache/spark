@@ -36,6 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -541,50 +542,23 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("Fiters should be pushed down for vectorized Parquet reader at row group level") {
     import testImplicits._
-    withTempPath { dir =>
-      val path = s"${dir.getCanonicalPath}/table"
-      (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-      val requiredSchema = StructType(Seq(
-        StructField("a", IntegerType, nullable = false),
-        StructField("b", IntegerType, nullable = false)
-      ))
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table"
+        (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-      val hadoopConf = new Configuration()
-
-      // Set up parquet block size to make sure many row groups produced.
-      hadoopConf.setInt("parquet.block.size", 8)
-      hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
-      hadoopConf.set(
-        ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-        ParquetSchemaConverter.checkFieldNames(requiredSchema).json)
-
-      val filters = ParquetFilters.createFilter(requiredSchema, sources.LessThan("a", 100))
-      assert(filters.isDefined)
-
-      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-      val hadoopAttemptContext1 =
-        new TaskAttemptContextImpl(hadoopConf, attemptId)
-      val hadoopAttemptContext2 =
-        new TaskAttemptContextImpl(hadoopConf, attemptId)
-
-      ParquetInputFormat.setFilterPredicate(hadoopAttemptContext1.getConfiguration, filters.get)
-
-      new File(path).listFiles().filter(f => f.getPath().endsWith(".parquet")).map { f =>
-        val file = new File(f.getPath())
-        val split = new org.apache.parquet.hadoop.ParquetInputSplit(
-          new Path(f.getPath), 0L, file.length(), file.length(), Array.empty, null)
-
-        val vectorizedReader = new VectorizedParquetRecordReader()
-        // Use the context with filters pushed down.
-        vectorizedReader.initialize(split, hadoopAttemptContext1)
-        // Row groups are filtered.
-        assert(vectorizedReader.getRowGroupCount() == 0)
-
-        // Use the context without filters pushed down.
-        vectorizedReader.initialize(split, hadoopAttemptContext2)
-        // Row groups are not filtered.
-        assert(vectorizedReader.getRowGroupCount() > 0)
+        Seq(("true", (x: Long) => x == 0), ("false", (x: Long) => x > 0)).map { case (push, func) =>
+          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> push) {
+            val df = spark.read.parquet(path).filter("a < 100")
+            df.collect()
+            val source = df.queryExecution.sparkPlan.collect {
+              case f: FileSourceScanExec => f
+            }.head
+            assert(func(source.longMetric("numRowGroups").value))
+          }
+        }
       }
     }
   }

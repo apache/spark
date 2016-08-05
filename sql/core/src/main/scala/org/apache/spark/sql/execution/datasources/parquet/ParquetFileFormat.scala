@@ -366,6 +366,10 @@ private[sql] class ParquetFileFormat
         val vectorizedReader = new VectorizedParquetRecordReader()
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
+
+        // For test purpose, getting the number to row groups this vectorized reader to read.
+        numRowGroups = vectorizedReader.getRowGroupCount()
+
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
@@ -415,6 +419,9 @@ private[sql] class ParquetFileFormat
       sqlContext.sessionState.newHadoopConf(),
       options)
   }
+
+  // Only for test purpose.
+  private[sql] var numRowGroups: Int = -1
 }
 
 /**
