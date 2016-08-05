@@ -279,6 +279,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val bcFeaturesMean = instances.context.broadcast(featuresMean)
+    val bcFeaturesStd = instances.context.broadcast(featuresStd)
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
       featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
@@ -294,7 +296,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
     val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
-      $(standardization), featuresStd, featuresMean, effectiveL2RegParam)
+      $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam)
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -338,6 +340,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         logError(msg)
         throw new SparkException(msg)
       }
+
+      bcFeaturesMean.destroy(blocking = false)
+      bcFeaturesStd.destroy(blocking = false)
 
       /*
          The coefficients are trained in the scaled space; we're converting them back to
@@ -1009,16 +1014,14 @@ private class LeastSquaresCostFun(
     labelMean: Double,
     fitIntercept: Boolean,
     standardization: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double],
+    bcFeaturesStd: Broadcast[Array[Double]],
+    bcFeaturesMean: Broadcast[Array[Double]],
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
-
-  val bcFeaturesStd = instances.context.broadcast(featuresStd)
-  val bcFeaturesMean = instances.context.broadcast(featuresMean)
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
     val bcCoeffs = instances.context.broadcast(coeffs)
+    val localFeaturesStd = bcFeaturesStd.value
 
     val leastSquaresAggregator = {
       val seqOp = (c: LeastSquaresAggregator, instance: Instance) => c.add(instance)
@@ -1044,13 +1047,13 @@ private class LeastSquaresCostFun(
             totalGradientArray(index) += effectiveL2regParam * value
             value * value
           } else {
-            if (featuresStd(index) != 0.0) {
+            if (localFeaturesStd(index) != 0.0) {
               // If `standardization` is false, we still standardize the data
               // to improve the rate of convergence; as a result, we have to
               // perform this reverse standardization by penalizing each component
               // differently to get effectively the same objective function when
               // the training dataset is not standardized.
-              val temp = value / (featuresStd(index) * featuresStd(index))
+              val temp = value / (localFeaturesStd(index) * localFeaturesStd(index))
               totalGradientArray(index) += effectiveL2regParam * temp
               value * temp
             } else {
