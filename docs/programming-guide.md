@@ -1097,7 +1097,7 @@ for details.
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
 </tr>
 </table>
 
@@ -1571,7 +1571,7 @@ have changed from returning (key, list of values) pairs to (key, iterable of val
 </div>
 
 Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](ml-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
+[MLlib](ml-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-11).
 
 
 # Where to Go from Here
