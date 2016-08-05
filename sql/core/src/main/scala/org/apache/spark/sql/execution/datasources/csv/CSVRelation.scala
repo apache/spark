@@ -182,7 +182,7 @@ private[sql] object CSVRelation extends Logging {
       header: Array[String],
       rdd: RDD[String]): RDD[Array[String]] = {
     val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
-    univocityTokenizer(rdd, header, firstLine, options)
+    univocityTokenizer(rdd, firstLine, options)
   }
 
   /**
@@ -233,7 +233,7 @@ private[sql] object CSVRelation extends Logging {
 
   def getHeader(rdd: RDD[String], csvOptions: CSVOptions): Array[String] = {
     val firstLine = findFirstLine(csvOptions, rdd)
-    val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
+    val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
 
     if (csvOptions.headerFlag) {
       firstRow.zipWithIndex.map { case (value, index) =>

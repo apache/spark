@@ -428,16 +428,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         CSVInferSchema.infer(parsedRDD, header, parsedOptions)
       }
 
+    val parser = CSVRelation.csvParser(schema, schema.fields.map(_.name), parsedOptions)
+    var numMalformedRecords = 0
+    val rows = parsedRDD.flatMap { recordTokens =>
+      val row = parser(recordTokens, numMalformedRecords)
+      if (row.isEmpty) {
+        numMalformedRecords += 1
+      }
+      row
+    }
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(
-        schema.toAttributes,
-        CSVRelation.parseCsv(
-          parsedRDD,
-          schema,
-          schema.fields.map(_.name),
-          parsedOptions
-        ))(sparkSession))
+      LogicalRDD(schema.toAttributes, rows)(sparkSession))
   }
 
   /**
