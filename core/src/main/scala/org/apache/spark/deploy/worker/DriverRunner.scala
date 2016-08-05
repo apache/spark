@@ -87,8 +87,8 @@ private[deploy] class DriverRunner(
             kill()
           }
 
-          // prepare driver jars and launch driver
-          val exitCode = prepareAndLaunchDriver()
+          // prepare driver jars and run driver
+          val exitCode = prepareAndRunDriver()
 
           // set final state depending on if forcibly killed and process exit code
           finalState = if (exitCode == 0) {
@@ -98,15 +98,15 @@ private[deploy] class DriverRunner(
           } else {
             Some(DriverState.FAILED)
           }
-        }
-        catch {
+        } catch {
           case e: Exception =>
             kill()
             finalState = Some(DriverState.ERROR)
             finalException = Some(e)
-        }
-        finally {
-          if (shutdownHook != null) ShutdownHookManager.removeShutdownHook(shutdownHook)
+        } finally {
+          if (shutdownHook != null) {
+            ShutdownHookManager.removeShutdownHook(shutdownHook)
+          }
         }
 
         // notify worker of final driver state, possible exception
@@ -120,13 +120,13 @@ private[deploy] class DriverRunner(
     logInfo("Killing driver process!")
     killed = true
     synchronized {
-      process.foreach(p => {
+      process.foreach { p =>
         val exitCode = Utils.terminateProcess(p, DRIVER_TERMINATE_TIMEOUT_MS)
         if (exitCode.isEmpty) {
           logWarning("Failed to terminate driver process: " + p +
               ". This process will likely be orphaned.")
         }
-      })
+      }
     }
   }
 
@@ -173,7 +173,7 @@ private[deploy] class DriverRunner(
     localJarFilename
   }
 
-  private[worker] def prepareAndLaunchDriver(): Int = {
+  private[worker] def prepareAndRunDriver(): Int = {
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
 
@@ -187,10 +187,10 @@ private[deploy] class DriverRunner(
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
       driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
 
-    launchDriver(builder, driverDir, driverDesc.supervise)
+    runDriver(builder, driverDir, driverDesc.supervise)
   }
 
-  private def launchDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean): Int = {
+  private def runDriver(builder: ProcessBuilder, baseDir: File, supervise: Boolean): Int = {
     builder.directory(baseDir)
     def initialize(process: Process): Unit = {
       // Redirect stdout and stderr to files

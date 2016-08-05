@@ -52,15 +52,16 @@ class DriverRunnerTest extends SparkFunSuite {
     (processBuilder, process)
   }
 
-  private def createTestableDriverRunner(processBuilder: ProcessBuilderLike,
-                                         superviseRetry: Boolean) = {
+  private def createTestableDriverRunner(
+      processBuilder: ProcessBuilderLike,
+      superviseRetry: Boolean) = {
     val runner = createDriverRunner()
     runner.setSleeper(mock(classOf[Sleeper]))
     doAnswer(new Answer[Int] {
       def answer(invocation: InvocationOnMock): Int = {
         runner.runCommandWithRetry(processBuilder, p => (), supervise = superviseRetry)
       }
-    }).when(runner).prepareAndLaunchDriver()
+    }).when(runner).prepareAndRunDriver()
     runner
   }
 
