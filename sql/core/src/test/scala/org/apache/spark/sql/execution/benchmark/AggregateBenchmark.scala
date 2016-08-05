@@ -1078,6 +1078,146 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
+  ignore("4 key fields, 4 value field, varying linear distinct keys") {
+    val N = 20 << 22;
+
+    var timeStart: Long = 0L
+    var timeEnd: Long = 0L
+    var nsPerRow: Long = 0L
+    var i = 0
+    sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "30")
+
+    // scalastyle:off
+    println(Benchmark.getJVMOSInfo())
+    println(Benchmark.getProcessorName())
+    printf("%20s %20s %20s %20s\n", "Num. Distinct Keys", "No Fast Hashmap",
+      "Vectorized", "Row-based")
+    // scalastyle:on
+
+    val modes = List("skip", "vectorized", "rowbased")
+
+    while (i < 17) {
+      val results = modes.map(mode => {
+        sparkSession.conf.set("spark.sql.codegen.aggregate.map.enforce.impl", mode)
+        var j = 0
+        var minTime: Long = 1000
+        while (j < 5) {
+          System.gc()
+          val s = "id & " + ((1<<i)-1) + " as k"
+          sparkSession.range(N)
+            .selectExpr(List.range(0, 4).map(x => s + x): _*)
+            .createOrReplaceTempView("test")
+          timeStart = System.nanoTime
+          sparkSession.sql("select " + List.range(0, 4).map(x => "sum(k" + x + ")").mkString(",") +
+            " from test group by " + List.range(0, 4).map(x => "k" + x).mkString(",")).collect()
+          timeEnd = System.nanoTime
+          nsPerRow = (timeEnd - timeStart) / N
+          // printf("nsPerRow i=%d j=%d mode=%10s %20s\n", i, j, mode, nsPerRow)
+          if (j > 1 && minTime > nsPerRow) minTime = nsPerRow
+          j += 1
+        }
+        minTime
+      })
+      printf("%20s %20s %20s %20s\n", (1<<i), results(0), results(1), results(2))
+      i += 1
+    }
+    printf("Unit: ns/row\n")
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+      Num. Distinct Keys      No Fast Hashmap           Vectorized            Row-based
+                       1                   33                   38                   24
+                       2                   58                   43                   30
+                       4                   58                   42                   28
+                       8                   57                   46                   28
+                      16                   56                   41                   28
+                      32                   55                   44                   27
+                      64                   56                   48                   27
+                     128                   58                   43                   27
+                     256                   60                   43                   30
+                     512                   61                   45                   31
+                    1024                   62                   44                   31
+                    2048                   64                   42                   38
+                    4096                   66                   47                   38
+                    8192                   70                   48                   38
+                   16384                   72                   48                   42
+                   32768                   77                   54                   47
+                   65536                   96                   75                   61
+                  131072                  115                  119                  130
+                  262144                  137                  162                  185
+    Unit: ns/row
+    */
+  }
+
+  ignore("single key field, single value field, varying linear distinct keys") {
+    val N = 20 << 21;
+
+    var timeStart: Long = 0L
+    var timeEnd: Long = 0L
+    var nsPerRow: Long = 0L
+    var i = 0
+    sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+    sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "30")
+
+    // scalastyle:off
+    println(Benchmark.getJVMOSInfo())
+    println(Benchmark.getProcessorName())
+    printf("%20s %20s %20s %20s\n", "Num. Distinct Keys", "No Fast Hashmap",
+      "Vectorized", "Row-based")
+    // scalastyle:on
+
+    val modes = List("skip", "vectorized", "rowbased")
+
+    while (i < 21) {
+      val results = modes.map(mode => {
+        sparkSession.conf.set("spark.sql.codegen.aggregate.map.enforce.impl", mode)
+        var j = 0
+        var minTime: Long = 1000
+        while (j < 5) {
+          System.gc()
+          val s = "id & " + ((1<<i)-1) + " as k"
+          sparkSession.range(N)
+            .selectExpr(List.range(0, 2).map(x => s + x): _*)
+            .createOrReplaceTempView("test")
+          timeStart = System.nanoTime
+          sparkSession.sql("select sum(k1) from test group by k0").collect()
+          timeEnd = System.nanoTime
+          nsPerRow = (timeEnd - timeStart) / N
+          // printf("nsPerRow i=%d j=%d mode=%10s %20s\n", i, j, mode, nsPerRow)
+          if (j > 1 && minTime > nsPerRow) minTime = nsPerRow
+          j += 1
+        }
+        minTime
+      })
+      printf("%20s %20s %20s %20s\n", (1<<i), results(0), results(1), results(2))
+      i += 1
+    }
+    printf("Unit: ns/row\n")
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+    
+    Partial results:
+    
+      Num. Distinct Keys      No Fast Hashmap           Vectorized            Row-based
+                       1                   23                   14                   12
+                       8                   25                   13                   14
+                      64                   24                   13                   14
+                     512                   27                   15                   14
+                    4096                   29                   18                   15
+                   32768                   39                   17                   16
+                   65536                   46                   19                   15
+                  131072                   65                   38                   35
+                  262144                   91                   74                   86
+                  524288                  119                   93                   95
+    Unit: ns/row
+    */
+  }
+  
   ignore("TPCDS mini-scale benchmark") {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
