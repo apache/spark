@@ -423,7 +423,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'
 #' @param data A \code{SparkDataFrame} of observations and labels for model fitting
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'               operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param blockSize BlockSize parameter
 #' @param initialWeights InitialWeights parameter
 #' @param layers Layers parameter
@@ -432,7 +432,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @rdname spark.mlp
 #' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/mlp/}
+#' @seealso \link{spark.mlp}
 #' @export
 #' @examples
 #' \dontrun{
@@ -464,8 +464,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
 
-# Makes predictions from a Multilayer Perceptron Classification Model or a model produced by spark.mlp(),
-# similarly to R package e1071's predict.
+# Makes predictions from a model produced by spark.mlp().
 
 #' @param newData A SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
@@ -481,7 +480,7 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
-#' @return \code{summary} returns a list containing \code{apriori}, the label distribution, and
+#' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
 #'         \code{tables}, conditional probabilities given the target label
 #' @rdname spark.mlp
 #' @export
@@ -510,7 +509,7 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
 #'
 #' @param data A \code{SparkDataFrame} of observations and labels for model fitting
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'               operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param smoothing Smoothing parameter
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model
 #' @rdname spark.naiveBayes
