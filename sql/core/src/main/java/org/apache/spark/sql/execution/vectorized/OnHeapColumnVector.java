@@ -158,7 +158,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return byteData[rowId];
     } else {
-      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -188,7 +188,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return shortData[rowId];
     } else {
-      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -282,7 +282,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return longData[rowId];
     } else {
-      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToLong(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -321,7 +321,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return floatData[rowId];
     } else {
-      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -362,7 +362,7 @@ public final class OnHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return doubleData[rowId];
     } else {
-      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
   }
 

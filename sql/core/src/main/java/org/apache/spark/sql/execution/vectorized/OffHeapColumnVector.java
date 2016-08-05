@@ -161,7 +161,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return Platform.getByte(null, data + rowId);
     } else {
-      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -193,7 +193,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return Platform.getShort(null, data + 2 * rowId);
     } else {
-      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -298,7 +298,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return Platform.getLong(null, data + 8 * rowId);
     } else {
-      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToLong(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -344,7 +344,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return Platform.getFloat(null, data + rowId * 4);
     } else {
-      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -391,7 +391,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return Platform.getDouble(null, data + rowId * 8);
     } else {
-      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
   }
 

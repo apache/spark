@@ -622,7 +622,7 @@ public abstract class ColumnVector implements AutoCloseable {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return UTF8String.fromBytes(v.getBytes());
     }
   }
@@ -637,7 +637,7 @@ public abstract class ColumnVector implements AutoCloseable {
       System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
       return bytes;
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
       return v.getBytes();
     }
   }
