@@ -142,11 +142,12 @@ private[hive] class HiveClientImpl(
         originalState
       } else {
         val hiveConf = new HiveConf(classOf[SessionState])
-        // 1: we set all confs in the Hadoop Conf to this hiveConf.
+        // 1: we set all confs in the hadoopConf to this hiveConf.
         // This hadoopConf contains user settings in Hadoop's core-site.xml file
         // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
         // SharedState and put settings in this hadoopConf instead of relying on HiveConf
-        // to load user settings. This issue only shows up when spark.sql.hive.metastore.jars
+        // to load user settings. Otherwise, HiveConf's initialize method will override
+        // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
         // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
         // has hive-site.xml. So, HiveConf will use that to override its default values.
         hadoopConf.iterator().asScala.foreach { entry =>
