@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
@@ -937,6 +938,8 @@ class BinaryLogisticRegressionSummary private[classification] (
  * @param fitIntercept Whether to fit an intercept term.
  */
 private class LogisticAggregator(
+    val bcCoeffs: Broadcast[Vector],
+    val bcFeaturesStd: Broadcast[Array[Double]],
     private val numFeatures: Int,
     numClasses: Int,
     fitIntercept: Boolean) extends Serializable {
@@ -952,14 +955,9 @@ private class LogisticAggregator(
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
-   * @param coefficients The coefficients corresponding to the features.
-   * @param featuresStd The standard deviation values of the features.
    * @return This LogisticAggregator object.
    */
-  def add(
-      instance: Instance,
-      coefficients: Vector,
-      featuresStd: Array[Double]): this.type = {
+  def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
       require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $numFeatures but got ${features.size}.")
@@ -967,14 +965,15 @@ private class LogisticAggregator(
 
       if (weight == 0.0) return this
 
-      val coefficientsArray = coefficients match {
+      val coefficientsArray = bcCoeffs.value match {
         case dv: DenseVector => dv.values
         case _ =>
           throw new IllegalArgumentException(
-            s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
+            s"coefficients only supports dense vector but got type ${bcCoeffs.value.getClass}.")
       }
       val localGradientSumArray = gradientSumArray
 
+      val featuresStd = bcFeaturesStd.value
       numClasses match {
         case 2 =>
           // For Binary Logistic Regression.
@@ -1075,20 +1074,20 @@ private class LogisticCostFun(
     featuresMean: Array[Double],
     regParamL2: Double) extends DiffFunction[BDV[Double]] {
 
+  val bcFeaturesStd = instances.context.broadcast(featuresStd)
+
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
     val coeffs = Vectors.fromBreeze(coefficients)
+    val bcCoeffs = instances.context.broadcast(coeffs)
     val n = coeffs.size
-    val localFeaturesStd = featuresStd
-
 
     val logisticAggregator = {
-      val seqOp = (c: LogisticAggregator, instance: Instance) =>
-        c.add(instance, coeffs, localFeaturesStd)
+      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(numFeatures, numClasses, fitIntercept)
+        new LogisticAggregator(bcCoeffs, bcFeaturesStd, numFeatures, numClasses, fitIntercept)
       )(seqOp, combOp)
     }
 
