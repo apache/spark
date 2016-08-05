@@ -63,7 +63,11 @@ public class JavaChiSqSelectorExample {
       .setOutputCol("selectedFeatures");
 
     Dataset<Row> result = selector.fit(df).transform(df);
+
+    System.out.println("ChiSqSelector output with top " + selector.getNumTopFeatures()
+        + " features selected");
     result.show();
+
     // $example off$
     spark.stop();
   }
