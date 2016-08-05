@@ -429,6 +429,13 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract int getInt(int rowId);
 
   /**
+   * Returns the dictionary Id for rowId.
+   * This should only be called when the ColumnVector is dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public abstract int getDictId(int rowId);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putLong(int rowId, long value);

@@ -240,8 +240,19 @@ public final class OffHeapColumnVector extends ColumnVector {
     if (dictionary == null) {
       return Platform.getInt(null, data + 4 * rowId);
     } else {
-      return dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  /**
+   * Returns the dictionary Id for rowId.
+   * This should only be called when the ColumnVector is dictionaryIds.
+   * We have this separate method for dictionaryIds as per SPARK-16928.
+   */
+  public int getDictId(int rowId) {
+    assert(dictionary == null)
+            : "A ColumnVector dictionary should not have a dictionary for itself.";
+    return Platform.getInt(null, data + 4 * rowId);
   }
 
   //
