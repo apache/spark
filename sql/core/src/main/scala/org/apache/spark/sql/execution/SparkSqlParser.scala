@@ -409,7 +409,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[RepairTableCommand]] command.
+   * Create a [[AlterTableRecoverPartitionsCommand]] command.
    *
    * For example:
    * {{{
@@ -417,7 +417,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTableCommand(visitTableIdentifier(ctx.tableIdentifier))
+    AlterTableRecoverPartitionsCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      "MSCK REPAIR TABLE")
   }
 
   /**
@@ -795,12 +797,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * For example:
    * {{{
-   *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
-   *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+   *   ALTER TABLE table RECOVER PARTITIONS;
    * }}}
-   *
-   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
-   * is associated with physical tables
    */
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {

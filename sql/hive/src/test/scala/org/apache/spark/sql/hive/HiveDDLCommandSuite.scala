@@ -503,8 +503,9 @@ class HiveDDLCommandSuite extends PlanTest {
   test("MSCK REPAIR table") {
     val sql = "MSCK REPAIR TABLE tab1"
     val parsed = parser.parsePlan(sql)
-    val expected = RepairTableCommand(
-      TableIdentifier("tab1", None))
+    val expected = AlterTableRecoverPartitionsCommand(
+      TableIdentifier("tab1", None),
+      "MSCK REPAIR TABLE")
     comparePlans(parsed, expected)
   }
 

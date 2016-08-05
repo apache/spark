@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
-
 import scala.collection.GenSeq
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -32,8 +31,8 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, Catal
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
-
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -432,61 +431,60 @@ case class AlterTableDropPartitionCommand(
 }
 
 /**
- * Discover Partitions in ALTER TABLE: discover all the partition in the directory of a table and
+ * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
  * update the catalog.
  *
  * The syntax of this command is:
  * {{{
- *   ALTER TABLE table DISCOVER PARTITIONS;
+ *   ALTER TABLE table RECOVER PARTITIONS;
+ *   MSCK REPAIR TABLE table;
  * }}}
  */
 case class AlterTableRecoverPartitionsCommand(
-    tableName: TableIdentifier) extends RunnableCommand {
+    tableName: TableIdentifier,
+    cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(
-        s"Table $tableName in ALTER TABLE RECOVER PARTITIONS does not exist.")
+      throw new AnalysisException(s"Table $tableName in $cmd does not exist.")
     }
     val table = catalog.getTableMetadata(tableName)
     if (catalog.isTemporaryTable(tableName)) {
       throw new AnalysisException(
-        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS on temporary tables: $tableName")
+        s"Operation not allowed: $cmd on temporary tables: $tableName")
     }
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS on datasource tables: $tableName")
+        s"Operation not allowed: $cmd on datasource tables: $tableName")
     }
     if (table.tableType != CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
-        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on external " +
-          s"tables: $tableName")
+        s"Operation not allowed: $cmd only works on external tables: $tableName")
     }
-    if (DDLUtils.isTablePartitioned(table)) {
+    if (!DDLUtils.isTablePartitioned(table)) {
       throw new AnalysisException(
-        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on partitioned " +
-          s"tables: $tableName")
+        s"Operation not allowed: $cmd only works on partitioned tables: $tableName")
     }
     if (table.storage.locationUri.isEmpty) {
       throw new AnalysisException(
-        s"Operation not allowed: ALTER TABLE RECOVER PARTITIONS only works on tables with " +
-          s"location provided: $tableName")
+        s"Operation not allowed: $cmd only works on table with location provided: $tableName")
     }
 
-    recoverPartitions(spark, table)
-    Seq.empty[Row]
-  }
-
-  def recoverPartitions(spark: SparkSession, table: CatalogTable): Unit = {
     val root = new Path(table.storage.locationUri.get)
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
-    val partitionSpecsAndLocs = scanPartitions(spark, fs, root, Map(), table.partitionSchema.size)
+    // Dummy jobconf to get to the pathFilter defined in configuration
+    // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
+    val jobConf = new JobConf(spark.sparkContext.hadoopConfiguration, this.getClass)
+    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+    val partitionSpecsAndLocs = scanPartitions(
+      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase))
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       // inherit table storage format (possibly except for location)
       CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
     }
     spark.sessionState.catalog.createPartitions(tableName,
       parts.toArray[CatalogTablePartition], ignoreIfExists = true)
+    Seq.empty[Row]
   }
 
   @transient private lazy val evalTaskSupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
@@ -494,17 +492,18 @@ case class AlterTableRecoverPartitionsCommand(
   private def scanPartitions(
       spark: SparkSession,
       fs: FileSystem,
+      filter: PathFilter,
       path: Path,
       spec: TablePartitionSpec,
-      numPartitionsLeft: Int): GenSeq[(TablePartitionSpec, Path)] = {
-    if (numPartitionsLeft == 0) {
+      partitionNames: Seq[String]): GenSeq[(TablePartitionSpec, Path)] = {
+    if (partitionNames.length == 0) {
       return Seq(spec -> path)
     }
 
     val statuses = fs.listStatus(path)
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
     val statusPar: GenSeq[FileStatus] =
-      if (numPartitionsLeft > 1 && statuses.length > threshold || numPartitionsLeft > 2) {
+      if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         val parArray = statuses.par
         parArray.tasksupport = evalTaskSupport
         parArray
@@ -512,11 +511,25 @@ case class AlterTableRecoverPartitionsCommand(
         statuses
       }
     statusPar.flatMap { st =>
-      val ps = st.getPath.getName.split("=", 2)
-      if (ps.length != 2) {
-        throw new AnalysisException(s"Invalid partition path: ${st.getPath}")
+      val name = st.getPath.getName
+      if (st.isDirectory && name.contains("=")) {
+        val ps = name.split("=", 2)
+        val columnName = PartitioningUtils.unescapePathName(ps(0)).toLowerCase
+        val value = PartitioningUtils.unescapePathName(ps(1))
+        // comparing with case-insensitive, but preserve the case
+        if (columnName == partitionNames(0)) {
+          scanPartitions(
+            spark, fs, filter, st.getPath, spec ++ Map(columnName -> value), partitionNames.drop(1))
+        } else {
+          logWarning(s"expect partition column ${partitionNames(0)}, but got ${ps(0)}, ignore it")
+          Seq()
+        }
+      } else {
+        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+          logWarning(s"ignore ${new Path(path, name)}")
+        }
+        Seq()
       }
-      scanPartitions(spark, fs, st.getPath, spec ++ Map(ps(0) -> ps(1)), numPartitionsLeft - 1)
     }
   }
 }

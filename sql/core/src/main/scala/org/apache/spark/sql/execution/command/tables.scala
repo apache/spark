@@ -389,50 +389,6 @@ case class TruncateTableCommand(
 }
 
 /**
- * A command to repair a table by discovery all the partitions in the directory.
- *
- * The syntax of this command is:
- * {{{
- *   MSCK REPAIR TABLE table_name;
- * }}}
- *
- * This command is the same as AlterTableRecoverPartitions
- */
-case class RepairTableCommand(tableName: TableIdentifier) extends RunnableCommand {
-  override def run(spark: SparkSession): Seq[Row] = {
-    val catalog = spark.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
-    if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(s"Table $tableName in MSCK REPAIR TABLE does not exist.")
-    }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(
-        s"Operation not allowed: MSCK REPAIR TABLE on temporary tables: $tableName")
-    }
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        s"Operation not allowed: MSCK REPAIR TABLE on datasource tables: $tableName")
-    }
-    if (table.tableType != CatalogTableType.EXTERNAL) {
-      throw new AnalysisException(
-        s"Operation not allowed: MSCK REPAIR TABLE only works on external tables: $tableName")
-    }
-    if (DDLUtils.isTablePartitioned(table)) {
-      throw new AnalysisException(
-        s"Operation not allowed: MSCK REPAIR TABLE only works on partitioned tables: $tableName")
-    }
-    if (table.storage.locationUri.isEmpty) {
-      throw new AnalysisException(
-        s"Operation not allowed: MSCK REPAIR TABLE only works on tables with location provided: " +
-          s"$tableName")
-    }
-
-    AlterTableRecoverPartitionsCommand(tableName).recoverPartitions(spark, table)
-    Seq.empty[Row]
-  }
-}
-
-/**
  * Command that looks like
  * {{{
  *   DESCRIBE [EXTENDED|FORMATTED] table_name;
