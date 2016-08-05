@@ -43,6 +43,10 @@ object MimaExcludes {
       // SPARK-12469 Add data property accumulators to Spark
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.setRDDPartitionInfo"),
       ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.getRDDPartitionInfo")
+    ) ++ Seq(
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
+      // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")
     )
   }
 

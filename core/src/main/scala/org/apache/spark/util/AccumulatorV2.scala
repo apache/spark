@@ -211,6 +211,7 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
   /**
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend addImpl to customize the adding functionality.
+   * Takes the inputs and accumulates.
    */
   protected[spark] def addImpl(v: IN)
 

@@ -18,9 +18,9 @@
 package org.apache.spark.sql
 
 import java.math.MathContext
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
-import org.apache.spark.AccumulatorSuite
+import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -1337,6 +1337,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     checkAggregation("SELECT key + 2, COUNT(*) FROM testData GROUP BY key + 1")
     checkAggregation("SELECT key + 1 + 1, COUNT(*) FROM testData GROUP BY key + 1", false)
+  }
+
+  testQuietly(
+    "SPARK-16748: SparkExceptions during planning should not wrapped in TreeNodeException") {
+    intercept[SparkException] {
+      val df = spark.range(0, 5).map(x => (1 / x).toString).toDF("a").orderBy("a")
+      df.queryExecution.toRdd // force physical planning, but not execution of the plan
+    }
   }
 
   test("Test to check we can use Long.MinValue") {
@@ -3008,5 +3016,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         readBack.selectExpr("`part.col1`", "`col.1`"),
         data.selectExpr("`part.col1`", "`col.1`"))
     }
+  }
+
+  test("current_date and current_timestamp literals") {
+    // NOTE that I am comparing the result of the literal with the result of the function call.
+    // This is done to prevent the test from failing because we are comparing a result to an out
+    // dated timestamp (quite likely) or date (very unlikely - but equally annoying).
+    checkAnswer(
+      sql("select current_date = current_date(), current_timestamp = current_timestamp()"),
+      Seq(Row(true, true)))
   }
 }

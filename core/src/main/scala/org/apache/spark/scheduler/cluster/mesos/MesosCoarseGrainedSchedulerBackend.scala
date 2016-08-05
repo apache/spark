@@ -220,9 +220,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
 
-    conf.getOption("spark.mesos.uris").map { uris =>
-      setupUris(uris, command)
-    }
+    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
 
     command.build()
   }
