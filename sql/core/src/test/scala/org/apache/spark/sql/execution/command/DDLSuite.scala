@@ -1218,11 +1218,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
     }
-    // serde properties must not be a datasource property
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 SET SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='wah')")
-    }
-    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
@@ -1525,8 +1520,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("create table with datasource properties (not allowed)") {
     assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
-    assertUnsupported("CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
-      "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
   test("drop current database") {

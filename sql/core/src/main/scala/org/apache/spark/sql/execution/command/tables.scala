@@ -120,7 +120,6 @@ case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.properties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
