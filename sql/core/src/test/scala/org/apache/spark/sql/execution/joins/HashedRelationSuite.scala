@@ -152,6 +152,51 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
+  test("LongToUnsafeRowMap with very wide range") {
+    val taskMemoryManager = new TaskMemoryManager(
+      new StaticMemoryManager(
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
+    val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
+
+    {
+      // SPARK-16740
+      val keys = Seq(0L, Long.MaxValue, Long.MaxValue)
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val row = unsafeProj(InternalRow(0L)).copy()
+      keys.foreach { k =>
+        assert(map.getValue(k, row) eq row)
+        assert(row.getLong(0) === k)
+      }
+      map.free()
+    }
+
+
+    {
+      // SPARK-16802
+      val keys = Seq(Long.MaxValue, Long.MaxValue - 10)
+      val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+      keys.foreach { k =>
+        map.append(k, unsafeProj(InternalRow(k)))
+      }
+      map.optimize()
+      val row = unsafeProj(InternalRow(0L)).copy()
+      keys.foreach { k =>
+        assert(map.getValue(k, row) eq row)
+        assert(row.getLong(0) === k)
+      }
+      assert(map.getValue(Long.MinValue, row) eq null)
+      map.free()
+    }
+  }
+
   test("Spark-14521") {
     val ser = new KryoSerializer(
       (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()

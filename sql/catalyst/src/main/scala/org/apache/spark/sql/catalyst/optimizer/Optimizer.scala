@@ -662,10 +662,6 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
 
-      // MaxOf and MinOf can't do null propagation
-      case e: MaxOf => e
-      case e: MinOf => e
-
       // Put exceptional cases above if any
       case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ BinaryArithmetic(_, Literal(null, _)) => Literal.create(null, e.dataType)
