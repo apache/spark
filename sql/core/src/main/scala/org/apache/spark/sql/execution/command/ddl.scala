@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.regex.Pattern
-
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -492,19 +490,5 @@ object DDLUtils {
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
     })
-  }
-
-  /**
-   * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
-   * i.e. if this name only contains characters, numbers, and _.
-   *
-   * This method is intended to have the same behavior of
-   * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
-   */
-  def validateName(name: String): Boolean = {
-    val tpat = Pattern.compile("[\\w_]+")
-    val matcher = tpat.matcher(name)
-
-    matcher.matches()
   }
 }

@@ -52,21 +52,6 @@ case class CreateDataSourceTableCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Since we are saving metadata to metastore, we need to check if metastore supports
-    // the table name and database name we have for this query. MetaStoreUtils.validateName
-    // is the method used by Hive to check if a table name or a database name is valid for
-    // the metastore.
-    if (!DDLUtils.validateName(tableIdent.table)) {
-      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
-        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
-    }
-    if (tableIdent.database.isDefined &&
-      !DDLUtils.validateName(tableIdent.database.get)) {
-      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
-        s"for metastore. Metastore only accepts database name containing " +
-        s"characters, numbers and _.")
-    }
-
     val tableName = tableIdent.unquotedString
     val sessionState = sparkSession.sessionState
 
@@ -99,22 +84,12 @@ case class CreateDataSourceTableCommand(
     val partitionColumns = if (userSpecifiedSchema.nonEmpty) {
       userSpecifiedPartitionColumns
     } else {
-      val res = dataSource match {
+      // This is guaranteed in `PreprocessDDL`.
+      assert(userSpecifiedPartitionColumns.isEmpty)
+      dataSource match {
         case r: HadoopFsRelation => r.partitionSchema.fieldNames
         case _ => Array.empty[String]
       }
-      if (userSpecifiedPartitionColumns.length > 0) {
-        // The table does not have a specified schema, which means that the schema will be inferred
-        // when we load the table. So, we are not expecting partition columns and we will discover
-        // partitions when we load the table. However, if there are specified partition columns,
-        // we simply ignore them and provide a warning message.
-        logWarning(
-          s"Specified partition columns (${userSpecifiedPartitionColumns.mkString(",")}) will be " +
-            s"ignored. The schema and partition columns of table $tableIdent are inferred. " +
-            s"Schema: ${dataSource.schema.simpleString}; " +
-            s"Partition columns: ${res.mkString("(", ", ", ")")}")
-      }
-      res
     }
 
     val table = CatalogTable(
@@ -158,21 +133,6 @@ case class CreateDataSourceTableAsSelectCommand(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Since we are saving metadata to metastore, we need to check if metastore supports
-    // the table name and database name we have for this query. MetaStoreUtils.validateName
-    // is the method used by Hive to check if a table name or a database name is valid for
-    // the metastore.
-    if (!DDLUtils.validateName(tableIdent.table)) {
-      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
-        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
-    }
-    if (tableIdent.database.isDefined &&
-      !DDLUtils.validateName(tableIdent.database.get)) {
-      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
-        s"for metastore. Metastore only accepts database name containing " +
-        s"characters, numbers and _.")
-    }
-
     val tableName = tableIdent.unquotedString
     val sessionState = sparkSession.sessionState
     var createMetastoreTable = false

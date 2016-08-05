@@ -133,16 +133,6 @@ case class CatalogTable(
     comment: Option[String] = None,
     unsupportedFeatures: Seq[String] = Seq.empty) {
 
-  // Verify that the provided columns are part of the schema
-  private val colNames = schema.map(_.name).toSet
-  private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
-    require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
-      s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
-  }
-  requireSubsetOfSchema(partitionColumnNames, "partition")
-  requireSubsetOfSchema(bucketSpec.map(_.sortColumnNames).getOrElse(Nil), "sort")
-  requireSubsetOfSchema(bucketSpec.map(_.bucketColumnNames).getOrElse(Nil), "bucket")
-
   /** schema of this table's partition columns */
   def partitionSchema: StructType = StructType(schema.filter {
     c => partitionColumnNames.contains(c.name)
