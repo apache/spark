@@ -893,6 +893,7 @@ private class LeastSquaresAggregator(
   private var lossSum = 0.0
 
   private val dim = bcCoefficients.value.size
+  // make transient so we do not serialize between aggregation stages
   @transient private lazy val featuresStd = bcFeaturesStd.value
   @transient private lazy val effectiveCoefAndOffset = {
     val coefficientsArray = bcCoefficients.value.toArray.clone()
@@ -912,6 +913,7 @@ private class LeastSquaresAggregator(
     val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
     (Vectors.dense(coefficientsArray), offset)
   }
+  // do not use tuple assignment above because it will circumvent the @transient tag
   @transient private lazy val effectiveCoefficientsVector = effectiveCoefAndOffset._1
   @transient private lazy val offset = effectiveCoefAndOffset._2
 
