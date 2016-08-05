@@ -551,7 +551,15 @@ setGeneric("merge")
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
-#' @rdname arrange
+#' Ordering Columns in a WindowSpec
+#'
+#' Defines the ordering columns in a WindowSpec.
+#' @param x a WindowSpec
+#' @param col a character or Column object indicating an ordering column
+#' @param ... additional sorting fields
+#' @return A WindowSpec
+#' @rdname orderBy
+#' @seealso See \link{arrange} for use in sorting a SparkDataFrame
 #' @export
 setGeneric("orderBy", function(x, col, ...) { standardGeneric("orderBy") })
 
