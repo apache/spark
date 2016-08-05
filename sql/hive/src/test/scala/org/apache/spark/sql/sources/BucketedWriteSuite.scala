@@ -59,17 +59,28 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[SparkException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
   }
 
-  test("write bucketed data to non-hive-table or existing hive table") {
+  test("write bucketed data using save()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
-    intercept[IllegalArgumentException](df.write.bucketBy(2, "i").parquet("/tmp/path"))
-    intercept[IllegalArgumentException](df.write.bucketBy(2, "i").json("/tmp/path"))
-    intercept[IllegalArgumentException](df.write.bucketBy(2, "i").insertInto("tt"))
+
+    val e = intercept[AnalysisException] {
+      df.write.bucketBy(2, "i").parquet("/tmp/path")
+    }
+    assert(e.getMessage == "'save' does not support bucketing right now;")
+  }
+
+  test("write bucketed data using insertInto()") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+
+    val e = intercept[AnalysisException] {
+      df.write.bucketBy(2, "i").insertInto("tt")
+    }
+    assert(e.getMessage == "'insertInto' does not support bucketing right now;")
   }
 
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   def tableDir: File = {
-    val identifier = hiveContext.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
+    val identifier = spark.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
     new File(URI.create(hiveContext.sessionState.catalog.hiveDefaultTableFilePath(identifier)))
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
 import org.apache.spark.rdd.RDD
 
 /**
- * Represents an entry in an distributed matrix.
+ * Represents an entry in a distributed matrix.
  * @param i row index
  * @param j column index
  * @param value value of the entry

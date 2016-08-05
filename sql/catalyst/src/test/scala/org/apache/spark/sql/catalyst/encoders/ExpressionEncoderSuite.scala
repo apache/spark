@@ -27,6 +27,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
@@ -327,6 +328,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     }
   }
 
+  test("null check for map key") {
+    val encoder = ExpressionEncoder[Map[String, Int]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
@@ -334,7 +341,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.defaultBinding
+      val boundEncoder = encoder.resolveAndBind()
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
@@ -350,12 +357,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       }
 
       // Test the correct resolution of serialization / deserialization.
-      val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
-      val inputPlan = LocalRelation(attr)
-      val plan =
-        Project(Alias(encoder.deserializer, "obj")() :: Nil,
-          Project(encoder.namedExpressions,
-            inputPlan))
+      val attr = AttributeReference("obj", encoder.deserializer.dataType)()
+      val plan = LocalRelation(attr).serialize[T].deserialize[T]
       assertAnalysisSuccess(plan)
 
       val isCorrect = (input, convertedBack) match {
@@ -365,7 +368,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
-        case (left: Comparable[Any], right: Comparable[Any]) => left.compareTo(right) == 0
+        case (left: Comparable[_], right: Comparable[_]) =>
+          left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
         case _ => input == convertedBack
       }
 

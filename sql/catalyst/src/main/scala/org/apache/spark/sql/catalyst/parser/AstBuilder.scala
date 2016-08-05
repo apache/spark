@@ -171,6 +171,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
+    val dynamicPartitionKeys = partitionKeys.filter(_._2.isEmpty)
+    if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
+      throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
+        "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
+    }
+
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,
@@ -642,7 +648,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val table = UnresolvedRelation(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.identifier).map(_.getText))
+      Option(ctx.strictIdentifier).map(_.getText))
     table.optionalMap(ctx.sample)(withSample)
   }
 
@@ -692,7 +698,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.relation).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.relation)
+      .optionalMap(ctx.sample)(withSample)
+      .optionalMap(ctx.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -701,13 +709,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.queryNoWith)
+      .optionalMap(ctx.sample)(withSample)
+      .optionalMap(ctx.strictIdentifier)(aliasPlan)
   }
 
   /**
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
-  private def aliasPlan(alias: IdentifierContext, plan: LogicalPlan): LogicalPlan = {
+  private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
     SubqueryAlias(alias.getText, plan)
   }
 
@@ -1009,6 +1019,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case spec: WindowDefContext =>
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
+    }
+  }
+
+  /**
+   * Create a current timestamp/date expression. These are different from regular function because
+   * they do not require the user to specify braces when calling them.
+   */
+  override def visitTimeFunctionCall(ctx: TimeFunctionCallContext): Expression = withOrigin(ctx) {
+    ctx.name.getType match {
+      case SqlBaseParser.CURRENT_DATE =>
+        CurrentDate()
+      case SqlBaseParser.CURRENT_TIMESTAMP =>
+        CurrentTimestamp()
     }
   }
 
@@ -1420,13 +1443,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-
-    // Add the comment to the metadata.
-    val builder = new MetadataBuilder
-    if (STRING != null) {
-      builder.putString("comment", string(STRING))
-    }
-
-    StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }

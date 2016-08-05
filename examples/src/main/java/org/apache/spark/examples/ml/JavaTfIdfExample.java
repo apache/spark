@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.IDF;
 import org.apache.spark.ml.feature.IDFModel;
 import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -45,9 +45,9 @@ public class JavaTfIdfExample {
 
     // $example on$
     List<Row> data = Arrays.asList(
-      RowFactory.create(0, "Hi I heard about Spark"),
-      RowFactory.create(0, "I wish Java could use case classes"),
-      RowFactory.create(1, "Logistic regression models are neat")
+      RowFactory.create(0.0, "Hi I heard about Spark"),
+      RowFactory.create(0.0, "I wish Java could use case classes"),
+      RowFactory.create(1.0, "Logistic regression models are neat")
     );
     StructType schema = new StructType(new StructField[]{
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),

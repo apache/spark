@@ -56,7 +56,7 @@ object SparkPageRank {
       .getOrCreate()
 
     val iters = if (args.length > 1) args(1).toInt else 10
-    val lines = spark.read.text(args(0)).rdd
+    val lines = spark.read.textFile(args(0)).rdd
     val links = lines.map{ s =>
       val parts = s.split("\\s+")
       (parts(0), parts(1))

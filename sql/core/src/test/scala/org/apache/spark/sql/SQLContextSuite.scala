@@ -20,8 +20,11 @@ package org.apache.spark.sql
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
+@deprecated("This suite is deprecated to silent compiler deprecation warnings", "2.0.0")
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
   object DummyRule extends Rule[LogicalPlan] {
@@ -77,6 +80,65 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     val sqlContext = SQLContext.getOrCreate(sc)
     sqlContext.experimental.extraOptimizations = Seq(DummyRule)
     assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
+  }
+
+  test("get all tables") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    val df = sqlContext.range(10)
+    df.createOrReplaceTempView("listtablessuitetable")
+    assert(
+      sqlContext.tables().filter("tableName = 'listtablessuitetable'").collect().toSeq ==
+      Row("listtablessuitetable", true) :: Nil)
+
+    assert(
+      sqlContext.sql("SHOW tables").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
+      Row("listtablessuitetable", true) :: Nil)
+
+    sqlContext.sessionState.catalog.dropTable(
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
+    assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
+  }
+
+  test("getting all tables with a database name has no impact on returned table names") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    val df = sqlContext.range(10)
+    df.createOrReplaceTempView("listtablessuitetable")
+    assert(
+      sqlContext.tables("default").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
+      Row("listtablessuitetable", true) :: Nil)
+
+    assert(
+      sqlContext.sql("show TABLES in default").filter("tableName = 'listtablessuitetable'")
+        .collect().toSeq == Row("listtablessuitetable", true) :: Nil)
+
+    sqlContext.sessionState.catalog.dropTable(
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
+    assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
+  }
+
+  test("query the returned DataFrame of tables") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    val df = sqlContext.range(10)
+    df.createOrReplaceTempView("listtablessuitetable")
+
+    val expectedSchema = StructType(
+      StructField("tableName", StringType, false) ::
+        StructField("isTemporary", BooleanType, false) :: Nil)
+
+    Seq(sqlContext.tables(), sqlContext.sql("SHOW TABLes")).foreach {
+      case tableDF =>
+        assert(expectedSchema === tableDF.schema)
+
+        tableDF.createOrReplaceTempView("tables")
+        assert(
+          sqlContext.sql(
+            "SELECT isTemporary, tableName from tables WHERE tableName = 'listtablessuitetable'")
+            .collect().toSeq == Row(true, "listtablessuitetable") :: Nil)
+        assert(
+          sqlContext.tables().filter("tableName = 'tables'").select("tableName", "isTemporary")
+            .collect().toSeq == Row("tables", true) :: Nil)
+        sqlContext.dropTempTable("tables")
+    }
   }
 
 }

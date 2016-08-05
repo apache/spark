@@ -929,7 +929,7 @@ private[deploy] class Master(
     exec.state = ExecutorState.KILLED
   }
 
-  /** Generate a new app ID given a app's submission date */
+  /** Generate a new app ID given an app's submission date */
   private def newApplicationId(submitDate: Date): String = {
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1

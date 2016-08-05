@@ -21,6 +21,8 @@ import java.util
 
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
@@ -35,7 +37,9 @@ import org.apache.spark.sql.hive.client.HiveClient
  * A persistent implementation of the system catalog using Hive.
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCatalog with Logging {
+private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configuration)
+  extends ExternalCatalog with Logging {
+
   import CatalogTypes.TablePartitionSpec
 
   // Exceptions thrown by the hive client that we would like to wrap
@@ -68,15 +72,8 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       body
     } catch {
       case NonFatal(e) if isClientException(e) =>
-        throw new AnalysisException(e.getClass.getCanonicalName + ": " + e.getMessage)
-    }
-  }
-
-  private def requireDbMatches(db: String, table: CatalogTable): Unit = {
-    if (table.identifier.database != Some(db)) {
-      throw new AnalysisException(
-        s"Provided database '$db' does not match the one specified in the " +
-        s"table definition (${table.identifier.database.getOrElse("n/a")})")
+        throw new AnalysisException(
+          e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
     }
   }
 
@@ -142,20 +139,55 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   // --------------------------------------------------------------------------
 
   override def createTable(
-      db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = withClient {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireDbExists(db)
-    requireDbMatches(db, tableDefinition)
-    client.createTable(tableDefinition, ignoreIfExists)
+
+    if (
+    // If this is an external data source table...
+      tableDefinition.properties.contains("spark.sql.sources.provider") &&
+        tableDefinition.tableType == CatalogTableType.EXTERNAL &&
+        // ... that is not persisted as Hive compatible format (external tables in Hive compatible
+        // format always set `locationUri` to the actual data location and should NOT be hacked as
+        // following.)
+        tableDefinition.storage.locationUri.isEmpty
+    ) {
+      // !! HACK ALERT !!
+      //
+      // Due to a restriction of Hive metastore, here we have to set `locationUri` to a temporary
+      // directory that doesn't exist yet but can definitely be successfully created, and then
+      // delete it right after creating the external data source table. This location will be
+      // persisted to Hive metastore as standard Hive table location URI, but Spark SQL doesn't
+      // really use it. Also, since we only do this workaround for external tables, deleting the
+      // directory after the fact doesn't do any harm.
+      //
+      // Please refer to https://issues.apache.org/jira/browse/SPARK-15269 for more details.
+      val tempPath = {
+        val dbLocation = getDatabase(tableDefinition.database).locationUri
+        new Path(dbLocation, tableDefinition.identifier.table + "-__PLACEHOLDER__")
+      }
+
+      try {
+        client.createTable(
+          tableDefinition.withNewStorage(locationUri = Some(tempPath.toString)),
+          ignoreIfExists)
+      } finally {
+        FileSystem.get(tempPath.toUri, hadoopConf).delete(tempPath, true)
+      }
+    } else {
+      client.createTable(tableDefinition, ignoreIfExists)
+    }
   }
 
   override def dropTable(
       db: String,
       table: String,
-      ignoreIfNotExists: Boolean): Unit = withClient {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withClient {
     requireDbExists(db)
-    client.dropTable(db, table, ignoreIfNotExists)
+    client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
@@ -171,8 +203,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
    * Note: As of now, this only supports altering table properties, serde properties,
    * and num buckets!
    */
-  override def alterTable(db: String, tableDefinition: CatalogTable): Unit = withClient {
-    requireDbMatches(db, tableDefinition)
+  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     client.alterTable(tableDefinition)
   }
@@ -256,9 +289,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = withClient {
+      ignoreIfNotExists: Boolean,
+      purge: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    client.dropPartitions(db, table, parts, ignoreIfNotExists)
+    client.dropPartitions(db, table, parts, ignoreIfNotExists, purge)
   }
 
   override def renamePartitions(

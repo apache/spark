@@ -869,10 +869,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
       new UDT.MyDenseVectorUDT())
-    // Right now, we will use SortBasedAggregate to handle UDAFs.
-    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortBasedAggregate to use
+    // Right now, we will use SortAggregate to handle UDAFs.
+    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
-    // SortBasedAggregate to use a safe row as the aggregation buffer.
+    // SortAggregate to use a safe row as the aggregation buffer.
     Seq(dataTypes, UnsafeRow.mutableFieldTypes.asScala.toSeq).foreach { dataTypes =>
       val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
         StructField(s"col$index", dataType, nullable = true)
@@ -923,7 +923,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("udaf without specifying inputSchema") {
-    withTempTable("noInputSchemaUDAF") {
+    withTempView("noInputSchemaUDAF") {
       spark.udf.register("noInputSchema", new ScalaAggregateFunctionWithoutInputSchema)
 
       val data =
@@ -992,10 +992,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 }
 
 
-class TungstenAggregationQuerySuite extends AggregationQuerySuite
+class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
-class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
+class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq(0, 10).foreach { maxColumnarHashMapColumns =>
@@ -1013,7 +1013,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
               case Some(errorMessage) =>
                 val newErrorMessage =
                   s"""
-                     |The following aggregation query failed when using TungstenAggregate with
+                     |The following aggregation query failed when using HashAggregate with
                      |controlled fallback (it falls back to bytes to bytes map once it has processed
                      |${fallbackStartsAt - 1} input rows and to sort-based aggregation once it has
                      |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}

@@ -322,7 +322,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
-  // HiveTypeCoercion will take care of the precision, scale of result
+  // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
 
@@ -366,7 +366,7 @@ object Decimal {
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
-  /** Maximum number of decimal digits a Int can represent */
+  /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.sources.InsertableRelation
@@ -32,6 +33,8 @@ private[sql] case class InsertIntoDataSourceCommand(
     overwrite: Boolean)
   extends RunnableCommand {
 
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val relation = logicalRelation.relation.asInstanceOf[InsertableRelation]
     val data = Dataset.ofRows(sparkSession, query)
@@ -40,7 +43,7 @@ private[sql] case class InsertIntoDataSourceCommand(
     relation.insert(df, overwrite)
 
     // Invalidate the cache.
-    sparkSession.cacheManager.invalidateCache(logicalRelation)
+    sparkSession.sharedState.cacheManager.invalidateCache(logicalRelation)
 
     Seq.empty[Row]
   }
