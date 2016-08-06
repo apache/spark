@@ -42,7 +42,7 @@ object MimaExcludes {
     ) ++
     Seq(
       // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
-      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")    
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")
     ) ++
     Seq(
       // [SPARK-16856] [WEBUI] [CORE] Link the application's executor page to the master's UI
