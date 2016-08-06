@@ -790,15 +790,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     </p>
   </td>
 </tr>
-<tr>
-  <td><code>spark.sql.broadcastTimeout</code></td>
-  <td>300</td>
-  <td>
-    <p>
-      Timeout in seconds for the broadcast wait time in broadcast joins
-    </p>
-  </td>
-</tr>
 </table>
 
 ## JSON Datasets
@@ -1194,6 +1185,15 @@ that these options will be deprecated in future release as more optimizations ar
       time. This is used when putting multiple files into a partition. It is better to over estimated,
       then the partitions with small files will be faster than partitions with bigger files (which is
       scheduled first).
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.broadcastTimeout</code></td>
+    <td>300</td>
+    <td>
+    <p>
+      Timeout in seconds for the broadcast wait time in broadcast joins
+    </p>
     </td>
   </tr>
   <tr>
