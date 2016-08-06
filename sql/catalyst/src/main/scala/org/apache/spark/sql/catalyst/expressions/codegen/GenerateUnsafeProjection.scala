@@ -262,16 +262,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         final ArrayData $keys = $input.keyArray();
         final ArrayData $values = $input.valueArray();
 
-        // preserve 4 bytes to write the key array numBytes later.
-        $bufferHolder.grow(4);
-        $bufferHolder.cursor += 4;
+        // preserve 8 bytes to write the key array numBytes later.
+        $bufferHolder.grow(8);
+        $bufferHolder.cursor += 8;
 
         // Remember the current cursor so that we can write numBytes of key array later.
         final int $tmpCursor = $bufferHolder.cursor;
 
         ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
-        // Write the numBytes of key array into the first 4 bytes.
-        Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
+        // Write the numBytes of key array into the first 8 bytes.
+        Platform.putLong($bufferHolder.buffer, $tmpCursor - 8, $bufferHolder.cursor - $tmpCursor);
 
         ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
       }

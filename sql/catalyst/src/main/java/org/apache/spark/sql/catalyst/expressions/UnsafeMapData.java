@@ -65,14 +65,15 @@ public final class UnsafeMapData extends MapData {
    * @param sizeInBytes the size of this map's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
-    // Read the numBytes of key array from the first 4 bytes.
-    final int keyArraySize = Platform.getInt(baseObject, baseOffset);
-    final int valueArraySize = sizeInBytes - keyArraySize - 4;
+    // Read the numBytes of key array from the first 8 bytes.
+    final long keyArraySize = Platform.getLong(baseObject, baseOffset);
+    final long valueArraySize = sizeInBytes - keyArraySize - 8;
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
+    assert keyArraySize <= Integer.MAX_VALUE : "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 
-    keys.pointTo(baseObject, baseOffset + 4, keyArraySize);
-    values.pointTo(baseObject, baseOffset + 4 + keyArraySize, valueArraySize);
+    keys.pointTo(baseObject, baseOffset + 8, (int)keyArraySize);
+    values.pointTo(baseObject, baseOffset + 8 + keyArraySize, (int)valueArraySize);
 
     assert keys.numElements() == values.numElements();
 

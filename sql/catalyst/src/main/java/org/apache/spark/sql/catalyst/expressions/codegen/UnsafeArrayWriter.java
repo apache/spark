@@ -47,7 +47,7 @@ public class UnsafeArrayWriter {
   }
 
   public void initialize(BufferHolder holder, int numElements, int elementSize) {
-    // We need 4 bytes to store numElements in header
+    // We need 8 bytes to store numElements in header
     this.numElements = numElements;
     this.headerInBytes = calculateHeaderPortionInBytes(numElements);
 
@@ -58,7 +58,7 @@ public class UnsafeArrayWriter {
     holder.grow(headerInBytes + elementSize * numElements);
 
     // Write numElements and clear out null bits to header
-    Platform.putInt(holder.buffer, startingOffset, numElements);
+    Platform.putLong(holder.buffer, startingOffset, numElements);
     for (int i = 4; i < headerInBytes; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }

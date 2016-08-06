@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.unsafe.Platform
+import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class UnsafeArraySuite extends SparkFunSuite {
 
@@ -31,8 +32,16 @@ class UnsafeArraySuite extends SparkFunSuite {
   val floatArray = Array(1.1.toFloat, 2.2.toFloat, 3.3.toFloat)
   val doubleArray = Array(1.1, 2.2, 3.3)
   val stringArray = Array("1", "10", "100")
+  val dateArray = Array(
+    DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
+    DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
+  val timestampArray = Array(
+    DateTimeUtils.stringToTimestamp(UTF8String.fromString("1970-1-1 00:00:00")).get,
+    DateTimeUtils.stringToTimestamp(UTF8String.fromString("2016-7-26 00:00:00")).get)
+  val decimalArray = Array(Decimal(77L, 2, 1), Decimal(77L, 12, 1), Decimal(77L, 20, 1))
+  val calenderintervalArray = Array(new CalendarInterval(3, 321), new CalendarInterval(1, 123))
 
-  val intMultiDimArray = Array(Array(1, 10), Array(2, 20, 200), Array(3, 30, 300, 3000))
+  val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
   val doubleMultiDimArray = Array(
     Array(1.1, 11.1), Array(2.2, 22.2, 222.2), Array(3.3, 33.3, 333.3, 3333.3))
 
@@ -93,6 +102,38 @@ class UnsafeArraySuite extends SparkFunSuite {
       assert(unsafeString.getUTF8String(i).toString().equals(e))
     }
 
+    val unsafeDate = ExpressionEncoder[Array[Int]].resolveAndBind().
+      toRow(dateArray).getArray(0)
+    assert(unsafeDate.isInstanceOf[UnsafeArrayData])
+    assert(unsafeDate.numElements == dateArray.length)
+    dateArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeDate.get(i, DateType) == e)
+    }
+
+    val unsafeTimestamp = ExpressionEncoder[Array[Long]].resolveAndBind().
+      toRow(timestampArray).getArray(0)
+    assert(unsafeTimestamp.isInstanceOf[UnsafeArrayData])
+    assert(unsafeTimestamp.numElements == timestampArray.length)
+    timestampArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeTimestamp.get(i, TimestampType) == e)
+    }
+
+    val unsafeDecimal = ExpressionEncoder[Array[Decimal]].resolveAndBind().
+      toRow(decimalArray).getArray(0)
+    assert(unsafeDecimal.isInstanceOf[UnsafeArrayData])
+    assert(unsafeDecimal.numElements == decimalArray.length)
+    decimalArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeDecimal.getDecimal(i, e.precision, e.scale) == e)
+    }
+
+    val unsafeInterval = ExpressionEncoder[Array[CalendarInterval]].resolveAndBind().
+      toRow(calenderintervalArray).getArray(0)
+    assert(unsafeInterval.isInstanceOf[UnsafeArrayData])
+    assert(unsafeInterval.numElements == calenderintervalArray.length)
+    calenderintervalArray.zipWithIndex.map { case (e, i) =>
+      assert(unsafeInterval.getInterval(i) == e)
+    }
+
     val unsafeMultiDimInt = ExpressionEncoder[Array[Array[Int]]].resolveAndBind().
       toRow(intMultiDimArray).getArray(0)
     assert(unsafeMultiDimInt.isInstanceOf[UnsafeArrayData])
@@ -124,7 +165,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeInt = UnsafeArrayData.fromPrimitiveArray(intArray)
     assert(unsafeInt.numElements == 3)
     assert(unsafeInt.getSizeInBytes ==
-      ((4 + scala.math.ceil(3/64.toDouble) * 8 + 4 * 3 + 7).toInt / 8) * 8)
+      ((8 + scala.math.ceil(3/64.toDouble) * 8 + 4 * 3 + 7).toInt / 8) * 8)
     intArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeInt.getInt(i) == e)
     }
@@ -132,7 +173,7 @@ class UnsafeArraySuite extends SparkFunSuite {
     val unsafeDouble = UnsafeArrayData.fromPrimitiveArray(doubleArray)
     assert(unsafeDouble.numElements == 3)
     assert(unsafeDouble.getSizeInBytes ==
-      ((4 + scala.math.ceil(3/64.toDouble) * 8 + 8 * 3 + 7).toInt / 8) * 8)
+      ((8 + scala.math.ceil(3/64.toDouble) * 8 + 8 * 3 + 7).toInt / 8) * 8)
     doubleArray.zipWithIndex.map { case (e, i) =>
       assert(unsafeDouble.getDouble(i) == e)
     }
