@@ -553,7 +553,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       identifier = TableIdentifier("my_table", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
-      schema = new StructType().add("a", "int").add("b", "string")
+      schema = new StructType().add("a", "int").add("b", "string"),
+      provider = Some("hive")
     )
 
     catalog.createTable(table, ignoreIfExists = false)
@@ -572,7 +573,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       storage = CatalogStorageFormat(
         Some(Utils.createTempDir().getAbsolutePath),
         None, None, None, false, Map.empty),
-      schema = new StructType().add("a", "int").add("b", "string")
+      schema = new StructType().add("a", "int").add("b", "string"),
+      provider = Some("hive")
     )
     catalog.createTable(externalTable, ignoreIfExists = false)
     assert(!exists(db.locationUri, "external_table"))
@@ -590,6 +592,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
         .add("col2", "string")
         .add("a", "int")
         .add("b", "string"),
+      provider = Some("hive"),
       partitionColumnNames = Seq("a", "b")
     )
     catalog.createTable(table, ignoreIfExists = false)
@@ -693,6 +696,7 @@ abstract class CatalogTestUtils {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "string"),
+      provider = Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
   }
