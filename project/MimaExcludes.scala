@@ -41,6 +41,10 @@ object MimaExcludes {
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
     ) ++
     Seq(
+      // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")    
+    ) ++
+    Seq(
       // [SPARK-16856] [WEBUI] [CORE] Link the application's executor page to the master's UI
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart$")
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerApplicationStart.apply")
