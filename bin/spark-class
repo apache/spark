@@ -65,24 +65,25 @@ fi
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
 # an array that will be used to exec the final command.
 #
-# The exit code of the launcher is appended to the output, so the parent shell removes it from the
-# command array and checks the value to see if the launcher succeeded.
-build_command() {
-  "$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"
-  printf "%d\0" $?
-}
+# To keep both the output and the exit code of the launcher, the output is first converted to a hex
+# dump which prevents the bash from getting rid of the NULL character, and the exit code retrieved
+# from the bash array ${PIPESTATUS[@]}.
+#
+# Note that the seperator NULL character can not be replace with space or '\n' so that the command
+# won't fail if some path of the user contain special characher such as '\n' or space
+#
+# Also note that when the launcher fails, it might not output something ending with '\0' [SPARK-16586]
+_CMD=$("$RUNNER" -Xmx128m -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@"|xxd -p|tr -d '\n';exit ${PIPESTATUS[0]})
+LAUNCHER_EXIT_CODE=$?
 
 CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
-done < <(build_command "$@")
+done < <(echo $_CMD|xxd -r -p)
 
-COUNT=${#CMD[@]}
-LAST=$((COUNT - 1))
-LAUNCHER_EXIT_CODE=${CMD[$LAST]}
 if [ $LAUNCHER_EXIT_CODE != 0 ]; then
+  echo $_CMD|xxd -r -p|tr '\0' ' '
   exit $LAUNCHER_EXIT_CODE
 fi
 
-CMD=("${CMD[@]:0:$LAST}")
 exec "${CMD[@]}"
