@@ -471,7 +471,7 @@ private[deploy] class Master(
 
     case RequestMasterState =>
       context.reply(MasterStateResponse(
-        address.host, address.port, restServerBoundPort, masterWebUiUrl,
+        address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state))
 

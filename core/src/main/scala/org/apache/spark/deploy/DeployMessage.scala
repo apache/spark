@@ -177,7 +177,6 @@ private[deploy] object DeployMessages {
       host: String,
       port: Int,
       restPort: Option[Int],
-      webUiUrl: String,
       workers: Array[WorkerInfo],
       activeApps: Array[ApplicationInfo],
       completedApps: Array[ApplicationInfo],

@@ -35,7 +35,6 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
     val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
-    val masterWebUiUrl = state.webUiUrl
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
     if (app == null) {
@@ -82,7 +81,6 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
               }
             }
           </ul>
-          <p><a href={masterWebUiUrl}>Back to Master</a></p>
         </div>
       </div>
 
