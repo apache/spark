@@ -31,6 +31,7 @@ private[orc] class OrcOptions(
 
   /**
    * Compression codec to use. By default use the value specified in Hadoop configuration.
+   * If `orc.compress` is unset, then we use snappy.
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
