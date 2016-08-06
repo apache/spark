@@ -34,7 +34,7 @@ private[orc] class OrcOptions(
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
-    val default = conf.get(OrcRelation.ORC_COMPRESSION, "NONE")
+    val default = conf.get(OrcRelation.ORC_COMPRESSION, "SNAPPY")
 
     // Because the ORC configuration value in `default` is not guaranteed to be the same
     // with keys in `shortOrcCompressionCodecNames` in Spark, this value should not be
