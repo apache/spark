@@ -37,7 +37,7 @@ import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
 import org.slf4j.bridge.SLF4JBridgeHandler
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -368,7 +369,15 @@ private[sql] class ParquetFileFormat
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
 
         // For test purpose, getting the number to row groups this vectorized reader to read.
-        numRowGroups = vectorizedReader.getRowGroupCount()
+        val taskContext = TaskContext.get()
+        if (taskContext != null) {
+          val accu = taskContext.taskMetrics.externalAccums.find { acc =>
+            acc.name.isDefined && acc.name.get == accuNameForNumRowGroup
+          }
+          if (accu.isDefined) {
+            accu.get.asInstanceOf[SQLMetric].add(vectorizedReader.getRowGroupCount().toLong)
+          }
+        }
 
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
         if (returningBatch) {
@@ -427,7 +436,7 @@ private[sql] class ParquetFileFormat
   }
 
   // Only for test purpose.
-  private[sql] var numRowGroups: Int = -1
+  private val accuNameForNumRowGroup = "numRowGroups"
 }
 
 /**

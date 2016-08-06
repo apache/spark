@@ -186,21 +186,11 @@ private[sql] case class FileSourceScanExec(
     "PushedFilters" -> dataFilters.mkString("[", ", ", "]"),
     "InputPaths" -> relation.location.paths.mkString(", "))
 
-  // Only for test purpose to get the number of row groups to read in vectorized Parquet reader.
-  // Since the relation is not serialized, we obtain the file format object here.
-  private val fileFormat: ParquetSource =
-    // A few file formats are not serializable...
-    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      relation.fileFormat.asInstanceOf[ParquetSource]
-    } else {
-      null
-    }
-
   private lazy val inputRDD: RDD[InternalRow] = {
     val selectedPartitions = relation.location.listFiles(partitionFilters)
 
-    val readFile: (PartitionedFile) => Iterator[InternalRow] = {
-      val func = relation.fileFormat.buildReaderWithPartitionValues(
+    val readFile: (PartitionedFile) => Iterator[InternalRow] =
+      relation.fileFormat.buildReaderWithPartitionValues(
         sparkSession = relation.sparkSession,
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
@@ -208,19 +198,6 @@ private[sql] case class FileSourceScanExec(
         filters = dataFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
-
-      (file: PartitionedFile) => {
-        val iter = func(file)
-        // Only for test purpose.
-        // Once the vectorized Parquet reader is initialized in the above method, we can read its
-        // variable numRowGroups.
-        if (fileFormat != null) {
-          val numRowGroups = longMetric("numRowGroups")
-          numRowGroups.add(fileFormat.numRowGroups)
-        }
-        iter
-      }
-    }
 
     relation.bucketSpec match {
       case Some(bucketing) if relation.sparkSession.sessionState.conf.bucketingEnabled =>
@@ -238,7 +215,7 @@ private[sql] case class FileSourceScanExec(
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"),
       // Only for test purpose.
-      "numRowGroups" -> SQLMetrics.createMetric(sparkContext, "number of row groups to read"))
+      "numRowGroups" -> SQLMetrics.createMetric(sparkContext, "numRowGroups"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
