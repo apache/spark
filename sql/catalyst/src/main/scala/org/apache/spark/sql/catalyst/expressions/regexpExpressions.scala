@@ -372,7 +372,11 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         ${termPattern}.matcher($subject.toString());
       if (${matcher}.find()) {
         java.util.regex.MatchResult ${matchResult} = ${matcher}.toMatchResult();
-        ${ev.value} = UTF8String.fromString(${matchResult}.group($idx));
+        if (${matchResult}.group($idx) == null) {
+          ${ev.value} = UTF8String.EMPTY_UTF8;
+        } else {
+          ${ev.value} = UTF8String.fromString(${matchResult}.group($idx));
+        }
         $setEvNotNull
       } else {
         ${ev.value} = UTF8String.EMPTY_UTF8;
