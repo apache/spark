@@ -19,7 +19,6 @@ package org.apache.spark.mllib.util
 
 import scala.annotation.varargs
 import scala.reflect.ClassTag
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -32,6 +31,8 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
+
+import scala.util.Random
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
