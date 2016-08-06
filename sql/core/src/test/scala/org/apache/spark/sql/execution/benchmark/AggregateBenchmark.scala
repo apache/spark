@@ -1178,7 +1178,7 @@ class AggregateBenchmark extends BenchmarkBase {
         var minTime: Long = 1000
         while (j < 5) {
           System.gc()
-          val s = "id & " + ((1<<i)-1) + " as k"
+          val s = "id & " + ((1 << i) - 1) + " as k"
           sparkSession.range(N)
             .selectExpr(List.range(0, 2).map(x => s + x): _*)
             .createOrReplaceTempView("test")
@@ -1192,7 +1192,7 @@ class AggregateBenchmark extends BenchmarkBase {
         }
         minTime
       })
-      printf("%20s %20s %20s %20s\n", (1<<i), results(0), results(1), results(2))
+      printf("%20s %20s %20s %20s\n", (1 << i), results(0), results(1), results(2))
       i += 1
     }
     printf("Unit: ns/row\n")
@@ -1200,9 +1200,9 @@ class AggregateBenchmark extends BenchmarkBase {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
     Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
-    
+
     Partial results:
-    
+
       Num. Distinct Keys      No Fast Hashmap           Vectorized            Row-based
                        1                   23                   14                   12
                        8                   25                   13                   14
@@ -1217,7 +1217,7 @@ class AggregateBenchmark extends BenchmarkBase {
     Unit: ns/row
     */
   }
-  
+
   ignore("TPCDS mini-scale benchmark") {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
