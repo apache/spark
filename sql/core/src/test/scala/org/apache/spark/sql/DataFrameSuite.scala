@@ -1562,6 +1562,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
   }
 
+  test("SPARK-16938: `dropDuplicate` should not raise exception on qualified column names") {
+    val dfa = Seq((1, 2), (2, 3)).toDF("id", "a").alias("dfa")
+    val dfb = Seq((1, 0), (1, 1)).toDF("id", "b").alias("dfb")
+    checkAnswer(dfa.join(dfb, dfa("id") === dfb("id")).dropDuplicates(Array("dfa.id", "dfb.id")),
+      Row(1, 2, 1, 1) :: Nil)
+  }
+
   test("SPARK-16181: outer join with isNull filter") {
     val left = Seq("x").toDF("col")
     val right = Seq("y").toDF("col").withColumn("new", lit(true))

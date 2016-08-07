@@ -1879,7 +1879,7 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
     val groupCols = colNames.map { colName =>
-      allColumns.find(col => resolver(col.name, colName)).getOrElse(
+      allColumns.find(col => resolver(col.qualifiedName, colName)).getOrElse(
         throw new AnalysisException(
           s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
     }
