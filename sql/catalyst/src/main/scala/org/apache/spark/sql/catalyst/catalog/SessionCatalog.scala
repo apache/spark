@@ -508,7 +508,7 @@ class SessionCatalog(
    * For testing only.
    */
   private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(name)
+    tempTables.get(formatTableName(name))
   }
 
   // ----------------------------------------------------------------------------
