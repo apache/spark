@@ -265,19 +265,16 @@ private[deploy] class Master(
 
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
-            if (!normalExit) {
-              if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
-                schedule()
-              } else {
-                val execs = appInfo.executors.values
-                if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                    s"${appInfo.retryCount} times; removing it")
-                  removeApplication(appInfo, ApplicationState.FAILED)
-                }
+            if (!normalExit && appInfo.incrementRetryCount() >= ApplicationState.MAX_NUM_RETRY) {
+              val execs = appInfo.executors.values
+              if (!execs.exists(_.state == ExecutorState.RUNNING)) {
+                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
+                  s"${appInfo.retryCount} times; removing it")
+                removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
           }
+          schedule()
         case None =>
           logWarning(s"Got status update for unknown executor $appId/$execId")
       }
