@@ -1348,16 +1348,16 @@ running stages (NOTE: this is not yet supported in Python).
   <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
 </p>
 
-An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
-running on a cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
-However, they cannot read its value.
-Only the driver program can read the accumulator's value, using its `value` method.
-
-The code below shows an accumulator being used to add up the elements of an array:
-
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
+
+A numeric accumulator can be created by calling `SparkContext.longAccumulator()` or `SparkContext.doubleAccumulator()`
+to accumulate values of type Long or Double, respectively. Tasks running on a cluster can then add to it using
+the `add` method.  However, they cannot read its value. Only the driver program can read the accumulator's value, 
+using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
 
 {% highlight scala %}
 scala> val accum = sc.longAccumulator("My Accumulator")
@@ -1395,14 +1395,21 @@ val myVectorAcc = new VectorAccumulatorV2
 sc.register(myVectorAcc, "MyVectorAcc1")
 {% endhighlight %}
 
-Note that, when programmers define their own type of AccumulatorV2, the resulting type can be same or not same with the elements added.
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be different than that of the elements added.
 
 </div>
 
 <div data-lang="java"  markdown="1">
 
+A numeric accumulator can be created by calling `SparkContext.longAccumulator()` or `SparkContext.doubleAccumulator()`
+to accumulate values of type Long or Double, respectively. Tasks running on a cluster can then add to it using
+the `add` method.  However, they cannot read its value. Only the driver program can read the accumulator's value, 
+using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
+
 {% highlight java %}
-LongAccumulator accum = sc.sc().longAccumulator();
+LongAccumulator accum = jsc.sc().longAccumulator();
 
 sc.parallelize(Arrays.asList(1, 2, 3, 4)).foreach(x -> accum.add(x));
 // ...
@@ -1412,8 +1419,8 @@ accum.value();
 // returns 10
 {% endhighlight %}
 
-While this code used the built-in support for accumulators of type Integer, programmers can also
-create their own types by subclassing [AccumulatorParam](api/java/index.html?org/apache/spark/AccumulatorParam.html).
+Programmers can also create their own types by subclassing
+[AccumulatorParam](api/java/index.html?org/apache/spark/AccumulatorParam.html).
 The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
 type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
 representing mathematical vectors, we could write:
@@ -1439,6 +1446,12 @@ a list by collecting together elements).
 </div>
 
 <div data-lang="python"  markdown="1">
+
+An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
+running on a cluster can then add to it using the `add` method or the `+=` operator. However, they cannot read its value.
+Only the driver program can read the accumulator's value, using its `value` method.
+
+The code below shows an accumulator being used to add up the elements of an array:
 
 {% highlight python %}
 >>> accum = sc.accumulator(0)
@@ -1485,15 +1498,15 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-val accum = sc.accumulator(0)
-data.map { x => accum += x; x }
+val accum = sc.longAccumulator
+data.map { x => accum.add(x); x }
 // Here, accum is still 0 because no actions have caused the map operation to be computed.
 {% endhighlight %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
-LongAccumulator accum = sc.sc().longAccumulator();
+LongAccumulator accum = jsc.sc().longAccumulator();
 data.map(x -> { accum.add(x); return f(x); });
 // Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
