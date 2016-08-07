@@ -350,7 +350,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     // launches a task on a valid offer
     val offers = List((backend.executorMemory(sc), 1))
     offerResources(offers)
-    verifyTaskLaunched("o1")
+    verifyTaskLaunched(driver, "o1")
 
     // launches a thread simulating status update
     val statusUpdateThread = new Thread {
