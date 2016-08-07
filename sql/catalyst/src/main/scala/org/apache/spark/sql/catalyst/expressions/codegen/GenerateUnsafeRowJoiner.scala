@@ -170,12 +170,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
        |    // row2: ${schema2.size}, $bitset2Words words in bitset
        |    // output: ${schema1.size + schema2.size} fields, $outputBitsetWords words in bitset
-       |    final long sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes() - $sizeReduction;
+       |    final int sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes() - $sizeReduction;
        |    if (sizeInBytes > buf.length) {
-       |      if (sizeInBytes > Integer.MAX_VALUE) {
-       |        throw new UnsupportedOperationException("Cannot allocate an array as " +
-       |          "it's too big.");
-       |      }
        |      buf = new byte[sizeInBytes];
        |    }
        |

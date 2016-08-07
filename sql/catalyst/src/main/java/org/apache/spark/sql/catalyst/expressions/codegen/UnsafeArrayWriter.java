@@ -59,7 +59,7 @@ public class UnsafeArrayWriter {
 
     // Write numElements and clear out null bits to header
     Platform.putLong(holder.buffer, startingOffset, numElements);
-    for (int i = 4; i < headerInBytes; i += 8) {
+    for (int i = 8; i < headerInBytes; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
     holder.cursor += (headerInBytes + elementSize * numElements);
@@ -75,7 +75,7 @@ public class UnsafeArrayWriter {
 
   private void setNullBit(int ordinal) {
     assertIndexIsValid(ordinal);
-    BitSetMethods.set(holder.buffer, startingOffset + 4, ordinal);
+    BitSetMethods.set(holder.buffer, startingOffset + 8, ordinal);
   }
 
   public void setNullBoolean(int ordinal) {

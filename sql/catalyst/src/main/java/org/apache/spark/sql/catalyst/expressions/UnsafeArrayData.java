@@ -127,7 +127,7 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public boolean isNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return BitSetMethods.isSet(baseObject, baseOffset + 4, ordinal);
+    return BitSetMethods.isSet(baseObject, baseOffset + 8, ordinal);
   }
 
   @Override
@@ -412,7 +412,7 @@ public final class UnsafeArrayData extends ArrayData {
 
     final long[] data = new long[(int)totalSizeInLongs];
 
-    Platform.putInt(data, Platform.LONG_ARRAY_OFFSET, length);
+    Platform.putLong(data, Platform.LONG_ARRAY_OFFSET, length);
     Platform.copyMemory(arr, offset, data,
       Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
 
