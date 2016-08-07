@@ -1097,7 +1097,7 @@ for details.
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#ClosuresLink">Understanding closures </a> for more details.</td>
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
 </tr>
 </table>
 
@@ -1543,49 +1543,6 @@ Simply create a `SparkContext` in your test with the master URL set to `local`, 
 and then call `SparkContext.stop()` to tear it down.
 Make sure you stop the context within a `finally` block or the test framework's `tearDown` method,
 as Spark does not support two contexts running concurrently in the same program.
-
-# Migrating from pre-1.0 Versions of Spark
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-The only change for Scala users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
-have changed from returning `(Key, Seq[Value])` pairs to `(Key, Iterable[Value])`.
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-Several changes were made to the Java API:
-
-* The Function classes in `org.apache.spark.api.java.function` became interfaces in 1.0, meaning that old
-  code that `extends Function` should `implement Function` instead.
-* New variants of the `map` transformations, like `mapToPair` and `mapToDouble`, were added to create RDDs
-  of special data types.
-* Grouping operations like `groupByKey`, `cogroup` and `join` have changed from returning
-  `(Key, List<Value>)` pairs to `(Key, Iterable<Value>)`.
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-Spark 1.0 freezes the API of Spark Core for the 1.X series, in that any API available today that is
-not marked "experimental" or "developer API" will be supported in future versions.
-The only change for Python users is that the grouping operations, e.g. `groupByKey`, `cogroup` and `join`,
-have changed from returning (key, list of values) pairs to (key, iterable of values).
-
-</div>
-
-</div>
-
-Migration guides are also available for [Spark Streaming](streaming-programming-guide.html#migration-guide-from-091-or-below-to-1x),
-[MLlib](ml-guide.html#migration-guide) and [GraphX](graphx-programming-guide.html#migrating-from-spark-091).
-
 
 # Where to Go from Here
 
