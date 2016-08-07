@@ -36,6 +36,8 @@ import org.apache.hive.service.auth.PlainSaslHelper
 import org.apache.hive.service.cli.GetInfoType
 import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
+import org.apache.hive.service.cli.FetchOrientation
+import org.apache.hive.service.cli.FetchType
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
@@ -87,6 +89,57 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
         logInfo(s"Spark version: $version")
         version != "Unknown"
+      }
+    }
+  }
+
+  test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
+    withCLIServiceClient { client =>
+      val user = System.getProperty("user.name")
+      val sessionHandle = client.openSession(user, "")
+
+      withJdbcStatement { statement =>
+        val queries = Seq(
+          "SET spark.sql.shuffle.partitions=3",
+          "DROP TABLE IF EXISTS test",
+          "CREATE TABLE test_16563(key INT, val STRING)",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563",
+          "CACHE TABLE test_16563")
+
+        queries.foreach(statement.execute)
+        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+        val operationHandle = client.executeStatement(
+          sessionHandle,
+          "SELECT * FROM test_16563",
+          confOverlay)
+
+        assertResult(0, "Repeat fetching result from next row") {
+
+          // Fetch first time
+          val rows = client.fetchResults(operationHandle)
+
+          // Fetch second time from first row
+          val rows_next = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_NEXT,
+            1000,
+            FetchType.QUERY_OUTPUT)
+
+          rows_next.numRows()
+        }
+
+        assertResult(5, "Repeat fetching result from first row") {
+
+          // Fetch second time from first row
+          val rows_first = client.fetchResults(
+            operationHandle,
+            FetchOrientation.FETCH_FIRST,
+            1000,
+            FetchType.QUERY_OUTPUT)
+
+          rows_first.numRows()
+        }
+        statement.executeQuery("DROP TABLE IF EXISTS test_16563")
       }
     }
   }
