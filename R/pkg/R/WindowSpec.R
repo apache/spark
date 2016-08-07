@@ -82,10 +82,18 @@ setMethod("partitionBy",
             }
           })
 
-#' @rdname orderBy
+#' Ordering Columns in a WindowSpec
+#'
+#' Defines the ordering columns in a WindowSpec.
+#' @param x a WindowSpec
+#' @param col a character or Column object indicating an ordering column
+#' @param ... additional sorting fields
+#' @return A WindowSpec
 #' @name orderBy
+#' @rdname orderBy
 #' @aliases orderBy,WindowSpec,character-method
 #' @family windowspec_method
+#' @seealso See \link{arrange} for use in sorting a SparkDataFrame
 #' @export
 #' @examples
 #' \dontrun{
