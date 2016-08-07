@@ -548,6 +548,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))().select('b)
       ),
       LocalRelation(a))
-    assertAnalysisError(plan5, "Accessing outer query column is not allowed in a TABLESAMPLE" :: Nil)
+    assertAnalysisError(plan5, 
+                        "Accessing outer query column is not allowed in a TABLESAMPLE" :: Nil)
   }
 }
