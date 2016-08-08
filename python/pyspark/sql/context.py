@@ -254,6 +254,7 @@ class SQLContext(object):
            If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
            :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
 
+        .. versionchanged:: 2.1
            Added verifySchema.
 
         >>> l = [('Alice', 1)]

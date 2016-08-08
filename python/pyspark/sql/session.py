@@ -433,6 +433,9 @@ class SparkSession(object):
         :param verifySchema: verify data types of every row against schema.
         :return: :class:`DataFrame`
 
+        .. versionchanged:: 2.1
+           Added verifySchema.
+
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
         [Row(_1=u'Alice', _2=1)]

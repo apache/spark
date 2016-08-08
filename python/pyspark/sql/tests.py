@@ -415,16 +415,17 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType().add("b", StringType()).add("a", IntegerType())
         input = [{"a": 1}, {"b": "coffee"}]
         rdd = self.sc.parallelize(input)
-        df = self.spark.createDataFrame(input, schema)
-        df2 = self.spark.createDataFrame(rdd, schema)
-        self.assertEqual(df.schema, df2.schema)
+        for verify in [False, True]:
+            df = self.spark.createDataFrame(input, schema, verifySchema=verify)
+            df2 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
+            self.assertEqual(df.schema, df2.schema)
 
-        rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
-        df3 = self.spark.createDataFrame(rdd, schema)
-        self.assertEqual(10, df3.count())
-        input = [Row(a=x, b=str(x)) for x in range(10)]
-        df4 = self.spark.createDataFrame(input, schema)
-        self.assertEqual(10, df4.count())
+            rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x, b=None))
+            df3 = self.spark.createDataFrame(rdd, schema, verifySchema=verify)
+            self.assertEqual(10, df3.count())
+            input = [Row(a=x, b=str(x)) for x in range(10)]
+            df4 = self.spark.createDataFrame(input, schema, verifySchema=verify)
+            self.assertEqual(10, df4.count())
 
     def test_create_dataframe_schema_mismatch(self):
         input = [Row(a=1)]
