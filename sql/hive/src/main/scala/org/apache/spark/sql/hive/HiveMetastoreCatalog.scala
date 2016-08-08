@@ -23,15 +23,13 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
-import org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.orc.OrcFileFormat
@@ -436,23 +434,30 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
-      case p: LogicalPlan if p.resolved => p
 
-      case p @ CreateHiveTableAsSelectLogicalPlan(table, child, allowExisting) =>
-        val desc = if (table.storage.serde.isEmpty) {
+      case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
+        val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
           // add default serde
-          table.withNewStorage(
+          tableDesc.withNewStorage(
             serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
         } else {
-          table
+          tableDesc
         }
 
-        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
+        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableDesc)
+
+        // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
+        // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
+        // tables yet.
+        if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
+          throw new AnalysisException("" +
+            "CTAS for hive serde tables does not support append or overwrite semantics.")
+        }
 
         execution.CreateHiveTableAsSelectCommand(
-          desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
-          child,
-          allowExisting)
+          newTableDesc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
+          query,
+          mode == SaveMode.Ignore)
     }
   }
 }

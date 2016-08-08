@@ -184,6 +184,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
   }
 
+  test("SPARK-16853: select, case class and tuple") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.select(expr("struct(_2, _2)").as[(Int, Int)]): Dataset[(Int, Int)],
+      (1, 1), (2, 2), (3, 3))
+
+    checkDataset(
+      ds.select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]): Dataset[ClassData],
+      ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+  }
+
   test("select 2") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -420,6 +431,31 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       data.sample(withReplacement = false, 0.05, seed = 13),
       3, 17, 27, 58, 62)
+  }
+
+  test("SPARK-16686: Dataset.sample with seed results shouldn't depend on downstream usage") {
+    val simpleUdf = udf((n: Int) => {
+      require(n != 1, "simpleUdf shouldn't see id=1!")
+      1
+    })
+
+    val df = Seq(
+      (0, "string0"),
+      (1, "string1"),
+      (2, "string2"),
+      (3, "string3"),
+      (4, "string4"),
+      (5, "string5"),
+      (6, "string6"),
+      (7, "string7"),
+      (8, "string8"),
+      (9, "string9")
+    ).toDF("id", "stringData")
+    val sampleDF = df.sample(false, 0.7, 50)
+    // After sampling, sampleDF doesn't contain id=1.
+    assert(!sampleDF.select("id").collect.contains(1))
+    // simpleUdf should not encounter id=1.
+    checkAnswer(sampleDF.select(simpleUdf($"id")), List.fill(sampleDF.count.toInt)(Row(1)))
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {

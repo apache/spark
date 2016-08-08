@@ -522,6 +522,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.index.cache.entries</code></td>
+  <td>1024</td>
+  <td>
+    Max number of entries to keep in the index cache of the shuffle service.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
   <td>200</td>
   <td>
@@ -1174,7 +1181,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.quantile</code></td>
   <td>0.75</td>
   <td>
-    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
+    Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
 </tr>
 <tr>

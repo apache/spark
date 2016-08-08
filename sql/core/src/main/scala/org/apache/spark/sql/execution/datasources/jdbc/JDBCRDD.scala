@@ -322,19 +322,19 @@ private[sql] class JDBCRDD(
     }
   }
 
-  // A `JDBCValueSetter` is responsible for converting and setting a value from `ResultSet`
-  // into a field for `MutableRow`. The last argument `Int` means the index for the
-  // value to be set in the row and also used for the value to retrieve from `ResultSet`.
-  private type JDBCValueSetter = (ResultSet, MutableRow, Int) => Unit
+  // A `JDBCValueGetter` is responsible for getting a value from `ResultSet` into a field
+  // for `MutableRow`. The last argument `Int` means the index for the value to be set in
+  // the row and also used for the value in `ResultSet`.
+  private type JDBCValueGetter = (ResultSet, MutableRow, Int) => Unit
 
   /**
-   * Creates `JDBCValueSetter`s according to [[StructType]], which can set
+   * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[MutableRow]] correctly.
    */
-  def makeSetters(schema: StructType): Array[JDBCValueSetter] =
-    schema.fields.map(sf => makeSetter(sf.dataType, sf.metadata))
+  def makeGetters(schema: StructType): Array[JDBCValueGetter] =
+    schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
 
-  private def makeSetter(dt: DataType, metadata: Metadata): JDBCValueSetter = dt match {
+  private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: MutableRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
@@ -489,15 +489,15 @@ private[sql] class JDBCRDD(
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
-    val setters: Array[JDBCValueSetter] = makeSetters(schema)
+    val getters: Array[JDBCValueGetter] = makeGetters(schema)
     val mutableRow = new SpecificMutableRow(schema.fields.map(x => x.dataType))
 
     def getNext(): InternalRow = {
       if (rs.next()) {
         inputMetrics.incRecordsRead(1)
         var i = 0
-        while (i < setters.length) {
-          setters(i).apply(rs, mutableRow, i)
+        while (i < getters.length) {
+          getters(i).apply(rs, mutableRow, i)
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
         }

@@ -77,14 +77,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
     }
   }
 
-  private def requireDbMatches(db: String, table: CatalogTable): Unit = {
-    if (table.identifier.database != Some(db)) {
-      throw new AnalysisException(
-        s"Provided database '$db' does not match the one specified in the " +
-        s"table definition (${table.identifier.database.getOrElse("n/a")})")
-    }
-  }
-
   private def requireTableExists(db: String, table: String): Unit = {
     withClient { getTable(db, table) }
   }
@@ -147,11 +139,11 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
   // --------------------------------------------------------------------------
 
   override def createTable(
-      db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = withClient {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireDbExists(db)
-    requireDbMatches(db, tableDefinition)
 
     if (
     // If this is an external data source table...
@@ -211,8 +203,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
    * Note: As of now, this only supports altering table properties, serde properties,
    * and num buckets!
    */
-  override def alterTable(db: String, tableDefinition: CatalogTable): Unit = withClient {
-    requireDbMatches(db, tableDefinition)
+  override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
+    assert(tableDefinition.identifier.database.isDefined)
+    val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     client.alterTable(tableDefinition)
   }

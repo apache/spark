@@ -84,8 +84,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
 case class CreateMap(children: Seq[Expression]) extends Expression {
-  private[sql] lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
-  private[sql] lazy val values = children.indices.filter(_ % 2 != 0).map(children)
+  lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
+  lazy val values = children.indices.filter(_ % 2 != 0).map(children)
 
   override def foldable: Boolean = children.forall(_.foldable)
 

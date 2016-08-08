@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
-
+import org.apache.spark.sql.test.SharedSQLContext
 
 case class WindowData(month: Int, area: String, product: Int)
 
@@ -28,8 +26,9 @@ case class WindowData(month: Int, area: String, product: Int)
 /**
  * Test suite for SQL window functions.
  */
-class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import spark.implicits._
+class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
+
+  import testImplicits._
 
   test("window function: udaf with aggregate expression") {
     val data = Seq(
@@ -357,14 +356,59 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {
-    sql("SELECT * FROM src") // Force loading of src table.
-
     checkAnswer(sql(
       """
         |with
-        | v1 as (select key, count(value) over (partition by key) cnt_val from src),
+        | v0 as (select 0 as key, 1 as value),
+        | v1 as (select key, count(value) over (partition by key) cnt_val from v0),
         | v2 as (select v1.key, v1_lag.cnt_val from v1, v1 v1_lag where v1.key = v1_lag.key)
-        | select * from v2 order by key limit 1
-      """.stripMargin), Row(0, 3))
+        | select key, cnt_val from v2 order by key limit 1
+      """.stripMargin), Row(0, 1))
+  }
+
+  test("SPARK-16633: lead/lag should return the default value if the offset row does not exist") {
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  lag(123, 100, 321) OVER (ORDER BY id) as lag,
+        |  lead(123, 100, 321) OVER (ORDER BY id) as lead
+        |FROM (SELECT 1 as id) tmp
+      """.stripMargin),
+      Row(321, 321))
+
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  lag(123, 100, a) OVER (ORDER BY id) as lag,
+        |  lead(123, 100, a) OVER (ORDER BY id) as lead
+        |FROM (SELECT 1 as id, 2 as a) tmp
+      """.stripMargin),
+      Row(2, 2))
+  }
+
+  test("lead/lag should respect null values") {
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  b,
+        |  lag(a, 1, 321) OVER (ORDER BY b) as lag,
+        |  lead(a, 1, 321) OVER (ORDER BY b) as lead
+        |FROM (SELECT cast(null as int) as a, 1 as b
+        |      UNION ALL
+        |      select cast(null as int) as id, 2 as b) tmp
+      """.stripMargin),
+      Row(1, 321, null) :: Row(2, null, 321) :: Nil)
+
+    checkAnswer(sql(
+      """
+        |SELECT
+        |  b,
+        |  lag(a, 1, c) OVER (ORDER BY b) as lag,
+        |  lead(a, 1, c) OVER (ORDER BY b) as lead
+        |FROM (SELECT cast(null as int) as a, 1 as b, 3 as c
+        |      UNION ALL
+        |      select cast(null as int) as id, 2 as b, 4 as c) tmp
+      """.stripMargin),
+      Row(1, 3, null) :: Row(2, null, 4) :: Nil)
   }
 }
