@@ -32,6 +32,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
       (HyperLogLogPlusPlus, MutableRow, MutableRow) = {
     val input = new SpecificMutableRow(Seq(dt))
     val hll = new HyperLogLogPlusPlus(new BoundReference(0, dt, true), rsd)
+    hll.setMutableBufferOffset(0)
     val buffer = createBuffer(hll)
     (hll, input, buffer)
   }
@@ -132,6 +133,7 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
     }
 
     // Merge the lower and upper halves.
+    hll.setInputBufferOffset(0)
     hll.merge(buffer1a, buffer1b)
 
     // Create the other buffer in reverse

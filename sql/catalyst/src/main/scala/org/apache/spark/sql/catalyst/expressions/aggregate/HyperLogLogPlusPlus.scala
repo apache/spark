@@ -53,31 +53,18 @@ import org.apache.spark.sql.types._
     """)
 case class HyperLogLogPlusPlus(
     child: Expression,
-    relativeSD: Double = 0.05,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate {
+    relativeSD: Double = 0.05) extends ImperativeAggregate {
   import HyperLogLogPlusPlus._
 
-  def this(child: Expression) = {
-    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
-  }
+  def this(child: Expression) = this(child, 0.05)
 
   def this(child: Expression, relativeSD: Expression) = {
     this(
       child = child,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
-      mutableAggBufferOffset = 0,
-      inputAggBufferOffset = 0)
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD))
   }
 
   override def prettyName: String = "approx_count_distinct"
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   /**
    * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
@@ -155,10 +142,10 @@ case class HyperLogLogPlusPlus(
     aggBufferAttributes.map(_.newInstance())
 
   /** Fill all words with zeros. */
-  override def initialize(buffer: MutableRow): Unit = {
+  override def doInitialize(buffer: MutableRow): Unit = {
     var word = 0
     while (word < numWords) {
-      buffer.setLong(mutableAggBufferOffset + word, 0)
+      buffer.setLong(word, 0)
       word += 1
     }
   }
@@ -168,7 +155,7 @@ case class HyperLogLogPlusPlus(
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+  override def doUpdate(buffer: MutableRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
       // Create the hashed value 'x'.
@@ -182,7 +169,7 @@ case class HyperLogLogPlusPlus(
 
       // Get the word containing the register we are interested in.
       val wordOffset = idx / REGISTERS_PER_WORD
-      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
+      val word = buffer.getLong(wordOffset)
 
       // Extract the M[J] register value from the word.
       val shift = REGISTER_SIZE * (idx - (wordOffset * REGISTERS_PER_WORD))
@@ -191,7 +178,7 @@ case class HyperLogLogPlusPlus(
 
       // Assign the maximum number of leading zeros to the register.
       if (pw > Midx) {
-        buffer.setLong(mutableAggBufferOffset + wordOffset, (word & ~mask) | (pw << shift))
+        buffer.setLong(wordOffset, (word & ~mask) | (pw << shift))
       }
     }
   }
@@ -200,12 +187,12 @@ case class HyperLogLogPlusPlus(
    * Merge the HLL buffers by iterating through the registers in both buffers and select the
    * maximum number of leading zeros for each register.
    */
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def doMerge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word1 = buffer1.getLong(mutableAggBufferOffset + wordOffset)
-      val word2 = buffer2.getLong(inputAggBufferOffset + wordOffset)
+      val word1 = buffer1.getLong(wordOffset)
+      val word2 = buffer2.getLong(wordOffset)
       var word = 0L
       var i = 0
       var mask = REGISTER_WORD_MASK
@@ -215,7 +202,7 @@ case class HyperLogLogPlusPlus(
         i += 1
         idx += 1
       }
-      buffer1.setLong(mutableAggBufferOffset + wordOffset, word)
+      buffer1.setLong(wordOffset, word)
       wordOffset += 1
     }
   }
@@ -270,14 +257,14 @@ case class HyperLogLogPlusPlus(
    *
    * Variable names in the HLL++ paper match variable names in the code.
    */
-  override def eval(buffer: InternalRow): Any = {
+  override def doEval(buffer: InternalRow): Any = {
     // Compute the inverse of indicator value 'z' and count the number of zeros 'V'.
     var zInverse = 0.0d
     var V = 0.0d
     var idx = 0
     var wordOffset = 0
     while (wordOffset < numWords) {
-      val word = buffer.getLong(mutableAggBufferOffset + wordOffset)
+      val word = buffer.getLong(wordOffset)
       var i = 0
       var shift = 0
       while (idx < m && i < REGISTERS_PER_WORD) {

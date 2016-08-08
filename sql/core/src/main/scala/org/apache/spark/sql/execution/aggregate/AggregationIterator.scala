@@ -88,24 +88,23 @@ abstract class AggregationIterator(
         case _ =>
           // We only need to set inputBufferOffset for aggregate functions with mode
           // PartialMerge and Final.
-          val updatedFunc = func match {
-            case function: ImperativeAggregate =>
-              function.withNewInputAggBufferOffset(inputBufferOffset)
-            case function => function
+          func match {
+            case f: ImperativeAggregate => f.setInputBufferOffset(inputBufferOffset)
+            case _ =>
           }
           inputBufferOffset += func.aggBufferSchema.length
-          updatedFunc
+          func
       }
-      val funcWithUpdatedAggBufferOffset = funcWithBoundReferences match {
+      funcWithBoundReferences match {
         case function: ImperativeAggregate =>
           // Set mutableBufferOffset for this function. It is important that setting
           // mutableBufferOffset happens after all potential bindReference operations
           // because bindReference will create a new instance of the function.
-          function.withNewMutableAggBufferOffset(mutableBufferOffset)
-        case function => function
+          function.setMutableBufferOffset(mutableBufferOffset)
+        case _ =>
       }
-      mutableBufferOffset += funcWithUpdatedAggBufferOffset.aggBufferSchema.length
-      functions(i) = funcWithUpdatedAggBufferOffset
+      mutableBufferOffset += funcWithBoundReferences.aggBufferAttributes.length
+      functions(i) = funcWithBoundReferences
       i += 1
     }
     functions

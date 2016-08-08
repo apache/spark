@@ -263,16 +263,8 @@ private[hive] case class HiveUDAFFunction(
     name: String,
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
-    isUDAFBridgeRequired: Boolean = false,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    isUDAFBridgeRequired: Boolean = false)
   extends ImperativeAggregate with HiveInspectors {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   @transient
   private lazy val resolver =
@@ -304,7 +296,7 @@ private[hive] case class HiveUDAFFunction(
   @transient
   private[this] var buffer: GenericUDAFEvaluator.AggregationBuffer = _
 
-  override def eval(input: InternalRow): Any = unwrapper(function.evaluate(buffer))
+  override def doEval(input: InternalRow): Any = unwrapper(function.evaluate(buffer))
 
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
@@ -319,17 +311,17 @@ private[hive] case class HiveUDAFFunction(
   // buffer for it.
   override def aggBufferSchema: StructType = StructType(Nil)
 
-  override def update(_buffer: MutableRow, input: InternalRow): Unit = {
+  override def doUpdate(_buffer: MutableRow, input: InternalRow): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached, inputDataTypes))
   }
 
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def doMerge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "Hive UDAF doesn't support partial aggregate")
   }
 
-  override def initialize(_buffer: MutableRow): Unit = {
+  override def doInitialize(_buffer: MutableRow): Unit = {
     buffer = function.getNewAggregationBuffer
   }
 

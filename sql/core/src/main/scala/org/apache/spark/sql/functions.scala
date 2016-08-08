@@ -161,7 +161,7 @@ object functions {
    * @since 1.3.0
    */
   def approxCountDistinct(e: Column, rsd: Double): Column = withAggregateFunction {
-    HyperLogLogPlusPlus(e.expr, rsd, 0, 0)
+    HyperLogLogPlusPlus(e.expr, rsd)
   }
 
   /**

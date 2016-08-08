@@ -56,19 +56,19 @@ abstract class Collect extends ImperativeAggregate {
 
   protected[this] val buffer: Growable[Any] with Iterable[Any]
 
-  override def initialize(b: MutableRow): Unit = {
+  override def doInitialize(b: MutableRow): Unit = {
     buffer.clear()
   }
 
-  override def update(b: MutableRow, input: InternalRow): Unit = {
+  override def doUpdate(b: MutableRow, input: InternalRow): Unit = {
     buffer += child.eval(input)
   }
 
-  override def merge(buffer: MutableRow, input: InternalRow): Unit = {
+  override def doMerge(buffer: MutableRow, input: InternalRow): Unit = {
     sys.error("Collect cannot be used in partial aggregations.")
   }
 
-  override def eval(input: InternalRow): Any = {
+  override def doEval(input: InternalRow): Any = {
     new GenericArrayData(buffer.toArray)
   }
 }
@@ -78,18 +78,7 @@ abstract class Collect extends ImperativeAggregate {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.")
-case class CollectList(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
-
-  def this(child: Expression) = this(child, 0, 0)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
+case class CollectList(child: Expression) extends Collect {
 
   override def prettyName: String = "collect_list"
 
@@ -101,12 +90,7 @@ case class CollectList(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
-case class CollectSet(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect {
-
-  def this(child: Expression) = this(child, 0, 0)
+case class CollectSet(child: Expression) extends Collect {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!child.dataType.existsRecursively(_.isInstanceOf[MapType])) {
@@ -115,12 +99,6 @@ case class CollectSet(
       TypeCheckResult.TypeCheckFailure("collect_set() cannot have map type data")
     }
   }
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override def prettyName: String = "collect_set"
 

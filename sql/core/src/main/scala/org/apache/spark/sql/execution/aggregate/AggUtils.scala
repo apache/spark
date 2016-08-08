@@ -99,7 +99,6 @@ object AggUtils {
         groupingExpressions = groupingExpressions,
         aggregateExpressions = partialAggregateExpressions,
         aggregateAttributes = partialAggregateAttributes,
-        initialInputBufferOffset = 0,
         resultExpressions = partialResultExpressions,
         child = child)
 

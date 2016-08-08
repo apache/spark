@@ -71,9 +71,7 @@ object PivotFirst {
 case class PivotFirst(
   pivotColumn: Expression,
   valueColumn: Expression,
-  pivotColumnValues: Seq[Any],
-  mutableAggBufferOffset: Int = 0,
-  inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+  pivotColumnValues: Seq[Any]) extends ImperativeAggregate {
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
@@ -91,7 +89,7 @@ case class PivotFirst(
 
   private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 
-  override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
+  override def doUpdate(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     if (pivotColValue != null) {
       // We ignore rows whose pivot column value is not in the list of pivot column values.
@@ -99,47 +97,40 @@ case class PivotFirst(
       if (index >= 0) {
         val value = valueColumn.eval(inputRow)
         if (value != null) {
-          updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
+          updateRow(mutableAggBuffer, index, value)
         }
       }
     }
   }
 
-  override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
+  override def doMerge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
     for (i <- 0 until indexSize) {
-      if (!inputAggBuffer.isNullAt(inputAggBufferOffset + i)) {
-        val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
-        updateRow(mutableAggBuffer, mutableAggBufferOffset + i, value)
+      if (!inputAggBuffer.isNullAt(i)) {
+        val value = inputAggBuffer.get(i, valueDataType)
+        updateRow(mutableAggBuffer, i, value)
       }
     }
   }
 
-  override def initialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
+  override def doInitialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
     case d: DecimalType =>
       // Per doc of setDecimal we need to do this instead of setNullAt for DecimalType.
       for (i <- 0 until indexSize) {
-        mutableAggBuffer.setDecimal(mutableAggBufferOffset + i, null, d.precision)
+        mutableAggBuffer.setDecimal(i, null, d.precision)
       }
     case _ =>
       for (i <- 0 until indexSize) {
-        mutableAggBuffer.setNullAt(mutableAggBufferOffset + i)
+        mutableAggBuffer.setNullAt(i)
       }
   }
 
-  override def eval(input: InternalRow): Any = {
+  override def doEval(input: InternalRow): Any = {
     val result = new Array[Any](indexSize)
     for (i <- 0 until indexSize) {
-      result(i) = input.get(mutableAggBufferOffset + i, valueDataType)
+      result(i) = input.get(i, valueDataType)
     }
     new GenericArrayData(result)
   }
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
 
   override val aggBufferAttributes: Seq[AttributeReference] =
     pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
