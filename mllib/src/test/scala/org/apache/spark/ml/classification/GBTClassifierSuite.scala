@@ -17,31 +17,27 @@
 
 package org.apache.spark.ml.classification
 
+import scala.collection.mutable.ArrayBuffer
+import org.scalactic.TolerantNumerics
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DataGenerator, DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.tree.impurity.ApproxBernoulliAggregator
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.tree.impurity.{Variance => OldVariance}
+import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, Encoders}
 import org.apache.spark.util.Utils
-import org.scalactic.TolerantNumerics
-
-case class RTreeNode(splitVar: Int,
-                     splitCodePred: Double,
-                     leftNode: Int,
-                     rightNode: Int,
-                     missingNode: Int,
-                     errorReduction: Double,
-                     weight: Int)
 
 /**
  * Test suite for [[GBTClassifier]].
@@ -129,132 +125,186 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     checkVarianceBasedLogLoss(categoricalFeatures)
   }
 
-  // We can't verify this against the variance-based model in the same way. Though
-  // a true loss-based impurity which finds the absolute optimum prediction at the leaf nodes
-  // will perform at least as well as a variance-based model, the absolute optimum is not
-  // analytic. The use of a NR numerical optimization prevents us from a direct accuracy
-  // comparison. Instead, we just make sure that after removing any randomness from GBT generation
-  // the results are what we expect.
+  private def computeCalculator(df: DataFrame, agg: ImpurityAggregator): ImpurityCalculator = {
+    implicit val encoder = Encoders.scalaDouble
+    val labels = df.select("label").as[Double].collect()
+    val stats = new Array[Double](agg.statsSize)
+    labels.foreach(label => agg.update(stats, offset = 0, label, instanceWeight = 1))
+    agg.getCalculator(stats, offset = 0)
+  }
 
-  /*
+  test("approximate bernoulli impurity") {
+    val agg = new ApproxBernoulliAggregator()
+    implicit val approxEquals = TolerantNumerics.tolerantDoubleEquality(1e-3)
+    val loss = LogLoss
+    def grad(pred: Double, label: Double): Double = {
+      -4 * label / (1 + math.exp(2 * label * pred))
+    }
+    def hess(pred: Double, label: Double): Double = {
+      val numerator = 8 * math.exp(2 * label * pred) * math.pow(label, 2)
+      val denominator = math.pow(1 + Math.exp(2 * label * pred), 2)
+      numerator / denominator
+    }
 
+    val npoints = 6
+    for (cutoff <- 0 to npoints) withClue(s"for cutoff $cutoff: ") {
+      val labels = (0 until npoints).map(x => if (x < cutoff) -1.0 else 1.0)
+      val prediction = 0
+      val psuedoResiduals = labels.map(x => -loss.gradient(prediction, x))
+      val df = spark.createDataFrame(psuedoResiduals.map(Tuple1.apply)).toDF("label")
 
-  private def checkTreeSimilarToR(sparkNode: Node,
-                                  gbmTree: Array[RTreeNode],
-                                  rNodeIdx: Int): Unit = {
-    implicit val approxEquals = TolerantNumerics.tolerantDoubleEquality(0.01)
-    val rNode = gbmTree(rNodeIdx - 1) // R is 1-indexed
+      val variance = computeCalculator(df, new VarianceAggregator).calculate()
+      val newtonRaphson =
+        -labels.map(grad(prediction, _)).sum / labels.map(hess(prediction, _)).sum
 
-    withClue(s"For RTreeNode of 1-index $rNodeIdx:\n" +
-      s"R:     $rNode\n" +
-      s"Spark: $sparkNode\n\n") {
-      if (rNode.splitVar == -1) {
-        assert(sparkNode.isInstanceOf[LeafNode])
-        val leaf = sparkNode.asInstanceOf[LeafNode]
-        assert(leaf.prediction === rNode.splitCodePred, "prediction differs")
-        assert(leaf.impurityStats.count === rNode.weight, "number of items in leaf differs")
-      } else {
-        assert(sparkNode.isInstanceOf[InternalNode])
-        val internal = sparkNode.asInstanceOf[InternalNode]
-        assert(internal.split.featureIndex === rNode.splitVar - 1, "feature splits disagree")
-        assert(internal.split.asInstanceOf[ContinuousSplit].threshold === rNode.splitCodePred,
-          "split thresholds were unequal")
+      val calculator = computeCalculator(df, agg)
+      assert(calculator.count === npoints)
+      assert(calculator.calculate() === variance)
+      assert(calculator.predict === newtonRaphson)
+    }
+  }
+
+  test("Binary classification: Loss-based impurity + Log Loss") {
+    val expectedImpurity = new ApproxBernoulliAggregator()
+    val loss = LogLoss
+    val impurityName = "bernoulli"
+
+    // We create a dataset that can be optimally classified with a root tree
+    // and one round of gradient boosting. The first tree will not be a perfect classifier,
+    // so the leaf node predictions will differ for different impurity measures. This is expected
+    // to be tested on depth-2 trees (7 nodes total). The generated trees should do no
+    // sub-sampling.
+    //
+    // The error is slight enough that the tree structure should not change, but results in
+    // nontrivial leaf error estimates. In other words, since the trees should tend towards the
+    // hypothesis of empirical risk minimization, and the first tree is not the minimizer,
+    // the second tree is going to have the same structure and leaf prediction signs.
+
+    val data = new ArrayBuffer[LabeledPoint]()
+
+    // At depth-1, the trees separate 4 intervals.
+    def addPoints(npoints: Int, label: Double, features: Vector): Unit = {
+      for (_ <- 0 until npoints) {
+        data += new LabeledPoint(label, features)
       }
     }
 
-    if (rNode.splitVar != -1) {
-      val internal = sparkNode.asInstanceOf[InternalNode]
-      checkTreeSimilarToR(internal.leftChild, gbmTree, rNode.leftNode)
-      checkTreeSimilarToR(internal.rightChild, gbmTree, rNode.rightNode)
+    // Adds 9 points of label 'label' and 1 point of label '1.0-label'
+    def addMixedSection(label: Double, feature0: Double, feature1: Double): Unit = {
+      val pointsPerSection = 10
+      val offPoints = 1
+      val features = Vectors.dense(feature0, feature1)
+      val offFeatures = Vectors.dense(feature0, feature1)
+      addPoints(pointsPerSection - offPoints, label, features)
+      addPoints(offPoints, 1.0 - label, offFeatures)
     }
-  }
 
-  private def checkApproximatelyEqualToR(tree: DecisionTreeModel,
-                                         filename: String): Unit = {
-    implicit val encoder: Encoder[RTreeNode] = Encoders.product
-    val csvFile = getClass.getClassLoader.getResource(
-      "org/apache/spark/ml/classification/" + filename).getFile
-    val gbmTree = spark.read
-      .option("header", true)
-      .option("inferSchema", true)
-      .csv(csvFile).as[RTreeNode]
-
-    val gbmTreeTable = gbmTree.showString(gbmTree.count().toInt)
-    lazy val sparkTreeString = tree.toDebugString
-    withClue(s"GBM tree:\n$gbmTreeTable\n\nSpark tree:\n$sparkTreeString\n") {
-      checkTreeSimilarToR(tree.rootNode, gbmTree.collect(), 1)
+    for (feature0 <- Seq(0.0, 1.0); feature1 <- Seq(0.0, 1.0)) {
+      val xor = if (feature0 == feature1) 0.0 else 1.0
+      addMixedSection(label = xor, feature0, feature1)
     }
-  }
+    addMixedSection(label = 0.0, feature0 = 0.0, feature1 = 0.0)
+    addMixedSection(label = 1.0, feature0 = 0.0, feature1 = 1.0)
+    addMixedSection(label = 1.0, feature0 = 1.0, feature1 = 0.0)
+    addMixedSection(label = 0.0, feature0 = 1.0, feature1 = 1.0)
 
-   */
+    // Make splitting on feature 0 slightly more attractive for an initial split
+    // than the others by making it a slight decent identity predictor while keeping
+    // other features uninformative. Note that feature 2's predictive power, when
+    // conditioned on feature 0, is maintained.
+    for (feature1 <- Seq(0.0, 1.0); label <- Seq(0.0, 1.0)) {
+      addPoints(npoints = 1, label, Vectors.dense(label, feature1))
+    }
 
-  test("Binary classification with continuous features: Loss-based impurity + Log Loss") {
-
-    val categoricalFeatures = Map.empty[Int, Int]
-    val numFeatures = 4
-    val numPoints = 100
-    val continuousData = DataGenerator.randomLabeledPoints(
-      seed = 123, classification = true, numFeatures, categoricalFeatures, numPoints)
-    val input = spark.createDataFrame(continuousData)
-
-    /*
-    To get equivalent gbm() results (cached in resources directory for tests):
-
-    Scala
-
-    import org.apache.spark.sql.functions._
-    import org.apache.spark.ml.linalg.Vector
-
+    // Convert the input dataframe to a more convenient format to check our results against.
+    val rawInput = spark.createDataFrame(data)
     val vectorAsArray = udf((v: Vector) => v.toArray)
-    val cols = col("label") +: (0 until numFeatures).map(vectorAsArray(col("features"))(_))
-    input.select(cols: _*).coalesce(1).write.option("header", true).csv("/tmp/out")
-
-    R
-
-    data <- read.csv(Sys.glob(paste("/tmp/out/", "*.csv", sep="")), header=TRUE)
-    library(gbm)
-    set.seed(123)
-    gbt <- gbm(formula = formula(data),
-               distribution = "bernoulli",
-               data = data,
-               n.trees = 10,
-               interaction.depth = 2,
-               bag.fraction = 1.0,
-               n.minobsinnode = 5,
-               shrinkage = 0.1,
-               train.fraction = 1.0)
-    for (tree in seq(1, 10)) {
-      write.table(pretty.gbm.tree(gbt, tree),
-        paste("/tmp/gbm-bernoulli-tree-", tree - 1, ".csv", sep=""),
-        row.names=FALSE,
-        quote=FALSE,
-        sep=",")
-    }
-
-    # Then move the tree files to the appropriate resource location:
-    # spark/mllib/src/test/resources/org/apache/spark/ml/classification
-    */
+    val input = rawInput.select(
+      col("*"),
+      vectorAsArray(col("features"))(0).as("feature0"),
+      vectorAsArray(col("features"))(1).as("feature1"))
 
     val gbt = new GBTClassifier()
       .setMaxDepth(2)
-      .setMaxBins(numPoints) // continuous splits for compatibility with R.
-      .setMinInstancesPerNode(5)
+      .setMinInstancesPerNode(1)
       .setMinInfoGain(0)
-      .setImpurity("loss-based")
       .setSubsamplingRate(1.0)
-      .setSeed(0) // should not be used
-      .setMaxIter(10)
-      .setStepSize(0.1)
-      .setLossType("bernoulli")
+      .setMaxIter(2)
+      .setStepSize(1)
+      .setLossType(impurityName)
+    val model = gbt.fit(rawInput)
 
-    val model = gbt.fit(input)
+    assert(model.trees.length === 2)
+    assert(model.treeWeights === Array(1.0, 1.0))
+
+    // A "feature" with index below 0 is a label
+    def pointFilter(featureMap: Seq[(Int, Int)]): String = {
+      if (featureMap.isEmpty) return "true"
+      val sqlConditions = featureMap.map({
+        case (idx, value) if idx < 0 => s"label = $value"
+        case (idx, value) => s"feature$idx = $value"})
+      sqlConditions.mkString(" and ")
+    }
+
+    var relabeledDF: DataFrame = null
+
+    def verifyImpurity(actualImpurity: ImpurityCalculator, featureMap: Seq[(Int, Int)]): Unit = {
+      implicit val approxEquals = TolerantNumerics.tolerantDoubleEquality(1e-3)
+      val df = relabeledDF.where(pointFilter(featureMap))
+      val expectedCalculator = computeCalculator(df, expectedImpurity)
+      withClue(s"actualImpurity $actualImpurity\nexpectedImpurity $expectedCalculator\n\n") {
+        assert(actualImpurity.count === expectedCalculator.count)
+        assert(actualImpurity.calculate() === expectedCalculator.calculate())
+        assert(actualImpurity.predict === expectedCalculator.predict)
+      }
+    }
+
+    def withNode[T <: Node](node: Node, featureMap: Seq[(Int, Int)])(f: T => Unit): T = {
+      withClue(s"node $node\n\nlocation ${featureMap.mkString(" ")}\n\n") {
+        assert(node.isInstanceOf[T])
+        val t = node.asInstanceOf[T]
+        f(t)
+        t
+      }
+    }
+
+    def verifyInternalNode(node: Node, feature: Int, featureMap: (Int, Int)*): InternalNode = {
+      withNode[InternalNode](node, featureMap) { internal =>
+        assert(internal.split.featureIndex === feature)
+        verifyImpurity(internal.impurityStats, featureMap)
+      }
+    }
+
+    def verifyLeafNode(node: Node, featureMap: (Int, Int)*): Unit = {
+      withNode[LeafNode](node, featureMap) { leaf =>
+        verifyImpurity(leaf.impurityStats, featureMap)
+      }
+    }
+
+    def verifyFeature0First(dtree: DecisionTreeModel, idx: Int): Unit = {
+      withClue(s"Tree $idx:\n\n${dtree.toDebugString}\n") {
+        val root = verifyInternalNode(dtree.rootNode, 0)
+        val left = verifyInternalNode(root.leftChild, 1, 0 -> 0)
+        val right = verifyInternalNode(root.rightChild, 1, 0 -> 1)
+        verifyLeafNode(left.leftChild, 0 -> 0, 1 -> 0)
+        verifyLeafNode(left.rightChild, 0 -> 0, 1 -> 1)
+        verifyLeafNode(right.leftChild, 0 -> 1, 1 -> 0)
+        verifyLeafNode(right.rightChild, 0 -> 1, 1 -> 1)
+      }
+    }
+
+    val oldLabel = input.withColumnRenamed("label", "oldlabel")
+    relabeledDF = oldLabel.withColumn("label", col("oldlabel") * 2 - 1)
+    verifyFeature0First(model.trees.head, 0)
+
+    val gradient = udf((pred: Double, label: Double) => -loss.gradient(pred, label))
+    relabeledDF = model.trees.head.transform(oldLabel)
+      .withColumn("label", gradient(col("prediction"), col("oldlabel") * 2 - 1))
+    verifyFeature0First(model.trees.last, 1)
   }
 
-  // categorical + continuous features + compare to variance-based (should be better)
-  // compare to gbm test logisitic.
-
-  // TODO regression: cat/cont/mixed features variance compared to old model
-  // TODO regression: cat/cont/mixed features  compared to variance
+  // TODO regression: similar test breakup
+  // TODO regression: cont features loss based expected result
   // TODO regression: defaults, param support
 
   test("Checkpointing") {
@@ -411,7 +461,7 @@ private object GBTClassifierSuite extends SparkFunSuite {
     assert(gbt.getImpurity == "variance")
     val numFeatures = data.first().features.size
     val oldBoostingStrategy =
-      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification, OldVariance)
+      gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification, Variance)
     val oldGBT = new OldGBT(oldBoostingStrategy, gbt.getSeed.toInt)
     val oldModel = oldGBT.run(data.map(OldLabeledPoint.fromML))
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 2)

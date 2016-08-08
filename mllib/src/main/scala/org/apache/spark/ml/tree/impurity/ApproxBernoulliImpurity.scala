@@ -137,6 +137,9 @@ private[spark] class ApproxBernoulliCalculator(stats: Array[Double])
     // Where p_i is the previous GBT model's prediction for point i. The above with the factor of
     // 2 is equivalent to the LogLoss defined in Spark.
     //
+    // We solve this problem by iterative root-finding for the gradients themselves (this turns
+    // out to be equivalent to Newton's optimization method anyway).
+    //
     // The single NR step from 0 yields the solution H^{-1} s, where H is the Hessian
     // and s is the gradient for L wrt gamma above at gamma = 0.
     //
