@@ -375,10 +375,6 @@ trait CheckAnalysis extends PredicateHelper {
                   s"$numStaticPartitions partition column(s) having constant value(s).")
             }
 
-          case c if c.getClass.getName ==
-              "org.apache.spark.sql.execution.command.CreateHiveTableAsSelectLogicalPlan" =>
-            failAnalysis("Hive support is required to use CREATE Hive TABLE AS SELECT")
-
           case o if !o.resolved =>
             failAnalysis(
               s"unresolved operator ${operator.simpleString}")

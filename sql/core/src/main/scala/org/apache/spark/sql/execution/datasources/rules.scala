@@ -21,6 +21,8 @@ import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
@@ -275,7 +277,10 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
+private[sql] case class PreWriteCheck(
+    sqlConf: SQLConf,
+    catalog: SessionCatalog,
+    sparkConf: SparkConf)
   extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
@@ -285,6 +290,9 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
+      case CreateTable(tableDesc, _, Some(_))
+          if tableDesc.provider.get == "hive" && sparkConf.get(CATALOG_IMPLEMENTATION) != "hive" =>
+        failAnalysis("Hive support is required to use CREATE Hive TABLE AS SELECT")
       case c @ CreateTable(tableDesc, mode, query) if c.resolved =>
         // Since we are saving table metadata to metastore, we should make sure the table name
         // and database name don't break some common restrictions, e.g. special chars except
@@ -334,7 +342,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
         }
 
         PartitioningUtils.validatePartitionColumn(
-          r.schema, part.keySet.toSeq, conf.caseSensitiveAnalysis)
+          r.schema, part.keySet.toSeq, sqlConf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
