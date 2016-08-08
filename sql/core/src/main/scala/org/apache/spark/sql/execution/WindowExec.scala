@@ -558,6 +558,9 @@ private[execution] abstract class WindowFunctionFrame {
  * The offset window frame calculates frames containing LEAD/LAG statements.
  *
  * @param target to write results to.
+ * @param ordinal the ordinal is the starting offset at which the results of the window frame get
+ *                written into the (shared) target row. The result of the frame expression with
+ *                index 'i' will be written to the 'ordinal' + 'i' position in the target row.
  * @param expressions to shift a number of rows.
  * @param inputSchema required for creating a projection.
  * @param newMutableProjection function used to create the projection.
