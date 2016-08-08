@@ -21,7 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.Since
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.feature.LabeledPoint
@@ -241,7 +241,7 @@ class GBTClassificationModel private[ml](
    * This may be replaced with a different mechanism to control code generation in future versions.
    */
   @Experimental
-  @Since("1.7.0")
+  @Since("2.1.0")
   def toCodeGen(): GBTClassificationModel = {
     if (!useCodeGen) {
       val extra = ParamMap.empty
