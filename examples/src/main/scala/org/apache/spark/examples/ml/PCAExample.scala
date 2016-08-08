@@ -38,14 +38,15 @@ object PCAExample {
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
     )
     val df = spark.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+
     val pca = new PCA()
       .setInputCol("features")
       .setOutputCol("pcaFeatures")
       .setK(3)
       .fit(df)
-    val pcaDF = pca.transform(df)
-    val result = pcaDF.select("pcaFeatures")
-    result.show()
+
+    val result = pca.transform(df).select("pcaFeatures")
+    result.show(false)
     // $example off$
 
     spark.stop()

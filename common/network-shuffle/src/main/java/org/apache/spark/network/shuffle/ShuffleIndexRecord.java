@@ -15,35 +15,26 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.network.shuffle;
 
-// $example on$
-import org.apache.spark.ml.feature.StopWordsRemover
-// $example off$
-import org.apache.spark.sql.SparkSession
+/**
+ * Contains offset and length of the shuffle block data.
+ */
+public class ShuffleIndexRecord {
+  private final long offset;
+  private final long length;
 
-object StopWordsRemoverExample {
-  def main(args: Array[String]): Unit = {
-    val spark = SparkSession
-      .builder
-      .appName("StopWordsRemoverExample")
-      .getOrCreate()
+  public ShuffleIndexRecord(long offset, long length) {
+    this.offset = offset;
+    this.length = length;
+  }
 
-    // $example on$
-    val remover = new StopWordsRemover()
-      .setInputCol("raw")
-      .setOutputCol("filtered")
+  public long getOffset() {
+    return offset;
+  }
 
-    val dataSet = spark.createDataFrame(Seq(
-      (0, Seq("I", "saw", "the", "red", "balloon")),
-      (1, Seq("Mary", "had", "a", "little", "lamb"))
-    )).toDF("id", "raw")
-
-    remover.transform(dataSet).show(false)
-    // $example off$
-
-    spark.stop()
+  public long getLength() {
+    return length;
   }
 }
-// scalastyle:on println
+
