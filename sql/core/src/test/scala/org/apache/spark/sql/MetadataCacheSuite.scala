@@ -100,7 +100,7 @@ class MetadataCacheSuite extends QueryTest with SharedSQLContext {
 
           // Delete a file
           deleteOneFileInDirectory(location)
-          intercept[SparkException] {sql("select count(*) from view_refresh").first()}
+          intercept[SparkException](sql("select count(*) from view_refresh").first())
 
           // Refresh and we should be able to read it again.
           spark.catalog.refreshTable("vIeW_reFrEsH")
