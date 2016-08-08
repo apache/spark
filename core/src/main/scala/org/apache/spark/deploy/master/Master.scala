@@ -266,9 +266,11 @@ private[deploy] class Master(
 
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
+            // Important note: this code path is not exercised by tests, so be very careful when
+            // changing this `if` condition.
             if (!normalExit
                 && appInfo.incrementRetryCount() >= MAX_EXECUTOR_RETRIES
-                && MAX_EXECUTOR_RETRIES >= 0) {
+                && MAX_EXECUTOR_RETRIES >= 0) { // < 0 disables this application-killing path
               val execs = appInfo.executors.values
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
                 logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
