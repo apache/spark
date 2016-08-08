@@ -80,11 +80,40 @@ case class CreateTableLikeCommand(
         s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
     }
 
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
-      identifier = targetTable,
-      tableType = CatalogTableType.MANAGED,
-      createTime = System.currentTimeMillis,
-      lastAccessTime = -1).withNewStorage(locationUri = None)
+    val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+
+    val tableToCreate = {
+      // For EXTERNAL_TABLE, the table properties has a particular field. To change it
+      // to a MANAGED_TABLE, we need to remove it; Otherwise, it will be EXTERNAL_TABLE,
+      // even if we set the tableType to MANAGED
+      // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
+      val tableProp = sourceTableDesc.properties.filterKeys(_ != "EXTERNAL")
+
+      if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
+        if (sourceTableDesc.tableType != CatalogTableType.MANAGED) {
+          throw new AnalysisException(
+            "CREATE TABLE LIKE is not allowed when the source table is external tables created " +
+              "using the datasource API")
+        } else {
+          val newPath = catalog.defaultTablePath(targetTable)
+          sourceTableDesc.copy(
+            identifier = targetTable,
+            tableType = CatalogTableType.MANAGED,
+            createTime = System.currentTimeMillis,
+            properties = tableProp,
+            lastAccessTime = -1).withNewStorage(
+              locationUri = None,
+              serdeProperties = sourceTableDesc.storage.properties ++ Map("path" -> newPath))
+        }
+      } else {
+        sourceTableDesc.copy(
+          identifier = targetTable,
+          tableType = CatalogTableType.MANAGED,
+          createTime = System.currentTimeMillis,
+          properties = tableProp,
+          lastAccessTime = -1).withNewStorage(locationUri = None)
+      }
+    }
 
     catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]

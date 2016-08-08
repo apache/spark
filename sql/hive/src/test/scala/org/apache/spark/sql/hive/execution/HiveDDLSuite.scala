@@ -26,6 +26,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -614,6 +615,117 @@ class HiveDDLSuite
       }
       // After hitting runtime exception, we should drop the created table.
       assert(!spark.sessionState.catalog.tableExists(TableIdentifier("tab")))
+    }
+  }
+
+  test("CREATE TABLE LIKE a data source table") {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        .write.format("json").saveAsTable(sourceTabName)
+
+      val sourceTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
+      val sourceTablePath = sourceTable.storage.properties.get("path")
+
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+      val targetTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+      val targetTablePath = targetTable.storage.properties.get("path")
+
+      // The table path should be different
+      assert(sourceTablePath != targetTablePath)
+      // The source table contents should not been seen in the target table.
+      // The target table should be empty
+      assert(spark.table(sourceTabName).count() != 0)
+      assert(spark.table(targetTabName).count() == 0)
+
+      // The table type of both source and target table should be the Hive-managed data source table
+      assert(DDLUtils.isDatasourceTable(sourceTable))
+      assert(sourceTable.tableType == CatalogTableType.MANAGED)
+      assert(DDLUtils.isDatasourceTable(targetTable))
+      assert(targetTable.tableType == CatalogTableType.MANAGED)
+
+      // Their schema should be identical
+      checkAnswer(
+        sql(s"DESC $sourceTabName"),
+        sql(s"DESC $targetTabName"))
+    }
+  }
+
+  test("CREATE TABLE LIKE an external data source table") {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .write.format("parquet").save(path)
+        sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '$path')")
+
+        // The source table should be an external data source table
+        val sourceTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceTabName, Some("default")))
+        assert(DDLUtils.isDatasourceTable(sourceTable))
+        assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
+
+        val e = intercept[AnalysisException] {
+          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+        }.getMessage
+        assert(e.contains("CREATE TABLE LIKE is not allowed when the source table is " +
+          "external tables created using the datasource API"))
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE an external Hive serde table") {
+    val catalog = spark.sessionState.catalog
+    withTempDir { tmpDir =>
+      val basePath = tmpDir.getCanonicalPath
+      val sourceTabName = "tab1"
+      val targetTabName = "tab2"
+      withTable(sourceTabName, targetTabName) {
+        assert(tmpDir.listFiles.isEmpty)
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $sourceTabName (key INT, value STRING)
+             |PARTITIONED BY (ds STRING, hr STRING)
+             |LOCATION '$basePath'
+           """.stripMargin)
+
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $sourceTabName
+               |partition (ds='$ds',hr='$hr')
+               |SELECT 1, 'a'
+             """.stripMargin)
+        }
+
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+        val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
+        val sourceTablePath = sourceTable.storage.locationUri
+        assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
+
+        val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+        val targetTablePath = targetTable.storage.locationUri
+        assert(targetTable.tableType == CatalogTableType.MANAGED)
+
+        // The table path should be different
+        assert(sourceTablePath != targetTablePath)
+        // The source table contents should not been seen in the target table.
+        // The target table should be empty
+        assert(spark.table(sourceTabName).count() != 0)
+        assert(spark.table(targetTabName).count() == 0)
+
+        // Their schema should be identical
+        checkAnswer(
+          sql(s"DESC $sourceTabName"),
+          sql(s"DESC $targetTabName"))
+      }
     }
   }
 
