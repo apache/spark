@@ -168,8 +168,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
             executorDataMap.put(executorId, data)
-            if (currentExecutorIdCounter < executorId.toInt) {
-              currentExecutorIdCounter = executorId.toInt
+            // [snappydata] skip toInt used for Yarn since snappydata's
+            // executorId is not an integer
+            try {
+              if (currentExecutorIdCounter < executorId.toInt) {
+                currentExecutorIdCounter = executorId.toInt
+              }
+            } catch {
+              case nfe: NumberFormatException => // ignore
             }
             if (numPendingExecutors > 0) {
               numPendingExecutors -= 1
