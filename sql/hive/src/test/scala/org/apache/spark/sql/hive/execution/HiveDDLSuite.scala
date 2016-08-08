@@ -624,13 +624,11 @@ class HiveDDLSuite
     withTable(sourceTabName, targetTabName) {
       spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
         .write.format("json").saveAsTable(sourceTabName)
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
 
       val sourceTable =
         spark.sessionState.catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
       val sourceTablePath = sourceTable.storage.properties.get("path")
-
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-
       val targetTable =
         spark.sessionState.catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
       val targetTablePath = targetTable.storage.properties.get("path")
@@ -694,7 +692,6 @@ class HiveDDLSuite
              |PARTITIONED BY (ds STRING, hr STRING)
              |LOCATION '$basePath'
            """.stripMargin)
-
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
           sql(
             s"""
@@ -703,7 +700,6 @@ class HiveDDLSuite
                |SELECT 1, 'a'
              """.stripMargin)
         }
-
         sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
 
         val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
@@ -724,6 +720,48 @@ class HiveDDLSuite
         // Their schema should be identical
         checkAnswer(
           sql(s"DESC $sourceTabName"),
+          sql(s"DESC $targetTabName"))
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE a view") {
+    val sourceTabName = "tab1"
+    val sourceViewName = "view"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      withView(sourceViewName) {
+        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+          .write.format("json").saveAsTable(sourceTabName)
+        sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName")
+
+        val sourceView = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(sourceViewName, Some("default")))
+        val sourceViewPath = sourceView.storage.locationUri
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+        val targetTablePath = targetTable.storage.locationUri
+
+        // The source table contents should not been seen in the target table.
+        // The target table should be empty
+        assert(spark.table(sourceTabName).count() != 0)
+        assert(spark.table(targetTabName).count() == 0)
+
+        // The original source should be a VIEW with an empty path
+        assert(sourceView.tableType == CatalogTableType.VIEW)
+        assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
+        assert(sourceViewPath.isEmpty)
+
+        // The original source should be a MANAGED table with empty view text and original text
+        // The location of table should not be empty.
+        assert(targetTable.tableType == CatalogTableType.MANAGED)
+        assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty)
+        assert(targetTablePath.nonEmpty)
+
+        // Their schema should be identical
+        checkAnswer(
+          sql(s"DESC $sourceViewName"),
           sql(s"DESC $targetTabName"))
       }
     }

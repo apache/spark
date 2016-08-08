@@ -101,7 +101,9 @@ case class CreateTableLikeCommand(
             tableType = CatalogTableType.MANAGED,
             createTime = System.currentTimeMillis,
             properties = tableProp,
-            lastAccessTime = -1).withNewStorage(
+            lastAccessTime = -1,
+            viewOriginalText = None,
+            viewText = None).withNewStorage(
               locationUri = None,
               serdeProperties = sourceTableDesc.storage.properties ++ Map("path" -> newPath))
         }
@@ -111,7 +113,9 @@ case class CreateTableLikeCommand(
           tableType = CatalogTableType.MANAGED,
           createTime = System.currentTimeMillis,
           properties = tableProp,
-          lastAccessTime = -1).withNewStorage(locationUri = None)
+          lastAccessTime = -1,
+          viewOriginalText = None,
+          viewText = None).withNewStorage(locationUri = None)
       }
     }
 
