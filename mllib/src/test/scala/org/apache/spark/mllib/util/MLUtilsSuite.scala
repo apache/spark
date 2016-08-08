@@ -210,6 +210,45 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("groupKFold") {
+    val data = sc.parallelize(
+      Seq((1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f')))
+    val collectedData = data.collect().sorted
+    val twoFoldedRdd = groupKFold(data, 2)
+    assert(twoFoldedRdd(0)._1.collect().sorted.sameElements(twoFoldedRdd(1)._2.collect().sorted))
+    assert(twoFoldedRdd(0)._2.collect().sorted.sameElements(twoFoldedRdd(1)._1.collect().sorted))
+
+    withClue("Invalid setting of numFolds was not caught !") {
+      intercept[IllegalArgumentException] {
+        val testRdd = groupKFold(data, 10)
+      }
+    }
+
+    for (folds <- 2 to 3) {
+        val foldedRdds = groupKFold(data, folds)
+        assert(foldedRdds.length === folds)
+        foldedRdds.foreach { case (training, validation) =>
+          val result = validation.union(training).collect().sorted
+          val validationSize = validation.collect().size.toFloat
+          assert(validationSize > 0, "empty validation data")
+          assert(training.collect().size > 0, "empty training data")
+          assert(result ===  collectedData,
+            "Each training+validation set combined should contain all of the data.")
+          val validationLength = validation.map(_._1).collect().distinct.length
+          val traingingLength = training.map(_._1).collect().distinct.length
+          assert(validationLength + traingingLength === validation.map(_._1)
+            .collect()
+            .distinct
+            .union(training.map(_._1).collect().distinct)
+            .length,
+            "same group should not appear in both training set and validation set")
+        }
+        // group K fold should only have each element in the validation set exactly once
+        assert(foldedRdds.map(_._2).reduce((x, y) => x.union(y)).collect().sorted ===
+          data.collect().sorted)
+    }
+  }
+
   test("loadVectors") {
     val vectors = sc.parallelize(Seq(
       Vectors.dense(1.0, 2.0),

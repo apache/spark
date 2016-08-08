@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.util
 
 import scala.annotation.varargs
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
@@ -223,6 +224,30 @@ object MLUtils extends Logging {
         complement = false)
       val validation = new PartitionwiseSampledRDD(rdd, sampler, true, seed)
       val training = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), true, seed)
+      (training, validation)
+    }.toArray
+  }
+
+  /**
+   * Version of [[groupKFold()]] taking a PairRDD with group labels as keys.
+   */
+  def groupKFold[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)], numFolds: Int):
+      Array[(RDD[(K, V)], RDD[(K, V)])] = {
+    val groupArray = rdd.mapValues(_ => 1L)
+      .reduceByKey(_ + _)
+      .sortBy(_._2, ascending = false)
+      .collect()
+    require(groupArray.length >= numFolds, s"there cannot be more folds than groups.")
+    val samplePerFold = new Array[Long](numFolds)
+    val group2fold = Array.fill(numFolds)(new ArrayBuffer[K])
+    for ((k, v) <- groupArray) {
+      val index = samplePerFold.zipWithIndex.min._2
+      samplePerFold(index) += v
+      group2fold(index) += k
+    }
+    (0 until numFolds).map { fold =>
+      val validation = rdd.filter(sample => group2fold(fold).contains(sample._1))
+      val training = rdd.filter(sample => !group2fold(fold).contains(sample._1))
       (training, validation)
     }.toArray
   }
