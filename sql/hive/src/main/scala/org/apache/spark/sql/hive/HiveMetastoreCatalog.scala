@@ -294,7 +294,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
           }.getOrElse(metastoreSchema)
         } else {
-          defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles()).get
+          val inferredSchema =
+            defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
+          inferredSchema.getOrElse(metastoreSchema)
         }
 
         val relation = HadoopFsRelation(

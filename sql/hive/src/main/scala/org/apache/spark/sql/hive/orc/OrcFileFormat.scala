@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Properties
+
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -56,10 +59,11 @@ private[sql] class OrcFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    OrcFileOperator.readSchema(
-      files.map(_.getPath.toUri.toString),
-      Some(sparkSession.sessionState.newHadoopConf())
-    )
+    val schema = Try(OrcFileOperator.readSchema(
+        files.map(_.getPath.toUri.toString),
+        Some(sparkSession.sessionState.newHadoopConf())))
+      .recover { case _: FileNotFoundException => None }
+    schema.get
   }
 
   override def prepareWrite(

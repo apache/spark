@@ -349,6 +349,29 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-16948. Check empty orc partitioned tables in ORC") {
+    withSQLConf((HiveUtils.CONVERT_METASTORE_ORC.key, "true")) {
+      withTempPath { dir =>
+        withTable("empty_orc_partitioned") {
+          spark.sql(
+            s"""CREATE TABLE empty_orc_partitioned(key INT, value STRING)
+                | PARTITIONED BY (p INT) STORED AS ORC
+             """.stripMargin)
+
+          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+          emptyDF.createOrReplaceTempView("empty")
+
+          // Query empty table
+          val df = spark.sql(
+                    s"""SELECT key, value FROM empty_orc_partitioned
+                        | WHERE key > 10
+                     """.stripMargin)
+          checkAnswer(df, emptyDF)
+        }
+      }
+    }
+  }
+
   test("SPARK-10623 Enable ORC PPD") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
