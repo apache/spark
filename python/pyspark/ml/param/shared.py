@@ -311,7 +311,7 @@ class HasSeed(Params):
 
     def __init__(self):
         super(HasSeed, self).__init__()
-        self._setDefault(seed=hash(type(self).__name__))
+        self._setDefault(seed=None)
 
     def setSeed(self, value):
         """
