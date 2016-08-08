@@ -100,11 +100,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
       withJdbcStatement { statement =>
         val queries = Seq(
-          "SET spark.sql.shuffle.partitions=3",
-          "DROP TABLE IF EXISTS test",
+          "DROP TABLE IF EXISTS test_16563",
           "CREATE TABLE test_16563(key INT, val STRING)",
-          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563",
-          "CACHE TABLE test_16563")
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563")
 
         queries.foreach(statement.execute)
         val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
@@ -113,12 +111,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
           "SELECT * FROM test_16563",
           confOverlay)
 
-        assertResult(0, "Repeat fetching result from next row") {
+        // Fetch result first time
+        assertResult(5, "Fetching result first time from next row") {
 
-          // Fetch first time
-          val rows = client.fetchResults(operationHandle)
-
-          // Fetch second time from first row
           val rows_next = client.fetchResults(
             operationHandle,
             FetchOrientation.FETCH_NEXT,
@@ -128,9 +123,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
           rows_next.numRows()
         }
 
+        // Fetch result second time from first row
         assertResult(5, "Repeat fetching result from first row") {
 
-          // Fetch second time from first row
           val rows_first = client.fetchResults(
             operationHandle,
             FetchOrientation.FETCH_FIRST,
