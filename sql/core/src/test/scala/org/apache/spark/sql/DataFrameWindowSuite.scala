@@ -228,7 +228,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         $"key",
         var_pop($"value").over(window),
         var_samp($"value").over(window),
-        approxCountDistinct($"value").over(window)),
+        approx_count_distinct($"value").over(window)),
       Seq.fill(4)(Row("a", 1.0d / 4.0d, 1.0d / 3.0d, 2))
       ++ Seq.fill(3)(Row("b", 2.0d / 3.0d, 1.0d, 3)))
   }
