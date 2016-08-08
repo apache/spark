@@ -492,10 +492,11 @@ private class AFTAggregator(
     fitIntercept: Boolean,
     bcFeaturesStd: Broadcast[Array[Double]]) extends Serializable {
 
+  private val length = bcParameters.value.length
   // make transient so we do not serialize between aggregation stages
   @transient private lazy val parameters = bcParameters.value
   // the regression coefficients to the covariates
-  @transient private lazy val coefficients = parameters.slice(2, parameters.length)
+  @transient private lazy val coefficients = parameters.slice(2, length)
   @transient private lazy val intercept = parameters(1)
   // sigma is the scale parameter of the AFT model
   @transient private lazy val sigma = math.exp(parameters(0))
@@ -503,7 +504,7 @@ private class AFTAggregator(
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
   // Here we optimize loss function over log(sigma), intercept and coefficients
-  private val gradientSumArray = Array.ofDim[Double](parameters.length)
+  private val gradientSumArray = Array.ofDim[Double](length)
 
   def count: Long = totalCnt
   def loss: Double = {
@@ -573,8 +574,7 @@ private class AFTAggregator(
       lossSum += other.lossSum
 
       var i = 0
-      val len = this.gradientSumArray.length
-      while (i < len) {
+      while (i < length) {
         this.gradientSumArray(i) += other.gradientSumArray(i)
         i += 1
       }
