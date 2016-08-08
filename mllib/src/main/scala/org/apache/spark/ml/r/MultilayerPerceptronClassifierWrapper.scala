@@ -22,6 +22,7 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
@@ -59,7 +60,7 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 }
 
 private[r] object MultilayerPerceptronClassifierWrapper
-  extends MLReadable[MultilayerPerceptronClassifierWrapper] {
+  extends MLReadable[MultilayerPerceptronClassifierWrapper] with Logging {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
@@ -68,14 +69,13 @@ private[r] object MultilayerPerceptronClassifierWrapper
       formula: String,
       data: DataFrame,
       blockSize: Int,
-      layers: Array[Int],
-      initialWeights: Vector,
+      layers: Array[Double],
       solver: String,
-      seed: Long,
       maxIter: Int,
       tol: Double,
       stepSize: Double
      ): MultilayerPerceptronClassifierWrapper = {
+    logWarning("inside wrapper fit() hahaha")
     val rFormula = new RFormula()
       .setFormula(formula)
       .fit(data)
@@ -89,13 +89,11 @@ private[r] object MultilayerPerceptronClassifierWrapper
     val features = featureAttrs.map(_.name.get)
     // assemble and fit the pipeline
     val mlp = new MultilayerPerceptronClassifier()
-      .setLayers(layers)
+      .setLayers(layers.map(_.toInt))
       .setBlockSize(blockSize)
       .setSolver(solver)
       .setMaxIter(maxIter)
       .setTol(tol)
-      .setSeed(seed)
-      .setInitialWeights(initialWeights)
       .setStepSize(stepSize)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     val idxToStr = new IndexToString()
