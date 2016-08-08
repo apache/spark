@@ -33,7 +33,7 @@ private[orc] class OrcOptions(@transient private val parameters: Map[String, Str
     // `orc.compress` is a ORC configuration. So, here we respect this as an option but
     // `compression` has higher precedence than `orc.compress`. It means if both are set,
     // we will use `compression`.
-    val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
+    val orcCompressionConf = parameters.get(OrcFileFormat.ORC_COMPRESSION)
     val codecName = parameters
       .get("compression")
       .orElse(orcCompressionConf)
