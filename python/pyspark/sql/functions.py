@@ -140,7 +140,7 @@ _functions_2_0 = {
     'degrees': 'Converts an angle measured in radians to an approximately equivalent angle ' +
                'measured in degrees.',
     'radians': 'Converts an angle measured in degrees to an approximately equivalent angle ' +
-               'measured in radians.',
+               'measured in radians.'
 }
 
 # math functions that take two arguments as input
