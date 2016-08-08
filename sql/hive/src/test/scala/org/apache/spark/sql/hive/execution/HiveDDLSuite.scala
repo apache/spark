@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -628,28 +628,13 @@ class HiveDDLSuite
 
       val sourceTable =
         spark.sessionState.catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
-      val sourceTablePath = sourceTable.storage.properties.get("path")
       val targetTable =
         spark.sessionState.catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
-      val targetTablePath = targetTable.storage.properties.get("path")
-
-      // The table path should be different
-      assert(sourceTablePath != targetTablePath)
-      // The source table contents should not been seen in the target table.
-      // The target table should be empty
-      assert(spark.table(sourceTabName).count() != 0)
-      assert(spark.table(targetTabName).count() == 0)
-
-      // The table type of both source and target table should be the Hive-managed data source table
+      // The table type of the source table should be a Hive-managed data source table
       assert(DDLUtils.isDatasourceTable(sourceTable))
       assert(sourceTable.tableType == CatalogTableType.MANAGED)
-      assert(DDLUtils.isDatasourceTable(targetTable))
-      assert(targetTable.tableType == CatalogTableType.MANAGED)
 
-      // Their schema should be identical
-      checkAnswer(
-        sql(s"DESC $sourceTabName"),
-        sql(s"DESC $targetTabName"))
+      checkCreateTableLike(sourceTable, targetTable)
     }
   }
 
@@ -678,6 +663,22 @@ class HiveDDLSuite
     }
   }
 
+  test("CREATE TABLE LIKE a managed Hive serde table") {
+    val catalog = spark.sessionState.catalog
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      sql(s"CREATE TABLE $sourceTabName AS SELECT 1 key, 'a' value")
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+      val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
+      assert(sourceTable.tableType == CatalogTableType.MANAGED)
+      val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+
+      checkCreateTableLike(sourceTable, targetTable)
+    }
+  }
+
   test("CREATE TABLE LIKE an external Hive serde table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
@@ -688,7 +689,8 @@ class HiveDDLSuite
         assert(tmpDir.listFiles.isEmpty)
         sql(
           s"""
-             |CREATE EXTERNAL TABLE $sourceTabName (key INT, value STRING)
+             |CREATE EXTERNAL TABLE $sourceTabName (key INT comment 'test', value STRING)
+             |COMMENT 'Apache Spark'
              |PARTITIONED BY (ds STRING, hr STRING)
              |LOCATION '$basePath'
            """.stripMargin)
@@ -703,24 +705,11 @@ class HiveDDLSuite
         sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
 
         val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
-        val sourceTablePath = sourceTable.storage.locationUri
         assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
-
+        assert(sourceTable.properties.get("comment") == Option("Apache Spark"))
         val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
-        val targetTablePath = targetTable.storage.locationUri
-        assert(targetTable.tableType == CatalogTableType.MANAGED)
 
-        // The table path should be different
-        assert(sourceTablePath != targetTablePath)
-        // The source table contents should not been seen in the target table.
-        // The target table should be empty
-        assert(spark.table(sourceTabName).count() != 0)
-        assert(spark.table(targetTabName).count() == 0)
-
-        // Their schema should be identical
-        checkAnswer(
-          sql(s"DESC $sourceTabName"),
-          sql(s"DESC $targetTabName"))
+        checkCreateTableLike(sourceTable, targetTable)
       }
     }
   }
@@ -738,33 +727,59 @@ class HiveDDLSuite
 
         val sourceView = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(sourceViewName, Some("default")))
-        val sourceViewPath = sourceView.storage.locationUri
-        val targetTable = spark.sessionState.catalog.getTableMetadata(
-          TableIdentifier(targetTabName, Some("default")))
-        val targetTablePath = targetTable.storage.locationUri
-
-        // The source table contents should not been seen in the target table.
-        // The target table should be empty
-        assert(spark.table(sourceTabName).count() != 0)
-        assert(spark.table(targetTabName).count() == 0)
-
         // The original source should be a VIEW with an empty path
         assert(sourceView.tableType == CatalogTableType.VIEW)
         assert(sourceView.viewText.nonEmpty && sourceView.viewOriginalText.nonEmpty)
-        assert(sourceViewPath.isEmpty)
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
 
-        // The original source should be a MANAGED table with empty view text and original text
-        // The location of table should not be empty.
-        assert(targetTable.tableType == CatalogTableType.MANAGED)
-        assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty)
-        assert(targetTablePath.nonEmpty)
-
-        // Their schema should be identical
-        checkAnswer(
-          sql(s"DESC $sourceViewName"),
-          sql(s"DESC $targetTabName"))
+        checkCreateTableLike(sourceView, targetTable)
       }
     }
+  }
+
+  private def getTablePath(table: CatalogTable): Option[String] = {
+    if (DDLUtils.isDatasourceTable(table)) {
+      table.storage.properties.get("path")
+    } else {
+      table.storage.locationUri
+    }
+  }
+
+  private def checkCreateTableLike(sourceTable: CatalogTable, targetTable: CatalogTable): Unit = {
+    // The original source should be a MANAGED table with empty view text and original text
+    // The location of table should not be empty.
+    assert(targetTable.tableType == CatalogTableType.MANAGED,
+      "the created table must be a Hive managed table")
+    assert(targetTable.viewText.isEmpty && targetTable.viewOriginalText.isEmpty,
+      "the view text and original text in the created table must be empty")
+    assert(targetTable.comment.isEmpty,
+      "the comment in the created table must be empty")
+    assert(targetTable.properties.get("comment").isEmpty,
+      "the comment in the created table must be empty")
+
+    if (DDLUtils.isDatasourceTable(sourceTable)) {
+      assert(DDLUtils.isDatasourceTable(targetTable),
+        "the target table should be a data source table")
+    } else {
+      assert(!DDLUtils.isDatasourceTable(targetTable),
+        "the target table should be a Hive serde table")
+    }
+
+    val sourceTablePath = getTablePath(sourceTable)
+    val targetTablePath = getTablePath(targetTable)
+    assert(targetTablePath.nonEmpty, "target table path should not be empty")
+    assert(sourceTablePath != targetTablePath,
+      "source table/view path should be different from target table path")
+
+    // The source table contents should not been seen in the target table.
+    assert(spark.table(sourceTable.identifier).count() != 0, "the source table should be nonempty")
+    assert(spark.table(targetTable.identifier).count() == 0, "the target table should be empty")
+
+    // Their schema should be identical
+    checkAnswer(
+      sql(s"DESC ${sourceTable.identifier}"),
+      sql(s"DESC ${targetTable.identifier}"))
   }
 
   test("desc table for data source table") {

@@ -82,12 +82,20 @@ case class CreateTableLikeCommand(
 
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
 
+    sourceTableDesc.tableType match {
+      case CatalogTableType.MANAGED | CatalogTableType.EXTERNAL | CatalogTableType.VIEW => // OK
+      case o => throw new AnalysisException(
+        s"CREATE TABLE LIKE is not allowed when the source table is ${o.name}")
+    }
+
     val tableToCreate = {
       // For EXTERNAL_TABLE, the table properties has a particular field. To change it
       // to a MANAGED_TABLE, we need to remove it; Otherwise, it will be EXTERNAL_TABLE,
       // even if we set the tableType to MANAGED
       // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-      val tableProp = sourceTableDesc.properties.filterKeys(_ != "EXTERNAL")
+      // Table comment is stored as a table property. To clean it, we also should remove them.
+      val tableProp =
+        sourceTableDesc.properties.filterKeys(key => key != "EXTERNAL" && key != "comment")
 
       if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
         if (sourceTableDesc.tableType != CatalogTableType.MANAGED) {
@@ -102,6 +110,7 @@ case class CreateTableLikeCommand(
             createTime = System.currentTimeMillis,
             properties = tableProp,
             lastAccessTime = -1,
+            comment = None,
             viewOriginalText = None,
             viewText = None).withNewStorage(
               locationUri = None,
@@ -114,6 +123,7 @@ case class CreateTableLikeCommand(
           createTime = System.currentTimeMillis,
           properties = tableProp,
           lastAccessTime = -1,
+          comment = None,
           viewOriginalText = None,
           viewText = None).withNewStorage(locationUri = None)
       }
