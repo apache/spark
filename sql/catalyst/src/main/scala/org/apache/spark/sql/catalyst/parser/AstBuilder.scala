@@ -656,40 +656,37 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create an inline table (a virtual table in Hive parlance).
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {
-    // Get the backing expressions.
-    val expressions = ctx.expression.asScala.map { eCtx =>
-      val e = expression(eCtx)
-      assert(e.foldable, "All expressions in an inline table must be constants.", eCtx)
-      e
+    // Create expressions.
+    val rows = ctx.expression.asScala.map { e =>
+      expression(e) match {
+        case CreateStruct(children) => children
+        case child => Seq(child)
+      }
     }
 
-    // Validate and evaluate the rows.
-    val (structType, structConstructor) = expressions.head.dataType match {
-      case st: StructType =>
-        (st, (e: Expression) => e)
-      case dt =>
-        val st = CreateStruct(Seq(expressions.head)).dataType
-        (st, (e: Expression) => CreateStruct(Seq(e)))
-    }
-    val rows = expressions.map {
-      case expression =>
-        val safe = Cast(structConstructor(expression), structType)
-        safe.eval().asInstanceOf[InternalRow]
-    }
-
-    // Construct attributes.
-    val baseAttributes = structType.toAttributes.map(_.withNullability(true))
-    val attributes = if (ctx.identifierList != null) {
-      val aliases = visitIdentifierList(ctx.identifierList)
-      assert(aliases.size == baseAttributes.size,
-        "Number of aliases must match the number of fields in an inline table.", ctx)
-      baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
+    // Resolve aliases.
+    val numExpectedColumns = rows.head.size
+    val aliases = if (ctx.identifierList != null) {
+      val names = visitIdentifierList(ctx.identifierList)
+      assert(names.size == numExpectedColumns,
+        s"Number of aliases '${names.size}' must match the number of fields " +
+        s"'$numExpectedColumns' in an inline table", ctx)
+      names
     } else {
-      baseAttributes
+      Seq.tabulate(numExpectedColumns)(i => s"col${i + 1}")
     }
 
-    // Create plan and add an alias if a name has been defined.
-    LocalRelation(attributes, rows).optionalMap(ctx.identifier)(aliasPlan)
+    // Create the UNION.
+    val union = Union(rows.zipWithIndex.map { case (expressions, index) =>
+      assert(expressions.size == numExpectedColumns,
+        s"Number of values '${expressions.size}' in row '${index + 1}' does not match the " +
+        s"expected number of values '$numExpectedColumns' in a row", ctx)
+      val namedExpressions = expressions.zip(aliases).map {
+        case (expression, name) => Alias(expression, name)()
+      }
+      Project(namedExpressions, OneRowRelation)
+    })
+    union.optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**

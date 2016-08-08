@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -424,19 +424,26 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("inline table") {
-    assertEqual("values 1, 2, 3, 4", LocalRelation.fromExternalRows(
-      Seq('col1.int),
-      Seq(1, 2, 3, 4).map(x => Row(x))))
+    def project(values: Seq[Any], names: Seq[String]): Project = {
+      val expressions = names match {
+        case Seq() =>
+          values.zipWithIndex.map(x => Alias(Literal(x._1), s"col${x._2 + 1}")())
+        case aliases if aliases.size == values.size =>
+          values.zip(aliases).map(x => Alias(Literal(x._1), x._2)())
+      }
+      Project(expressions, OneRowRelation)
+    }
+
+    assertEqual(
+      "values 1, 2, 3, 4",
+      Union(Seq(1, 2, 3, 4).map(x => project(Seq(x), Seq.empty))))
     assertEqual(
       "values (1, 'a'), (2, 'b'), (3, 'c') as tbl(a, b)",
-      LocalRelation.fromExternalRows(
-        Seq('a.int, 'b.string),
-        Seq((1, "a"), (2, "b"), (3, "c")).map(x => Row(x._1, x._2))).as("tbl"))
-    intercept("values (a, 'a'), (b, 'b')",
-      "All expressions in an inline table must be constants.")
+      Union(Seq(Seq(1, "a"), Seq(2, "b"), Seq(3, "c")).map(project(_, Seq("a", "b")))).as("tbl"))
     intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
-      "Number of aliases must match the number of fields in an inline table.")
-    intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+      "Number of aliases", "must match the number of fields", "in an inline table")
+    intercept("values (1, 'a'), (2, 'b', 5Y)",
+      "Number of values", "in row", "does not match the expected number of values", "in a row")
   }
 
   test("simple select query with !> and !<") {

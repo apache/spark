@@ -22,7 +22,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.java.function.FilterFunction
-import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, InternalRow, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -1563,17 +1563,23 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 }
 
 /**
- * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
- * another LocalRelation.
- *
- * This is relatively simple as it currently handles only a single case: Project.
+ * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation or
+ * OneRowRelation to a new LocalRelation.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case Project(projectList, LocalRelation(output, data))
         if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+    case Project(projectList, OneRowRelation) if !projectList.exists(hasUnevaluableExpr) =>
+      val row = InternalRow.fromSeq(projectList.map(_.eval()))
+      LocalRelation(projectList.map(_.toAttribute), Seq(row))
+    case u @ Union(children) if children.forall(_.isInstanceOf[LocalRelation]) =>
+      val data = children.flatMap {
+        case LocalRelation(_, rows) => rows
+      }
+      LocalRelation(u.output, data)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
