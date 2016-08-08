@@ -193,7 +193,13 @@ case class CreateDataSourceTableAsSelectCommand(
               }
               existingSchema = Some(l.schema)
             case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
-              existingSchema = Some(DDLUtils.getSchemaFromTableProperties(s.metadata))
+            val schemaStruct = DDLUtils.getSchemaFromTableProperties(s.metadata)
+              if (query.schema.size != schemaStruct.size) {
+                throw new AnalysisException(
+                  s"The column number of the existing schema ${schemaStruct} " +
+                    s"doesn't match the column number of the inserted schema ${query.schema}")
+              }
+              existingSchema = Some(schemaStruct)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
