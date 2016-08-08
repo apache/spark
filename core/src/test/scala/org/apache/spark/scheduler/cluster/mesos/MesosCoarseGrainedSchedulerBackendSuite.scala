@@ -344,7 +344,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(!dockerInfo.getForcePullImage)
   }
 
-  test("Do not call parent methods like removeExecutor() after backend is stopped") {
+  test("Do not call removeExecutor() after backend is stopped") {
     setBackend()
 
     // launches a task on a valid offer
@@ -364,7 +364,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       }
     }.start
 
-    backend.stop
+    backend.stop()
     // Any method of the backend involving sending messages to the driver endpoint should not
     // be called after the backend is stopped.
     verify(driverEndpoint, never()).askWithRetry(isA(classOf[RemoveExecutor]))(any[ClassTag[_]])
