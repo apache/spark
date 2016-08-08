@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver.server
 
 import java.util.{Map => JMap}
 
-import scala.collection.mutable.Map
+import scala.collection.mutable
 
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
@@ -39,8 +39,10 @@ private[thriftserver] class SparkSQLOperationManager()
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
-  val sessionToActivePool = Map[SessionHandle, String]()
-  val sessionToContexts = Map[SessionHandle, SQLContext]()
+  val sessionToActivePool = new mutable.HashMap[SessionHandle, String]()
+    with mutable.SynchronizedMap[SessionHandle, String]
+  val sessionToContexts = new mutable.HashMap[SessionHandle, SQLContext]()
+    with mutable.SynchronizedMap[SessionHandle, SQLContext]
 
   override def newExecuteStatementOperation(
       parentSession: HiveSession,
