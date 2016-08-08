@@ -37,13 +37,13 @@ import org.apache.spark.util.Utils
 
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.
- *
  * @param driverDescription Submitted driver description from
  * [[org.apache.spark.deploy.rest.mesos.MesosRestServer]]
  * @param taskId Mesos TaskID generated for the task
  * @param slaveId Slave ID that the task is assigned to
  * @param mesosTaskStatus The last known task status update.
  * @param startDate The date the task was launched
+ * @param finishDate The date the task finished
  * @param frameworkId Mesos framework ID the task registers with
  */
 private[spark] class MesosClusterSubmissionState(
