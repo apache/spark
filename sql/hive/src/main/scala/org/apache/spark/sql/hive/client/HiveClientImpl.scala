@@ -414,6 +414,7 @@ private[hive] class HiveClientImpl(
             .map(_.asScala.toMap).orNull
         ),
         properties = properties,
+        comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures)
