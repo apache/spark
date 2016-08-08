@@ -67,9 +67,9 @@ private[sql] class OrcFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val configuration = job.getConfiguration
+    val orcOptions = new OrcOptions(options)
 
-    val orcOptions = new OrcOptions(options, configuration)
+    val configuration = job.getConfiguration
 
     configuration.set(OrcRelation.ORC_COMPRESSION, orcOptions.compressionCodec)
     configuration match {
