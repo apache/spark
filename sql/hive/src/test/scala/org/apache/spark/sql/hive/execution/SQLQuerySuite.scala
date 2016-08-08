@@ -1790,6 +1790,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   def testCommandAvailable(command: String): Boolean = {
-    Try(Process(command) !!).isSuccess
+    val attempt = Try(Process(command).run().exitValue())
+    attempt.isSuccess && attempt.get == 0
   }
 }
