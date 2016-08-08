@@ -25,10 +25,10 @@ import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 import org.apache.spark.util.StatCounter
 
 object EnsembleTestHelper {
+
   /**
    * Aggregates all values in data, and tests whether the empirical mean and stddev are within
    * epsilon of the expected values.
-   *
    * @param data  Every element of the data should be an i.i.d. sample from some distribution.
    */
   def testRandomArrays(
@@ -83,7 +83,6 @@ object EnsembleTestHelper {
       s"validateRegressor calculated $metricName $metric but required $required.")
   }
 
-
   def generateOrderedLabeledPoints(numFeatures: Int, numInstances: Int): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](numInstances)
     for (i <- 0 until numInstances) {
@@ -101,4 +100,5 @@ object EnsembleTestHelper {
     }
     arr
   }
+
 }

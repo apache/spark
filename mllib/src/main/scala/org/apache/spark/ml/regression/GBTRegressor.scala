@@ -121,7 +121,8 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /**
    * Note that the default loss-based impurity is currently NOT compatible with absolute loss.
-   * @group setParam */
+   * @group setParam
+   */
   @Since("1.4.0")
   def setLossType(value: String): this.type = set(lossType, value)
 

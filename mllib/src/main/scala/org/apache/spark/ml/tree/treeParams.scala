@@ -573,7 +573,7 @@ private[ml] object GBTRegressorParams {
   final def getLossBasedImpurity(loss: String): OldImpurity = loss match {
     case "gaussian" | "squared" => OldVariance
     case "laplace" | "absolute" => throw new RuntimeException(
-      "GBTRegressor does not yet support loss-based impurity")
+      "GBTRegressor does not yet support loss-based impurity for absolute or laplace loss")
     // TODO(vlad17) use ApproxLaplaceImpurity here once it is implemented.
     case _ => throw new RuntimeException(
       s"GBTRegressor does not have loss-based impurity for loss ${loss}")

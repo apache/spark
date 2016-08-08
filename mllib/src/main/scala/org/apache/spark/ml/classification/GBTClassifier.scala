@@ -42,6 +42,7 @@ import org.apache.spark.sql.types.DoubleType
 /**
  * Gradient-Boosted Trees (GBTs) (http://en.wikipedia.org/wiki/Gradient_boosting)
  * learning algorithm for classification.
+ * Note: Multiclass labels are not currently supported.
  * It supports both continuous and categorical features.
  *
  * The implemention offers both Stochastic Gradient Boosting, as in J.H. Friedman 1999,

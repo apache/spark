@@ -26,8 +26,8 @@ import org.apache.spark.ml.classification.GBTClassifier
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.regression.GBTRegressor
-import org.apache.spark.ml.tree.{DecisionTreeModel, InternalNode, LeafNode, Node}
-import org.apache.spark.mllib.tree.impurity.{ImpurityAggregator, ImpurityCalculator, VarianceAggregator}
+import org.apache.spark.ml.tree.{InternalNode, LeafNode, Node}
+import org.apache.spark.mllib.tree.impurity.{ImpurityAggregator, ImpurityCalculator}
 import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._

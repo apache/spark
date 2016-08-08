@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.collection.mutable.ArrayBuffer
-import org.scalactic.TolerantNumerics
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg._
@@ -35,8 +33,7 @@ import org.apache.spark.mllib.tree.impurity._
 import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, Encoders}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
 
 /**
