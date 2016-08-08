@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -516,6 +516,40 @@ class PlannerSuite extends SharedSQLContext {
     }
     if (outputPlan2.collect { case e: ShuffleExchange => true }.size != 2) {
       fail(s"Should have only two shuffles:\n$outputPlan")
+    }
+  }
+
+  test("SPARK-16456: Reuse the uncorrelated scalar subqueries with the same logical plan") {
+    withTempTable("t1", "t2", "t3") {
+      val df = (1 to 3).map(i => (i, i)).toDF("key", "value")
+      df.createOrReplaceTempView("t1")
+      df.createOrReplaceTempView("t2")
+      df.createOrReplaceTempView("t3")
+      val planned = sql(
+        """
+          |WITH max_test AS
+          |(
+          | SELECT max(key) as max_key FROM t1
+          |),
+          |max_test2 AS
+          |(
+          | SELECT max(key) as max_key FROM t1
+          |)
+          |SELECT key FROM t2
+          |WHERE key = (SELECT max_key FROM max_test) and value = (SELECT max_key FROM max_test)
+          |UNION ALL
+          |SELECT key FROM t3
+          |WHERE key = (SELECT max_key FROM max_test) and value = (SELECT max_key FROM max_test2)
+        """.stripMargin
+      ).queryExecution.executedPlan
+      val numExecutedSubqueries = planned.flatMap {
+        case plan => plan.expressions.flatMap(_.collect { case e: ScalarSubquery => e })
+      }.distinct.size
+      assert(numExecutedSubqueries === 1)
+      val numReusedSubqueries = planned.flatMap {
+        case plan => plan.expressions.flatMap(_.collect { case e: ReusedScalarSubquery => e })
+      }.size
+      assert(numReusedSubqueries === 3)
     }
   }
 }

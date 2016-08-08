@@ -17,14 +17,20 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A subquery that will return only one row and one column.
@@ -48,10 +54,12 @@ case class ScalarSubquery(
   override def toString: String = s"subquery#${exprId.id}"
 
   // the first column in first row from `query`.
-  @volatile private var result: Any = null
-  @volatile private var updated: Boolean = false
+  @volatile private[this] var result: Any = null
+  @volatile private[this] var updated: Boolean = false
+  @transient private[this] var evaluated: Boolean = false
+  @transient private[this] var futureResult: Future[Array[InternalRow]] = _
 
-  def updateResult(v: Any): Unit = {
+  private def updateResult(v: Any): Unit = {
     result = v
     updated = true
   }
@@ -65,6 +73,70 @@ case class ScalarSubquery(
     require(updated, s"$this has not finished")
     Literal.create(result, dataType).doGenCode(ctx, ev)
   }
+
+  /**
+   * Submit the subquery to be evaluated. No need to do if it has been evaluated before.
+   */
+  def submitSubqueryEvaluated(): Unit = synchronized {
+    if (!evaluated) {
+      futureResult = Future {
+        // Each subquery should return only one row (and one column). We take two here and throws
+        // an exception later if the number of rows is greater than one.
+        executedPlan.executeTake(2)
+      }(ScalarSubquery.subqueryExecutionContext)
+      evaluated = true
+    }
+  }
+
+  /**
+   * Blocks the thread until the evaluation of subquery has been finished.
+   */
+  def awaitSubqueryResult(): Unit = synchronized {
+    if (!updated) {
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
+      if (rows.length > 1) {
+        sys.error(s"more than one row returned by a subquery used as an expression:\n${plan}")
+      }
+      if (rows.length == 1) {
+        assert(rows(0).numFields == 1,
+          s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
+        updateResult(rows(0).get(0, dataType))
+      } else {
+        // If there is no rows returned, the result should be null.
+        updateResult(null)
+      }
+    }
+  }
+
+  override def equals(o: Any): Boolean = o match {
+    case other: ScalarSubquery => this.eq(other)
+    case _ => false
+  }
+
+  override def hashCode: Int = exprId.hashCode()
+}
+
+object ScalarSubquery {
+  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+}
+
+/**
+ * A wrapper for reused uncorrelated ScalarSubquery to avoid the re-computing for subqueries with
+ * the same "canonical" logical plan in a query, because uncorrelated subqueries with the same
+ * "canonical" logical plan always produce the same results.
+ */
+case class ReusedScalarSubquery(
+    exprId: ExprId,
+    child: ScalarSubquery) extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+  override def toString: String = s"ReusedSubquery#${exprId.id}($child)"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, c => c)
+
+  protected override def nullSafeEval(input: Any): Any = input
 }
 
 /**
@@ -72,10 +144,24 @@ case class ScalarSubquery(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
+    // Build a hash map using schema of subquery's logical plan to avoid O(N*N) sameResult calls.
+    val subqueryMap = mutable.HashMap[StructType, ArrayBuffer[(LogicalPlan, ScalarSubquery)]]()
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
-        ScalarSubquery(executedPlan, subquery.exprId)
+        val sameSchema = subqueryMap.getOrElseUpdate(
+          subquery.query.schema, ArrayBuffer[(LogicalPlan, ScalarSubquery)]())
+        val samePlan = sameSchema.find { case (e, _) =>
+          subquery.query.sameResult(e)
+        }
+        if (samePlan.isDefined) {
+          // Subqueries that have the same logical plan can be reused the same results.
+          ReusedScalarSubquery(subquery.exprId, samePlan.get._2)
+        } else {
+          val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+          val physicalSubquery = new ScalarSubquery(executedPlan, subquery.exprId)
+          sameSchema += ((subquery.plan, physicalSubquery))
+          physicalSubquery
+        }
     }
   }
 }

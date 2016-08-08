@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -138,48 +137,29 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * List of (uncorrelated scalar subquery, future holding the subquery result) for this plan node.
+   * List of uncorrelated scalar subquery for this plan node.
    * This list is populated by [[prepareSubqueries]], which is called in [[prepare]].
    */
   @transient
-  private val subqueryResults = new ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]
+  private var allSubqueries = new ArrayBuffer[ScalarSubquery]
 
   /**
    * Finds scalar subquery expressions in this plan node and starts evaluating them.
-   * The list of subqueries are added to [[subqueryResults]].
+   * The list of subqueries are added to [[allSubqueries]].
    */
   protected def prepareSubqueries(): Unit = {
-    val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
-    allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
-      val futureResult = Future {
-        // Each subquery should return only one row (and one column). We take two here and throws
-        // an exception later if the number of rows is greater than one.
-        e.executedPlan.executeTake(2)
-      }(SparkPlan.subqueryExecutionContext)
-      subqueryResults += e -> futureResult
+    expressions.flatMap(_.collect { case e: ScalarSubquery => e }).distinct.foreach { e =>
+      e.submitSubqueryEvaluated()
+      allSubqueries += e
     }
   }
 
   /**
-   * Blocks the thread until all subqueries finish evaluation and update the results.
+   * Blocks the thread until all subqueries finish evaluation.
    */
   protected def waitForSubqueries(): Unit = synchronized {
-    // fill in the result of subqueries
-    subqueryResults.foreach { case (e, futureResult) =>
-      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
-      if (rows.length > 1) {
-        sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
-      }
-      if (rows.length == 1) {
-        assert(rows(0).numFields == 1,
-          s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
-        e.updateResult(rows(0).get(0, e.dataType))
-      } else {
-        // If there is no rows returned, the result should be null.
-        e.updateResult(null)
-      }
-    }
-    subqueryResults.clear()
+    allSubqueries.foreach(_.awaitSubqueryResult())
+    allSubqueries.clear()
   }
 
   /**
@@ -388,11 +368,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
-}
-
-object SparkPlan {
-  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 private[sql] trait LeafExecNode extends SparkPlan {
