@@ -515,6 +515,7 @@ case class AlterTableRecoverPartitionsCommand(
       if (st.isDirectory && name.contains("=")) {
         val ps = name.split("=", 2)
         val columnName = PartitioningUtils.unescapePathName(ps(0)).toLowerCase
+        // TODO: Validate the value
         val value = PartitioningUtils.unescapePathName(ps(1))
         // comparing with case-insensitive, but preserve the case
         if (columnName == partitionNames(0)) {

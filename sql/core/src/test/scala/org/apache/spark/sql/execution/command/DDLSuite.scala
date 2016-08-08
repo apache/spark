@@ -870,7 +870,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("after table: recover partition (parallel)") {
+  test("alter table: recover partition (parallel)") {
     withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
       testRecoverPartitions()
     }
