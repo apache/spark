@@ -92,7 +92,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
     credentialUpdater =
       new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
-    credentialUpdater.updateCredentialsIfRequired()
+    credentialUpdater.bootstrap()
   }
 
   private[spark] override def stopCredentialUpdater(): Unit = {
