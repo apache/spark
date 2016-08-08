@@ -710,6 +710,17 @@ class HiveDDLSuite
         sql(s"CREATE TABLE tbl TBLPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
       }
       assert(e3.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e4 = intercept[AnalysisException] {
+        sql(s"ALTER TABLE tbl SET SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='wah')")
+      }
+      assert(e4.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+
+      val e5 = intercept[AnalysisException] {
+        sql("CREATE TABLE tbl ROW FORMAT SERDE 'serde' " +
+          s"WITH SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='anything')")
+      }
+      assert(e5.getMessage.contains(DATASOURCE_PREFIX + "foo"))
     }
   }
 }

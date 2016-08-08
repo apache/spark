@@ -90,10 +90,11 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
    * If the given table properties contains datasource properties, throw an exception.
    */
   private def verifyTableProperties(table: CatalogTable): Unit = {
-    val datasourceKeys = table.properties.keys.filter(_.startsWith(DATASOURCE_PREFIX))
+    val datasourceKeys = (table.properties.keys ++ table.storage.properties.keys)
+      .filter(_.startsWith(DATASOURCE_PREFIX))
     if (datasourceKeys.nonEmpty) {
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
-        s"as table property keys may not start with '$DATASOURCE_PREFIX': " +
+        s"as table/storage property keys may not start with '$DATASOURCE_PREFIX': " +
         datasourceKeys.mkString("[", ", ", "]"))
     }
   }
