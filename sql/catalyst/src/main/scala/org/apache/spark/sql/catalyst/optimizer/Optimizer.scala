@@ -1573,8 +1573,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
     case Project(projectList, OneRowRelation) if !projectList.exists(hasUnevaluableExpr) =>
-      val row = InternalRow.fromSeq(projectList.map(_.eval()))
-      LocalRelation(projectList.map(_.toAttribute), Seq(row))
+      val projection = new InterpretedProjection(projectList, Seq.empty)
+      LocalRelation(projectList.map(_.toAttribute), Seq(projection(EmptyRow)))
     case u @ Union(children) if children.forall(_.isInstanceOf[LocalRelation]) =>
       val data = children.flatMap {
         case LocalRelation(_, rows) => rows
