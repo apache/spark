@@ -52,7 +52,7 @@ class JavaClassificationModel(JavaPredictionModel):
     """
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def numClasses(self):
         """
         Number of classes (values which the label can take).

@@ -248,7 +248,7 @@ class JavaPredictionModel():
     """
 
     @property
-    @since("2.0.0")
+    @since("2.1.0")
     def numFeatures(self):
         """
         Returns the number of features the model was trained on. If unknown, returns -1
