@@ -131,7 +131,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def reset(): Unit
 
   /**
-   * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
+   * Takes the inputs and accumulates.
    */
   def add(v: IN): Unit
 

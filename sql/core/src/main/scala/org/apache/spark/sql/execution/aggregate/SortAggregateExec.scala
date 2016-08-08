@@ -111,9 +111,9 @@ case class SortAggregateExec(
   private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
-    val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
-    val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
-    val outputString = Utils.truncatedString(output, "[", ",", "]")
+    val keyString = Utils.truncatedString(groupingExpressions, "[", ", ", "]")
+    val functionString = Utils.truncatedString(allAggregateExpressions, "[", ", ", "]")
+    val outputString = Utils.truncatedString(output, "[", ", ", "]")
     if (verbose) {
       s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
     } else {

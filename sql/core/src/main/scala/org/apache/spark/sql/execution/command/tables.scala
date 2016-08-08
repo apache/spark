@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -439,10 +439,10 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
         describeSchema(StructType(partColNames.map(userSpecifiedSchema(_))), buffer)
       }
     } else {
-      if (table.partitionColumns.nonEmpty) {
+      if (table.partitionColumnNames.nonEmpty) {
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(table.partitionColumns, buffer)
+        describeSchema(table.partitionSchema, buffer)
       }
     }
   }
@@ -518,12 +518,6 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
       describeSchema(schema, buffer)
     } else {
       describeSchema(tableDesc.schema, buffer)
-    }
-  }
-
-  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
-    schema.foreach { column =>
-      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
   }
 
@@ -701,7 +695,7 @@ case class ShowPartitionsCommand(
      * thrown if the partitioning spec is invalid.
      */
     if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
+      val badColumns = spec.get.keySet.filterNot(tab.partitionColumnNames.contains)
       if (badColumns.nonEmpty) {
         val badCols = badColumns.mkString("[", ", ", "]")
         throw new AnalysisException(
@@ -799,14 +793,14 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       .foreach(builder.append)
   }
 
-  private def columnToDDLFragment(column: CatalogColumn): String = {
-    val comment = column.comment.map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
-    s"${quoteIdentifier(column.name)} ${column.dataType}${comment.getOrElse("")}"
+  private def columnToDDLFragment(column: StructField): String = {
+    val comment = column.getComment().map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
+    s"${quoteIdentifier(column.name)} ${column.dataType.catalogString}${comment.getOrElse("")}"
   }
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.partitionColumns.nonEmpty) {
-      val partCols = metadata.partitionColumns.map(columnToDDLFragment)
+    if (metadata.partitionColumnNames.nonEmpty) {
+      val partCols = metadata.partitionSchema.map(columnToDDLFragment)
       builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
     }
 

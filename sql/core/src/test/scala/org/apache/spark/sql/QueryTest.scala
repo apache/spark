@@ -401,6 +401,9 @@ object QueryTest {
     sameRows(expectedAnswer, sparkAnswer, isSorted).map { results =>
         s"""
         |Results do not match for query:
+        |Timezone: ${TimeZone.getDefault}
+        |Timezone Env: ${sys.env("TZ")}
+        |
         |${df.queryExecution}
         |== Results ==
         |$results

@@ -53,7 +53,7 @@ public class JavaOneHotEncoderExample {
     );
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("category", DataTypes.StringType, false, Metadata.empty())
     });
 
