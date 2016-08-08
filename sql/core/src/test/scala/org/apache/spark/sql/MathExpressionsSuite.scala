@@ -156,7 +156,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("toRadians") {
+  test("radians") {
     testOneToOneMathFunction(radians, math.toRadians)
     checkAnswer(
       sql("SELECT radians(0), radians(1), radians(1.5)"),
