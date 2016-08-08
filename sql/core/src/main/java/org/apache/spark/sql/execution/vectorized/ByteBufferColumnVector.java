@@ -43,33 +43,22 @@ public final class ByteBufferColumnVector extends ColumnVector {
   private long offset;
 
   // Only set if type is Array.
-  private int[] arrayOffsets;
+  private int lastArrayRow;
+  private int lastArrayPos;
   private UnsafeArrayData unsafeArray;
 
   protected ByteBufferColumnVector(int capacity, DataType type,
     boolean isConstant, ByteBuffer buffer, ByteBuffer nullsBuffer) {
     super(capacity, type);
+    boolean containsNull = true;
     if (this.resultArray != null) {
+      containsNull = ((ArrayType)type).containsNull();
       data = buffer.array();
       offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
 
       unsafeArray = new UnsafeArrayData();
-      arrayOffsets = new int[capacity];
-
-      byte[] dataNulls = nullsBuffer.array();
-      int posNulls = Platform.BYTE_ARRAY_OFFSET + nullsBuffer.position();
-      int numNulls = Platform.getInt(dataNulls, posNulls);
-      for (int i = 0; i < numNulls; i++) {
-        int cordinal = Platform.getInt(dataNulls, posNulls + 4 + i * 4);
-        arrayOffsets[cordinal] = -1;
-      }
-
-      int pos = 0;
-      for (int i = 0; i < capacity; i++) {
-        if (arrayOffsets[i] < 0) continue;
-        arrayOffsets[i] = pos;
-        pos += Platform.getInt(data, offset + pos) + 4;
-      }
+      lastArrayPos = 0;
+      lastArrayRow = 0;
     } else if (DecimalType.isByteArrayDecimalType(type)) {
       throw new NotImplementedException();
     } else if ((type instanceof FloatType) || (type instanceof DoubleType)) {
@@ -80,13 +69,17 @@ public final class ByteBufferColumnVector extends ColumnVector {
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
-    nulls = new byte[capacity];
+    if (containsNull) {
+      nulls = new byte[capacity];
+    }
     reset();
 
-    int numNulls = ByteBufferHelper.getInt(nullsBuffer);
-    for (int i = 0; i < numNulls; i++) {
-      int cordinal = ByteBufferHelper.getInt(nullsBuffer);
-      putNull(cordinal);
+    if (containsNull) {
+      int numNulls = ByteBufferHelper.getInt(nullsBuffer);
+      for (int i = 0; i < numNulls; i++) {
+        int cordinal = ByteBufferHelper.getInt(nullsBuffer);
+        putNull(cordinal);
+      }
     }
     if (isConstant) {
       setIsConstant();
@@ -94,16 +87,16 @@ public final class ByteBufferColumnVector extends ColumnVector {
   }
 
   @Override
-  public final long valuesNativeAddress() {
+  public long valuesNativeAddress() {
     throw new RuntimeException("Cannot get native address for on heap column");
   }
   @Override
-  public final long nullsNativeAddress() {
+  public long nullsNativeAddress() {
     throw new RuntimeException("Cannot get native address for on heap column");
   }
 
   @Override
-  public final void close() {
+  public void close() {
   }
 
   //
@@ -111,19 +104,19 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putNotNull(int rowId) {
+  public void putNotNull(int rowId) {
     nulls[rowId] = (byte)0;
   }
 
   @Override
-  public final void putNull(int rowId) {
+  public  void putNull(int rowId) {
     nulls[rowId] = (byte)1;
     ++numNulls;
     anyNullsSet = true;
   }
 
   @Override
-  public final void putNulls(int rowId, int count) {
+  public void putNulls(int rowId, int count) {
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
@@ -132,7 +125,7 @@ public final class ByteBufferColumnVector extends ColumnVector {
   }
 
   @Override
-  public final void putNotNulls(int rowId, int count) {
+  public void putNotNulls(int rowId, int count) {
     if (!anyNullsSet) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
@@ -140,7 +133,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
   }
 
   @Override
-  public final boolean isNullAt(int rowId) {
+  public boolean isNullAt(int rowId) {
+    if (nulls == null) return false;
     return nulls[rowId] == 1;
   }
 
@@ -149,17 +143,17 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putBoolean(int rowId, boolean value) {
+  public void putBoolean(int rowId, boolean value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putBooleans(int rowId, int count, boolean value) {
+  public void putBooleans(int rowId, int count, boolean value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final boolean getBoolean(int rowId) {
+  public boolean getBoolean(int rowId) {
     assert(dictionary == null);
     return Platform.getBoolean(data, offset + rowId);
   }
@@ -169,22 +163,22 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putByte(int rowId, byte value) {
+  public void putByte(int rowId, byte value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putBytes(int rowId, int count, byte value) {
+  public void putBytes(int rowId, int count, byte value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putBytes(int rowId, int count, byte[] src, int srcIndex) {
+  public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final byte getByte(int rowId) {
+  public byte getByte(int rowId) {
     assert(dictionary == null);
     return Platform.getByte(data, offset + rowId);
   }
@@ -194,22 +188,22 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putShort(int rowId, short value) {
+  public void putShort(int rowId, short value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putShorts(int rowId, int count, short value) {
+  public void putShorts(int rowId, int count, short value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putShorts(int rowId, int count, short[] src, int srcIndex) {
+  public void putShorts(int rowId, int count, short[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final short getShort(int rowId) {
+  public short getShort(int rowId) {
     assert(dictionary == null);
     return Platform.getShort(data, offset + rowId * 2);
   }
@@ -219,27 +213,27 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putInt(int rowId, int value) {
+  public void putInt(int rowId, int value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putInts(int rowId, int count, int value) {
+  public void putInts(int rowId, int count, int value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putInts(int rowId, int count, int[] src, int srcIndex) {
+  public void putInts(int rowId, int count, int[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+  public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final int getInt(int rowId) {
+  public int getInt(int rowId) {
     assert(dictionary == null);
     return Platform.getInt(data, offset + rowId * 4);
   }
@@ -249,27 +243,27 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putLong(int rowId, long value) {
+  public void putLong(int rowId, long value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putLongs(int rowId, int count, long value) {
+  public void putLongs(int rowId, int count, long value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putLongs(int rowId, int count, long[] src, int srcIndex) {
+  public void putLongs(int rowId, int count, long[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+  public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final long getLong(int rowId) {
+  public long getLong(int rowId) {
     throw new NotImplementedException();
   }
 
@@ -278,27 +272,27 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putFloat(int rowId, float value) {
+  public void putFloat(int rowId, float value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putFloats(int rowId, int count, float value) {
+  public void putFloats(int rowId, int count, float value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putFloats(int rowId, int count, float[] src, int srcIndex) {
+  public void putFloats(int rowId, int count, float[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putFloats(int rowId, int count, byte[] src, int srcIndex) {
+  public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final float getFloat(int rowId) {
+  public float getFloat(int rowId) {
     assert(dictionary == null);
     return Platform.getFloat(data, offset + rowId * 4);
   }
@@ -308,27 +302,27 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final void putDouble(int rowId, double value) {
+  public void putDouble(int rowId, double value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putDoubles(int rowId, int count, double value) {
+  public void putDoubles(int rowId, int count, double value) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putDoubles(int rowId, int count, double[] src, int srcIndex) {
+  public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
+  public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final double getDouble(int rowId) {
+  public double getDouble(int rowId) {
     assert(dictionary == null);
     return Platform.getDouble(data, offset + rowId * 8);
   }
@@ -337,25 +331,70 @@ public final class ByteBufferColumnVector extends ColumnVector {
   // APIs dealing with Arrays
   //
 
-  @Override
-  public final ArrayData getArray(int rowId) {
-    int length = getArrayLength(rowId);
-    unsafeArray.pointTo(data, offset + arrayOffsets[rowId] + 4, length);
-    return unsafeArray;
+  private void updateLastArrayPos(int rowId) {
+    int relative = rowId - lastArrayRow;
+    lastArrayRow = rowId;
+
+    if (relative == 1) {
+      int totalBytesLastArray = Platform.getInt(data, offset + lastArrayPos);
+      lastArrayPos += totalBytesLastArray + 4;  // 4 for totalbytes in UnsafeArrayData
+    } else if (relative == 0) {
+      // return the same position
+      return;
+    } else if (relative > 0) {
+      for (int i = 0; i < relative; i++) {
+        int totalBytesLastArray = Platform.getInt(data, offset + lastArrayPos);
+        lastArrayPos += totalBytesLastArray + 4;  // 4 for totalbytes in UnsafeArrayData
+      }
+    } else {
+      // recalculate pos from the first Array entry
+      lastArrayPos = 0;
+      for (int i = 0; i < rowId; i++) {
+        int totalBytesLastArray = Platform.getInt(data, offset + lastArrayPos);
+        lastArrayPos += totalBytesLastArray + 4;  // 4 for totalbytes in UnsafeArrayData
+      }
+    }
   }
 
   @Override
-  public final int getArrayLength(int rowId) { return Platform.getInt(data, offset + arrayOffsets[rowId]); }
-  @Override
-  public final int getArrayOffset(int rowId) { return arrayOffsets[rowId]; }
+  public ArrayData getArray(int rowId) {
+    if (rowId - lastArrayRow == 1) {
+      lastArrayRow = rowId;
+      long localOffset = offset;
+      int localLastArrayPos = lastArrayPos;
+      int totalBytesLastArray = Platform.getInt(data, localOffset + localLastArrayPos);
+      localLastArrayPos += totalBytesLastArray + 4;  // 4 for totalbytes in UnsafeArrayData
+      int length = Platform.getInt(data, localOffset + localLastArrayPos);
+      unsafeArray.pointTo(data, localOffset + localLastArrayPos + 4, length);
+      lastArrayPos = localLastArrayPos;
+      return unsafeArray;
+    } else {
+      updateLastArrayPos(rowId);
+      int length = Platform.getInt(data, offset + lastArrayPos);  // inline getArrayLength()
+      unsafeArray.pointTo(data, offset + lastArrayPos + 4, length);
+      return unsafeArray;
+    }
+  }
 
   @Override
-  public final void putArray(int rowId, int offset, int length) {
+  public int getArrayLength(int rowId) {
+    updateLastArrayPos(rowId);
+    return Platform.getInt(data, offset + lastArrayPos);
+  }
+
+  @Override
+  public int getArrayOffset(int rowId) {
+    updateLastArrayPos(rowId);
+    return lastArrayPos;
+  }
+
+  @Override
+  public void putArray(int rowId, int offset, int length) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void loadBytes(ColumnVector.Array array) {
+  public void loadBytes(ColumnVector.Array array) {
     throw new NotImplementedException();
   }
 
@@ -364,12 +403,12 @@ public final class ByteBufferColumnVector extends ColumnVector {
   //
 
   @Override
-  public final int putByteArray(int rowId, byte[] value, int offset, int length) {
+  public int putByteArray(int rowId, byte[] value, int offset, int length) {
     throw new NotImplementedException();
   }
 
   @Override
-  public final void reserve(int requiredCapacity) {
+  public void reserve(int requiredCapacity) {
     if (requiredCapacity > capacity) reserveInternal(requiredCapacity * 2);
   }
 
