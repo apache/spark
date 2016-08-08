@@ -2121,7 +2121,7 @@ setMethod("arrange",
           })
 
 #' @rdname arrange
-#' @name arrange
+#' @name orderBy
 #' @aliases orderBy,SparkDataFrame,characterOrColumn-method
 #' @export
 #' @note orderBy(SparkDataFrame, characterOrColumn) since 1.4.0

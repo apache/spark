@@ -551,7 +551,7 @@ setGeneric("merge")
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
-#' @rdname orderBy
+#' @rdname arrange
 #' @export
 setGeneric("orderBy", function(x, col, ...) { standardGeneric("orderBy") })
 
@@ -770,6 +770,10 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 setGeneric("over", function(x, window) { standardGeneric("over") })
 
 ###################### WindowSpec Methods ##########################
+
+#' @rdname orderBy
+#' @export
+setGeneric("orderBy", function(x, col, ...) { standardGeneric("orderBy") })
 
 #' @rdname rowsBetween
 #' @export

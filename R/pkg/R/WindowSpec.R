@@ -88,7 +88,7 @@ setMethod("partitionBy",
 #' @param x a WindowSpec
 #' @param col a character or Column object indicating an ordering column
 #' @param ... additional sorting fields
-#' @return A WindowSpec
+#' @return A WindowSpec.
 #' @name orderBy
 #' @rdname orderBy
 #' @aliases orderBy,WindowSpec,character-method
