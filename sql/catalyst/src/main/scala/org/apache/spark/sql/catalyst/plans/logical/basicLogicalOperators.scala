@@ -756,16 +756,20 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
-case object OneRowRelation extends LeafNode {
+abstract class AbstractOneRowRelation extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
-
-  /**
-   * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
-   * of cartesian joins.
-   *
-   * [[LeafNode]]s must override this.
-   */
   override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
 }
+
+/**
+ * A relation with one row. This relation might be eliminated during optimization in favor of a
+ * LocalRelation.
+ */
+case object OneRowRelation extends AbstractOneRowRelation
+
+/**
+ * A one row relation that should not be rewritten (during optimization). This is only for
+ * testing purposes.
+ */
+case object FixedOneRowRelation extends AbstractOneRowRelation
