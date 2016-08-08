@@ -24,6 +24,7 @@ import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -175,7 +176,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .startApplication()
 
     try {
-      eventually(timeout(30.seconds), interval(100.millis)) {
+      eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.RUNNING)
       }
 
@@ -183,7 +184,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should startWith ("application_")
       handle.stop()
 
-      eventually(timeout(30.seconds), interval(100.millis)) {
+      eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
     } finally {

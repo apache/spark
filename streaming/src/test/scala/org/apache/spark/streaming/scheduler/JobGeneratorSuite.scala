@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.CountDownLatch
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
 
@@ -68,7 +69,7 @@ class JobGeneratorSuite extends TestSuiteBase {
       val longBatchNumber = 3 // 3rd batch will take a long time
       val longBatchTime = longBatchNumber * batchDuration.milliseconds
 
-      val testTimeout = timeout(10.seconds)
+      val testTimeout = timeout(10 seconds)
       val inputStream = ssc.receiverStream(new TestReceiver)
 
       inputStream.foreachRDD((rdd: RDD[Int], time: Time) => {

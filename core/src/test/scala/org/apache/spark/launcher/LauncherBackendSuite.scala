@@ -20,6 +20,7 @@ package org.apache.spark.launcher
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -52,13 +53,13 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       .startApplication()
 
     try {
-      eventually(timeout(30.seconds), interval(100.millis)) {
+      eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getAppId() should not be (null)
       }
 
       handle.stop()
 
-      eventually(timeout(30.seconds), interval(100.millis)) {
+      eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
     } finally {

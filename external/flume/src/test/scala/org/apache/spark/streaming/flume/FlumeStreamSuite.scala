@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
@@ -54,11 +55,11 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
     try {
       val outputQueue = startContext(utils.getTestPort(), testCompression)
 
-      eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      eventually(timeout(10 seconds), interval(100 milliseconds)) {
         utils.writeInput(input.asJava, testCompression)
       }
 
-      eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      eventually(timeout(10 seconds), interval(100 milliseconds)) {
         val outputEvents = outputQueue.asScala.toSeq.flatten.map { _.event }
         outputEvents.foreach {
           event =>

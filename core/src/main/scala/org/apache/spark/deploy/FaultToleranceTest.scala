@@ -26,6 +26,7 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.sys.process._
 
 import org.json4s._
@@ -112,7 +113,7 @@ private object FaultToleranceTest extends App with Logging {
     assertValidClusterState()
 
     killLeader()
-    delay(30.seconds)
+    delay(30 seconds)
     assertValidClusterState()
     createClient()
     assertValidClusterState()
@@ -126,12 +127,12 @@ private object FaultToleranceTest extends App with Logging {
 
     killLeader()
     addMasters(1)
-    delay(30.seconds)
+    delay(30 seconds)
     assertValidClusterState()
 
     killLeader()
     addMasters(1)
-    delay(30.seconds)
+    delay(30 seconds)
     assertValidClusterState()
   }
 
@@ -156,7 +157,7 @@ private object FaultToleranceTest extends App with Logging {
     killLeader()
     workers.foreach(_.kill())
     workers.clear()
-    delay(30.seconds)
+    delay(30 seconds)
     addWorkers(2)
     assertValidClusterState()
   }
@@ -174,7 +175,7 @@ private object FaultToleranceTest extends App with Logging {
 
     (1 to 3).foreach { _ =>
       killLeader()
-      delay(30.seconds)
+      delay(30 seconds)
       assertValidClusterState()
       assertTrue(getLeader == masters.head)
       addMasters(1)
@@ -264,7 +265,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     // Avoid waiting indefinitely (e.g., we could register but get no executors).
-    assertTrue(ThreadUtils.awaitResult(f, 120.seconds))
+    assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
   }
 
   /**
@@ -317,7 +318,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     try {
-      assertTrue(ThreadUtils.awaitResult(f, 120.seconds))
+      assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
     } catch {
       case e: TimeoutException =>
         logError("Master states: " + masters.map(_.state))
@@ -421,7 +422,7 @@ private object SparkDocker {
     }
 
     dockerCmd.run(ProcessLogger(findIpAndLog _))
-    val ip = ThreadUtils.awaitResult(ipPromise.future, 30.seconds)
+    val ip = ThreadUtils.awaitResult(ipPromise.future, 30 seconds)
     val dockerId = Docker.getLastProcessId
     (ip, dockerId, outFile)
   }

@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.hdfs.DistributedFileSystem
@@ -367,7 +368,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1.second), interval(10.millis)) {
+      eventually(timeout(1 second), interval(10 millis)) {
         provider.getConfig().keys should not contain ("HDFS State")
       }
     } finally {
@@ -385,7 +386,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1.second), interval(10.millis)) {
+      eventually(timeout(1 second), interval(10 millis)) {
         verify(errorHandler).uncaughtException(any(), any())
       }
     } finally {

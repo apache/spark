@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.MoreExecutors
@@ -60,7 +61,7 @@ private class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: Task
           sparkEnv.blockManager.master.removeBlock(blockId)
           // removeBlock is asynchronous. Need to wait it's removed successfully
           try {
-            eventually(timeout(3.seconds), interval(200.milliseconds)) {
+            eventually(timeout(3 seconds), interval(200 milliseconds)) {
               assert(!sparkEnv.blockManager.master.contains(blockId))
             }
             removeBlockSuccessfully = true
@@ -247,3 +248,4 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
   }
 
 }
+

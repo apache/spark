@@ -23,6 +23,7 @@ import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
 import com.google.common.io.{ByteStreams, Files}
@@ -348,8 +349,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // start initial job
     val d = sc.parallelize(1 to 10)
     d.count()
-    val stdInterval = interval(100.milliseconds)
-    val appId = eventually(timeout(20.seconds), stdInterval) {
+    val stdInterval = interval(100 milliseconds)
+    val appId = eventually(timeout(20 seconds), stdInterval) {
       val json = getContentAndCode("applications", port)._2.get
       val apps = parse(json).asInstanceOf[JArray].arr
       apps should have size 1
@@ -429,7 +430,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     d2.count()
     dumpLogDir("After second job")
 
-    val stdTimeout = timeout(10.seconds)
+    val stdTimeout = timeout(10 seconds)
     logDebug("waiting for UI to update")
     eventually(stdTimeout, stdInterval) {
       assert(2 === getNumJobs(""),

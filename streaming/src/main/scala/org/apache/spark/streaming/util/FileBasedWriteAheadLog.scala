@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ExecutionContextTaskSupport
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.language.postfixOps
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -187,7 +188,7 @@ private[streaming] class FileBasedWriteAheadLog(
           val f = Future { deleteFile(logInfo) }(executionContext)
           if (waitForCompletion) {
             import scala.concurrent.duration._
-            Await.ready(f, 1.second)
+            Await.ready(f, 1 second)
           }
         } catch {
           case e: RejectedExecutionException =>

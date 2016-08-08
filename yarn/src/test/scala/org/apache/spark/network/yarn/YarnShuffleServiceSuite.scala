@@ -23,6 +23,7 @@ import java.util.EnumSet
 
 import scala.annotation.tailrec
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.service.ServiceStateException
@@ -302,7 +303,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile2 = s2.registeredExecutorFile
     recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
-    eventually(timeout(10.seconds), interval(5.millis)) {
+    eventually(timeout(10 seconds), interval(5 millis)) {
       assert(!execStateFile.exists())
     }
 

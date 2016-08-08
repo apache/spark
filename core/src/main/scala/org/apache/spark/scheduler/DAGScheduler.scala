@@ -27,6 +27,7 @@ import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.SerializationUtils
@@ -232,7 +233,7 @@ class DAGScheduler(
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates))
     blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
-      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600.seconds, "BlockManagerHeartbeat"))
+      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
   }
 
   /**

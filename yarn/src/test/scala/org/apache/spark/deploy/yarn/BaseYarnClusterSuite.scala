@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.apache.commons.lang3.SerializationUtils
@@ -166,7 +167,7 @@ abstract class BaseYarnClusterSuite
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(2.minutes), interval(1.second)) {
+      eventually(timeout(2 minutes), interval(1 second)) {
         assert(handle.getState().isFinal())
       }
     } finally {

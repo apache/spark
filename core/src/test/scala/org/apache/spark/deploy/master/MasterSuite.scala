@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.language.postfixOps
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -139,7 +140,7 @@ class MasterSuite extends SparkFunSuite
     val localCluster = new LocalSparkCluster(2, 2, 512, conf)
     localCluster.start()
     try {
-      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+      eventually(timeout(5 seconds), interval(100 milliseconds)) {
         val json = Source.fromURL(s"http://localhost:${localCluster.masterWebUIPort}/json")
           .getLines().mkString("\n")
         val JArray(workers) = (parse(json) \ "workers")

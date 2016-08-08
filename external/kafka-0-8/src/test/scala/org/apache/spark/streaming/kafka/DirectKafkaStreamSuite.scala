@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
@@ -157,7 +158,7 @@ class DirectKafkaStreamSuite
 
     // Send some initial messages before starting context
     kafkaTestUtils.sendMessages(topic, data)
-    eventually(timeout(10.seconds), interval(20.milliseconds)) {
+    eventually(timeout(10 seconds), interval(20 milliseconds)) {
       assert(getLatestOffset() > 3)
     }
     val offsetBeforeStart = getLatestOffset()
@@ -179,7 +180,7 @@ class DirectKafkaStreamSuite
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
-    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
@@ -202,7 +203,7 @@ class DirectKafkaStreamSuite
 
     // Send some initial messages before starting context
     kafkaTestUtils.sendMessages(topic, data)
-    eventually(timeout(10.seconds), interval(20.milliseconds)) {
+    eventually(timeout(10 seconds), interval(20 milliseconds)) {
       assert(getLatestOffset() >= 10)
     }
     val offsetBeforeStart = getLatestOffset()
@@ -225,7 +226,7 @@ class DirectKafkaStreamSuite
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
-    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
@@ -273,7 +274,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 10).sum)
     }
 
@@ -316,7 +317,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10.seconds), interval(50.milliseconds)) {
+    eventually(timeout(10 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 20).sum)
     }
     ssc.stop()
