@@ -88,7 +88,7 @@ public class JavaSparkSQLExample {
     // $example on:init_session$
     SparkSession spark = SparkSession
       .builder()
-      .appName("Java Spark SQL Example")
+      .appName("Java Spark SQL basic example")
       .config("spark.some.config.option", "some-value")
       .getOrCreate();
     // $example off:init_session$

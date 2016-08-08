@@ -246,7 +246,7 @@ class Analyzer(
       }.isDefined
     }
 
-    private def hasGroupingFunction(e: Expression): Boolean = {
+    private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
         case g: Grouping => g
         case g: GroupingID => g
@@ -1207,6 +1207,19 @@ class Analyzer(
                 val alias = Alias(ae, ae.toString)()
                 aggregateExpressions += alias
                 alias.toAttribute
+              // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
+              case e: Expression if grouping.exists(_.semanticEquals(e)) &&
+                  !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
+                  !aggregate.output.exists(_.semanticEquals(e)) =>
+                e match {
+                  case ne: NamedExpression =>
+                    aggregateExpressions += ne
+                    ne.toAttribute
+                  case _ =>
+                    val alias = Alias(e, e.toString)()
+                    aggregateExpressions += alias
+                    alias.toAttribute
+                }
             }
 
             // Push the aggregate expressions into the aggregate (if any).
@@ -1399,7 +1412,7 @@ class Analyzer(
      * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
      * names is empty names are assigned from field names in generator.
      */
-    private[sql] def makeGeneratorOutput(
+    private[analysis] def makeGeneratorOutput(
         generator: Generator,
         names: Seq[String]): Seq[Attribute] = {
       val elementAttrs = generator.elementSchema.toAttributes
@@ -1787,7 +1800,8 @@ class Analyzer(
         s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if wf.frame != UnspecifiedFrame =>
           WindowExpression(wf, s.copy(frameSpecification = wf.frame))
-        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame)) =>
+        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
+          if e.resolved =>
           val frame = SpecifiedWindowFrame.defaultWindowFrame(o.nonEmpty, acceptWindowFrame = true)
           we.copy(windowSpec = s.copy(frameSpecification = frame))
       }

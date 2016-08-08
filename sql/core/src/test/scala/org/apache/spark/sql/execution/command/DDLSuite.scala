@@ -23,18 +23,17 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, FunctionRegistry, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogStorageFormat}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
@@ -89,11 +88,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = Seq(
-        CatalogColumn("col1", "int"),
-        CatalogColumn("col2", "string"),
-        CatalogColumn("a", "int"),
-        CatalogColumn("b", "int")),
+      schema = new StructType()
+        .add("col1", "int")
+        .add("col2", "string")
+        .add("a", "int")
+        .add("b", "int"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L)
   }
@@ -252,6 +252,242 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  private def checkSchemaInCreatedDataSourceTable(
+      path: File,
+      userSpecifiedSchema: Option[String],
+      userSpecifiedPartitionCols: Option[String],
+      expectedSchema: StructType,
+      expectedPartitionCols: Seq[String]): Unit = {
+    val tabName = "tab1"
+    withTable(tabName) {
+      val partitionClause =
+        userSpecifiedPartitionCols.map(p => s"PARTITIONED BY ($p)").getOrElse("")
+      val schemaClause = userSpecifiedSchema.map(s => s"($s)").getOrElse("")
+      sql(
+        s"""
+           |CREATE TABLE $tabName $schemaClause
+           |USING parquet
+           |OPTIONS (
+           |  path '$path'
+           |)
+           |$partitionClause
+         """.stripMargin)
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
+
+      assert(expectedSchema ==
+        DDLUtils.getSchemaFromTableProperties(tableMetadata))
+      assert(expectedPartitionCols ==
+        DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata))
+    }
+  }
+
+  test("Create partitioned data source table without user specified schema") {
+    import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+      withTempPath { pathToPartitionedTable =>
+        df.write.format("parquet").partitionBy("num")
+          .save(pathToPartitionedTable.getCanonicalPath)
+        checkSchemaInCreatedDataSourceTable(
+          pathToPartitionedTable,
+          userSpecifiedSchema = None,
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("str", StringType).add("num", IntegerType),
+          expectedPartitionCols = Seq("num"))
+      }
+    }
+  }
+
+  test("Create partitioned data source table with user specified schema") {
+    import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+
+    // Case 1: with partitioning columns but no schema: Option("num")
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("num"), None).foreach { partitionCols =>
+      withTempPath { pathToPartitionedTable =>
+        df.write.format("parquet").partitionBy("num")
+          .save(pathToPartitionedTable.getCanonicalPath)
+        checkSchemaInCreatedDataSourceTable(
+          pathToPartitionedTable,
+          userSpecifiedSchema = Option("num int, str string"),
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
+      }
+    }
+  }
+
+  test("Create non-partitioned data source table without user specified schema") {
+    import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+      withTempPath { pathToNonPartitionedTable =>
+        df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
+        checkSchemaInCreatedDataSourceTable(
+          pathToNonPartitionedTable,
+          userSpecifiedSchema = None,
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedPartitionCols = Seq.empty[String])
+      }
+    }
+  }
+
+  test("Create non-partitioned data source table with user specified schema") {
+    import testImplicits._
+    val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+
+    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 2: without schema and partitioning columns: None
+    Seq(Option("num"), None).foreach { partitionCols =>
+      withTempPath { pathToNonPartitionedTable =>
+        df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
+        checkSchemaInCreatedDataSourceTable(
+          pathToNonPartitionedTable,
+          userSpecifiedSchema = Option("num int, str string"),
+          userSpecifiedPartitionCols = partitionCols,
+          expectedSchema = new StructType().add("num", IntegerType).add("str", StringType),
+          expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
+      }
+    }
+  }
+
+  test("create table - duplicate column names in the table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int, a string) USING json")
+    }
+    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+  }
+
+  test("create table - partition column names not in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
+    }
+    assert(e.message == "partition column c is not defined in table `tbl`, " +
+      "defined table columns are: a, b")
+  }
+
+  test("create table - bucket column names not in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
+    }
+    assert(e.message == "bucket column c is not defined in table `tbl`, " +
+      "defined table columns are: a, b")
+  }
+
+  test("create table - column repeated in partition columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) USING json PARTITIONED BY (a, a)")
+    }
+    assert(e.message == "Found duplicate column(s) in partition: a")
+  }
+
+  test("create table - column repeated in bucket columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) USING json CLUSTERED BY (a, a) INTO 4 BUCKETS")
+    }
+    assert(e.message == "Found duplicate column(s) in bucket: a")
+  }
+
+  test("Describe Table with Corrupted Schema") {
+    import testImplicits._
+
+    val tabName = "tab1"
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("col1", "col2")
+      df.write.format("json").save(path)
+
+      withTable(tabName) {
+        sql(
+          s"""
+             |CREATE TABLE $tabName
+             |USING json
+             |OPTIONS (
+             |  path '$path'
+             |)
+           """.stripMargin)
+
+        val catalog = spark.sessionState.catalog
+        val table = catalog.getTableMetadata(TableIdentifier(tabName))
+        val newProperties = table.properties.filterKeys(key =>
+          key != CreateDataSourceTableUtils.DATASOURCE_SCHEMA_NUMPARTS)
+        val newTable = table.copy(properties = newProperties)
+        catalog.alterTable(newTable)
+
+        val e = intercept[AnalysisException] {
+          sql(s"DESC $tabName")
+        }.getMessage
+        assert(e.contains(s"Could not read schema from the metastore because it is corrupted"))
+      }
+    }
+  }
+
+  test("Refresh table after changing the data source table partitioning") {
+    import testImplicits._
+
+    val tabName = "tab1"
+    val catalog = spark.sessionState.catalog
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString, i, i))
+        .toDF("col1", "col2", "col3", "col4")
+      df.write.format("json").partitionBy("col1", "col3").save(path)
+      val schema = new StructType()
+        .add("col2", StringType).add("col4", LongType)
+        .add("col1", IntegerType).add("col3", IntegerType)
+      val partitionCols = Seq("col1", "col3")
+
+      withTable(tabName) {
+        spark.sql(
+          s"""
+             |CREATE TABLE $tabName
+             |USING json
+             |OPTIONS (
+             |  path '$path'
+             |)
+           """.stripMargin)
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName))
+        val tableSchema = DDLUtils.getSchemaFromTableProperties(tableMetadata)
+        assert(tableSchema == schema)
+        val partCols = DDLUtils.getPartitionColumnsFromTableProperties(tableMetadata)
+        assert(partCols == partitionCols)
+
+        // Change the schema
+        val newDF = sparkContext.parallelize(1 to 10).map(i => (i, i.toString))
+          .toDF("newCol1", "newCol2")
+        newDF.write.format("json").partitionBy("newCol1").mode(SaveMode.Overwrite).save(path)
+
+        // No change on the schema
+        val tableMetadataBeforeRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+        val tableSchemaBeforeRefresh =
+          DDLUtils.getSchemaFromTableProperties(tableMetadataBeforeRefresh)
+        assert(tableSchemaBeforeRefresh == schema)
+        val partColsBeforeRefresh =
+          DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataBeforeRefresh)
+        assert(partColsBeforeRefresh == partitionCols)
+
+        // Refresh does not affect the schema
+        spark.catalog.refreshTable(tabName)
+
+        val tableMetadataAfterRefresh = catalog.getTableMetadata(TableIdentifier(tabName))
+        val tableSchemaAfterRefresh =
+          DDLUtils.getSchemaFromTableProperties(tableMetadataAfterRefresh)
+        assert(tableSchemaAfterRefresh == schema)
+        val partColsAfterRefresh =
+          DDLUtils.getPartitionColumnsFromTableProperties(tableMetadataAfterRefresh)
+        assert(partColsAfterRefresh == partitionCols)
+      }
+    }
+  }
+
   test("desc table for parquet data source table using in-memory catalog") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
     val tabName = "tab1"
@@ -399,7 +635,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
-      assert(table.schema == Seq(CatalogColumn("a", "int"), CatalogColumn("b", "int")))
+      assert(table.schema == new StructType().add("a", "int").add("b", "int"))
       assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
     }
   }
@@ -413,7 +649,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
       assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
-        Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
+        new StructType().add("a", IntegerType).add("b", IntegerType))
       assert(DDLUtils.getPartitionColumnsFromTableProperties(table) ==
         Seq("a"))
     }
@@ -429,7 +665,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
       assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
-        Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
+        new StructType().add("a", IntegerType).add("b", IntegerType))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
         Some(BucketSpec(5, Seq("a"), Seq("b"))))
     }
@@ -1270,7 +1506,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[ParseException] {
+        val e = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE TABLE jsonTable
@@ -1280,9 +1516,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |)
              |CLUSTERED BY (inexistentColumnA) SORTED BY (inexistentColumnB) INTO 2 BUCKETS
            """.stripMargin)
-        }.getMessage
-        assert(e.contains(
-          "Expected explicit specification of table schema when using CLUSTERED BY clause"))
+        }
+        assert(e.message == "Cannot specify bucketing information if the table schema is not " +
+          "specified when creating and will be inferred at runtime")
       }
     }
   }

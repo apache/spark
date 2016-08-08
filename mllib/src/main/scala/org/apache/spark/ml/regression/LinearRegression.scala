@@ -58,7 +58,12 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *
  * The learning objective is to minimize the squared error, with regularization.
  * The specific squared error loss function used is:
- *   L = 1/2n ||A coefficients - y||^2^
+ *
+ * <p><blockquote>
+ *    $$
+ *    L = 1/2n ||A coefficients - y||^2^
+ *    $$
+ * </blockquote></p>
  *
  * This supports multiple types of regularization:
  *  - none (a.k.a. ordinary least squares)
@@ -759,66 +764,103 @@ class LinearRegressionSummary private[regression] (
  *
  * When training with intercept enabled,
  * The objective function in the scaled space is given by
- * {{{
- * L = 1/2n ||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2,
- * }}}
- * where \bar{x_i} is the mean of x_i, \hat{x_i} is the standard deviation of x_i,
- * \bar{y} is the mean of label, and \hat{y} is the standard deviation of label.
+ *
+ * <p><blockquote>
+ *    $$
+ *    L = 1/2n ||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2,
+ *    $$
+ * </blockquote></p>
+ *
+ * where $\bar{x_i}$ is the mean of $x_i$, $\hat{x_i}$ is the standard deviation of $x_i$,
+ * $\bar{y}$ is the mean of label, and $\hat{y}$ is the standard deviation of label.
  *
  * If we fitting the intercept disabled (that is forced through 0.0),
- * we can use the same equation except we set \bar{y} and \bar{x_i} to 0 instead
+ * we can use the same equation except we set $\bar{y}$ and $\bar{x_i}$ to 0 instead
  * of the respective means.
  *
  * This can be rewritten as
- * {{{
- * L = 1/2n ||\sum_i (w_i/\hat{x_i})x_i - \sum_i (w_i/\hat{x_i})\bar{x_i} - y / \hat{y}
- *     + \bar{y} / \hat{y}||^2
- *   = 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
- * }}}
- * where w_i^\prime^ is the effective coefficients defined by w_i/\hat{x_i}, offset is
- * {{{
- * - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
- * }}}, and diff is
- * {{{
- * \sum_i w_i^\prime x_i - y / \hat{y} + offset
- * }}}
  *
+ * <p><blockquote>
+ *    $$
+ *    \begin{align}
+ *     L &= 1/2n ||\sum_i (w_i/\hat{x_i})x_i - \sum_i (w_i/\hat{x_i})\bar{x_i} - y / \hat{y}
+ *          + \bar{y} / \hat{y}||^2 \\
+ *       &= 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
+ *    \end{align}
+ *    $$
+ * </blockquote></p>
+ *
+ * where $w_i^\prime$ is the effective coefficients defined by $w_i/\hat{x_i}$, offset is
+ *
+ * <p><blockquote>
+ *    $$
+ *    - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
+ *    $$
+ * </blockquote></p>
+ *
+ * and diff is
+ *
+ * <p><blockquote>
+ *    $$
+ *    \sum_i w_i^\prime x_i - y / \hat{y} + offset
+ *    $$
+ * </blockquote></p>
  *
  * Note that the effective coefficients and offset don't depend on training dataset,
  * so they can be precomputed.
  *
  * Now, the first derivative of the objective function in scaled space is
- * {{{
- * \frac{\partial L}{\partial w_i} = diff/N (x_i - \bar{x_i}) / \hat{x_i}
- * }}}
- * However, ($x_i - \bar{x_i}$) will densify the computation, so it's not
+ *
+ * <p><blockquote>
+ *    $$
+ *    \frac{\partial L}{\partial w_i} = diff/N (x_i - \bar{x_i}) / \hat{x_i}
+ *    $$
+ * </blockquote></p>
+ *
+ * However, $(x_i - \bar{x_i})$ will densify the computation, so it's not
  * an ideal formula when the training dataset is sparse format.
  *
- * This can be addressed by adding the dense \bar{x_i} / \hat{x_i} terms
+ * This can be addressed by adding the dense $\bar{x_i} / \hat{x_i}$ terms
  * in the end by keeping the sum of diff. The first derivative of total
  * objective function from all the samples is
- * {{{
- * \frac{\partial L}{\partial w_i} =
- *     1/N \sum_j diff_j (x_{ij} - \bar{x_i}) / \hat{x_i}
- *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) - diffSum \bar{x_i}) / \hat{x_i})
- *   = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) + correction_i)
- * }}},
- * where correction_i = - diffSum \bar{x_i}) / \hat{x_i}
+ *
+ *
+ * <p><blockquote>
+ *    $$
+ *    \begin{align}
+ *       \frac{\partial L}{\partial w_i} &=
+ *           1/N \sum_j diff_j (x_{ij} - \bar{x_i}) / \hat{x_i} \\
+ *         &= 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) - diffSum \bar{x_i} / \hat{x_i}) \\
+ *         &= 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) + correction_i)
+ *    \end{align}
+ *    $$
+ * </blockquote></p>
+ *
+ * where $correction_i = - diffSum \bar{x_i} / \hat{x_i}$
  *
  * A simple math can show that diffSum is actually zero, so we don't even
  * need to add the correction terms in the end. From the definition of diff,
- * {{{
- * diffSum = \sum_j (\sum_i w_i(x_{ij} - \bar{x_i}) / \hat{x_i} - (y_j - \bar{y}) / \hat{y})
- *         = N * (\sum_i w_i(\bar{x_i} - \bar{x_i}) / \hat{x_i} - (\bar{y_j} - \bar{y}) / \hat{y})
- *         = 0
- * }}}
+ *
+ * <p><blockquote>
+ *    $$
+ *    \begin{align}
+ *       diffSum &= \sum_j (\sum_i w_i(x_{ij} - \bar{x_i})
+ *                    / \hat{x_i} - (y_j - \bar{y}) / \hat{y}) \\
+ *         &= N * (\sum_i w_i(\bar{x_i} - \bar{x_i}) / \hat{x_i} - (\bar{y} - \bar{y}) / \hat{y}) \\
+ *         &= 0
+ *    \end{align}
+ *    $$
+ * </blockquote></p>
  *
  * As a result, the first derivative of the total objective function only depends on
  * the training dataset, which can be easily computed in distributed fashion, and is
  * sparse format friendly.
- * {{{
- * \frac{\partial L}{\partial w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
- * }}},
+ *
+ * <p><blockquote>
+ *    $$
+ *    \frac{\partial L}{\partial w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
+ *    $$
+ * </blockquote></p>
  *
  * @param coefficients The coefficients corresponding to the features.
  * @param labelStd The standard deviation value of the label.

@@ -76,7 +76,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
       PushThroughSetOperations,
-      PushProjectThroughSample,
       ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
@@ -147,17 +146,6 @@ class SimpleTestOptimizer extends Optimizer(
     EmptyFunctionRegistry,
     new SimpleCatalystConf(caseSensitiveAnalysis = true)),
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
-
-/**
- * Pushes projects down beneath Sample to enable column pruning with sampling.
- */
-object PushProjectThroughSample extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down projection into sample
-    case Project(projectList, Sample(lb, up, replace, seed, child)) =>
-      Sample(lb, up, replace, seed, Project(projectList, child))()
-  }
-}
 
 /**
  * Removes the Project only conducting Alias of its child node.
@@ -673,10 +661,6 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(Literal(null, _), _, _) => Literal.create(null, e.dataType)
       case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
-
-      // MaxOf and MinOf can't do null propagation
-      case e: MaxOf => e
-      case e: MinOf => e
 
       // Put exceptional cases above if any
       case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
