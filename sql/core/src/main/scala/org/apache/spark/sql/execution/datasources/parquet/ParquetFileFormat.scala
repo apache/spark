@@ -368,12 +368,12 @@ private[sql] class ParquetFileFormat
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
 
-        // For test purpose, getting the number to row groups this vectorized reader to read.
+        // For test purpose.
+        // If the predefined accumulator exists, the row group number to read will be updated
+        // to the accumulator. So we can check if the row groups are filtered or not in test case.
         val taskContext = TaskContext.get()
         if (taskContext != null) {
-          val accu = taskContext.taskMetrics.externalAccums.find { acc =>
-            acc.name.isDefined && acc.name.get == accuNameForNumRowGroup
-          }
+          val accu = taskContext.taskMetrics.lookForAccumulatorByName(accuNameForNumRowGroup)
           if (accu.isDefined) {
             accu.get.asInstanceOf[SQLMetric].add(vectorizedReader.getRowGroupCount().toLong)
           }
