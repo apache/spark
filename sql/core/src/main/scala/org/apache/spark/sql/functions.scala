@@ -138,28 +138,28 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.0.0")
+  @deprecated("Use approx_count_distinct()", "2.1.0")
   def approxCountDistinct(e: Column): Column = approx_count_distinct(e)
 
   /**
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.0.0")
+  @deprecated("Use approx_count_distinct()", "2.1.0")
   def approxCountDistinct(columnName: String): Column = approx_count_distinct(columnName)
 
   /**
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.0.0")
+  @deprecated("Use approx_count_distinct()", "2.1.0")
   def approxCountDistinct(e: Column, rsd: Double): Column = approx_count_distinct(e, rsd)
 
   /**
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.0.0")
+  @deprecated("Use approx_count_distinct()", "2.1.0")
   def approxCountDistinct(columnName: String, rsd: Double): Column = {
     approx_count_distinct(Column(columnName), rsd)
   }
@@ -168,7 +168,7 @@ object functions {
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def approx_count_distinct(e: Column): Column = withAggregateFunction {
     HyperLogLogPlusPlus(e.expr)
@@ -178,7 +178,7 @@ object functions {
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def approx_count_distinct(columnName: String): Column = approx_count_distinct(column(columnName))
 
@@ -188,7 +188,7 @@ object functions {
    * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def approx_count_distinct(e: Column, rsd: Double): Column = withAggregateFunction {
     HyperLogLogPlusPlus(e.expr, rsd, 0, 0)
@@ -200,7 +200,7 @@ object functions {
    * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def approx_count_distinct(columnName: String, rsd: Double): Column = {
     approx_count_distinct(Column(columnName), rsd)
@@ -1935,21 +1935,21 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use degrees()", "2.0.0")
+  @deprecated("Use degrees()", "2.1.0")
   def toDegrees(e: Column): Column = degrees(e)
 
   /**
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use degrees()", "2.0.0")
+  @deprecated("Use degrees()", "2.1.0")
   def toDegrees(columnName: String): Column = degrees(Column(columnName))
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
    * @group math_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def degrees(e: Column): Column = withExpr { ToDegrees(e.expr) }
 
@@ -1957,7 +1957,7 @@ object functions {
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
    * @group math_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def degrees(columnName: String): Column = degrees(Column(columnName))
 
@@ -1965,21 +1965,21 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use radians()", "2.0.0")
+  @deprecated("Use radians()", "2.1.0")
   def toRadians(e: Column): Column = radians(e)
 
   /**
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use radians()", "2.0.0")
+  @deprecated("Use radians()", "2.1.0")
   def toRadians(columnName: String): Column = radians(Column(columnName))
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def radians(e: Column): Column = withExpr { ToRadians(e.expr) }
 
@@ -1987,7 +1987,7 @@ object functions {
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
    * @group math_funcs
-   * @since 2.0.0
+   * @since 2.1.0
    */
   def radians(columnName: String): Column = radians(Column(columnName))
 
