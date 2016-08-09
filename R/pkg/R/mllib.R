@@ -314,8 +314,8 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param isotonic Whether the output sequence should be isotonic/increasing (true) or
-#'                 antitonic/decreasing (false)
+#' @param isotonic Whether the output sequence should be isotonic/increasing (TRUE) or
+#'                 antitonic/decreasing (FALSE)
 #' @param featureIndex The index of the feature if \code{featuresCol} is a vector column (default: `0`),
 #'                     no effect otherwise
 #' @param weightCol The weight column name.
@@ -352,7 +352,7 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
-            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex), weightCol)
+            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex), as.character(weightCol))
             return(new("IsotonicRegressionModel", jobj = jobj))
           })
 
@@ -371,6 +371,7 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 
 #  Get the summary of a isotonicRegressionModel model
 
+#' @param object a fitted isotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
 #' @export
