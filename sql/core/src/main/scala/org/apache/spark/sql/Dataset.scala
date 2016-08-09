@@ -256,6 +256,12 @@ class Dataset[T] private[sql](
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case array: Array[_] => array.mkString("[", ", ", "]")
           case seq: Seq[_] => seq.mkString("[", ", ", "]")
+          case decimal: BigDecimal =>
+            val d = decimal.bigDecimal.stripTrailingZeros
+            if (d.scale() < 0) d.setScale(0).toString else d.toString
+          case jdecimal: java.math.BigDecimal =>
+            val d = jdecimal.stripTrailingZeros
+            if (d.scale() < 0) d.setScale(0).toString else d.toString
           case _ => cell.toString
         }
         if (truncate > 0 && str.length > truncate) {
