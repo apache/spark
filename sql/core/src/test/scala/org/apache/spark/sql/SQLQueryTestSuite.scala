@@ -124,8 +124,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = df.schema.map(_.dataType.simpleString).mkString(", "),
-        output = df.showString(_numRows = 10000, truncate = 10000).trim)
+        schema = df.schema.catalogString,
+        output = df.queryExecution.hiveResultString().mkString("\n"))
     }
 
     if (regenerateGoldenFiles) {
