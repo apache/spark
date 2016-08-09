@@ -808,6 +808,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     boostingStrategy.treeStrategy.setMaxDepth(maxDepth)
     boostingStrategy.treeStrategy.setMaxBins(maxBins)
     boostingStrategy.treeStrategy.categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap
+    boostingStrategy.treeStrategy.setImpurity(Variance)
 
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
     try {
