@@ -31,6 +31,7 @@ import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -882,8 +883,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val threshold = 0.05
     val seed = 1L
 
-    // results[i][j]: how many times Utils.randomize moves an element from position j to position i
-    val results: Array[Array[Long]] = Array.ofDim(arraySize, arraySize)
+    // results(i)(j): how many times Utils.randomize moves an element from position j to position i
+    val results = Array.ofDim[Long](arraySize, arraySize)
 
     // This must be seeded because even a fair random process will fail this test with
     // probability equal to the value of `threshold`, which is inconvenient for a unit test.
@@ -893,18 +894,20 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     for {
       _ <- 0 until numTrials
       trial = Utils.randomizeInPlace(range.toArray, rand)
+    } for {
       i <- range
-    } results(i)(trial(i)) += 1L
+      j = trial(i)
+    } results(i)(j) += 1L
 
-    val chi = new org.apache.commons.math3.stat.inference.ChiSquareTest()
+    val chi = new ChiSquareTest()
 
     // We expect an even distribution; this array will be rescaled by `chiSquareTest`
-    val expected: Array[Double] = Array.fill(arraySize * arraySize)(1.0)
-    val observed: Array[Long] = results.flatMap(x => x)
+    val expected = Array.fill(arraySize * arraySize)(1.0)
+    val observed = results.flatten
 
     // Performs Pearson's chi-squared test. Using the sum-of-squares as the test statistic, gives
     // the probability of a uniform distribution producing results as extreme as `observed`
-    val pValue: Double = chi.chiSquareTest(expected, observed)
+    val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
   }
