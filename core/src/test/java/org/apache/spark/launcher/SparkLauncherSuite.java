@@ -89,6 +89,11 @@ public class SparkLauncherSuite {
     launcher.setConf("spark.foo", "foo");
     launcher.addSparkArg(opts.CONF, "spark.foo=bar");
     assertEquals("bar", launcher.builder.conf.get("spark.foo"));
+
+    launcher.setConf(SparkLauncher.PYSPARK_DRIVER_PYTHON, "python3.4");
+    launcher.setConf(SparkLauncher.PYSPARK_PYTHON, "python3.5");
+    assertEquals("python3.4", launcher.builder.conf.get("spark.pyspark.driver.python"));
+    assertEquals("python3.5", launcher.builder.conf.get("spark.pyspark.python"));
   }
 
   @Test(expected=IllegalStateException.class)

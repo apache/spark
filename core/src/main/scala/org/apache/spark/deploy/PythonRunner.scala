@@ -26,7 +26,7 @@ import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkUserAppException}
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
@@ -39,14 +39,10 @@ object PythonRunner {
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
-    val pythonExec =
-      if (sparkConf.contains(SparkLauncher.PYSPARK_DRIVER_PYTHON)) {
-        sparkConf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON)
-      } else if (sparkConf.contains(SparkLauncher.PYSPARK_PYTHON)) {
-        sparkConf.get(SparkLauncher.PYSPARK_PYTHON)
-      } else {
-        sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python"))
-      }
+    val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
+          .getOrElse(sparkConf.get(PYSPARK_PYTHON)
+            .getOrElse(sys.env.getOrElse("PYSPARK_DRIVER_PYTHON",
+              sys.env.getOrElse("PYSPARK_PYTHON", "python"))))
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -87,7 +83,7 @@ object PythonRunner {
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
-    sparkConf.getOption(SparkLauncher.PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
+    sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()
