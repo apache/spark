@@ -161,7 +161,6 @@ get_preferred_mirror <- function(version, packageName) {
   jsonUrl <- paste0("http://www.apache.org/dyn/closer.cgi?path=",
                         file.path("spark", version, packageName),
                         ".tgz&as_json=1")
-  # jsonUrl <- "http://www.apache.org/dyn/closer.cgi?as_json=1"
   textLines <- readLines(jsonUrl, warn = FALSE)
   rowNum <- grep("\"preferred\"", textLines)
   linePreferred <- textLines[rowNum]
