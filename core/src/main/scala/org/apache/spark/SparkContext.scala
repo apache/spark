@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReferenc
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
@@ -1562,14 +1562,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
     }
-  }
-
-  def killTasks(tasks: HashSet[Long], taskInfo: HashMap[Long, TaskInfo]): Boolean = {
-    tasks.foreach { task =>
-      val executorId = taskInfo(task).executorId
-      schedulerBackend.killTask(task, executorId, true)
-    }
-    true
   }
 
   /** The version of Spark on which this application is running. */

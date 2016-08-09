@@ -801,8 +801,16 @@ private[spark] class TaskSetManager(
 
     // kill running task if stage failed
     if(reason.isInstanceOf[FetchFailed]) {
-      sched.sc.killTasks(runningTasksSet, taskInfos)
+      killTasks(runningTasksSet, taskInfos)
     }
+  }
+
+  def killTasks(tasks: HashSet[Long], taskInfo: HashMap[Long, TaskInfo]): Boolean = {
+    tasks.foreach { task =>
+      val executorId = taskInfo(task).executorId
+      sched.sc.schedulerBackend.killTask(task, executorId, true)
+    }
+    true
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
