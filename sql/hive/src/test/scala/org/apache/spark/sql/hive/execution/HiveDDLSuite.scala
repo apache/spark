@@ -27,6 +27,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.CaseInsensitiveMap
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -647,18 +648,18 @@ class HiveDDLSuite
         spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
           .write.format("parquet").save(path)
         sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '$path')")
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
 
         // The source table should be an external data source table
         val sourceTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(sourceTabName, Some("default")))
+        val targetTable = spark.sessionState.catalog.getTableMetadata(
+          TableIdentifier(targetTabName, Some("default")))
+        // The table type of the source table should be an external data source table
         assert(DDLUtils.isDatasourceTable(sourceTable))
         assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
 
-        val e = intercept[AnalysisException] {
-          sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
-        }.getMessage
-        assert(e.contains("CREATE TABLE LIKE is not allowed when the source table is " +
-          "an external table created using the datasource API"))
+        checkCreateTableLike(sourceTable, targetTable)
       }
     }
   }
@@ -740,7 +741,7 @@ class HiveDDLSuite
 
   private def getTablePath(table: CatalogTable): Option[String] = {
     if (DDLUtils.isDatasourceTable(table)) {
-      table.storage.properties.get("path")
+      new CaseInsensitiveMap(table.storage.properties).get("path")
     } else {
       table.storage.locationUri
     }

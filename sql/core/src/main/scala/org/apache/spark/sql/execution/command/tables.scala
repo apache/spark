@@ -57,9 +57,13 @@ case class CreateHiveTableAsSelectLogicalPlan(
 
 /**
  * A command to create a MANAGED table with the same definition of the given existing table.
- * The source table cannot be temporary table, Index table or an external table created using
- * the datasource API. In the target table definition, the table comment is always empty but
- * the column comments are identical to the ones defined in the source table.
+ * The source table cannot be temporary table or Index table. In the target table definition,
+ * the table comment is always empty but the column comments are identical to the ones defined
+ * in the source table.
+ *
+ * The CatalogTable attributes copied from the source table include storage(inputFormat, outputFormat,
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec, properties,
+ * unsupportedFeatures.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -91,24 +95,19 @@ case class CreateTableLikeCommand(
         s"CREATE TABLE LIKE is not allowed when the source table is ${o.name}")
     }
 
-    if (DDLUtils.isDatasourceTable(sourceTableDesc) &&
-        sourceTableDesc.tableType != CatalogTableType.MANAGED) {
-      throw new AnalysisException(
-        "CREATE TABLE LIKE is not allowed when the source table is an external table created " +
-          "using the datasource API")
-    }
-
     // For EXTERNAL_TABLE, the table properties has a particular field. To change it
     // to a MANAGED_TABLE, we need to remove it; Otherwise, it will be EXTERNAL_TABLE,
     // even if we set the tableType to MANAGED
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     // Table comment is stored as a table property. To clean it, we also should remove them.
     val newTableProp =
-      sourceTableDesc.properties.filterKeys(key => key != "EXTERNAL" && key != "comment")
+      sourceTableDesc.properties.filterKeys(key =>
+        key != "EXTERNAL" && key.toLowerCase != "comment")
     val newSerdeProp =
       if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
         val newPath = catalog.defaultTablePath(targetTable)
-        sourceTableDesc.storage.properties ++ Map("path" -> newPath)
+        sourceTableDesc.storage.properties.filterKeys(_.toLowerCase != "path") ++
+          Map("path" -> newPath)
       } else {
         sourceTableDesc.storage.properties
       }
@@ -116,9 +115,10 @@ case class CreateTableLikeCommand(
       sourceTableDesc.copy(
         identifier = targetTable,
         tableType = CatalogTableType.MANAGED,
+        owner = "",
         createTime = System.currentTimeMillis,
-        properties = newTableProp,
         lastAccessTime = -1,
+        properties = newTableProp,
         comment = None,
         viewOriginalText = None,
         viewText = None).withNewStorage(
