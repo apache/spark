@@ -27,7 +27,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[sql] object StatFunctions extends Logging {
+object StatFunctions extends Logging {
 
   import QuantileSummaries.Stats
 
@@ -337,7 +337,7 @@ private[sql] object StatFunctions extends Logging {
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
-  private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
+  def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols, "correlation")
     counts.Ck / math.sqrt(counts.MkX * counts.MkY)
   }
@@ -407,13 +407,13 @@ private[sql] object StatFunctions extends Logging {
    * @param cols the column names
    * @return the covariance of the two columns.
    */
-  private[sql] def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
+  def calculateCov(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols, "covariance")
     counts.cov
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
-  private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
+  def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
     val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
     if (counts.length == 1e6.toInt) {
