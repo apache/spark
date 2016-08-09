@@ -301,8 +301,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       sessionState.close()
       System.exit(0)
     }
-    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
-      cmd_trimmed.startsWith("!") || isRemoteMode) {
+    if (cmd_trimmed.startsWith("!") || isRemoteMode) {
       val start = System.currentTimeMillis()
       super.processCmd(cmd)
       val end = System.currentTimeMillis()
@@ -318,7 +317,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
           proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[ListResourceProcessor] ||
-          proc.isInstanceOf[ResetProcessor] ) {
+          proc.isInstanceOf[ResetProcessor] || proc.isInstanceOf[DeleteResourceProcessor] ||
+          proc.isInstanceOf[ReloadProcessor] || proc.isInstanceOf[CompileProcessor] ||
+          proc.isInstanceOf[DfsProcessor] || proc.isInstanceOf[CryptoProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()
