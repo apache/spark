@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.Map
 
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
@@ -36,7 +36,7 @@ private[thriftserver] class SparkSQLOperationManager()
   extends OperationManager with Logging {
 
   val handleToOperation = ReflectionUtils
-    .getSuperField[Map[OperationHandle, Operation]](this, "handleToOperation")
+    .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
   val sessionToActivePool = new ConcurrentHashMap[SessionHandle, String]()
   val sessionToContexts = new ConcurrentHashMap[SessionHandle, SQLContext]()
@@ -44,7 +44,7 @@ private[thriftserver] class SparkSQLOperationManager()
   override def newExecuteStatementOperation(
       parentSession: HiveSession,
       statement: String,
-      confOverlay: Map[String, String],
+      confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     if (null == sqlContext) {
