@@ -114,6 +114,21 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     reader.load(path)
   }
 
+  def createFileStreamWithOptions(
+      format: String,
+      path: String,
+      schema: Option[StructType] = None,
+      options: Map[String, String]): DataFrame = {
+
+    val reader =
+      if (schema.isDefined) {
+        spark.readStream.format(format).schema(schema.get).options(options)
+      } else {
+        spark.readStream.format(format).options(options)
+      }
+    reader.load(path)
+  }
+
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     df.queryExecution.analyzed
@@ -331,7 +346,44 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  // =============== csv file stream tests =================
+  test("inforSchema option for csv file") {
+    withTempDirs { case (src, tmp) =>
+      // Add a file so that we can infer its schema
+      stringToFile(new File(src, "existing"), "a,b\n1,2\n3,4")
+      createFileStreamWithOptions("csv", src.getCanonicalPath, None, Map("inferSchema" -> "true"))
+    }
+  }
+
+  test("spark.sql.streaming.schemaInference set for csv file") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "a,b\n1,2\n3,4")
+        createFileStream("csv", src.getCanonicalPath, None)
+      }
+    }
+  }
+
   // =============== JSON file stream tests ================
+
+  test("inforSchema option for json") {
+    withTempDirs { case (src, tmp) =>
+      // Add a file so that we can infer its schema
+      stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+      createFileStreamWithOptions("json", src.getCanonicalPath, None, Map("inferSchema" -> "true"))
+    }
+  }
+
+  test("spark.sql.streaming.schemaInference set for json file") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+        createFileStream("json", src.getCanonicalPath, None)
+      }
+    }
+  }
 
   test("read from json files") {
     withTempDirs { case (src, tmp) =>
