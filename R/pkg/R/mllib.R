@@ -352,7 +352,8 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
             }
 
             jobj <- callJStatic("org.apache.spark.ml.r.IsotonicRegressionWrapper", "fit",
-            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex), as.character(weightCol))
+            data@sdf, formula, as.logical(isotonic), as.integer(featureIndex),
+              as.character(weightCol))
             return(new("IsotonicRegressionModel", jobj = jobj))
           })
 
