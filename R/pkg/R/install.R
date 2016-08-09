@@ -19,7 +19,7 @@
 # from CRAN.
 
 #' Download and Install Apache Spark to a Local Directory
-#' 
+#'
 #' \code{install.spark} downloads and installs Spark to a local directory if
 #' it is not found. The Spark version we use is the same as the SparkR version.
 #' Users can specify a desired Hadoop version, the remote mirror site, and
@@ -59,6 +59,7 @@
 #' @return \code{install.spark} returns the local directory where Spark is found or installed
 #' @rdname install.spark
 #' @name install.spark
+#' @aliases install.spark
 #' @export
 #' @examples
 #'\dontrun{
@@ -131,7 +132,7 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
 
   # step 2: use url suggested from apache website
   message("Looking for site suggested from apache website...")
-  mirrorUrl <- get_preferred_mirror()
+  mirrorUrl <- get_preferred_mirror(version, packageName)
   if (!is.null(mirrorUrl)) {
     success <- direct_download_tar(mirrorUrl, version, hadoopVersion,
                                    packageName, packageLocalPath)
@@ -156,8 +157,11 @@ robust_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
   }
 }
 
-get_preferred_mirror <- function() {
-  jsonUrl <- "http://www.apache.org/dyn/closer.cgi?as_json=1"
+get_preferred_mirror <- function(version, packageName) {
+  jsonUrl <- paste0("http://www.apache.org/dyn/closer.cgi?path=",
+                        file.path("spark", version, packageName),
+                        ".tgz&as_json=1")
+  # jsonUrl <- "http://www.apache.org/dyn/closer.cgi?as_json=1"
   textLines <- readLines(jsonUrl, warn = FALSE)
   rowNum <- grep("\"preferred\"", textLines)
   linePreferred <- textLines[rowNum]
@@ -185,6 +189,7 @@ direct_download_tar <- function(mirrorUrl, version, hadoopVersion, packageName, 
   isFail <- tryCatch(download.file(packageRemotePath, packageLocalPath),
                      error = function(e) {
                        message(sprintf("Fetch failed from %s", mirrorUrl))
+                       print(e)
                        TRUE
                      })
   !isFail

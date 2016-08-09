@@ -366,8 +366,8 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
   # do not download if it is run in the sparkR shell
-  if (!grepl(".*shell\\.R$", Sys.getenv("R_PROFILE_USER"), perl = TRUE)) {
-    if (!nzchar(master) || is_master_local(master)) {
+  if (!nzchar(master) || is_master_local(master)) {
+    if (!is_sparkR_shell()) {
       if (is.na(file.info(sparkHome)$isdir)) {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome,
