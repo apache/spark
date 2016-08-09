@@ -47,10 +47,8 @@ private[thriftserver] class SparkSQLOperationManager()
       confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    if (null == sqlContext) {
-      throw new HiveSQLException(s"Session handle: ${parentSession.getSessionHandle} has not been" +
-        s" initialed or had already closed.")
-    }
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      s" initialed or had already closed.")
     val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
     val runInBackground = async && sessionState.hiveThriftServerAsync
     val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,

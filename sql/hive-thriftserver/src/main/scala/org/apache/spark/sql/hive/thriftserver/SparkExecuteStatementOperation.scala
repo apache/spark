@@ -207,7 +207,7 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
-    if(null != pool) {
+    if (pool != null) {
       sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
