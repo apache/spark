@@ -40,9 +40,10 @@ object PythonRunner {
     val otherArgs = args.slice(2, args.length)
     val sparkConf = new SparkConf()
     val pythonExec = sparkConf.get(PYSPARK_DRIVER_PYTHON)
-          .getOrElse(sparkConf.get(PYSPARK_PYTHON)
-            .getOrElse(sys.env.getOrElse("PYSPARK_DRIVER_PYTHON",
-              sys.env.getOrElse("PYSPARK_PYTHON", "python"))))
+          .orElse(sparkConf.get(PYSPARK_PYTHON))
+          .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
+          .orElse(sys.env.get("PYSPARK_PYTHON"))
+          .getOrElse("python")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)

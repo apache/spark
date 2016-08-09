@@ -432,7 +432,7 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Python binary executable to use for PySpark in driver.
-    (default is <code>spark.pyspark.python</code>)</code>.
+    (default is <code>spark.pyspark.python</code>)
   </td>
 </tr>
 <tr>
@@ -440,7 +440,6 @@ Apart from these, the following properties are also available, and may be useful
   <td></td>
   <td>
     Python binary executable to use for PySpark in both driver and executors.
-    </code>.
   </td>
 </tr>
 </table>

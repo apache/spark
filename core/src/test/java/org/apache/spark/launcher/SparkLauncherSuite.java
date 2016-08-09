@@ -28,6 +28,8 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 import static org.junit.Assert.*;
 
+import org.apache.spark.internal.config.package$;
+
 /**
  * These tests require the Spark assembly to be built before they can be run.
  */
@@ -92,8 +94,9 @@ public class SparkLauncherSuite {
 
     launcher.setConf(SparkLauncher.PYSPARK_DRIVER_PYTHON, "python3.4");
     launcher.setConf(SparkLauncher.PYSPARK_PYTHON, "python3.5");
-    assertEquals("python3.4", launcher.builder.conf.get("spark.pyspark.driver.python"));
-    assertEquals("python3.5", launcher.builder.conf.get("spark.pyspark.python"));
+    assertEquals("python3.4", launcher.builder.conf.get(
+            package$.MODULE$.PYSPARK_DRIVER_PYTHON().key()));
+    assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
   }
 
   @Test(expected=IllegalStateException.class)
