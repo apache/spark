@@ -159,7 +159,7 @@ object CSVRelation extends Logging {
   }
 }
 
-private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
+private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       bucketId: Option[Int],
@@ -170,7 +170,7 @@ private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWrit
   }
 }
 
-private[sql] class CsvOutputWriter(
+private[csv] class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
