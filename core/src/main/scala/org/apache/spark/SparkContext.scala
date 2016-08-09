@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReferenc
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.generic.Growable
-import scala.collection.mutable.{HashSet, HashMap}
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
