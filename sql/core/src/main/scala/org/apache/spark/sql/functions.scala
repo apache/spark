@@ -993,12 +993,31 @@ object functions {
    * This expression would return the following IDs:
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
    *
-   * Optionally, you can specify the offset where the Id starts
-   *
    * @group normal_funcs
    * @since 1.6.0
    */
-  def monotonically_increasing_id(offset: Long = 0): Column = withExpr { MonotonicallyIncreasingID(offset) }
+  def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * Optionally, you can specify the offset where the Id starts
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   * @since 2.0.1
+   */
+  def monotonically_increasing_id(offset: Long): Column = withExpr {
+    MonotonicallyIncreasingID(offset)
+  }
 
   /**
    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
