@@ -658,7 +658,7 @@ class HiveDDLSuite
           sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
         }.getMessage
         assert(e.contains("CREATE TABLE LIKE is not allowed when the source table is " +
-          "external tables created using the datasource API"))
+          "an external table created using the datasource API"))
       }
     }
   }
@@ -780,6 +780,16 @@ class HiveDDLSuite
     checkAnswer(
       sql(s"DESC ${sourceTable.identifier}"),
       sql(s"DESC ${targetTable.identifier}"))
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      // Check whether the new table can be inserted using the data from the original table
+      sql(s"INSERT INTO TABLE ${targetTable.identifier} SELECT * FROM ${sourceTable.identifier}")
+    }
+
+    // After insertion, the data should be identical
+    checkAnswer(
+      sql(s"SELECT * FROM ${sourceTable.identifier}"),
+      sql(s"SELECT * FROM ${targetTable.identifier}"))
   }
 
   test("desc table for data source table") {

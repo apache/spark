@@ -56,7 +56,10 @@ case class CreateHiveTableAsSelectLogicalPlan(
 }
 
 /**
- * A command to create a table with the same definition of the given existing table.
+ * A command to create a MANAGED table with the same definition of the given existing table.
+ * The source table cannot be temporary table, Index table or an external table created using
+ * the datasource API. In the target table definition, the table comment is always empty but
+ * the column comments are identical to the ones defined in the source table.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -91,7 +94,7 @@ case class CreateTableLikeCommand(
     if (DDLUtils.isDatasourceTable(sourceTableDesc) &&
         sourceTableDesc.tableType != CatalogTableType.MANAGED) {
       throw new AnalysisException(
-        "CREATE TABLE LIKE is not allowed when the source table is external tables created " +
+        "CREATE TABLE LIKE is not allowed when the source table is an external table created " +
           "using the datasource API")
     }
 
@@ -604,7 +607,7 @@ case class ShowTablesCommand(
 
 
 /**
- * A command for users to list the properties for a table If propertyKey is specified, the value
+ * A command for users to list the properties for a table. If propertyKey is specified, the value
  * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
  * corresponding values are returned.
  * The syntax of using this command in SQL is:
