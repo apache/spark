@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, ReturnAnswer, Union}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SparkPlannerSuite extends SharedSQLContext {
@@ -40,9 +40,9 @@ class SparkPlannerSuite extends SharedSQLContext {
         case Union(children) =>
           planned += 1
           UnionExec(children.map(planLater)) :: planLater(NeverPlanned) :: Nil
-        case r: Range =>
+        case LocalRelation(output, data) =>
           planned += 1
-          RangeExec(r) :: planLater(NeverPlanned) :: Nil
+          LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
         case NeverPlanned =>
           fail("QueryPlanner should not go down to this branch.")
         case _ => Nil
@@ -52,9 +52,9 @@ class SparkPlannerSuite extends SharedSQLContext {
     try {
       spark.experimental.extraStrategies = TestStrategy :: Nil
 
-      val ds = spark.range(1, 3).union(spark.range(3, 6))
+      val ds = Seq("a", "b", "c").toDS().union(Seq("d", "e", "f").toDS())
 
-      assert(ds.collect().toSeq === Seq(1, 2, 3, 4, 5))
+      assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
       assert(planned === 4)
     } finally {
       spark.experimental.extraStrategies = Nil

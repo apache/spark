@@ -104,23 +104,20 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("EXPLAIN CODEGEN command") {
-    withTempView("x") {
-      spark.range(0, 1).createOrReplaceTempView("x")
-      checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1 FROM X"),
-        "WholeStageCodegen",
-        "Generated code:",
-        "/* 001 */ public Object generate(Object[] references) {",
-        "/* 002 */   return new GeneratedIterator(references);",
-        "/* 003 */ }"
-      )
+    checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1"),
+      "WholeStageCodegen",
+      "Generated code:",
+      "/* 001 */ public Object generate(Object[] references) {",
+      "/* 002 */   return new GeneratedIterator(references);",
+      "/* 003 */ }"
+    )
 
-      checkKeywordsNotExist(sql("EXPLAIN CODEGEN SELECT 1 FROM X"),
-        "== Physical Plan =="
-      )
+    checkKeywordsNotExist(sql("EXPLAIN CODEGEN SELECT 1"),
+      "== Physical Plan =="
+    )
 
-      intercept[ParseException] {
-        sql("EXPLAIN EXTENDED CODEGEN SELECT 1 FROM X")
-      }
+    intercept[ParseException] {
+      sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
     }
   }
 }

@@ -1192,8 +1192,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10740: handle nondeterministic expressions correctly for set operations") {
-    val df1 = spark.range(1, 20).select('id.cast("int").as("i"))
-    val df2 = spark.range(1, 10).select('id.cast("int").as("i"))
+    val df1 = (1 to 20).map(Tuple1.apply).toDF("i")
+    val df2 = (1 to 10).map(Tuple1.apply).toDF("i")
 
     // When generating expected results at here, we need to follow the implementation of
     // Rand expression.

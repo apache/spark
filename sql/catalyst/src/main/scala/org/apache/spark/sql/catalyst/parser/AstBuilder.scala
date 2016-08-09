@@ -676,17 +676,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       Seq.tabulate(numExpectedColumns)(i => s"col${i + 1}")
     }
 
-    // Create the UNION.
-    val union = Union(rows.zipWithIndex.map { case (expressions, index) =>
+    // Create the inline table.
+    val table = InlineTable(rows.zipWithIndex.map { case (expressions, index) =>
       assert(expressions.size == numExpectedColumns,
         s"Number of values '${expressions.size}' in row '${index + 1}' does not match the " +
         s"expected number of values '$numExpectedColumns' in a row", ctx)
-      val namedExpressions = expressions.zip(aliases).map {
+      expressions.zip(aliases).map {
         case (expression, name) => Alias(expression, name)()
       }
-      Project(namedExpressions, OneRowRelation)
     })
-    union.optionalMap(ctx.identifier)(aliasPlan)
+    table.optionalMap(ctx.identifier)(aliasPlan)
   }
 
   /**
