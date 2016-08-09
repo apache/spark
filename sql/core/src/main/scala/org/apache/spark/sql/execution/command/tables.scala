@@ -102,7 +102,6 @@ case class CreateTableLikeCommand(
     // Table comment is stored as a table property. To clean it, we also should remove them.
     val newTableProp =
       sourceTableDesc.properties.filterKeys(key => key != "EXTERNAL" && key != "comment")
-
     val newSerdeProp =
       if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
         val newPath = catalog.defaultTablePath(targetTable)
