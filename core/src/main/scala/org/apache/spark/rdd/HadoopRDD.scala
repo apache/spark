@@ -140,8 +140,6 @@ class HadoopRDD[K, V](
 
   private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
 
-  private val cacheJobConf = sparkContext.conf.getBoolean("spark.hadoop.cacheConf", true)
-
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
@@ -177,9 +175,7 @@ class HadoopRDD[K, V](
           logDebug("Creating new JobConf and caching it for later re-use")
           val newJobConf = new JobConf(conf)
           initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
-          if (cacheJobConf) {
-            HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-          }
+          HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
           newJobConf
         }
       }
