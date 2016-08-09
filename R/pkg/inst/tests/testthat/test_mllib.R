@@ -323,8 +323,9 @@ test_that("spark.kmeans", {
 
 test_that("spark.mlp", {
   irisDF <- suppressWarnings(createDataFrame(iris))
-  model <- spark.mlp(df, blockSize=128, layers=c(4,5,4,3), solver='l-bfgs', maxIter=100, tol=0.5,
-                     stepSize=1)})
+  model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
+                     tol = 0.5, stepSize = 1 )
+})
 
 test_that("spark.naiveBayes", {
   # R code to reproduce the result.
