@@ -61,9 +61,9 @@ case class CreateHiveTableAsSelectLogicalPlan(
  * the table comment is always empty but the column comments are identical to the ones defined
  * in the source table.
  *
- * The CatalogTable attributes copied from the source table include storage(inputFormat, outputFormat,
- * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec, properties,
- * unsupportedFeatures.
+ * The CatalogTable attributes copied from the source table include storage(inputFormat,
+ * outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames,
+ * bucketSpec, properties, unsupportedFeatures.
  *
  * The syntax of using this command in SQL is:
  * {{{
