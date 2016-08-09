@@ -1009,8 +1009,8 @@ object functions {
    * Optionally, you can specify the offset where the Id starts
    *
    * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
-   * This expression would return the following IDs:
-   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   * This expression, monotonically_increasing_id(5), would return the following IDs:
+   * 5, 6, 7, 8589934597 (1L << 33), 8589934598, 8589934599.
    *
    * @group normal_funcs
    * @since 2.1.0
