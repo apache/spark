@@ -425,6 +425,7 @@ def monotonically_increasing_id():
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.monotonically_increasing_id())
 
+
 @since(2.1)
 def monotonically_increasing_id(offset):
     """A column that generates monotonically increasing 64-bit integers.
