@@ -415,6 +415,17 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+    * Compute the KCore membership of each vertex and return a graph with the vertex
+    * value containing a boolean the is true if this vertex belongs to the KCore of
+    * the original graph.
+    *
+    * @see [[org.apache.spark.graphx.lib.KCore#run]]
+    */
+  def kCore(k: Int, maxIterations: Int = Int.MaxValue): Graph[Boolean, ED] = {
+    KCore.run(graph, k, maxIterations)
+  }
+
+  /**
    * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
