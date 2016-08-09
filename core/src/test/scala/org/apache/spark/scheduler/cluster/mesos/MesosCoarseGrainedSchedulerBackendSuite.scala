@@ -370,6 +370,21 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verify(driverEndpoint, never()).askWithRetry(isA(classOf[RemoveExecutor]))(any[ClassTag[_]])
   }
 
+  test("mesos supports spark.executor.uri") {
+    val url = "spark.spark.spark.com"
+    setBackend(Map(
+      "spark.executor.uri" -> url
+    ), false)
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
+    backend.resourceOffers(driver, List(offer1).asJava)
+
+    val launchedTasks = verifyTaskLaunched(driver, "o1")
+    assert(launchedTasks.head.getCommand.getUrisList.asScala(0).getValue == url)
+  }
+
   private def verifyDeclinedOffer(driver: SchedulerDriver,
       offerId: OfferID,
       filter: Boolean = false): Unit = {
@@ -435,12 +450,16 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend
   }
 
-  private def setBackend(sparkConfVars: Map[String, String] = null) {
+  private def setBackend(sparkConfVars: Map[String, String] = null,
+      setHome: Boolean = true) {
     sparkConf = (new SparkConf)
       .setMaster("local[*]")
       .setAppName("test-mesos-dynamic-alloc")
-      .setSparkHome("/path")
       .set("spark.mesos.driver.webui.url", "http://webui")
+
+    if (setHome) {
+      sparkConf.setSparkHome("/path")
+    }
 
     if (sparkConfVars != null) {
       sparkConf.setAll(sparkConfVars)
