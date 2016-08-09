@@ -478,6 +478,7 @@ object SizeBasedWindowFunction {
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
   override def sql: String = "ROW_NUMBER()"
+  override def prettyName: String = "row_number"
 }
 
 /**
@@ -498,6 +499,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
   override def sql: String = "CUME_DIST()"
+  override def prettyName: String = "cume_dist"
 }
 
 /**
@@ -675,6 +677,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
   override def sql: String = "DENSE_RANK()"
+  override def prettyName: String = "dense_rank"
 }
 
 /**
@@ -702,4 +705,5 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
       Literal(0.0d))
   override def sql: String = "PERCENT_RANK()"
+  override def prettyName: String = "percent_rank"
 }
