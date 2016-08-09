@@ -522,6 +522,20 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("monotonically_increasing_id_with_offset") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonically_increasing_id(5), expr("monotonically_increasing_id(5)")),
+      Row(5L, 5L) ::
+        Row(6L, 6L) ::
+        Row((1L << 33) + 5L, (1L << 33) + 5L) ::
+        Row((1L << 33) + 6L, (1L << 33) + 6L) :: Nil
+    )
+  }
+
   test("spark_partition_id") {
     // Make sure we have 2 partitions, each with 2 records.
     val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
