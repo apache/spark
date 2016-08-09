@@ -287,21 +287,21 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           new Path(metastoreRelation.catalogTable.storage.locationUri.get),
           partitionSpec)
 
-        val schema =
+        val inferredSchema =
           defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
-        val inferredSchema = if (fileType.equals("parquet")) {
-          schema.map { inferred =>
-            ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
+        val schema = if (fileType == "parquet") {
+          inferredSchema.map { schema =>
+            ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, schema)
           }.getOrElse(metastoreSchema)
         } else {
-          schema.getOrElse(metastoreSchema)
+          inferredSchema.getOrElse(metastoreSchema)
         }
 
         val relation = HadoopFsRelation(
           sparkSession = sparkSession,
           location = fileCatalog,
           partitionSchema = partitionSchema,
-          dataSchema = inferredSchema,
+          dataSchema = schema,
           bucketSpec = bucketSpec,
           fileFormat = defaultSource,
           options = options)
