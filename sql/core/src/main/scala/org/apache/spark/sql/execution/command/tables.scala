@@ -88,48 +88,42 @@ case class CreateTableLikeCommand(
         s"CREATE TABLE LIKE is not allowed when the source table is ${o.name}")
     }
 
-    val tableToCreate = {
-      // For EXTERNAL_TABLE, the table properties has a particular field. To change it
-      // to a MANAGED_TABLE, we need to remove it; Otherwise, it will be EXTERNAL_TABLE,
-      // even if we set the tableType to MANAGED
-      // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
-      // Table comment is stored as a table property. To clean it, we also should remove them.
-      val tableProp =
-        sourceTableDesc.properties.filterKeys(key => key != "EXTERNAL" && key != "comment")
-
-      if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
-        if (sourceTableDesc.tableType != CatalogTableType.MANAGED) {
-          throw new AnalysisException(
-            "CREATE TABLE LIKE is not allowed when the source table is external tables created " +
-              "using the datasource API")
-        } else {
-          val newPath = catalog.defaultTablePath(targetTable)
-          sourceTableDesc.copy(
-            identifier = targetTable,
-            tableType = CatalogTableType.MANAGED,
-            createTime = System.currentTimeMillis,
-            properties = tableProp,
-            lastAccessTime = -1,
-            comment = None,
-            viewOriginalText = None,
-            viewText = None).withNewStorage(
-              locationUri = None,
-              serdeProperties = sourceTableDesc.storage.properties ++ Map("path" -> newPath))
-        }
-      } else {
-        sourceTableDesc.copy(
-          identifier = targetTable,
-          tableType = CatalogTableType.MANAGED,
-          createTime = System.currentTimeMillis,
-          properties = tableProp,
-          lastAccessTime = -1,
-          comment = None,
-          viewOriginalText = None,
-          viewText = None).withNewStorage(locationUri = None)
-      }
+    if (DDLUtils.isDatasourceTable(sourceTableDesc) &&
+        sourceTableDesc.tableType != CatalogTableType.MANAGED) {
+      throw new AnalysisException(
+        "CREATE TABLE LIKE is not allowed when the source table is external tables created " +
+          "using the datasource API")
     }
 
-    catalog.createTable(tableToCreate, ifNotExists)
+    // For EXTERNAL_TABLE, the table properties has a particular field. To change it
+    // to a MANAGED_TABLE, we need to remove it; Otherwise, it will be EXTERNAL_TABLE,
+    // even if we set the tableType to MANAGED
+    // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
+    // Table comment is stored as a table property. To clean it, we also should remove them.
+    val newTableProp =
+      sourceTableDesc.properties.filterKeys(key => key != "EXTERNAL" && key != "comment")
+
+    val newSerdeProp =
+      if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
+        val newPath = catalog.defaultTablePath(targetTable)
+        sourceTableDesc.storage.properties ++ Map("path" -> newPath)
+      } else {
+        sourceTableDesc.storage.properties
+      }
+    val newTableDesc =
+      sourceTableDesc.copy(
+        identifier = targetTable,
+        tableType = CatalogTableType.MANAGED,
+        createTime = System.currentTimeMillis,
+        properties = newTableProp,
+        lastAccessTime = -1,
+        comment = None,
+        viewOriginalText = None,
+        viewText = None).withNewStorage(
+          locationUri = None,
+          serdeProperties = newSerdeProp)
+
+    catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
   }
 }
