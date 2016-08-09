@@ -206,7 +206,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     successfully start running in between those failures, and the application has no running
     executors then the standalone cluster manager will remove the application and mark it as failed.
     To disable this automatic removal, set <code>spark.deploy.maxExecutorRetries</code> to
-    <code>-1</code>
+    <code>-1</code>.
     <br/>
   </td>
 </tr>
