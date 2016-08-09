@@ -72,16 +72,16 @@ object StructuredNetworkWordCountWindowed {
 
     import spark.implicits._
 
-    // Create Dataset representing the stream of input lines from connection to host:port
+    // Create DataFrame representing the stream of input lines from connection to host:port
     val lines = spark.readStream
       .format("socket")
       .option("host", host)
       .option("port", port)
       .option("includeTimestamp", true)
-      .load().as[(String, Timestamp)]
+      .load()
 
     // Split the lines into words, retaining timestamps
-    val words = lines.flatMap(line =>
+    val words = lines.as[(String, Timestamp)].flatMap(line =>
       line._1.split(" ").map(word => (word, line._2))
     ).toDF("word", "timestamp")
 
