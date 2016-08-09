@@ -16,11 +16,38 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.antlr.v4.runtime.CommonTokenStream
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
+import org.apache.spark.sql.catalyst.trees.Origin
 
 class ParserUtilsSuite extends SparkFunSuite {
 
   import ParserUtils._
+
+  val setConfContext = buildContext("set example.setting.name=setting.value") { parser =>
+    parser.statement().asInstanceOf[SetConfigurationContext]
+  }
+
+  val showFuncContext = buildContext("show functions foo.bar") { parser =>
+    parser.statement().asInstanceOf[ShowFunctionsContext]
+  }
+
+  val descFuncContext = buildContext("describe function extended bar") { parser =>
+    parser.statement().asInstanceOf[DescribeFunctionContext]
+  }
+
+  val showDbsContext = buildContext("show databases like 'identifier_with_wildcards'") { parser =>
+    parser.statement().asInstanceOf[ShowDatabasesContext]
+  }
+
+  private def buildContext[T](command: String)(toResult: SqlBaseParser => T): T = {
+    val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
+    val tokenStream = new CommonTokenStream(lexer)
+    val parser = new SqlBaseParser(tokenStream)
+    toResult(parser)
+  }
 
   test("unescapeSQLString") {
     // scalastyle:off nonascii
@@ -61,5 +88,39 @@ class ParserUtilsSuite extends SparkFunSuite {
     // scalastyle:on nonascii
   }
 
-  // TODO: Add test cases for other methods in ParserUtils
+  test("command") {
+    assert(command(setConfContext) == "set example.setting.name=setting.value")
+    assert(command(showFuncContext) == "show functions foo.bar")
+    assert(command(descFuncContext) == "describe function extended bar")
+    assert(command(showDbsContext) == "show databases like 'identifier_with_wildcards'")
+  }
+
+  test("source") {
+    assert(source(setConfContext) == "set example.setting.name=setting.value")
+    assert(source(showFuncContext) == "show functions foo.bar")
+    assert(source(descFuncContext) == "describe function extended bar")
+    assert(source(showDbsContext) == "show databases like 'identifier_with_wildcards'")
+  }
+
+  test("remainder") {
+    assert(remainder(setConfContext) == "")
+    assert(remainder(showFuncContext) == "")
+    assert(remainder(descFuncContext) == "")
+    assert(remainder(showDbsContext) == "")
+
+    assert(remainder(setConfContext.SET.getSymbol) == " example.setting.name=setting.value")
+    assert(remainder(showFuncContext.FUNCTIONS.getSymbol) == " foo.bar")
+    assert(remainder(descFuncContext.EXTENDED.getSymbol) == " bar")
+    assert(remainder(showDbsContext.LIKE.getSymbol) == " 'identifier_with_wildcards'")
+  }
+
+  test("string") {
+    assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
+  }
+
+  test("position") {
+    assert(position(setConfContext.start) == Origin(Some(1), Some(0)))
+    assert(position(showFuncContext.stop) == Origin(Some(1), Some(19)))
+    assert(position(descFuncContext.describeFuncName.start) == Origin(Some(1), Some(27)))
+  }
 }
