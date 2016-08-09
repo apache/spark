@@ -160,6 +160,29 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-16610: Respect orc.compress option when compression is unset") {
+    // Respect `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("orc.compress", "ZLIB")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+
+    // `compression` overrides `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "ZLIB")
+        .option("orc.compress", "SNAPPY")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+  }
+
   // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
