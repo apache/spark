@@ -19,15 +19,16 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.scheduler._
-import org.apache.spark.{TaskState, SparkEnv}
+import scala.collection.mutable.HashMap
+
+import org.apache.spark.{SparkEnv, TaskState}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcAddress, ThreadSafeRpcEndpoint, RpcEnv}
+import org.apache.spark.rpc.{RpcCallContext, RpcAddress, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils, ThreadUtils}
+import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 
-import scala.collection.mutable.{HashMap, HashSet}
-
+private[spark]
 class DriverEndpoint(backend: CoarseGrainedSchedulerBackend,
                      scheduler: TaskSchedulerImpl,
                      override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
