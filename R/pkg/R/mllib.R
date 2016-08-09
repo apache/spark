@@ -486,15 +486,10 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, ...) {
             jobj <- object@jobj
-            features <- callJMethod(jobj, "features")
-            labels <- callJMethod(jobj, "labels")
             layers <- callJMethod(jobj, "layers")
             layers <- t(as.matrix(unlist(layers)))
-            colnames(layers) <- unlist(labels)
             tables <- callJMethod(jobj, "tables")
             tables <- matrix(tables, nrow = length(labels))
-            rownames(tables) <- unlist(labels)
-            colnames(tables) <- unlist(features)
             return(list(layers = layers, tables = tables))
           })
 

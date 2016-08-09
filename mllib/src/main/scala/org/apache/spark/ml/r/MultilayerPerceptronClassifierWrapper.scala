@@ -32,9 +32,10 @@ import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class MultilayerPerceptronClassifierWrapper private (
-    val pipeline: PipelineModel) extends MLWritable {
+    val pipeline: PipelineModel) extends MLWritable with Logging{
 
   import MultilayerPerceptronClassifierWrapper._
+  logWarning("private[r] class MultilayerPerceptronClassifierWrapper() hahaha")
 
   private val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
     pipeline.stages.head.asInstanceOf[MultilayerPerceptronClassificationModel]
@@ -89,7 +90,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
       .setInputCol(PREDICTED_LABEL_INDEX_COL)
       .setOutputCol(PREDICTED_LABEL_COL)
     val pipeline = new Pipeline()
-      .setStages(Array(mlp, idxToStr))
+      .setStages(Array(mlp))
     val model = pipeline.fit(data)
     new MultilayerPerceptronClassifierWrapper(model)
   }
@@ -99,6 +100,8 @@ private[r] object MultilayerPerceptronClassifierWrapper
    */
   override def read: MLReader[MultilayerPerceptronClassifierWrapper] =
     new MultilayerPerceptronClassifierWrapperReader
+
+  override def load(path: String): MultilayerPerceptronClassifierWrapper = super.load(path)
 
   class MultilayerPerceptronClassifierWrapperReader
     extends MLReader[MultilayerPerceptronClassifierWrapper]{
