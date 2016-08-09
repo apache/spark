@@ -40,13 +40,13 @@ import org.apache.spark.sql.types.{DataType, LongType}
       represent the record number within each partition. The assumption is that the data frame has
       less than 1 billion partitions, and each partition has less than 8 billion records.""",
   extended = "> SELECT _FUNC_();\n 0")
-case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
+case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
    * we serialize and deserialize and initialize it.
    */
-  @transient private[this] var count: Long = _
+  @transient private[this] var count: Long = offset
 
   @transient private[this] var partitionMask: Long = _
 
