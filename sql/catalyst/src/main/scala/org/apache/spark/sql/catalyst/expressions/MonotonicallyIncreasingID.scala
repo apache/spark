@@ -43,6 +43,10 @@ import org.apache.spark.sql.types.{DataType, LongType}
 case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
   with Nondeterministic {
 
+  def this() = {
+    this(offset = 0)
+  }
+
   /**
    * Record ID within each partition. By being transient, count's value is reset to offset every
    * time we serialize and deserialize and initialize it.
