@@ -17,9 +17,13 @@
 
 package org.apache.spark.storage
 
+import java.io.{File, FileInputStream}
+import java.util.Properties
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
 /**
  * ::DeveloperApi::
@@ -46,6 +50,33 @@ class DefaultTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with L
   override def getTopologyForHost(hostname: String): String = {
     logDebug(s"Got a request for $hostname")
     "DefaultRack"
+  }
+}
+
+/**
+ * A simple file based topology mapper. This expects topology information provided as a
+ * [[java.util.Properties]] file. The name of the file is obtained from SparkConf property
+ * `spark.replication.topologyawareness.topologyfile`. To use this topology mapper, set the
+ * `spark.replication.topologyawareness.topologyMapper` property to
+ * [[org.apache.spark.storage.FileBasedTopologyMapper]]
+ * @param conf SparkConf object
+ */
+@DeveloperApi
+class FileBasedTopologyMapper(conf: SparkConf) extends TopologyMapper(conf) with Logging {
+
+  val topologyFile = conf.getOption("spark.replication.topologyawareness.topologyfile")
+  require(topologyFile.isDefined, "Please provide topology file for FileBasedTopologyMapper.")
+  val topologyMap = Utils.getPropertiesFromFile(topologyFile.get)
+
+  override def getTopologyForHost(hostname: String): String = {
+    val topology = topologyMap.get(hostname)
+    if(topology.isDefined) {
+      logDebug(s"$hostname -> ${topology.get}")
+      topology.get
+    } else {
+      logWarning(s"$hostname does not have any topology information")
+      ""
+    }
   }
 }
 
