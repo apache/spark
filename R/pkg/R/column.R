@@ -163,8 +163,9 @@ setMethod("alias",
 #' @family colum_func
 #' @aliases substr,Column-method
 #'
-#' @param start starting position
-#' @param stop ending position
+#' @param x a Column object.
+#' @param start starting position.
+#' @param stop ending position.
 #' @note substr since 1.4.0
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
@@ -219,6 +220,7 @@ setMethod("endsWith", signature(x = "Column"),
 #' @family colum_func
 #' @aliases between,Column-method
 #'
+#' @param x a Column object
 #' @param bounds lower and upper bounds
 #' @note between since 1.5.0
 setMethod("between", signature(x = "Column"),
@@ -233,6 +235,11 @@ setMethod("between", signature(x = "Column"),
 
 #' Casts the column to a different data type.
 #'
+#' @param x a Column object.
+#' @param dataType a character object describing the target data type.
+#'        See \href{
+#'        https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
+#'        Spark Data Types} for available data types.
 #' @rdname cast
 #' @name cast
 #' @family colum_func

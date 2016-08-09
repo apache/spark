@@ -120,7 +120,6 @@ setMethod("schema",
 #'
 #' Print the logical and physical Catalyst plans to the console for debugging.
 #'
-#' @param x A SparkDataFrame
 #' @param extended Logical. If extended is FALSE, explain() only prints the physical plan.
 #' @family SparkDataFrame functions
 #' @aliases explain,SparkDataFrame-method
@@ -177,11 +176,10 @@ setMethod("isLocal",
 #'
 #' Print the first numRows rows of a SparkDataFrame
 #'
-#' @param x A SparkDataFrame
-#' @param numRows The number of rows to print. Defaults to 20.
-#' @param truncate Whether truncate long strings. If true, strings more than 20 characters will be
-#' truncated and all cells will be aligned right
-#'
+#' @param numRows the number of rows to print. Defaults to 20.
+#' @param truncate whether truncate long strings. If true, strings more than 20 characters will be
+#'    truncated. However, if set greater than zero, truncates strings longer than `truncate`
+#'    characters and all cells will be aligned right.
 #' @family SparkDataFrame functions
 #' @aliases showDF,SparkDataFrame-method
 #' @rdname showDF
@@ -206,7 +204,7 @@ setMethod("showDF",
 #'
 #' Print the SparkDataFrame column names and types
 #'
-#' @param x A SparkDataFrame
+#' @param object a SparkDataFrame.
 #'
 #' @family SparkDataFrame functions
 #' @rdname show
@@ -318,6 +316,7 @@ setMethod("colnames",
             columns(x)
           })
 
+#' @param value a character vector. Must have the same length as the number of columns in the SparkDataFrame.
 #' @rdname columns
 #' @aliases colnames<-,SparkDataFrame-method
 #' @name colnames<-
@@ -406,7 +405,6 @@ setMethod("coltypes",
 #'
 #' Set the column types of a SparkDataFrame.
 #'
-#' @param x A SparkDataFrame
 #' @param value A character vector with the target column types for the given
 #'    SparkDataFrame. Column types can be one of integer, numeric/double, character, logical, or NA
 #'    to keep that column as-is.
@@ -510,9 +508,9 @@ setMethod("registerTempTable",
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
 #'
-#' @param x A SparkDataFrame
-#' @param tableName A character vector containing the name of the table
-#' @param overwrite A logical argument indicating whether or not to overwrite
+#' @param x a SparkDataFrame.
+#' @param tableName a character vector containing the name of the table.
+#' @param overwrite a logical argument indicating whether or not to overwrite.
 #' the existing rows in the table.
 #'
 #' @family SparkDataFrame functions
@@ -571,7 +569,9 @@ setMethod("cache",
 #' supported storage levels, refer to
 #' \url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
 #'
-#' @param x The SparkDataFrame to persist
+#' @param x the SparkDataFrame to persist.
+#' @param newLevel storage level chosen for the persistance. See available options in
+#'        the description.
 #'
 #' @family SparkDataFrame functions
 #' @rdname persist
@@ -634,9 +634,10 @@ setMethod("unpersist",
 #'  \item{3.} {Return a new SparkDataFrame partitioned by the given column(s),
 #'                      using `spark.sql.shuffle.partitions` as number of partitions.}
 #'}
-#' @param x A SparkDataFrame
-#' @param numPartitions The number of partitions to use.
-#' @param col The column by which the partitioning will be performed.
+#' @param x a SparkDataFrame.
+#' @param numPartitions the number of partitions to use.
+#' @param col the column by which the partitioning will be performed.
+#' @param ... additional column(s) to be used in the partitioning.
 #'
 #' @family SparkDataFrame functions
 #' @rdname repartition
@@ -915,8 +916,6 @@ setMethod("sample_frac",
 
 #' Returns the number of rows in a SparkDataFrame
 #'
-#' @param x A SparkDataFrame
-#'
 #' @family SparkDataFrame functions
 #' @rdname nrow
 #' @name count
@@ -1092,8 +1091,10 @@ setMethod("limit",
             dataFrame(res)
           })
 
-#' Take the first NUM rows of a SparkDataFrame and return a the results as a R data.frame
+#' Take the first NUM rows of a SparkDataFrame and return the results as a R data.frame
 #'
+#' @param x a SparkDataFrame.
+#' @param num number of rows to take.
 #' @family SparkDataFrame functions
 #' @rdname take
 #' @name take
@@ -1120,9 +1121,9 @@ setMethod("take",
 #' then head() returns the first 6 rows in keeping with the current data.frame
 #' convention in R.
 #'
-#' @param x A SparkDataFrame
-#' @param num The number of rows to return. Default is 6.
-#' @return A data.frame
+#' @param x a SparkDataFrame.
+#' @param num the number of rows to return. Default is 6.
+#' @return A data.frame.
 #'
 #' @family SparkDataFrame functions
 #' @aliases head,SparkDataFrame-method
@@ -1146,7 +1147,7 @@ setMethod("head",
 
 #' Return the first row of a SparkDataFrame
 #'
-#' @param x A SparkDataFrame
+#' @param x a SparkDataFrame or a column used in aggregation function.
 #'
 #' @family SparkDataFrame functions
 #' @aliases first,SparkDataFrame-method
@@ -1240,7 +1241,6 @@ setMethod("group_by",
 #'
 #' Compute aggregates by specifying a list of columns
 #'
-#' @param x a SparkDataFrame
 #' @family SparkDataFrame functions
 #' @aliases agg,SparkDataFrame-method
 #' @rdname summarize
@@ -1387,16 +1387,15 @@ setMethod("dapplyCollect",
 #' Groups the SparkDataFrame using the specified columns and applies the R function to each
 #' group.
 #'
-#' @param x A SparkDataFrame
-#' @param cols Grouping columns
-#' @param func A function to be applied to each group partition specified by grouping
+#' @param cols grouping columns.
+#' @param func a function to be applied to each group partition specified by grouping
 #'             column of the SparkDataFrame. The function `func` takes as argument
 #'             a key - grouping columns and a data frame - a local R data.frame.
 #'             The output of `func` is a local R data.frame.
-#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
+#' @param schema the schema of the resulting SparkDataFrame after the function is applied.
 #'               The schema must match to output of `func`. It has to be defined for each
 #'               output column with preferred output column name and corresponding data type.
-#' @return a SparkDataFrame
+#' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases gapply,SparkDataFrame-method
 #' @rdname gapply
@@ -1479,13 +1478,12 @@ setMethod("gapply",
 #' Groups the SparkDataFrame using the specified columns, applies the R function to each
 #' group and collects the result back to R as data.frame.
 #'
-#' @param x A SparkDataFrame
-#' @param cols Grouping columns
-#' @param func A function to be applied to each group partition specified by grouping
+#' @param cols grouping columns.
+#' @param func a function to be applied to each group partition specified by grouping
 #'             column of the SparkDataFrame. The function `func` takes as argument
 #'             a key - grouping columns and a data frame - a local R data.frame.
 #'             The output of `func` is a local R data.frame.
-#' @return a data.frame
+#' @return A data.frame.
 #' @family SparkDataFrame functions
 #' @aliases gapplyCollect,SparkDataFrame-method
 #' @rdname gapplyCollect
@@ -2460,8 +2458,8 @@ setMethod("unionAll",
 #' Union two or more SparkDataFrames. This is equivalent to `UNION ALL` in SQL.
 #' Note that this does not remove duplicate rows across the two SparkDataFrames.
 #'
-#' @param x A SparkDataFrame
-#' @param ... Additional SparkDataFrame
+#' @param x a SparkDataFrame.
+#' @param ... additional SparkDataFrame(s).
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
 #' @aliases rbind,SparkDataFrame-method
@@ -2518,8 +2516,8 @@ setMethod("intersect",
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
 #' but not in another SparkDataFrame. This is equivalent to `EXCEPT` in SQL.
 #'
-#' @param x A SparkDataFrame
-#' @param y A SparkDataFrame
+#' @param x a SparkDataFrame.
+#' @param y a SparkDataFrame.
 #' @return A SparkDataFrame containing the result of the except operation.
 #' @family SparkDataFrame functions
 #' @aliases except,SparkDataFrame,SparkDataFrame-method
@@ -2560,10 +2558,11 @@ setMethod("except",
 #'         and to not change the existing data.
 #' }
 #'
-#' @param df A SparkDataFrame
-#' @param path A name for the table
-#' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param df a SparkDataFrame.
+#' @param path a name for the table.
+#' @param source a name for external data source.
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.df,SparkDataFrame,character-method
@@ -2622,10 +2621,11 @@ setMethod("saveDF",
 #'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
 #'     and to not change the existing data. \cr
 #'
-#' @param df A SparkDataFrame
-#' @param tableName A name for the table
-#' @param source A name for external data source
-#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param df a SparkDataFrame.
+#' @param tableName a name for the table.
+#' @param source a name for external data source.
+#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
+#' @param ... additional option(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
 #' @aliases saveAsTable,SparkDataFrame,character-method
@@ -2661,10 +2661,10 @@ setMethod("saveAsTable",
 #' Computes statistics for numeric columns.
 #' If no columns are given, this function computes statistics for all numerical columns.
 #'
-#' @param x A SparkDataFrame to be computed.
-#' @param col A string of name
-#' @param ... Additional expressions
-#' @return A SparkDataFrame
+#' @param x a SparkDataFrame to be computed.
+#' @param col a string of name.
+#' @param ... additional expressions.
+#' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases describe,SparkDataFrame,character-method describe,SparkDataFrame,ANY-method
 #' @rdname summary
@@ -2699,6 +2699,7 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
+#' @param object a SparkDataFrame to be summarized.
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
@@ -2714,16 +2715,20 @@ setMethod("summary",
 #'
 #' dropna, na.omit - Returns a new SparkDataFrame omitting rows with null values.
 #'
-#' @param x A SparkDataFrame.
+#' @param x a SparkDataFrame.
 #' @param how "any" or "all".
 #'            if "any", drop a row if it contains any nulls.
 #'            if "all", drop a row only if all its values are null.
 #'            if minNonNulls is specified, how is ignored.
-#' @param minNonNulls If specified, drop rows that have less than
+#' @param minNonNulls if specified, drop rows that have less than
 #'                    minNonNulls non-null values.
 #'                    This overwrites the how parameter.
-#' @param cols Optional list of column names to consider.
-#' @return A SparkDataFrame
+#' @param cols optional list of column names to consider. In `fillna`,
+#'             columns specified in cols that do not have matching data
+#'             type are ignored. For example, if value is a character, and
+#'             subset contains a non-character column, then the non-character
+#'             column is simply ignored.
+#' @return A SparkDataFrame.
 #'
 #' @family SparkDataFrame functions
 #' @rdname nafunctions
@@ -2768,18 +2773,12 @@ setMethod("na.omit",
 
 #' fillna - Replace null values.
 #'
-#' @param x A SparkDataFrame.
-#' @param value Value to replace null values with.
+#' @param value value to replace null values with.
 #'              Should be an integer, numeric, character or named list.
 #'              If the value is a named list, then cols is ignored and
 #'              value must be a mapping from column name (character) to
 #'              replacement value. The replacement value must be an
 #'              integer, numeric or character.
-#' @param cols optional list of column names to consider.
-#'             Columns specified in cols that do not have matching data
-#'             type are ignored. For example, if value is a character, and
-#'             subset contains a non-character column, then the non-character
-#'             column is simply ignored.
 #'
 #' @rdname nafunctions
 #' @name fillna
@@ -2844,8 +2843,11 @@ setMethod("fillna",
 #' Since data.frames are held in memory, ensure that you have enough memory
 #' in your system to accommodate the contents.
 #'
-#' @param x a SparkDataFrame
-#' @return a data.frame
+#' @param x a SparkDataFrame.
+#' @param row.names NULL or a character vector giving the row names for the data frame.
+#' @param optional If `TRUE`, converting column names is optional.
+#' @param ... additional arguments passed to the method.
+#' @return A data.frame.
 #' @family SparkDataFrame functions
 #' @aliases as.data.frame,SparkDataFrame-method
 #' @rdname as.data.frame
@@ -2999,9 +3001,8 @@ setMethod("str",
 #' Returns a new SparkDataFrame with columns dropped.
 #' This is a no-op if schema doesn't contain column name(s).
 #'
-#' @param x A SparkDataFrame.
-#' @param cols A character vector of column names or a Column.
-#' @return A SparkDataFrame
+#' @param col a character vector of column names or a Column.
+#' @return A SparkDataFrame.
 #'
 #' @family SparkDataFrame functions
 #' @rdname drop
@@ -3048,8 +3049,8 @@ setMethod("drop",
 #'
 #' @name histogram
 #' @param nbins the number of bins (optional). Default value is 10.
+#' @param col the column (described by character or Column object) to build the histogram from.
 #' @param df the SparkDataFrame containing the Column to build the histogram from.
-#' @param colname the name of the column to build the histogram from.
 #' @return a data.frame with the histogram statistics, i.e., counts and centroids.
 #' @rdname histogram
 #' @aliases histogram,SparkDataFrame,characterOrColumn-method
@@ -3183,6 +3184,7 @@ setMethod("histogram",
 #' @param x A SparkDataFrame
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
 #' @param tableName The name of the table in the external database
+#' @param ... additional argument(s) passed to the method
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #' @family SparkDataFrame functions
 #' @rdname write.jdbc
