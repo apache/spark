@@ -586,7 +586,7 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Also used for terminal leaf value prediction.
-   * Supported: "loss-based" (default) and "variance"
+   * Supported: "loss-based" and "variance" (default)
    *
    * @group param
    */
@@ -619,7 +619,7 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
     s" ${GBTRegressorParams.supportedLossTypes.mkString(", ")}",
     (value: String) => GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase))
 
-  setDefault(lossType -> "gaussian", impurity -> "loss-based")
+  setDefault(lossType -> "gaussian", impurity -> "variance")
 
   /** @group getParam */
   def getLossType: String = $(lossType).toLowerCase

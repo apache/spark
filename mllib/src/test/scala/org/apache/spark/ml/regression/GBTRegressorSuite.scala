@@ -63,7 +63,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("GBT-specific param defaults") {
     val gbt = new GBTRegressor()
-    assert(gbt.getImpurity === "loss-based")
+    assert(gbt.getImpurity === "variance")
     assert(gbt.getLossType === "gaussian")
   }
 

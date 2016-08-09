@@ -55,8 +55,9 @@ import org.apache.spark.sql.functions._
  *  - In the case of squared error loss, variance impurity and mean leaf estimates happen
  *    to make the SGB and TreeBoost algorithms identical.
  *
- * [[GBTRegressor]] will use the usual `"loss-based"` impurity by default, conforming to
- * TreeBoost behavior. For SGB, set impurity to `"variance"`.
+ * [[GBTRegressor]] will use the usual `"variance"` impurity by default, conforming to
+ * SGB behavior. For TreeBoost, set impurity to `"loss-based"`. Note TreeBoost is currently
+ * incompatible with absolute error.
  *
  * Currently, however, even TreeBoost behavior uses variance impurity for split selection for
  * ease and speed. This is the approach `R`'s
@@ -96,7 +97,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   /**
-   * Note that the default loss-based impurity is currently NOT compatible with absolute loss.
+   * Note that the loss-based impurity is currently NOT compatible with absolute loss.
    * @param value new impurity value
    * @return this
    */
@@ -120,7 +121,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   // Parameters from GBTRegressorParams:
 
   /**
-   * Note that the default loss-based impurity is currently NOT compatible with absolute loss.
+   * Note that the loss-based impurity is currently NOT compatible with absolute loss.
    * @group setParam
    */
   @Since("1.4.0")
