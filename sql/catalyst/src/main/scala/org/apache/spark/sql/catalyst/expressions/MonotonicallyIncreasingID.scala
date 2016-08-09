@@ -44,8 +44,8 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
   with Nondeterministic {
 
   /**
-   * Record ID within each partition. By being transient, count's value is reset to 0 every time
-   * we serialize and deserialize and initialize it.
+   * Record ID within each partition. By being transient, count's value is reset to offset every
+   * time we serialize and deserialize and initialize it.
    */
   @transient private[this] var count: Long = offset
 

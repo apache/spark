@@ -1013,7 +1013,7 @@ object functions {
    * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
    *
    * @group normal_funcs
-   * @since 2.0.1
+   * @since 2.1.0
    */
   def monotonically_increasing_id(offset: Long): Column = withExpr {
     MonotonicallyIncreasingID(offset)
