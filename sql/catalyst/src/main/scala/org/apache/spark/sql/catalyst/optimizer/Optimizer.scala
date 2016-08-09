@@ -214,7 +214,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
       Project(objAttr :: Nil, s.child)
 
-    case a @ AppendColumns(_, _, _, s: SerializeFromObject)
+    case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjAttr.dataType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
 
@@ -223,7 +223,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // deserialization in condition, and push it down through `SerializeFromObject`.
     // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
     // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
-    case f @ TypedFilter(_, _, s: SerializeFromObject)
+    case f @ TypedFilter(_, _, _, _, s: SerializeFromObject)
         if f.deserializer.dataType == s.inputObjAttr.dataType =>
       s.copy(child = f.withObjectProducerChild(s.child))
 
@@ -1703,9 +1703,14 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case t1 @ TypedFilter(_, _, t2 @ TypedFilter(_, _, child))
+    case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
         if t1.deserializer.dataType == t2.deserializer.dataType =>
-      TypedFilter(combineFilterFunction(t2.func, t1.func), t1.deserializer, child)
+      TypedFilter(
+        combineFilterFunction(t2.func, t1.func),
+        t1.argumentClass,
+        t1.argumentSchema,
+        t1.deserializer,
+        child)
   }
 
   private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
