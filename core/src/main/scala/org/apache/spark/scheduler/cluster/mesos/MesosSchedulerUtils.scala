@@ -404,21 +404,21 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   def partitionPortResources(requestedPorts: List[Long], offeredResources: List[Resource])
     : (List[Resource], List[Resource]) = {
     if (requestedPorts.isEmpty) {
-     return (offeredResources, List[Resource]())
+      (offeredResources, List[Resource]())
     }
-    // partition port offers
-    val (resourcesWithoutPorts, portResources) = filterPortResources(offeredResources)
+    else {
+      // partition port offers
+      val (resourcesWithoutPorts, portResources) = filterPortResources(offeredResources)
 
-    val offeredPortRanges = getRangeResourceWithRoleInfo(portResources.asJava, "ports")
+      val portsAndRoles = requestedPorts.
+        map(x => (x, findPortAndGetAssignedRangeRole(x, portResources)))
 
-    val portsAndRoles = requestedPorts.
-      map(x => (x, findPortAndGetAssignedRangeRole(x, offeredPortRanges)))
+      val assignedPortResources = createResourcesFromPorts(portsAndRoles)
 
-    val assignedPortResources = createResourcesFromPorts(portsAndRoles)
-
-    // ignore non-assigned port resources, they will be declined implicitly by mesos
-    // no need for splitting port resources.
-    (resourcesWithoutPorts, assignedPortResources)
+      // ignore non-assigned port resources, they will be declined implicitly by mesos
+      // no need for splitting port resources.
+      (resourcesWithoutPorts, assignedPortResources)
+    }
   }
 
   val managedPortNames = List("spark.executor.port", "spark.blockManager.port")
@@ -433,22 +433,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   /** Creates a mesos resource for a specific port number. */
-  private def createResourcesFromPorts(nonZero: List[(Long, String)]) : List[Resource] = {
-    nonZero.flatMap{port => createMesosPortResource(List((port._1, port._1)), Some(port._2))}
-  }
-
-  /**
-   * A resource can have multiple values in the offer since it can either be from
-   * a specific role or wildcard.
-   * Extract role info and port range for every port resource in the offer.
-   */
-  private def getRangeResourceWithRoleInfo(resources: JList[Resource], name: String)
-    : List[(String, List[(Long, Long)])] = {
-    resources.asScala.filter(_.getName == name).
-      map{resource =>
-        (resource.getRole, resource.getRanges.getRangeList.asScala
-        .map(r => (r.getBegin, r.getEnd)).toList)
-      }.toList
+  private def createResourcesFromPorts(portsAndRoles: List[(Long, String)]) : List[Resource] = {
+    portsAndRoles.flatMap{port => createMesosPortResource(List((port._1, port._1)), Some(port._2))}
   }
 
   /** Helper to create mesos resources for specific port ranges. */
@@ -472,15 +458,19 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   * Helper to assign a port to an offered range and get the latter's role
   * info to use it later on.
   */
-  private def findPortAndGetAssignedRangeRole(
-       port: Long,
-       ranges: List[(String, List[(Long, Long)])])
+  private def findPortAndGetAssignedRangeRole(port: Long, portResources: List[Resource])
     : String = {
+
+    val ranges = portResources.
+      map {resource =>
+        (resource.getRole, resource.getRanges.getRangeList.asScala
+          .map(r => (r.getBegin, r.getEnd)).toList)
+         }
+
     val rangePortRole = ranges
-      .map{p => val tmpList = List(p._2.filter(r => r._1 <= port & r._2 >= port))
-         (p._1, tmpList.head)}.filterNot{p => p._2.isEmpty}
-      .head._1
-    rangePortRole
+      .find {p => p._2.exists(r => r._1 <= port & r._2 >= port) }
+    // this is safe since we have previously checked about the ranges (see checkPorts method)
+    rangePortRole.get._1
   }
 
   /** Retrieves the port resources from a list of mesos offered resources */

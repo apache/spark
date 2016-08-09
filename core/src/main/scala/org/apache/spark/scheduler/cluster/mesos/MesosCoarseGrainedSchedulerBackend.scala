@@ -161,11 +161,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     startScheduler(driver)
   }
 
-  def createCommand(
-      offer: Offer,
-      numCores: Int,
-      taskId: String)
-    : CommandInfo = {
+  def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
     val executorSparkHome = conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome())
       .getOrElse {
@@ -177,7 +173,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     // Set the environment variable through a command prefix
@@ -309,7 +304,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val ports = getRangeResource(offer.getResourcesList, "ports")
 
     logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem" +
-      s" cpu: $cpus port: $ports for $refuseSeconds seconds  " +
+      s" cpu: $cpus port: $ports for $refuseSeconds seconds" +
       reason.map(r => s" (reason: $r)").getOrElse(""))
 
     refuseSeconds match {
@@ -335,7 +330,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       val offerMem = getResource(offer.getResourcesList, "mem")
       val offerCpus = getResource(offer.getResourcesList, "cpus")
       val offerPorts = getRangeResource(offer.getResourcesList, "ports")
-      val id = offer.getId.getValue.mkString(",")
+      val id = offer.getId.getValue
 
       if (tasks.contains(offer.getId)) { // accept
         val offerTasks = tasks(offer.getId)

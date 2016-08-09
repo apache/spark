@@ -29,9 +29,11 @@ import org.mockito.Mockito._
 
 object Utils {
   def createOffer(
-      offerId: String, slaveId: String, mem: Int, cpu: Int,
-      ports: Option[(Long, Long)] = None):
-    Offer = {
+      offerId: String,
+      slaveId: String,
+      mem: Int,
+      cpu: Int,
+      ports: Option[(Long, Long)] = None): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -48,8 +50,6 @@ object Utils {
         .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
           .setBegin(resourcePorts._1).setEnd(resourcePorts._2).build()))
     }
-    builder.setId(OfferID.newBuilder()
-      .setValue(offerId).build())
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
         .setValue("f1"))

@@ -37,7 +37,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     when(sc.conf).thenReturn(sparkConf)
   }
 
-  def createTestPortResource(range: (Long, Long), role: Option[String] = None): Resource = {
+  private def createTestPortResource(range: (Long, Long), role: Option[String] = None): Resource = {
     val rangeValue = Value.Range.newBuilder()
     rangeValue.setBegin(range._1)
     rangeValue.setEnd(range._2)
@@ -50,18 +50,18 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     builder.build()
   }
 
-  def rangesResourcesToTuple(resources: List[Resource]): List[(Long, Long)] = {
+  private def rangesResourcesToTuple(resources: List[Resource]): List[(Long, Long)] = {
     resources.flatMap{resource => resource.getRanges.getRangeList
       .asScala.map(range => (range.getBegin, range.getEnd))}
   }
 
-  def compareForEqualityOfPortRangeArrays(array1: Array[(Long, Long)], array2: Array[(Long, Long)]):
-  Boolean = {
+  def arePortsEqual(array1: Array[(Long, Long)], array2: Array[(Long, Long)])
+    : Boolean = {
     array1.sortBy(identity).deep == array2.sortBy(identity).deep
   }
 
-  def compareForEqualityOfPortArrays(array1: Array[Long], array2: Array[Long]):
-  Boolean = {
+  def arePortsEqual(array1: Array[Long], array2: Array[Long])
+    : Boolean = {
     array1.sortBy(identity).deep == array2.sortBy(identity).deep
   }
 
@@ -189,15 +189,13 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}.toArray
 
     portsToUse.length shouldBe 2
-    compareForEqualityOfPortArrays(portsToUse, Array(3000L, 4000L)) shouldBe true
+    arePortsEqual(portsToUse, Array(3000L, 4000L)) shouldBe true
 
-    val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
     val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
-    val expectedLeft = Array((3001L, 3999L), (4001L, 5000L))
+
     val expectedUSed = Array((3000L, 3000L), (4000L, 4000L))
 
-    compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, expectedLeft) shouldBe true
-    compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUSed) shouldBe true
+    arePortsEqual(portRangesToBeUsed.toArray, expectedUSed) shouldBe true
   }
 
   test("Port reservation is done correctly with some user specified ports (spark.executor.port)") {
@@ -238,12 +236,11 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     portsToUse.length shouldBe 2
     val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
     val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
-    val leftExpected = Array((2000L, 2099L), (2101L, 2500L), (3000L, 3999L), (4001L, 5000L))
+
     val expectedUsed = Array((2100L, 2100L), (4000L, 4000L))
 
-    compareForEqualityOfPortArrays(portsToUse.toArray, Array(2100L, 4000L)) shouldBe true
-    compareForEqualityOfPortRangeArrays(portsRangesLeft.toArray, leftExpected) shouldBe true
-    compareForEqualityOfPortRangeArrays(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
+    arePortsEqual(portsToUse.toArray, Array(2100L, 4000L)) shouldBe true
+    arePortsEqual(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
   }
 
   test("Port reservation is done correctly with all random ports - multiple ranges") {

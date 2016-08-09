@@ -192,14 +192,12 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   test("mesos doesn't register twice with the same shuffle service") {
     setBackend(Map("spark.shuffle.service.enabled" -> "true"))
     val (mem, cpu) = (backend.executorMemory(sc), 4)
-    val offeredPorts1 = (31100L, 31200L)
-    val offeredPorts2 = (41100L, 43200L)
 
-    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts1))
+    val offer1 = createOffer("o1", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer1).asJava)
     verifyTaskLaunched(driver, "o1")
 
-    val offer2 = createOffer("o2", "s1", mem, cpu, Some(offeredPorts2))
+    val offer2 = createOffer("o2", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer2).asJava)
     verifyTaskLaunched(driver, "o2")
 
@@ -232,12 +230,32 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o1")
   }
 
-  test("mesos kills an executor when told") {
-    setBackend()
-    val offeredPorts = (31100L, 31200L)
+  test("Port offer accepted with user defined port numbers") {
+    val port = 30100
+    setBackend(Map("spark.blockManager.port" -> s"$port"))
+    val offeredPorts = (30000L, 31000L)
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
     val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    val taskInfo = verifyTaskLaunched(driver, "o1")
+
+    val taskPortResources = taskInfo.head.getResourcesList.asScala.
+    find(r => r.getType == Value.Type.RANGES && r.getName == "ports")
+
+    val isPortInOffer = (r: Resource) => {
+      r.getRanges().getRangeList
+        .asScala.exists(range => range.getBegin == port && range.getEnd == port)
+    }
+    assert(taskPortResources.exists(isPortInOffer))
+  }
+
+  test("mesos kills an executor when told") {
+    setBackend()
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer1).asJava)
     verifyTaskLaunched(driver, "o1")
 
@@ -277,10 +295,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("honors unset spark.mesos.containerizer") {
     setBackend(Map("spark.mesos.executor.docker.image" -> "test"))
-    val offeredPorts = (31100L, 31200L)
+
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
-    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    val offer1 = createOffer("o1", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer1).asJava)
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
@@ -291,10 +309,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     setBackend(Map(
       "spark.mesos.executor.docker.image" -> "test",
       "spark.mesos.containerizer" -> "mesos"))
-    val offeredPorts = (31100L, 31200L)
+
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
-    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    val offer1 = createOffer("o1", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer1).asJava)
 
     val taskInfos = verifyTaskLaunched(driver, "o1")
@@ -308,10 +326,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
       "spark.mesos.executor.docker.volumes" -> "/host_vol:/container_vol:ro",
       "spark.mesos.executor.docker.portmaps" -> "8080:80:tcp"
     ))
-    val offeredPorts = (31100L, 31200L)
+
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
-    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    val offer1 = createOffer("o1", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer1).asJava)
 
     val launchedTasks = verifyTaskLaunched(driver, "o1")
@@ -346,10 +364,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     setBackend(Map(
       "spark.mesos.executor.docker.image" -> "some_image"
     ))
-    val offeredPorts = (31100L, 31200L)
+
     val (mem, cpu) = (backend.executorMemory(sc), 4)
 
-    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    val offer1 = createOffer("o1", "s1", mem, cpu)
     backend.resourceOffers(driver, List(offer1).asJava)
 
     val launchedTasks = verifyTaskLaunched(driver, "o1")
@@ -401,9 +419,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
   private def offerResources(offers: List[(Int, Int)], startId: Int = 1): Unit = {
-    val offeredPorts = (31100L, 31200L) // same for all slaves
     val mesosOffers = offers.zipWithIndex.map {case (offer, i) =>
-      createOffer(s"o${i + startId}", s"s${i + startId}", offer._1, offer._2, Some(offeredPorts))}
+      createOffer(s"o${i + startId}", s"s${i + startId}", offer._1, offer._2)}
 
     backend.resourceOffers(driver, mesosOffers.asJava)
   }
