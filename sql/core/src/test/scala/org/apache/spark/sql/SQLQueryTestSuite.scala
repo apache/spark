@@ -69,8 +69,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  private val inputFilePath = "src/test/resources/sql-tests/inputs/"
-  private val goldenFilePath = "src/test/resources/sql-tests/results/"
+  private val baseResourcePath = {
+    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
+    // relative path. Otherwise, we use classloader's getResource to find the location.
+    if (regenerateGoldenFiles) {
+      java.nio.file.Paths.get("src", "test", "resources", "sql-tests").toFile
+    } else {
+      val res = getClass.getClassLoader.getResource("sql-tests")
+      new File(res.getFile)
+    }
+  }
+
+  private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
+  private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
   /** List of test cases to ignore, in lower cases. */
   private val blackList = Set(

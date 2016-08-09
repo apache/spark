@@ -27,8 +27,8 @@ struct<9223372036854775808:decimal(19,0),(-9223372036854775809):decimal(19,0)>
 
 
 -- !query 3
-select 0.3, -0.8, .5, -.18
+select 0.3, -0.8, .5, -.18, 0.1111
 -- !query 3 schema
-struct<0.3:decimal(1,1),(-0.8):decimal(1,1),0.5:decimal(1,1),(-0.18):decimal(2,2)>
+struct<0.3:decimal(1,1),(-0.8):decimal(1,1),0.5:decimal(1,1),(-0.18):decimal(2,2),0.1111:decimal(4,4)>
 -- !query 3 output
-0.3	-0.8	0.5	-0.18
+0.3	-0.8	0.5	-0.18	0.1111
