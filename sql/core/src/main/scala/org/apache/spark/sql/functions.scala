@@ -1006,7 +1006,7 @@ object functions {
    * within each partition in the lower 33 bits. The assumption is that the data frame has
    * less than 1 billion partitions, and each partition has less than 8 billion records.
    *
-   * Optionally, you can specify the offset where the Id starts
+   * You can specify the offset where the Id starts
    *
    * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
    * This expression, monotonically_increasing_id(5), would return the following IDs:
