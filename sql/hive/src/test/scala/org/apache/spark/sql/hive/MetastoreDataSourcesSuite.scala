@@ -741,7 +741,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           DATASOURCE_SCHEMA -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
-      sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
+      sharedState.externalCatalog.createTable(hiveTable, ignoreIfExists = false)
 
       sessionState.refreshTable(tableName)
       val actualSchema = table(tableName).schema

@@ -683,7 +683,7 @@ and add it to the classpath.
 
 Some of these advanced sources are as follows.
 
-- **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka 0.8.2.1. See the [Kafka Integration Guide](streaming-kafka-integration.html) for more details.
+- **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka broker versions 0.8.2.1 or higher. See the [Kafka Integration Guide](streaming-kafka-integration.html) for more details.
 
 - **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Flume 1.6.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
 
@@ -2350,7 +2350,7 @@ The following table summarizes the semantics under failures:
 
 ### With Kafka Direct API
 {:.no_toc}
-In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that all the Kafka data is received by Spark Streaming exactly once. Along with this, if you implement exactly-once output operation, you can achieve end-to-end exactly-once guarantees. This approach (experimental as of Spark {{site.SPARK_VERSION_SHORT}}) is further discussed in the [Kafka Integration Guide](streaming-kafka-integration.html).
+In Spark 1.3, we have introduced a new Kafka Direct API, which can ensure that all the Kafka data is received by Spark Streaming exactly once. Along with this, if you implement exactly-once output operation, you can achieve end-to-end exactly-once guarantees. This approach is further discussed in the [Kafka Integration Guide](streaming-kafka-integration.html).
 
 ## Semantics of output operations
 {:.no_toc}
@@ -2374,51 +2374,6 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
               // use this uniqueId to transactionally commit the data in partitionIterator
             }
           }
-
-***************************************************************************************************
-***************************************************************************************************
-
-# Migration Guide from 0.9.1 or below to 1.x
-Between Spark 0.9.1 and Spark 1.0, there were a few API changes made to ensure future API stability.
-This section elaborates the steps required to migrate your existing code to 1.0.
-
-**Input DStreams**: All operations that create an input stream (e.g., `StreamingContext.socketStream`, `FlumeUtils.createStream`, etc.) now returns
-[InputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.InputDStream) /
-[ReceiverInputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.ReceiverInputDStream)
-(instead of DStream) for Scala, and [JavaInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaInputDStream.html) /
-[JavaPairInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairInputDStream.html) /
-[JavaReceiverInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaReceiverInputDStream.html) /
-[JavaPairReceiverInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaPairReceiverInputDStream.html)
-(instead of JavaDStream) for Java. This ensures that functionality specific to input streams can
-be added to these classes in the future without breaking binary compatibility.
-Note that your existing Spark Streaming applications should not require any change
-(as these new classes are subclasses of DStream/JavaDStream) but may require recompilation with Spark 1.0.
-
-**Custom Network Receivers**: Since the release to Spark Streaming, custom network receivers could be defined
-in Scala using the class NetworkReceiver. However, the API was limited in terms of error handling
-and reporting, and could not be used from Java. Starting Spark 1.0, this class has been
-replaced by [Receiver](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver) which has
-the following advantages.
-
-* Methods like `stop` and `restart` have been added to for better control of the lifecycle of a receiver. See
-the [custom receiver guide](streaming-custom-receivers.html) for more details.
-* Custom receivers can be implemented using both Scala and Java.
-
-To migrate your existing custom receivers from the earlier NetworkReceiver to the new Receiver, you have
-to do the following.
-
-* Make your custom receiver class extend
-[`org.apache.spark.streaming.receiver.Receiver`](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver)
-instead of `org.apache.spark.streaming.dstream.NetworkReceiver`.
-* Earlier, a BlockGenerator object had to be created by the custom receiver, to which received data was
-added for being stored in Spark. It had to be explicitly started and stopped from `onStart()` and `onStop()`
-methods. The new Receiver class makes this unnecessary as it adds a set of methods named `store(<data>)`
-that can be called to store the data in Spark. So, to migrate your custom network receiver, remove any
-BlockGenerator object (does not exist any more in Spark 1.0 anyway), and use `store(...)` methods on
-received data.
-
-**Actor-based Receivers**: The Actor-based Receiver APIs have been moved to [DStream Akka](https://github.com/spark-packages/dstream-akka).
-Please refer to the project for more details.
 
 ***************************************************************************************************
 ***************************************************************************************************

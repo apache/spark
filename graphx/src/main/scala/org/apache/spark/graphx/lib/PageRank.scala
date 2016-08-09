@@ -17,7 +17,6 @@
 
 package org.apache.spark.graphx.lib
 
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
@@ -109,7 +108,7 @@ object PageRank extends Logging {
     require(resetProb >= 0 && resetProb <= 1, s"Random reset probability must belong" +
       s" to [0, 1], but got ${resetProb}")
 
-    val personalized = srcId isDefined
+    val personalized = srcId.isDefined
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the PageRank graph with each edge attribute having

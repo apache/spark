@@ -141,6 +141,13 @@ class HiveDDLSuite
     }
   }
 
+  test("create table: partition column names exist in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
+    }
+    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+  }
+
   test("add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>

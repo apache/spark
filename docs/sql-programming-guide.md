@@ -1160,6 +1160,15 @@ that these options will be deprecated in future release as more optimizations ar
     </td>
   </tr>
   <tr>
+    <td><code>spark.sql.broadcastTimeout</code></td>
+    <td>300</td>
+    <td>
+    <p>
+      Timeout in seconds for the broadcast wait time in broadcast joins
+    </p>
+    </td>
+  </tr>
+  <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
     <td>10485760 (10 MB)</td>
     <td>
