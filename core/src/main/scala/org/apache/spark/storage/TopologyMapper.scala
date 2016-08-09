@@ -36,6 +36,7 @@ abstract class TopologyMapper(conf: SparkConf) {
    *         to make this topology information nested.
    *         For example : ‘/myrack/myhost’, where ‘/’ is the topology delimiter,
    *         ‘myrack’ is the topology identifier, and ‘myhost’ is the individual host.
+   *         This function only returns the topology information without the hostname.
    */
   def getTopologyForHost(hostname: String): String
 }

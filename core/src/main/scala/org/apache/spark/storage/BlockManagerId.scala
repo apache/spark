@@ -117,6 +117,10 @@ private[spark] object BlockManagerId {
    * @param execId ID of the executor.
    * @param host Host name of the block manager.
    * @param port Port of the block manager.
+   * @param topologyInfo topology information for the blockmanager, if available
+   *                     This can be network topology information for use while choosing peers
+   *                     while replicating data blocks. More information available here:
+   *                     [[org.apache.spark.storage.TopologyMapper]]
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
   def apply(
