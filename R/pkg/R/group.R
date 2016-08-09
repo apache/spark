@@ -83,8 +83,6 @@ setMethod("count",
 #' df2 <- agg(df, <column> = <aggFunction>)
 #' df2 <- agg(df, newColName = aggFunction(column))
 #'
-#' @param x a GroupedData
-#' @return a SparkDataFrame
 #' @rdname summarize
 #' @aliases agg,GroupedData-method
 #' @name agg
@@ -201,7 +199,6 @@ createMethods()
 
 #' gapply
 #'
-#' @param x A GroupedData
 #' @rdname gapply
 #' @aliases gapply,GroupedData-method
 #' @name gapply
@@ -216,7 +213,6 @@ setMethod("gapply",
 
 #' gapplyCollect
 #'
-#' @param x A GroupedData
 #' @rdname gapplyCollect
 #' @aliases gapplyCollect,GroupedData-method
 #' @name gapplyCollect

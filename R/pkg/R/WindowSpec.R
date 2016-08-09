@@ -54,8 +54,10 @@ setMethod("show", "WindowSpec",
 #'
 #' Defines the partitioning columns in a WindowSpec.
 #'
-#' @param x a WindowSpec
-#' @return a WindowSpec
+#' @param x a WindowSpec.
+#' @param col a column to partition on (desribed by the name or Column object).
+#' @param ... additional column(s) to partition on.
+#' @return A WindowSpec.
 #' @rdname partitionBy
 #' @name partitionBy
 #' @aliases partitionBy,WindowSpec-method
@@ -122,7 +124,7 @@ setMethod("orderBy",
 #' rowsBetween
 #'
 #' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
+#'
 #' Both `start` and `end` are relative positions from the current row. For example, "0" means
 #' "current row", while "-1" means the row before the current row, and "5" means the fifth row
 #' after the current row.
@@ -154,7 +156,7 @@ setMethod("rowsBetween",
 #' rangeBetween
 #'
 #' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
+#'
 #' Both `start` and `end` are relative from the current row. For example, "0" means "current row",
 #' while "-1" means one off before the current row, and "5" means the five off after the
 #' current row.
@@ -188,8 +190,11 @@ setMethod("rangeBetween",
 
 #' over
 #'
-#' Define a windowing column. 
+#' Define a windowing column.
 #'
+#' @param x a Column object, usually one returned by window function(s).
+#' @param window a WindowSpec object. Can be created by `windowPartitionBy` or
+#'        `windowOrderBy` and configured by other WindowSpec methods.
 #' @rdname over
 #' @name over
 #' @aliases over,Column,WindowSpec-method

@@ -328,6 +328,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param sparkPackages Character vector of packages from spark-packages.org
 #' @param enableHiveSupport Enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
+#' @param ... additional parameters passed to the method
 #' @export
 #' @examples
 #'\dontrun{
@@ -396,9 +397,9 @@ sparkR.session <- function(
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a
 #' different value or cleared.
 #'
-#' @param groupid the ID to be assigned to job groups
-#' @param description description for the job group ID
-#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
+#' @param groupId the ID to be assigned to job groups.
+#' @param description description for the job group ID.
+#' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation.
 #' @rdname setJobGroup
 #' @name setJobGroup
 #' @examples

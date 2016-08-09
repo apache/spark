@@ -89,8 +89,6 @@ setMethod("acos",
 #' Returns the approximate number of distinct items in a group. This is a column
 #' aggregate function.
 #'
-#' @param x Column to compute on.
-#'
 #' @rdname approxCountDistinct
 #' @name approxCountDistinct
 #' @return the approximate number of distinct items in a group.
@@ -170,8 +168,6 @@ setMethod("atan",
 #' avg
 #'
 #' Aggregate function: returns the average of the values in a group.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname avg
 #' @name avg
@@ -319,7 +315,7 @@ setMethod("column",
 #'
 #' Computes the Pearson Correlation Coefficient for two Columns.
 #'
-#' @param x Column to compute on.
+#' @param col2 a (second) Column object.
 #'
 #' @rdname corr
 #' @name corr
@@ -338,8 +334,6 @@ setMethod("corr", signature(x = "Column"),
 #' cov
 #'
 #' Compute the sample covariance between two expressions.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname cov
 #' @name cov
@@ -362,8 +356,8 @@ setMethod("cov", signature(x = "characterOrColumn"),
 
 #' @rdname cov
 #'
-#' @param col1 First column to compute cov_samp.
-#' @param col2 Second column to compute cov_samp.
+#' @param col1 the first Column object.
+#' @param col2 the second Column object.
 #' @name covar_samp
 #' @aliases covar_samp,characterOrColumn,characterOrColumn-method
 #' @note covar_samp since 2.0.0
@@ -450,8 +444,6 @@ setMethod("cosh",
 #' Returns the number of items in a group
 #'
 #' Returns the number of items in a group. This is a column aggregate function.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname nrow
 #' @name count
@@ -663,7 +655,8 @@ setMethod("factorial",
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
-#' @param x Column to compute on.
+#' @param na.rm a logical value indicating whether NA values should be stripped
+#'        before the computation proceeds.
 #'
 #' @rdname first
 #' @name first
@@ -832,7 +825,8 @@ setMethod("kurtosis",
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
-#' @param x Column to compute on.
+#' @param na.rm a logical value indicating whether NA values should be stripped
+#'        before the computation proceeds.
 #'
 #' @rdname last
 #' @name last
@@ -1273,12 +1267,14 @@ setMethod("round",
 #' bround
 #'
 #' Returns the value of the column `e` rounded to `scale` decimal places using HALF_EVEN rounding
-#' mode if `scale` >= 0 or at integral part when `scale` < 0.
+#' mode if `scale` >= 0 or at integer part when `scale` < 0.
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
 #' @param x Column to compute on.
-#'
+#' @param scale round to `scale` digits to the right of the decimal point when `scale` > 0,
+#'        the nearest even number when `scale` = 0, and `scale` digits to the left
+#'        of the decimal point when `scale` <= 0.
 #' @rdname bround
 #' @name bround
 #' @family math_funcs
@@ -1560,7 +1556,8 @@ setMethod("stddev_samp",
 #'
 #' Creates a new struct column that composes multiple input columns.
 #'
-#' @param x Column to compute on.
+#' @param x a column to compute on.
+#' @param ... additional column(s) to be included.
 #'
 #' @rdname struct
 #' @name struct
@@ -2127,7 +2124,7 @@ setMethod("approxCountDistinct",
             column(jc)
           })
 
-#' Count Distinct
+#' Count Distinct Values
 #'
 #' @param x Column to compute on
 #' @param ... other columns
@@ -2156,7 +2153,7 @@ setMethod("countDistinct",
 #' concat
 #'
 #' Concatenates multiple input string columns together into a single string column.
-#' 
+#'
 #' @param x Column to compute on
 #' @param ... other columns
 #'
@@ -2246,7 +2243,6 @@ setMethod("ceiling",
           })
 
 #' @rdname sign
-#' @param x Column to compute on
 #'
 #' @name sign
 #' @aliases sign,Column-method
@@ -2262,9 +2258,6 @@ setMethod("sign", signature(x = "Column"),
 #'
 #' Aggregate function: returns the number of distinct items in a group.
 #'
-#' @param x Column to compute on
-#' @param ... other columns
-#'
 #' @rdname countDistinct
 #' @name n_distinct
 #' @aliases n_distinct,Column-method
@@ -2277,7 +2270,6 @@ setMethod("n_distinct", signature(x = "Column"),
           })
 
 #' @rdname nrow
-#' @param x Column to compute on
 #'
 #' @name n
 #' @aliases n,Column-method
@@ -2300,8 +2292,8 @@ setMethod("n", signature(x = "Column"),
 #' NOTE: Use when ever possible specialized functions like \code{year}. These benefit from a
 #' specialized implementation.
 #'
-#' @param y Column to compute on
-#' @param x date format specification 
+#' @param y Column to compute on.
+#' @param x date format specification.
 #'
 #' @family datetime_funcs
 #' @rdname date_format
@@ -2320,8 +2312,8 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #'
 #' Assumes given timestamp is UTC and converts to given timezone.
 #'
-#' @param y Column to compute on
-#' @param x time zone to use 
+#' @param y Column to compute on.
+#' @param x time zone to use.
 #'
 #' @family datetime_funcs
 #' @rdname from_utc_timestamp
@@ -2370,8 +2362,8 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' Day of the week parameter is case insensitive, and accepts first three or two characters:
 #' "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
-#' @param y Column to compute on
-#' @param x Day of the week string 
+#' @param y Column to compute on.
+#' @param x Day of the week string.
 #'
 #' @family datetime_funcs
 #' @rdname next_day
@@ -2637,6 +2629,7 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #' Parses the expression string into the column that it represents, similar to
 #' SparkDataFrame.selectExpr
 #'
+#' @param x an expression character object to be parsed.
 #' @family normal_funcs
 #' @rdname expr
 #' @aliases expr,character-method
@@ -2654,6 +2647,9 @@ setMethod("expr", signature(x = "character"),
 #'
 #' Formats the arguments in printf-style and returns the result as a string column.
 #'
+#' @param format a character object of format strings.
+#' @param x a Column object.
+#' @param ... additional columns.
 #' @family string_funcs
 #' @rdname format_string
 #' @name format_string
@@ -2804,6 +2800,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #'
 #' Generate a random column with i.i.d. samples from U[0.0, 1.0].
 #'
+#' @param seed a random seed. Can be missing.
 #' @family normal_funcs
 #' @rdname rand
 #' @name rand
@@ -2832,6 +2829,7 @@ setMethod("rand", signature(seed = "numeric"),
 #'
 #' Generate a column with i.i.d. samples from the standard normal distribution.
 #'
+#' @param seed a random seed. Can be missing.
 #' @family normal_funcs
 #' @rdname randn
 #' @name randn
@@ -3012,6 +3010,8 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 #' Evaluates a list of conditions and returns one of multiple possible result expressions.
 #' For unmatched expressions null is returned.
 #'
+#' @param condition the condition to test on. Must be a Column expression.
+#' @param value result expression.
 #' @family normal_funcs
 #' @rdname when
 #' @name when
@@ -3033,6 +3033,9 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
 #' Otherwise \code{no} is returned for unmatched conditions.
 #'
+#' @param test a Column expression that describes the condition.
+#' @param yes return values for true elements of test.
+#' @param no return values for false elements of test.
 #' @family normal_funcs
 #' @rdname ifelse
 #' @name ifelse
@@ -3074,7 +3077,11 @@ setMethod("ifelse",
 #' @family window_funcs
 #' @aliases cume_dist,missing-method
 #' @export
-#' @examples \dontrun{cume_dist()}
+#' @examples \dontrun{
+#'   df <- createDataFrame(iris)
+#'   ws <- orderBy(windowPartitionBy("Species"), "Sepal_Length")
+#'   out <- select(df, over(cume_dist(), ws), df$Sepal_Length, df$Species)
+#' }
 #' @note cume_dist since 1.6.0
 setMethod("cume_dist",
           signature(x = "missing"),
@@ -3143,7 +3150,7 @@ setMethod("lag",
 #' an `offset` of one will return the next row at any given point in the window partition.
 #'
 #' This is equivalent to the LEAD function in SQL.
-#' 
+#'
 #' @param x Column to compute on
 #' @param offset Number of rows to offset
 #' @param defaultValue (Optional) default value to use
@@ -3243,6 +3250,8 @@ setMethod("rank",
           })
 
 # Expose rank() in the R base package
+#' @param x a numeric, complex, character or logical vector.
+#' @param ... additional argument(s) passed to the method.
 #' @name rank
 #' @rdname rank
 #' @aliases rank,ANY-method
@@ -3318,7 +3327,7 @@ setMethod("explode",
 #' size
 #'
 #' Returns length of array or map.
-#' 
+#'
 #' @param x Column to compute on
 #'
 #' @rdname size
