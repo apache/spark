@@ -1105,7 +1105,9 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(ratings)
+#' ratings <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
+#'                 list(2, 1, 1.0), list(2, 2, 5.0))
+#' df <- createDataFrame(ratings, c("user", "item", "rating"))
 #' model <- spark.als(df, "rating", "user", "item")
 #'
 #' # extract latent factors
@@ -1132,6 +1134,16 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
                    rank = 10, reg = 1.0, maxIter = 10, ...) {
+
+            if (!is.numeric(rank) || rank <= 0) {
+              stop("rank should be a positive number.")
+            }
+            if (!is.numeric(reg) || reg < 0) {
+              stop("reg should be a nonnegative number.")
+            }
+            if (!is.numeric(maxIter) || maxIter <= 0) {
+              stop("maxIter should be a positive number.")
+            }
 
             `%||%` <- function(a, b) if (!is.null(a)) a else b
 
