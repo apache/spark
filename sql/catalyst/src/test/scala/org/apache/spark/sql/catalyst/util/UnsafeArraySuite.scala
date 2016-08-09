@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.sql.types.{DateType, Decimal, TimestampType}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class UnsafeArraySuite extends SparkFunSuite {
@@ -38,7 +39,13 @@ class UnsafeArraySuite extends SparkFunSuite {
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(UTF8String.fromString("1970-1-1 00:00:00")).get,
     DateTimeUtils.stringToTimestamp(UTF8String.fromString("2016-7-26 00:00:00")).get)
-  val decimalArray = Array(Decimal(77L, 2, 1), Decimal(77L, 12, 1), Decimal(77L, 20, 1))
+  val decimalArray4_1 = Array(
+    BigDecimal("123.4").setScale(1, BigDecimal.RoundingMode.FLOOR),
+    BigDecimal("567.8").setScale(1, BigDecimal.RoundingMode.FLOOR))
+  val decimalArray20_20 = Array(
+    BigDecimal("1.2345678901234567890123456").setScale(21, BigDecimal.RoundingMode.FLOOR),
+    BigDecimal("2.3456789012345678901234567").setScale(21, BigDecimal.RoundingMode.FLOOR))
+
   val calenderintervalArray = Array(new CalendarInterval(3, 321), new CalendarInterval(1, 123))
 
   val intMultiDimArray = Array(Array(1), Array(2, 20), Array(3, 30, 300))
@@ -118,12 +125,20 @@ class UnsafeArraySuite extends SparkFunSuite {
       assert(unsafeTimestamp.get(i, TimestampType) == e)
     }
 
-    val unsafeDecimal = ExpressionEncoder[Array[Decimal]].resolveAndBind().
-      toRow(decimalArray).getArray(0)
-    assert(unsafeDecimal.isInstanceOf[UnsafeArrayData])
-    assert(unsafeDecimal.numElements == decimalArray.length)
-    decimalArray.zipWithIndex.map { case (e, i) =>
-      assert(unsafeDecimal.getDecimal(i, e.precision, e.scale) == e)
+    Seq(decimalArray4_1, decimalArray20_20).map { decimalArray =>
+      val decimal = decimalArray(0)
+      val schema = new StructType().add(
+        "array", ArrayType(DecimalType(decimal.precision, decimal.scale)))
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val externalRow = Row(decimalArray)
+      val ir = encoder.toRow(externalRow)
+
+      val unsafeDecimal = ir.getArray(0)
+      assert(unsafeDecimal.isInstanceOf[UnsafeArrayData])
+      assert(unsafeDecimal.numElements == decimalArray.length)
+      decimalArray.zipWithIndex.map { case (e, i) =>
+        assert(unsafeDecimal.getDecimal(i, e.precision, e.scale).toBigDecimal == e)
+      }
     }
 
     val unsafeInterval = ExpressionEncoder[Array[CalendarInterval]].resolveAndBind().
