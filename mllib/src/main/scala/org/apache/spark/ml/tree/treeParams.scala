@@ -189,7 +189,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 /**
  * Parameters for Decision Tree-based classification algorithms.
  */
-private[ml] trait TreeClassifierParamsNoDefault extends Params {
+private[ml] trait TreeClassifierParams extends Params {
 
   // Impurity should be overriden when setting a default. This should be a def, but has
   // to be a val to maintain the proper documentation.
@@ -222,7 +222,7 @@ private[ml] object TreeClassifierParams {
   final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
 }
 
-private[ml] trait TreeClassifierParams extends TreeClassifierParamsNoDefault {
+private[ml] trait TreeClassifierParamsWithDefault extends TreeClassifierParams {
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Also used for terminal leaf value prediction.
@@ -239,12 +239,12 @@ private[ml] trait TreeClassifierParams extends TreeClassifierParamsNoDefault {
 }
 
 private[ml] trait DecisionTreeClassifierParams
-  extends DecisionTreeParams with TreeClassifierParams
+  extends DecisionTreeParams with TreeClassifierParamsWithDefault
 
 /**
  * Parameters for Decision Tree-based regression algorithms.
  */
-private[ml] trait TreeRegressorParamsNoDefault extends Params {
+private[ml] trait TreeRegressorParams extends Params {
 
   // Impurity should be overriden when setting a default. This should be a def, but has
   // to be a val to maintain the proper documentation.
@@ -276,7 +276,7 @@ private[ml] object TreeRegressorParams {
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
 }
 
-private[ml] trait TreeRegressorParams extends TreeRegressorParamsNoDefault {
+private[ml] trait TreeRegressorParamsWithDefault extends TreeRegressorParams {
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * Supported: "variance" (default)
@@ -286,13 +286,14 @@ private[ml] trait TreeRegressorParams extends TreeRegressorParamsNoDefault {
   override val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
     s" ${TreeRegressorParams.supportedImpurities.mkString(", ")}",
-    (value: String) => TreeRegressorParams.supportedImpurities.contains(value.toLowerCase))
+    (value: String) => TreeRegressorParams.supportedImpurities
+      .contains(value.toLowerCase))
 
   setDefault(impurity -> "variance")
 }
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
-  with TreeRegressorParams with HasVarianceCol {
+  with TreeRegressorParamsWithDefault with HasVarianceCol {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -432,16 +433,16 @@ private[spark] object RandomForestParams {
 }
 
 private[ml] trait RandomForestClassifierParams
-  extends RandomForestParams with TreeClassifierParams
+  extends RandomForestParams with TreeClassifierParamsWithDefault
 
 private[ml] trait RandomForestClassificationModelParams extends TreeEnsembleParams
-  with HasFeatureSubsetStrategy with TreeClassifierParams
+  with HasFeatureSubsetStrategy with TreeClassifierParamsWithDefault
 
 private[ml] trait RandomForestRegressorParams
-  extends RandomForestParams with TreeRegressorParams
+  extends RandomForestParams with TreeRegressorParamsWithDefault
 
 private[ml] trait RandomForestRegressionModelParams extends TreeEnsembleParams
-  with HasFeatureSubsetStrategy with TreeRegressorParams
+  with HasFeatureSubsetStrategy with TreeRegressorParamsWithDefault
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
@@ -508,7 +509,7 @@ private[ml] object GBTClassifierParams {
   }
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParamsNoDefault {
+private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
@@ -580,7 +581,7 @@ private[ml] object GBTRegressorParams {
   }
 }
 
-private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParamsNoDefault {
+private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
