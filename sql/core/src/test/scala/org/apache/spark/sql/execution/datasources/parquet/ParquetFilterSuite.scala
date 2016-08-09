@@ -42,6 +42,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -551,12 +552,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         Seq(("true", (x: Long) => x == 0), ("false", (x: Long) => x > 0)).map { case (push, func) =>
           withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> push) {
+            val accu = new LongAccumulator
+            accu.register(sparkContext, Some("numRowGroups"))
+
             val df = spark.read.parquet(path).filter("a < 100")
-            df.collect()
-            val source = df.queryExecution.sparkPlan.collect {
-              case f: FileSourceScanExec => f
-            }.head
-            assert(func(source.longMetric("numRowGroups").value))
+            df.foreachPartition(_.foreach(v => accu.add(0)))
+            df.collect
+
+            val numRowGroups = AccumulatorContext.lookForAccumulatorByName("numRowGroups")
+            assert(numRowGroups.isDefined)
+            assert(func(numRowGroups.get.asInstanceOf[LongAccumulator].value))
           }
         }
       }

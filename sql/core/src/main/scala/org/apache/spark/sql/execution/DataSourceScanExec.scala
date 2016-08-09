@@ -213,9 +213,7 @@ private[sql] case class FileSourceScanExec(
 
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"),
-      // Only for test purpose.
-      "numRowGroups" -> SQLMetrics.createMetric(sparkContext, "numRowGroups"))
+      "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {

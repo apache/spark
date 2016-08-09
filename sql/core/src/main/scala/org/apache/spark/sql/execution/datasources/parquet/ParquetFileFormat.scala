@@ -37,7 +37,7 @@ import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
 import org.slf4j.bridge.SLF4JBridgeHandler
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -367,18 +367,6 @@ private[sql] class ParquetFileFormat
         val vectorizedReader = new VectorizedParquetRecordReader()
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
-
-        // For test purpose.
-        // If the predefined accumulator exists, the row group number to read will be updated
-        // to the accumulator. So we can check if the row groups are filtered or not in test case.
-        val taskContext = TaskContext.get()
-        if (taskContext != null) {
-          val accu = taskContext.taskMetrics.lookForAccumulatorByName(accuNameForNumRowGroup)
-          if (accu.isDefined) {
-            accu.get.asInstanceOf[SQLMetric].add(vectorizedReader.getRowGroupCount().toLong)
-          }
-        }
-
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
@@ -434,9 +422,6 @@ private[sql] class ParquetFileFormat
       sqlContext.sessionState.newHadoopConf(),
       options)
   }
-
-  // Only for test purpose.
-  private val accuNameForNumRowGroup = "numRowGroups"
 }
 
 /**
