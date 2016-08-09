@@ -177,7 +177,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    // Set the ports to be pickedup by the executor
+
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     // Set the environment variable through a command prefix
@@ -444,11 +444,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val (afterMemResources, memResourcesToUse) =
       partitionResources(afterCPUResources.asJava, "mem", taskMemory)
 
-    // partition ports
-    val (afterPortResources, portResourcesToUse) =
+    // If user specifies port numbers in SparkConfig then consecutive tasks will not be launched
+    // on the same host. This essentially means one executor per host.
+    // TODO: handle network isolator case
+    val (nonPortResources, portResourcesToUse) =
       partitionPortResources(nonZeroPortValuesFromConfig(sc.conf), afterMemResources)
 
-    (afterPortResources, cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse)
+    (nonPortResources, cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse)
   }
 
   private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
