@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,22 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from airflow.operators.hive_to_druid import HiveToDruidTransfer
-from airflow import DAG
-from datetime import datetime
-
-args = {
-            'owner': 'qi_wang',
-            'start_date': datetime(2015, 4, 4),
-}
-
-dag = DAG("test_druid", default_args=args)
+import setproctitle
+from airflow import settings
 
 
-HiveToDruidTransfer(task_id="load_dummy_test",
-                    sql="select * from qi.druid_test_dataset_w_platform_1 \
-                            limit 10;",
-                    druid_datasource="airflow_test",
-                    ts_dim="ds",
-                    dag=dag
-                )
+def post_worker_init(dummy_worker):
+    setproctitle.setproctitle(
+        settings.GUNICORN_WORKER_READY_PREFIX + setproctitle.getproctitle()
+    )
