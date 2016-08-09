@@ -454,11 +454,10 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' summary(savedModel)
 #' }
 #' @note spark.mlp since 2.1.0
-setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, blockSize, layers, solver, maxIter, tol, stepSize, ...) {
-            formula <- paste(deparse(formula), collapse = "")
+setMethod("spark.mlp", signature(data = "SparkDataFrame"),
+          function(data, blockSize, layers, solver, maxIter, tol, stepSize, ...) {
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
-                                "fit", formula, data@sdf, as.integer(blockSize), as.array(layers),
+                                "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 solver, as.integer(maxIter), tol, stepSize)
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
@@ -491,7 +490,7 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
             labels <- callJMethod(jobj, "labels")
             layers <- callJMethod(jobj, "layers")
             layers <- t(as.matrix(unlist(layers)))
-            colnames(apriori) <- unlist(labels)
+            colnames(layers) <- unlist(labels)
             tables <- callJMethod(jobj, "tables")
             tables <- matrix(tables, nrow = length(labels))
             rownames(tables) <- unlist(labels)

@@ -323,12 +323,8 @@ test_that("spark.kmeans", {
 
 test_that("spark.mlp", {
   irisDF <- suppressWarnings(createDataFrame(iris))
-  model <- spark.mlp(irisDF, ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width,
-                     blockSize=128, initialWeights=seq(1, 9, by = 2), layers=3, solver='LBFGS',
-                     seed=1234L, maxIter=100, tol=0.5, stepSize=1)
-  summary(model)
-  showDF(fitted(model))
-})
+  model <- spark.mlp(df, blockSize=128, layers=c(4,5,4,3), solver='l-bfgs', maxIter=100, tol=0.5,
+                     stepSize=1)})
 
 test_that("spark.naiveBayes", {
   # R code to reproduce the result.
