@@ -313,7 +313,7 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                         #queryTermDefault
-    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
+    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
     ;
 
 queryPrimary
@@ -611,7 +611,7 @@ qualifiedName
 identifier
     : strictIdentifier
     | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
-    | UNION | INTERSECT | EXCEPT
+    | UNION | INTERSECT | EXCEPT | SETMINUS
     ;
 
 strictIdentifier
@@ -751,6 +751,7 @@ FUNCTIONS: 'FUNCTIONS';
 DROP: 'DROP';
 UNION: 'UNION';
 EXCEPT: 'EXCEPT';
+SETMINUS: 'MINUS';
 INTERSECT: 'INTERSECT';
 TO: 'TO';
 TABLESAMPLE: 'TABLESAMPLE';
