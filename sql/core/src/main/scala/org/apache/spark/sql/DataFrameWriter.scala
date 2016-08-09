@@ -450,13 +450,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // To allow certain options to append when create a new table, which can be
         // table_options or partition_options.
         // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-        val createtblOptions = {
-          extraOptions.get("jdbc.create.table.options") match {
-            case Some(value) => " " + value
-            case None => ""
-          }
-        }
-        val sql = s"CREATE TABLE $table ($schema)" + createtblOptions
+        val createtblOptions = extraOptions.getOrElse("createTableOptions","")
+        val sql = s"CREATE TABLE $table ($schema) $createtblOptions"
         val statement = conn.createStatement
         try {
           statement.executeUpdate(sql)
