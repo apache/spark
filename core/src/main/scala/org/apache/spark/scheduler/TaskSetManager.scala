@@ -798,6 +798,11 @@ private[spark] class TaskSetManager(
       }
     }
     maybeFinishTaskSet()
+
+    // kill running task if stage failed
+    if(reason.isInstanceOf[FetchFailed]) {
+      sched.sc.killTasks(runningTasksSet, taskInfos)
+    }
   }
 
   def abort(message: String, exception: Option[Throwable] = None): Unit = sched.synchronized {
