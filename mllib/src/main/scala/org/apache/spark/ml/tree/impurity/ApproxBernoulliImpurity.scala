@@ -80,7 +80,6 @@ private[spark] class ApproxBernoulliAggregator
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
-    assert(instanceWeight == 1.0, "ApproxBernoulliImpurity only allows unweighted data")
     allStats(offset) += instanceWeight
     allStats(offset + 1) += instanceWeight * label
     allStats(offset + 2) += instanceWeight * label * label
