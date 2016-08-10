@@ -354,8 +354,8 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #' Note: A saved-loaded model does not support this method.
 #'
 #' @param object a fitted k-means model.
-#' @param method type of fitted results, `"centers"` for cluster centers
-#'        or `"classes"` for assigned classes.
+#' @param method type of fitted results, \code{"centers"} for cluster centers
+#'        or \code{"classes"} for assigned classes.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{fitted} returns a SparkDataFrame containing fitted values.
 #' @rdname fitted
@@ -428,8 +428,8 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param ... additional argument(s) passed to the method. Currently only \code{smoothing}.
 #' @param smoothing smoothing parameter.
-#' @param ... additional parameter(s) passed to the method.
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model.
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
@@ -457,7 +457,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' }
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, smoothing = 1.0, ...) {
+          function(data, formula, smoothing = 1.0) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
             formula, data@sdf, smoothing)
@@ -577,8 +577,7 @@ read.ml <- function(path) {
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
-#'                Note that operator '.' is not supported currently
-#' @param ... additional argument(s) passed to the method.
+#'                Note that operator '.' is not supported currently.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
@@ -603,7 +602,7 @@ read.ml <- function(path) {
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, ...) {
+          function(data, formula) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf)

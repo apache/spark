@@ -177,7 +177,7 @@ setMethod("isLocal",
 #' Print the first numRows rows of a SparkDataFrame
 #'
 #' @param numRows the number of rows to print. Defaults to 20.
-#' @param truncate whether truncate long strings. If true, strings more than 20 characters will be
+#' @param truncate whether truncate long strings. If \code{TRUE}, strings more than 20 characters will be
 #'    truncated. However, if set greater than zero, truncates strings longer than `truncate`
 #'    characters and all cells will be aligned right.
 #' @family SparkDataFrame functions
@@ -916,6 +916,7 @@ setMethod("sample_frac",
 
 #' Returns the number of rows in a SparkDataFrame
 #'
+#' @param x a SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @rdname nrow
 #' @name count
@@ -2846,7 +2847,7 @@ setMethod("fillna",
 #' @param x a SparkDataFrame.
 #' @param row.names NULL or a character vector giving the row names for the data frame.
 #' @param optional If `TRUE`, converting column names is optional.
-#' @param ... additional arguments passed to the method.
+#' @param ... additional arguments to pass to base::as.data.frame.
 #' @return A data.frame.
 #' @family SparkDataFrame functions
 #' @aliases as.data.frame,SparkDataFrame-method
@@ -3049,7 +3050,7 @@ setMethod("drop",
 #'
 #' @name histogram
 #' @param nbins the number of bins (optional). Default value is 10.
-#' @param col the column (described by character or Column object) to build the histogram from.
+#' @param col the column as Character string or a Column to build the histogram from.
 #' @param df the SparkDataFrame containing the Column to build the histogram from.
 #' @return a data.frame with the histogram statistics, i.e., counts and centroids.
 #' @rdname histogram
@@ -3184,7 +3185,7 @@ setMethod("histogram",
 #' @param x A SparkDataFrame
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
 #' @param tableName The name of the table in the external database
-#' @param ... additional argument(s) passed to the method
+#' @param ... additional JDBC database connection propertie(s).
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
 #' @family SparkDataFrame functions
 #' @rdname write.jdbc

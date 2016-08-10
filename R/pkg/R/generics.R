@@ -1083,8 +1083,7 @@ setGeneric("month", function(x) { standardGeneric("month") })
 #' @export
 setGeneric("months_between", function(y, x) { standardGeneric("months_between") })
 
-#' @param x a SparkDataFrame or a Column object.
-#' @rdname nrow
+#' @rdname n
 #' @export
 setGeneric("n", function(x) { standardGeneric("n") })
 
@@ -1339,7 +1338,7 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 
 #' @rdname spark.survreg
 #' @export
-setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
+setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
 
 #' @rdname write.ml
 #' @export
