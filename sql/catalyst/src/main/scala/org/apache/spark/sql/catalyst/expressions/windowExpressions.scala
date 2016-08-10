@@ -674,6 +674,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
+  override def sql: String = "DENSE_RANK()"
   override def prettyName: String = "dense_rank"
 }
 
@@ -701,5 +702,6 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override val evaluateExpression = If(GreaterThan(n, one),
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
       Literal(0.0d))
+  override def sql: String = "PERCENT_RANK()"
   override def prettyName: String = "percent_rank"
 }
