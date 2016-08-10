@@ -23,11 +23,15 @@ import org.mockito.Mockito.mock
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator}
@@ -340,16 +344,16 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("SPARK-11126: no memory leak when running non SQL jobs") {
-    val previousStageNumber = spark.listener.stageIdToStageMetrics.size
+    val previousStageNumber = spark.sharedState.listener.stageIdToStageMetrics.size
     spark.sparkContext.parallelize(1 to 10).foreach(i => ())
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     // listener should ignore the non SQL stage
-    assert(spark.listener.stageIdToStageMetrics.size == previousStageNumber)
+    assert(spark.sharedState.listener.stageIdToStageMetrics.size == previousStageNumber)
 
     spark.sparkContext.parallelize(1 to 10).toDF().foreach(i => ())
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     // listener should save the SQL stage
-    assert(spark.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
+    assert(spark.sharedState.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
   }
 
   test("SPARK-13055: history listener only tracks SQL metrics") {
@@ -365,9 +369,9 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // This task has both accumulators that are SQL metrics and accumulators that are not.
     // The listener should only track the ones that are actually SQL metrics.
     val sqlMetric = SQLMetrics.createMetric(sparkContext, "beach umbrella")
-    val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
+    val nonSqlMetric = sparkContext.longAccumulator("baseball")
     val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.value), None)
-    val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)
+    val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.value), None)
     val taskInfo = createTaskInfo(0, 0)
     taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
     val taskEnd = SparkListenerTaskEnd(0, 0, "just-a-task", null, taskInfo, null)
@@ -386,6 +390,52 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
   }
 
+  test("driver side SQL metrics") {
+    val listener = new SQLListener(spark.sparkContext.conf)
+    val expectedAccumValue = 12345
+    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue)
+    sqlContext.sparkContext.addSparkListener(listener)
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+    SQLExecution.withNewExecutionId(spark, dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    def waitTillExecutionFinished(): Unit = {
+      while (listener.getCompletedExecutions.isEmpty) {
+        Thread.sleep(100)
+      }
+    }
+    waitTillExecutionFinished()
+
+    val driverUpdates = listener.getCompletedExecutions.head.driverAccumUpdates
+    assert(driverUpdates.size == 1)
+    assert(driverUpdates(physicalPlan.longMetric("dummy").id) == expectedAccumValue)
+  }
+
+}
+
+
+/**
+ * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]
+ * on the driver.
+ */
+private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExecNode {
+  override def sparkContext: SparkContext = sc
+  override def output: Seq[Attribute] = Seq()
+
+  override val metrics: Map[String, SQLMetric] = Map(
+    "dummy" -> SQLMetrics.createMetric(sc, "dummy"))
+
+  override def doExecute(): RDD[InternalRow] = {
+    longMetric("dummy") += expectedValue
+    sc.listenerBus.post(SparkListenerDriverAccumUpdates(
+      sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY).toLong,
+      metrics.values.map(m => m.id -> m.value).toSeq))
+    sc.emptyRDD
+  }
 }
 
 
@@ -418,12 +468,12 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
           }
         }
         sc.listenerBus.waitUntilEmpty(10000)
-        assert(spark.listener.getCompletedExecutions.size <= 50)
-        assert(spark.listener.getFailedExecutions.size <= 50)
+        assert(spark.sharedState.listener.getCompletedExecutions.size <= 50)
+        assert(spark.sharedState.listener.getFailedExecutions.size <= 50)
         // 50 for successful executions and 50 for failed executions
-        assert(spark.listener.executionIdToData.size <= 100)
-        assert(spark.listener.jobIdToExecutionId.size <= 100)
-        assert(spark.listener.stageIdToStageMetrics.size <= 100)
+        assert(spark.sharedState.listener.executionIdToData.size <= 100)
+        assert(spark.sharedState.listener.jobIdToExecutionId.size <= 100)
+        assert(spark.sharedState.listener.stageIdToStageMetrics.size <= 100)
       } finally {
         sc.stop()
       }

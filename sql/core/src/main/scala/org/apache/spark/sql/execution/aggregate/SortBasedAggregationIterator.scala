@@ -86,7 +86,7 @@ class SortBasedAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: MutableRow = newBuffer
 
-  // An SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
+  // A SafeProjection to turn UnsafeRow into GenericInternalRow, because UnsafeRow can't be
   // compared to MutableRow (aggregation buffer) directly.
   private[this] val safeProj: Projection = FromUnsafeProjection(valueAttributes.map(_.dataType))
 

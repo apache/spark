@@ -137,7 +137,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test inferring decimals") {
-    val result = sqlContext.read
+    val result = spark.read
       .format("csv")
       .option("comment", "~")
       .option("header", "true")
@@ -363,6 +363,32 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(csvDir)
 
       verifyCars(carsCopy, withHeader = true)
+    }
+  }
+
+  test("save csv with quoteAll enabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data)
+
+      // escapeQuotes should be true by default
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\"")
+        .option("quoteAll", "true")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = "\"test \"\"quote\"\"\",\"123\",\"it \"\"works\"\"!\",\"\"\"very\"\" well\""
+
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
     }
   }
 
@@ -636,22 +662,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(numbers.count() == 8)
   }
 
-  test("Write and read empty data") {
-    withTempPath { path =>
-      val emptyDf = spark.range(10).limit(0).toDF()
-      emptyDf.write
-        .format("csv")
-        .save(path.getCanonicalPath)
-
-      val copyEmptyDf = spark.read
-        .format("csv")
-        .load(path.getCanonicalPath)
-
-      assert(copyEmptyDf.count() === 0)
-      assert(copyEmptyDf.schema.length === 0)
-    }
-  }
-
   test("Write and read empty data with the header as the schema") {
     withTempPath { path =>
       val emptyDf = spark.range(10).limit(0).toDF()
@@ -687,5 +697,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.getMessage
       assert(msg.contains("CSV data source does not support array<string> data type"))
     }
+  }
+
+  test("SPARK-15585 turn off quotations") {
+    val cars = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("quote", "")
+      .load(testFile(carsUnbalancedQuotesFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
   }
 }

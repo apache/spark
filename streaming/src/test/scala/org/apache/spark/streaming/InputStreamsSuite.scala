@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path

@@ -60,6 +60,7 @@ import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.StructType$;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -136,8 +137,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    this.sparkSchema = new CatalystSchemaConverter(configuration).convert(requestedSchema);
-    this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
+    String sparkRequestedSchemaString =
+        configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
+    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    this.reader = new ParquetFileReader(
+        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }
@@ -186,18 +190,23 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (columns == null) {
       this.requestedSchema = fileSchema;
     } else {
-      Types.MessageTypeBuilder builder = Types.buildMessage();
-      for (String s: columns) {
-        if (!fileSchema.containsField(s)) {
-          throw new IOException("Can only project existing columns. Unknown field: " + s +
-            " File schema:\n" + fileSchema);
+      if (columns.size() > 0) {
+        Types.MessageTypeBuilder builder = Types.buildMessage();
+        for (String s: columns) {
+          if (!fileSchema.containsField(s)) {
+            throw new IOException("Can only project existing columns. Unknown field: " + s +
+                    " File schema:\n" + fileSchema);
+          }
+          builder.addFields(fileSchema.getType(s));
         }
-        builder.addFields(fileSchema.getType(s));
+        this.requestedSchema = builder.named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
+      } else {
+        this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
-      this.requestedSchema = builder.named("spark_schema");
     }
-    this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
-    this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
+    this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
+    this.reader = new ParquetFileReader(
+        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }

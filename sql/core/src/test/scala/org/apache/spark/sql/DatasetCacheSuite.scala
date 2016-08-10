@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -39,7 +37,8 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
     // Drop the cache.
     cached.unpersist()
-    assert(spark.cacheManager.lookupCachedData(cached).isEmpty, "The Dataset should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(cached).isEmpty,
+      "The Dataset should not be cached.")
   }
 
   test("persist and then rebind right encoder when join 2 datasets") {
@@ -56,10 +55,10 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(joined, 2)
 
     ds1.unpersist()
-    assert(spark.cacheManager.lookupCachedData(ds1).isEmpty,
+    assert(spark.sharedState.cacheManager.lookupCachedData(ds1).isEmpty,
       "The Dataset ds1 should not be cached.")
     ds2.unpersist()
-    assert(spark.cacheManager.lookupCachedData(ds2).isEmpty,
+    assert(spark.sharedState.cacheManager.lookupCachedData(ds2).isEmpty,
       "The Dataset ds2 should not be cached.")
   }
 
@@ -75,9 +74,10 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(agged.filter(_._1 == "b"))
 
     ds.unpersist()
-    assert(spark.cacheManager.lookupCachedData(ds).isEmpty, "The Dataset ds should not be cached.")
+    assert(spark.sharedState.cacheManager.lookupCachedData(ds).isEmpty,
+      "The Dataset ds should not be cached.")
     agged.unpersist()
-    assert(spark.cacheManager.lookupCachedData(agged).isEmpty,
+    assert(spark.sharedState.cacheManager.lookupCachedData(agged).isEmpty,
       "The Dataset agged should not be cached.")
   }
 }

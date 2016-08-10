@@ -18,7 +18,8 @@
 context("include R packages")
 
 # JavaSparkContext handle
-sc <- sparkR.init()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 # Partitioned data
 nums <- 1:2
@@ -55,3 +56,5 @@ test_that("use include package", {
     actual <- collect(data)
   }
 })
+
+sparkR.session.stop()

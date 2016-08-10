@@ -47,10 +47,10 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *    partitions.
  *
  * The workflow of this coordinator is described as follows:
- *  - Before the execution of a [[SparkPlan]], for an [[ShuffleExchange]] operator,
+ *  - Before the execution of a [[SparkPlan]], for a [[ShuffleExchange]] operator,
  *    if an [[ExchangeCoordinator]] is assigned to it, it registers itself to this coordinator.
  *    This happens in the `doPrepare` method.
- *  - Once we start to execute a physical plan, an [[ShuffleExchange]] registered to this
+ *  - Once we start to execute a physical plan, a [[ShuffleExchange]] registered to this
  *    coordinator will call `postShuffleRDD` to get its corresponding post-shuffle
  *    [[ShuffledRowRDD]].
  *    If this coordinator has made the decision on how to shuffle data, this [[ShuffleExchange]]
@@ -61,7 +61,7 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *    post-shuffle partitions and pack multiple pre-shuffle partitions with continuous indices
  *    to a single post-shuffle partition whenever necessary.
  *  - Finally, this coordinator will create post-shuffle [[ShuffledRowRDD]]s for all registered
- *    [[ShuffleExchange]]s. So, when an [[ShuffleExchange]] calls `postShuffleRDD`, this coordinator
+ *    [[ShuffleExchange]]s. So, when a [[ShuffleExchange]] calls `postShuffleRDD`, this coordinator
  *    can lookup the corresponding [[RDD]].
  *
  * The strategy used to determine the number of post-shuffle partitions is described as follows.
@@ -79,7 +79,7 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *  - post-shuffle partition 1: pre-shuffle partition 2
  *  - post-shuffle partition 2: pre-shuffle partition 3 and 4
  */
-private[sql] class ExchangeCoordinator(
+class ExchangeCoordinator(
     numExchanges: Int,
     advisoryTargetPostShuffleInputSize: Long,
     minNumPostShufflePartitions: Option[Int] = None)
@@ -98,8 +98,8 @@ private[sql] class ExchangeCoordinator(
   @volatile private[this] var estimated: Boolean = false
 
   /**
-   * Registers an [[ShuffleExchange]] operator to this coordinator. This method is only allowed to
-   * be called in the `doPrepare` method of an [[ShuffleExchange]] operator.
+   * Registers a [[ShuffleExchange]] operator to this coordinator. This method is only allowed to
+   * be called in the `doPrepare` method of a [[ShuffleExchange]] operator.
    */
   @GuardedBy("this")
   def registerExchange(exchange: ShuffleExchange): Unit = synchronized {
@@ -112,7 +112,7 @@ private[sql] class ExchangeCoordinator(
    * Estimates partition start indices for post-shuffle partitions based on
    * mapOutputStatistics provided by all pre-shuffle stages.
    */
-  private[sql] def estimatePartitionStartIndices(
+  def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
     // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
     // a stage when the number of partitions of this dependency is 0.

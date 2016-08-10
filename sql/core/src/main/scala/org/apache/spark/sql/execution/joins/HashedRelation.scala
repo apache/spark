@@ -459,9 +459,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def getValue(key: Long, resultRow: UnsafeRow): UnsafeRow = {
     if (isDense) {
-      val idx = (key - minKey).toInt
-      if (idx >= 0 && key <= maxKey && array(idx) > 0) {
-        return getRow(array(idx), resultRow)
+      if (key >= minKey && key <= maxKey) {
+        val value = array((key - minKey).toInt)
+        if (value > 0) {
+          return getRow(value, resultRow)
+        }
       }
     } else {
       var pos = firstSlot(key)
@@ -497,9 +499,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def get(key: Long, resultRow: UnsafeRow): Iterator[UnsafeRow] = {
     if (isDense) {
-      val idx = (key - minKey).toInt
-      if (idx >=0 && key <= maxKey && array(idx) > 0) {
-        return valueIter(array(idx), resultRow)
+      if (key >= minKey && key <= maxKey) {
+        val value = array((key - minKey).toInt)
+        if (value > 0) {
+          return valueIter(value, resultRow)
+        }
       }
     } else {
       var pos = firstSlot(key)
@@ -540,7 +544,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
         cursor - Platform.LONG_ARRAY_OFFSET)
       page = newPage
-      freeMemory(used * 8)
+      freeMemory(used * 8L)
     }
 
     // copy the bytes of UnsafeRow
@@ -599,7 +603,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       i += 2
     }
     old_array = null  // release the reference to old array
-    freeMemory(n * 8)
+    freeMemory(n * 8L)
   }
 
   /**
@@ -608,9 +612,10 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   def optimize(): Unit = {
     val range = maxKey - minKey
     // Convert to dense mode if it does not require more memory or could fit within L1 cache
-    if (range < array.length || range < 1024) {
+    // SPARK-16740: Make sure range doesn't overflow if minKey has a large negative value
+    if (range >= 0 && (range < array.length || range < 1024)) {
       try {
-        ensureAcquireMemory((range + 1) * 8)
+        ensureAcquireMemory((range + 1) * 8L)
       } catch {
         case e: SparkException =>
           // there is no enough memory to convert
@@ -628,7 +633,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       val old_length = array.length
       array = denseArray
       isDense = true
-      freeMemory(old_length * 8)
+      freeMemory(old_length * 8L)
     }
   }
 
@@ -637,11 +642,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
    */
   def free(): Unit = {
     if (page != null) {
-      freeMemory(page.length * 8)
+      freeMemory(page.length * 8L)
       page = null
     }
     if (array != null) {
-      freeMemory(array.length * 8)
+      freeMemory(array.length * 8L)
       array = null
     }
   }

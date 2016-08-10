@@ -228,7 +228,7 @@ class OffsetRange(object):
 
     def __init__(self, topic, partition, fromOffset, untilOffset):
         """
-        Create a OffsetRange to represent  range of offsets
+        Create an OffsetRange to represent range of offsets
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         :param fromOffset: Inclusive starting offset.
@@ -286,6 +286,9 @@ class TopicAndPartition(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __hash__(self):
+        return (self._topic, self._partition).__hash__()
 
 
 class Broker(object):

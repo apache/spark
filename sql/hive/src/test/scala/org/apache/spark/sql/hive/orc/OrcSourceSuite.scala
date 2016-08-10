@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 case class OrcData(intField: Int, stringField: String)
 
 abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
-  import hiveContext._
+  import spark._
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -152,16 +152,16 @@ class OrcSourceSuite extends OrcSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    hiveContext.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_source
+    spark.sql(
+      s"""CREATE TEMPORARY VIEW normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
          |)
        """.stripMargin)
 
-    hiveContext.sql(
-      s"""CREATE TEMPORARY TABLE normal_orc_as_source
+    spark.sql(
+      s"""CREATE TEMPORARY VIEW normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'

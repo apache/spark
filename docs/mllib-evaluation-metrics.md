@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Evaluation Metrics - spark.mllib
-displayTitle: Evaluation Metrics - spark.mllib
+title: Evaluation Metrics - RDD-based API
+displayTitle: Evaluation Metrics - RDD-based API
 ---
 
 * Table of contents
@@ -140,7 +140,7 @@ definitions of positive and negative labels is straightforward.
 #### Label based metrics
 
 Opposed to binary classification where there are only two possible labels, multiclass classification problems have many
-possible labels and so the concept of label-based metrics is introduced. Overall precision measures precision across all
+possible labels and so the concept of label-based metrics is introduced. Accuracy measures precision across all
 labels -  the number of times any class was predicted correctly (true positives) normalized by the number of data
 points. Precision by label considers only one class, and measures the number of time a specific label was predicted
 correctly normalized by the number of times that label appears in the output.
@@ -182,19 +182,9 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
       </td>
     </tr>
     <tr>
-      <td>Overall Precision</td>
-      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
+      <td>Accuracy</td>
+      <td>$ACC = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
         \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall Recall</td>
-      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
-        \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall F1-measure</td>
-      <td>$F1 = 2 \cdot \left(\frac{PPV \cdot TPR}
-          {PPV + TPR}\right)$</td>
     </tr>
     <tr>
       <td>Precision by label</td>

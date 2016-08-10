@@ -21,6 +21,7 @@ import java.io.File
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
@@ -58,7 +59,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        hiveContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -76,7 +77,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(hiveContext.read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -104,7 +105,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
-      checkAnswer(hiveContext.read.format("parquet").load(path), df)
+      checkAnswer(spark.read.format("parquet").load(path), df)
     }
   }
 
@@ -114,7 +115,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
-        hiveContext.range(1, 10)
+        spark.range(1, 10)
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")
@@ -124,23 +125,25 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df = spark.range(0, 5).toDF()
-      df.write.mode(SaveMode.Overwrite).parquet(path)
+    withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = spark.range(0, 5).toDF()
+        df.write.mode(SaveMode.Overwrite).parquet(path)
 
-      val summaryPath = new Path(path, "_metadata")
-      val commonSummaryPath = new Path(path, "_common_metadata")
+        val summaryPath = new Path(path, "_metadata")
+        val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(spark.sessionState.newHadoopConf())
-      fs.delete(summaryPath, true)
-      fs.delete(commonSummaryPath, true)
+        val fs = summaryPath.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.delete(summaryPath, true)
+        fs.delete(commonSummaryPath, true)
 
-      df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(spark.read.parquet(path), df.union(df))
+        df.write.mode(SaveMode.Append).parquet(path)
+        checkAnswer(spark.read.parquet(path), df.union(df))
 
-      assert(fs.exists(summaryPath))
-      assert(fs.exists(commonSummaryPath))
+        assert(fs.exists(summaryPath))
+        assert(fs.exists(commonSummaryPath))
+      }
     }
   }
 

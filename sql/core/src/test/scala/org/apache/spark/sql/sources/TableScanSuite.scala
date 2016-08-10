@@ -106,7 +106,7 @@ case class AllDataTypesScan(
 }
 
 class TableScanSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
@@ -137,7 +137,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     super.beforeAll()
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTen
+        |CREATE TEMPORARY VIEW oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',
@@ -149,7 +149,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
     sql(
       """
-        |CREATE TEMPORARY TABLE tableWithSchema (
+        |CREATE TEMPORARY VIEW tableWithSchema (
         |`string$%Field` stRIng,
         |binaryField binary,
         |`booleanField` boolean,
@@ -241,7 +241,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       Nil
     )
 
-    assert(expectedSchema == caseInsensitiveContext.table("tableWithSchema").schema)
+    assert(expectedSchema == spark.table("tableWithSchema").schema)
 
     checkAnswer(
       sql(
@@ -297,7 +297,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   test("Caching")  {
     // Cached Query Execution
-    caseInsensitiveContext.cacheTable("oneToTen")
+    spark.catalog.cacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"))
     checkAnswer(
       sql("SELECT * FROM oneToTen"),
@@ -325,14 +325,14 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Verify uncaching
-    caseInsensitiveContext.uncacheTable("oneToTen")
+    spark.catalog.uncacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"), 0)
   }
 
   test("defaultSource") {
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTenDef
+        |CREATE TEMPORARY VIEW oneToTenDef
         |USING org.apache.spark.sql.sources
         |OPTIONS (
         |  from '1',
@@ -351,7 +351,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     val schemaNotAllowed = intercept[Exception] {
       sql(
         """
-          |CREATE TEMPORARY TABLE relationProvierWithSchema (i int)
+          |CREATE TEMPORARY VIEW relationProvierWithSchema (i int)
           |USING org.apache.spark.sql.sources.SimpleScanSource
           |OPTIONS (
           |  From '1',
@@ -364,7 +364,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     val schemaNeeded = intercept[Exception] {
       sql(
         """
-          |CREATE TEMPORARY TABLE schemaRelationProvierWithoutSchema
+          |CREATE TEMPORARY VIEW schemaRelationProvierWithoutSchema
           |USING org.apache.spark.sql.sources.AllDataTypesScanSource
           |OPTIONS (
           |  From '1',
@@ -378,7 +378,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
   test("SPARK-5196 schema field with comment") {
     sql(
       """
-       |CREATE TEMPORARY TABLE student(name string comment "SN", age int comment "SA", grade int)
+       |CREATE TEMPORARY VIEW student(name string comment "SN", age int comment "SA", grade int)
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
        |  from '1',
@@ -388,12 +388,8 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
        |)
        """.stripMargin)
 
-       val planned = sql("SELECT * FROM student").queryExecution.executedPlan
-       val comments = planned.schema.fields.map { field =>
-         if (field.metadata.contains("comment")) field.metadata.getString("comment")
-         else "NO_COMMENT"
-       }.mkString(",")
-
+    val planned = sql("SELECT * FROM student").queryExecution.executedPlan
+    val comments = planned.schema.fields.map(_.getComment().getOrElse("NO_COMMENT")).mkString(",")
     assert(comments === "SN,SA,NO_COMMENT")
   }
 }
