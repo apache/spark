@@ -89,7 +89,8 @@ case class DedupCommonSubqueries(sparkSession: SparkSession) extends Rule[Logica
     val dedup = new SubqueryDedup()
     plan.transformDown {
       case s: CommonSubqueryAlias =>
-        dedup.createCommonSubquery(sparkSession, s.child)
+        val optimized = sparkSession.sessionState.optimizer.execute(s.child)
+        dedup.createCommonSubquery(sparkSession, optimized)
     }
   }
 }
