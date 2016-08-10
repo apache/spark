@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang.NotImplementedException;
@@ -72,10 +73,10 @@ public class VectorizedSparkOrcNewRecordReader
     this.reader = new SparkVectorizedOrcRecordReader(file, conf,
       new org.apache.hadoop.mapred.FileSplit(fileSplit));
 
-    this.columnIDs = columnIDs;
+    this.columnIDs = new ArrayList<>(columnIDs);
     this.internalValue = this.reader.createValue();
     this.progress = reader.getProgress();
-    this.row = new Row(this.internalValue.cols, columnIDs);
+    this.row = new Row(this.internalValue.cols, this.columnIDs);
   }
 
   @Override
