@@ -332,8 +332,8 @@ test_that("spark.mlp", {
   expect_equal(length(summary$weights), 64)
 
   mlpTestDF <- df
-  mlpPredictions <- collect(select(predict(model, mlpTestDF), "pred_label_idx"))
-  expect_equal(head(mlpPredictions$pred_label_idx, 6), c(0, 1, 1, 1, 1, 1))
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
+  expect_equal(head(mlpPredictions$prediction, 6), c(0, 1, 1, 1, 1, 1))
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
