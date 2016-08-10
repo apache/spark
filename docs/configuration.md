@@ -1211,7 +1211,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to use dynamic resource allocation, which scales the number of executors registered
-    with this application up and down based on the workload. 
+    with this application up and down based on the workload.
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
@@ -1352,8 +1352,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.authenticate.enableSaslEncryption</code></td>
   <td>false</td>
   <td>
-    Enable encrypted communication when authentication is enabled. This option is currently
-    only supported by the block transfer service.
+    Enable encrypted communication when authentication is
+    enabled. This is supported by the block transfer service and the
+    RPC endpoints.
   </td>
 </tr>
 <tr>

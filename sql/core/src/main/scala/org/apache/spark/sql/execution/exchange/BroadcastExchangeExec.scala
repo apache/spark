@@ -38,7 +38,7 @@ case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"),
     "buildTime" -> SQLMetrics.createMetric(sparkContext, "time to build (ms)"),
