@@ -53,13 +53,11 @@ import org.apache.spark.sql.test.SharedSQLContext
  *   -- !query 0
  *   select 1, -1
  *   -- !query 0 schema
- *   int, int
+ *   struct<...schema...>
  *   -- !query 0 output
- *   +---+----+
- *   |  1|(-1)|
- *   +---+----+
- *   |  1|  -1|
- *   +---+----+
+ *   ... data row 1 ...
+ *   ... data row 2 ...
+ *   ...
  *
  *   -- !query 1
  *   ...
