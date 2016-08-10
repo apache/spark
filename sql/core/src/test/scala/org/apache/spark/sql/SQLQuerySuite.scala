@@ -1730,6 +1730,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-16994: filter should not be pushed down into local limit") {
+    checkAnswer(spark.createDataset(1 to 100).limit(10).filter($"value" % 10 === 0).toDF(),
+      Row(10) :: Nil)
+  }
+
   test("Struct Star Expansion") {
     val structDf = testData2.select("a", "b").as("record")
 
