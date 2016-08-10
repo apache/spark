@@ -302,10 +302,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // 5. python
     List<String> pyargs = new ArrayList<>();
     pyargs.add(firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
-            conf.get(SparkLauncher.PYSPARK_PYTHON),
-            System.getenv("PYSPARK_DRIVER_PYTHON"),
-            System.getenv("PYSPARK_PYTHON"),
-            "python"));
+      conf.get(SparkLauncher.PYSPARK_PYTHON),
+      System.getenv("PYSPARK_DRIVER_PYTHON"),
+      System.getenv("PYSPARK_PYTHON"),
+      "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
       // pass conf spark.pyspark.python to python by environment variable.

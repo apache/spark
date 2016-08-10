@@ -95,7 +95,7 @@ public class SparkLauncherSuite {
     launcher.setConf(SparkLauncher.PYSPARK_DRIVER_PYTHON, "python3.4");
     launcher.setConf(SparkLauncher.PYSPARK_PYTHON, "python3.5");
     assertEquals("python3.4", launcher.builder.conf.get(
-            package$.MODULE$.PYSPARK_DRIVER_PYTHON().key()));
+      package$.MODULE$.PYSPARK_DRIVER_PYTHON().key()));
     assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
   }
 
