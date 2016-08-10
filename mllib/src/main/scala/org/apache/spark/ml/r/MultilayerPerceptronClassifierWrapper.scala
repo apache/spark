@@ -33,6 +33,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class MultilayerPerceptronClassifierWrapper private (
     val pipeline: PipelineModel,
+    val labelCount: Long,
     val layers: Array[Int],
     val weights: Array[Double]
   ) extends MLWritable with Logging{
@@ -101,10 +102,11 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
     val weights = multilayerPerceptronClassificationModel.weights.toArray
     val layersFromPipeline = multilayerPerceptronClassificationModel.layers
+    val labelCount = data.select("label").distinct().count()
     logWarning("weights")
     logWarning(weights.toString)
 
-    new MultilayerPerceptronClassifierWrapper(pipeline, layersFromPipeline, weights)
+    new MultilayerPerceptronClassifierWrapper(pipeline, labelCount, layersFromPipeline, weights)
   }
 
   /**
@@ -125,11 +127,12 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
+      val labelCount = (rMetadata \ "labelCount").extract[Long]
       val layers = (rMetadata \ "layers").extract[Array[Int]]
       val weights = (rMetadata \ "weights").extract[Array[Double]]
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new MultilayerPerceptronClassifierWrapper(pipeline, layers, weights)
+      new MultilayerPerceptronClassifierWrapper(pipeline, labelCount, layers, weights)
     }
   }
 
@@ -141,6 +144,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
+        ("labelCount" -> instance.labelCount) ~
         ("layers" -> instance.layers.toSeq) ~
         ("weights" -> instance.weights.toArray.toSeq)
       val rMetadataJson: String = compact(render(rMetadata))

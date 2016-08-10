@@ -486,11 +486,12 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, ...) {
             jobj <- object@jobj
+            labelCount <- callJMethod(jobj, "labelCount")
             layers <- callJMethod(jobj, "layers")
             layers <- t(as.matrix(unlist(layers)))
             weights <- callJMethod(jobj, "weights")
             weights <- matrix(weights, nrow = length(weights))
-            return(list(layers = layers, weights = weights))
+            return(list(labelCount = labelCount, layers = layers, weights = weights))
           })
 
 #' Naive Bayes Models
