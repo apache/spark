@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -416,15 +416,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     } else {
       val metadata = catalog.getTableMetadata(table)
 
-      if (DDLUtils.isDatasourceTable(metadata)) {
-        DDLUtils.getSchemaFromTableProperties(metadata) match {
-          case Some(userSpecifiedSchema) => describeSchema(userSpecifiedSchema, result)
-          case None => describeSchema(catalog.lookupRelation(table).schema, result)
-        }
-      } else {
-        describeSchema(metadata.schema, result)
-      }
-
+      describeSchema(metadata, result)
       if (isExtended) {
         describeExtended(metadata, result)
       } else if (isFormatted) {
@@ -439,18 +431,18 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     if (DDLUtils.isDatasourceTable(table)) {
-      val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
       val partColNames = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      for (schema <- userSpecifiedSchema if partColNames.nonEmpty) {
+      if (partColNames.nonEmpty) {
+        val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(StructType(partColNames.map(schema(_))), buffer)
+        describeSchema(StructType(partColNames.map(userSpecifiedSchema(_))), buffer)
       }
     } else {
-      if (table.partitionColumns.nonEmpty) {
+      if (table.partitionColumnNames.nonEmpty) {
         append(buffer, "# Partition Information", "", "")
         append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(table.partitionColumns, buffer)
+        describeSchema(table.partitionSchema, buffer)
       }
     }
   }
@@ -518,9 +510,14 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     }
   }
 
-  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
-    schema.foreach { column =>
-      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
+  private def describeSchema(
+      tableDesc: CatalogTable,
+      buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(tableDesc)) {
+      val schema = DDLUtils.getSchemaFromTableProperties(tableDesc)
+      describeSchema(schema, buffer)
+    } else {
+      describeSchema(tableDesc.schema, buffer)
     }
   }
 
@@ -698,7 +695,7 @@ case class ShowPartitionsCommand(
      * thrown if the partitioning spec is invalid.
      */
     if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
+      val badColumns = spec.get.keySet.filterNot(tab.partitionColumnNames.contains)
       if (badColumns.nonEmpty) {
         val badCols = badColumns.mkString("[", ", ", "]")
         throw new AnalysisException(
@@ -796,14 +793,14 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       .foreach(builder.append)
   }
 
-  private def columnToDDLFragment(column: CatalogColumn): String = {
-    val comment = column.comment.map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
-    s"${quoteIdentifier(column.name)} ${column.dataType}${comment.getOrElse("")}"
+  private def columnToDDLFragment(column: StructField): String = {
+    val comment = column.getComment().map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
+    s"${quoteIdentifier(column.name)} ${column.dataType.catalogString}${comment.getOrElse("")}"
   }
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.partitionColumns.nonEmpty) {
-      val partCols = metadata.partitionColumns.map(columnToDDLFragment)
+    if (metadata.partitionColumnNames.nonEmpty) {
+      val partCols = metadata.partitionSchema.map(columnToDDLFragment)
       builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
     }
 
@@ -876,12 +873,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    DDLUtils.getSchemaFromTableProperties(metadata).foreach { schema =>
-      val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
-      builder ++= columns.mkString("(", ", ", ")")
-    }
-
-    builder ++= "\n"
+    val schema = DDLUtils.getSchemaFromTableProperties(metadata)
+    val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+    builder ++= columns.mkString("(", ", ", ")\n")
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {

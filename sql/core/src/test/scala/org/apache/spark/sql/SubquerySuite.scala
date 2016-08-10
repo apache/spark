@@ -599,4 +599,33 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }.distinct
     assert(commonSubqueries3.length == 1)
   }
+
+  test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from onerow t1
+            | where exists (select 1 from onerow t2 where t1.c1=t2.c1)
+            | and   exists (select 1 from onerow LIMIT 1)""".stripMargin),
+        Row(1) :: Nil)
+    }
+  }
+
+  test("SPARK-16804: Correlated subqueries containing LIMIT - 2") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from onerow t1
+            | where exists (select 1
+            |               from   (select 1 from onerow t2 LIMIT 1)
+            |               where  t1.c1=t2.c1)""".stripMargin),
+        Row(1) :: Nil)
+    }
+  }
 }

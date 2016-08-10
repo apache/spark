@@ -108,4 +108,9 @@ package object config {
     ConfigBuilder("spark.scheduler.listenerbus.eventqueue.size")
       .intConf
       .createWithDefault(10000)
+
+  // This property sets the root namespace for metrics reporting
+  private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
+    .stringConf
+    .createOptional
 }

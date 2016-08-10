@@ -50,7 +50,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
     val driverDescription = Iterable.apply(driverState.description)
     val submissionState = Iterable.apply(driverState.submissionState)
     val command = Iterable.apply(driverState.description.command)
-    val schedulerProperties = Iterable.apply(driverState.description.schedulerProperties)
+    val schedulerProperties = Iterable.apply(driverState.description.conf.getAll.toMap)
     val commandEnv = Iterable.apply(driverState.description.command.environment)
     val driverTable =
       UIUtils.listingTable(driverHeaders, driverRow, driverDescription)
