@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 
 private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
 
-private[sql] class JacksonParser(
+class JacksonParser(
     schema: StructType,
     columnNameOfCorruptRecord: String,
     options: JSONOptions) extends Logging {
