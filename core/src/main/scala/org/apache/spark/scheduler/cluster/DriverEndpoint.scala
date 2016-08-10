@@ -23,7 +23,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkEnv, TaskState}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcAddress, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
