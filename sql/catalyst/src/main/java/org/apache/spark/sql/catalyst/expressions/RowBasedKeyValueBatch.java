@@ -123,7 +123,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer {
     }
   }
 
-  private final boolean acquirePage(long requiredSize) {
+  private boolean acquirePage(long requiredSize) {
     try {
       page = allocatePage(requiredSize);
     } catch (OutOfMemoryError e) {
