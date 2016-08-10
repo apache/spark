@@ -33,7 +33,10 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 abstract class ReduceAggregator[T] extends Aggregator[T, (Boolean, T), T] {
 
   // Question 1: Should func and encoder be parameters rather than abstract methods?
-  // Question 2: Should finish throw an exception if there is no input?
+  //  rxin: abstract method has better java compatibility and forces naming the concrete impl,
+  //  whereas parameter has better type inference (infer encoders via context bounds).
+  // Question 2: Should finish throw an exception or return null if there is no input?
+  //  rxin: null might be more "SQL" like, whereas exception is more Scala like.
 
   /**
    * A associative and commutative reduce function.
@@ -47,12 +50,6 @@ abstract class ReduceAggregator[T] extends Aggregator[T, (Boolean, T), T] {
    */
   def encoder: ExpressionEncoder[T]
 
-  /**
-   * A zero value for this aggregation. It is represented as a Tuple2. The first element of the
-   * tuple is a false boolean value indicating the buffer is not initialized. The second element
-   * is initialized as a null value.
-   * @since 2.1.0
-   */
   override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
 
   override def bufferEncoder: Encoder[(Boolean, T)] =
