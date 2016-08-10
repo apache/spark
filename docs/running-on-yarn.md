@@ -534,16 +534,16 @@ If an application needs to interact with other secure HDFS clusters, then
 the tokens needed to access these clusters must be explicitly requested at
 launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
 
+```
+spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
+```
+
 Spark supports integrating with other security-aware services through Java Services mechanism (see
 `java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
 should be available to Spark by listing their names in the corresponding file in the jar's
 `META-INF/services` directory. These plug-ins can be disabled by setting
 `spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
 credential provider.
-
-```
-spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
-```
 
 ## Configuring the External Shuffle Service
 
