@@ -111,6 +111,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
+  private def appendTrailingSlash(path: String): String = {
+    if (!path.endsWith(File.separator)) path + File.separator else path
+  }
+
   test("the qualified path of a database is stored in the catalog") {
     val catalog = spark.sessionState.catalog
 
@@ -118,31 +122,23 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val path = tmpDir.toString
       // The generated temp path is not qualified.
       assert(!path.startsWith("file:/"))
-      val uri = tmpDir.toURI
-      sql(s"CREATE DATABASE db1 LOCATION '$uri'")
+      sql(s"CREATE DATABASE db1 LOCATION '$path'")
       val pathInCatalog = new Path(catalog.getDatabaseMetadata("db1").locationUri).toUri
       assert("file" === pathInCatalog.getScheme)
-      val expectedPath = new Path(path).toUri
-      assert(expectedPath.getPath === pathInCatalog.getPath)
+      val expectedPath = if (path.endsWith(File.separator)) path.dropRight(1) else path
+      assert(expectedPath === pathInCatalog.getPath)
 
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         sql(s"CREATE DATABASE db2")
-        val pathInCatalog2 = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
-        assert("file" === pathInCatalog2.getScheme)
-        val expectedPath2 = new Path(spark.sessionState.conf.warehousePath + "/" + "db2.db").toUri
-        assert(expectedPath2.getPath === pathInCatalog2.getPath)
+        val pathInCatalog = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
+        assert("file" === pathInCatalog.getScheme)
+        val expectedPath = appendTrailingSlash(spark.sessionState.conf.warehousePath) + "db2.db"
+        assert(expectedPath === pathInCatalog.getPath)
       }
 
       sql("DROP DATABASE db1")
       sql("DROP DATABASE db2")
     }
-  }
-
-  private def makeQualifiedPath(path: String): String = {
-    // copy-paste from SessionCatalog
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(sparkContext.hadoopConfiguration)
-    fs.makeQualified(hadoopPath).toString
   }
 
   test("Create/Drop Database") {
@@ -158,7 +154,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(path + "/" + s"$dbNameWithoutBackTicks.db")
+            val expectedLocation =
+              "file:" + appendTrailingSlash(path) + s"$dbNameWithoutBackTicks.db"
             assert(db1 == CatalogDatabase(
               dbNameWithoutBackTicks,
               "",
@@ -184,8 +181,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql(s"CREATE DATABASE $dbName")
         val db1 = catalog.getDatabaseMetadata(dbName)
         val expectedLocation =
-          makeQualifiedPath(s"${System.getProperty("user.dir")}/spark-warehouse" +
-            "/" + s"$dbName.db")
+          "file:" + appendTrailingSlash(System.getProperty("user.dir")) +
+            s"spark-warehouse/$dbName.db"
         assert(db1 == CatalogDatabase(
           dbName,
           "",
@@ -203,17 +200,17 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
     withTempDir { tmpDir =>
-      val path = new Path(tmpDir.toString).toUri.toString
+      val path = tmpDir.toString
+      val dbPath = "file:" + path
       databaseNames.foreach { dbName =>
         try {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName Location '$path'")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-          val expPath = makeQualifiedPath(tmpDir.toString)
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
-            expPath,
+            if (dbPath.endsWith(File.separator)) dbPath.dropRight(1) else dbPath,
             Map.empty))
           sql(s"DROP DATABASE $dbName CASCADE")
           assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -236,7 +233,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             val dbNameWithoutBackTicks = cleanIdentifier(dbName)
             sql(s"CREATE DATABASE $dbName")
             val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-            val expectedLocation = makeQualifiedPath(path + "/" + s"$dbNameWithoutBackTicks.db")
+            val expectedLocation =
+              "file:" + appendTrailingSlash(path) + s"$dbNameWithoutBackTicks.db"
             assert(db1 == CatalogDatabase(
               dbNameWithoutBackTicks,
               "",
@@ -277,7 +275,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         databaseNames.foreach { dbName =>
           try {
             val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-            val location = makeQualifiedPath(path + "/" + s"$dbNameWithoutBackTicks.db")
+            val location = "file:" + appendTrailingSlash(path) + s"$dbNameWithoutBackTicks.db"
 
             sql(s"CREATE DATABASE $dbName")
 
