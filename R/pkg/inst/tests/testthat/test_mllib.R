@@ -326,11 +326,13 @@ test_that("spark.mlp", {
   model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
                      tol = 0.5, stepSize = 1 )
 
+  # Test summary method
   summary <- summary(model)
   expect_equal(summary$labelCount, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
 
+  # Test predict method
   mlpTestDF <- df
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 6), c(0, 1, 1, 1, 1, 1))
