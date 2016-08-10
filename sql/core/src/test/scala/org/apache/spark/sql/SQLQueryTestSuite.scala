@@ -124,7 +124,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       // val cleaned = input.split("\n").filterNot(_.matches("--.*(?<=[^\\\\]);")).mkString("\n")
       val cleaned = input.split("\n").filterNot(_.startsWith("--")).mkString("\n")
       // note: this is not a robust way to split queries using semicolon, but works for now.
-      cleaned.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
+      cleaned.split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
     }
 
     // Run the SQL queries preparing them for comparison.
