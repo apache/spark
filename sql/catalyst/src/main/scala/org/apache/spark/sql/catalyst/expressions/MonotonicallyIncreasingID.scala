@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, LongType}
@@ -47,6 +48,10 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
     this(offset = 0)
   }
 
+  def this(offset: Expression) = {
+    this(offset = MonotonicallyIncreasingID.parseExpression(offset))
+  }
+
   /**
    * Record ID within each partition. By being transient, count's value is reset to offset every
    * time we serialize and deserialize and initialize it.
@@ -63,6 +68,14 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
   override def nullable: Boolean = false
 
   override def dataType: DataType = LongType
+
+  private def parseExpression(expr: Expression): Long = expr match {
+    case NonNullLiteral(s, StringType) => Long.parseLong(s.toString)
+    case IntegerLiteral(i) => i.toLong
+    case NonNullLiteral(l, LongType) => l.toString.toLong
+    case _ => throw new AnalysisException("The offset must be " +
+      "an integer or long literal.")
+  }
 
   override protected def evalInternal(input: InternalRow): Long = {
     val currentCount = count
