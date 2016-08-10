@@ -223,7 +223,7 @@ class SessionCatalog(
     val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     requireDbExists(db)
-    externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
+    externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 
   /**
@@ -242,7 +242,7 @@ class SessionCatalog(
     val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-    externalCatalog.alterTable(db, newTableDefinition)
+    externalCatalog.alterTable(newTableDefinition)
   }
 
   /**
@@ -491,7 +491,7 @@ class SessionCatalog(
     // If the database is defined, this is definitely not a temp table.
     // If the database is not defined, there is a good chance this is a temp table.
     if (name.database.isEmpty) {
-      tempTables.get(name.table).foreach(_.refresh())
+      tempTables.get(formatTableName(name.table)).foreach(_.refresh())
     }
   }
 
@@ -508,7 +508,7 @@ class SessionCatalog(
    * For testing only.
    */
   private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
-    tempTables.get(name)
+    tempTables.get(formatTableName(name))
   }
 
   // ----------------------------------------------------------------------------

@@ -92,14 +92,14 @@ def parquet_schema_merging_example(spark):
     # The final schema consists of all 3 columns in the Parquet files together
     # with the partitioning column appeared in the partition directory paths.
     # root
-    # |-- double: long (nullable = true)
-    # |-- single: long (nullable = true)
-    # |-- triple: long (nullable = true)
-    # |-- key: integer (nullable = true)
+    #  |-- double: long (nullable = true)
+    #  |-- single: long (nullable = true)
+    #  |-- triple: long (nullable = true)
+    #  |-- key: integer (nullable = true)
     # $example off:schema_merging$
 
 
-def json_dataset_examplg(spark):
+def json_dataset_example(spark):
     # $example on:json_dataset$
     # spark is from the previous example.
     sc = spark.sparkContext
@@ -112,8 +112,8 @@ def json_dataset_examplg(spark):
     # The inferred schema can be visualized using the printSchema() method
     peopleDF.printSchema()
     # root
-    # |-- age: long (nullable = true)
-    # |-- name: string (nullable = true)
+    #  |-- age: long (nullable = true)
+    #  |-- name: string (nullable = true)
 
     # Creates a temporary view using the DataFrame
     peopleDF.createOrReplaceTempView("people")
@@ -140,15 +140,29 @@ def json_dataset_examplg(spark):
     # +---------------+----+
     # $example off:json_dataset$
 
+
+def jdbc_dataset_example(spark):
+    # $example on:jdbc_dataset$
+    jdbcDF = spark.read \
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
+        .load()
+    # $example off:jdbc_dataset$
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
-        .appName("PythonSQL") \
+        .appName("Python Spark SQL data source example") \
         .getOrCreate()
 
     basic_datasource_example(spark)
     parquet_example(spark)
     parquet_schema_merging_example(spark)
-    json_dataset_examplg(spark)
+    json_dataset_example(spark)
+    jdbc_dataset_example(spark)
 
     spark.stop()
