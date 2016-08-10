@@ -75,7 +75,8 @@ private[r] object MultilayerPerceptronClassifierWrapper
       solver: String,
       maxIter: Int,
       tol: Double,
-      stepSize: Double
+      stepSize: Double,
+      seed: Int
      ): MultilayerPerceptronClassifierWrapper = {
     logWarning("inside wrapper fit() hahaha")
     // get labels and feature names from output schema
@@ -89,6 +90,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
       .setMaxIter(maxIter)
       .setTol(tol)
       .setStepSize(stepSize)
+      .setSeed(seed)
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)
