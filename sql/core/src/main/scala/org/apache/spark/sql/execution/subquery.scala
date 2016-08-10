@@ -45,9 +45,9 @@ trait ExecSubqueryExpression extends SubqueryExpression {
   override def plan: SparkPlan = executedPlan
 
   /**
-   * Fill the expression with result from subquery.
+   * Fill the expression with collected result from executed plan.
    */
-  def updateResult(rows: Array[InternalRow]): Unit
+  def updateResult(): Unit
 }
 
 /**
@@ -76,7 +76,8 @@ case class ScalarSubquery(
   @volatile private var result: Any = null
   @volatile private var updated: Boolean = false
 
-  def updateResult(rows: Array[InternalRow]): Unit = {
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
     if (rows.length > 1) {
       sys.error(s"more than one row returned by a subquery used as an expression:\n${plan}")
     }
@@ -125,7 +126,8 @@ case class InSubquery(
     case _ => false
   }
 
-  def updateResult(rows: Array[InternalRow]): Unit = {
+  def updateResult(): Unit = {
+    val rows = plan.executeCollect()
     result = rows.map(_.get(0, child.dataType)).asInstanceOf[Array[Any]]
     updated = true
   }

@@ -148,11 +148,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Finds scalar subquery expressions in this plan node and starts evaluating them.
    */
   protected def prepareSubqueries(): Unit = {
-    val allSubqueries = expressions.flatMap(_.collect { case e: ExecSubqueryExpression => e })
-    allSubqueries.foreach {
-      case e: ExecSubqueryExpression =>
-        e.plan.prepare()
-        runningSubqueries += e
+    expressions.foreach {
+      _.collect {
+        case e: ExecSubqueryExpression =>
+          e.plan.prepare()
+          runningSubqueries += e
+      }
     }
   }
 
@@ -162,7 +163,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def waitForSubqueries(): Unit = synchronized {
     // fill in the result of subqueries
     runningSubqueries.foreach { sub =>
-      sub.updateResult(sub.plan.executeCollect())
+      sub.updateResult()
     }
     runningSubqueries.clear()
   }
