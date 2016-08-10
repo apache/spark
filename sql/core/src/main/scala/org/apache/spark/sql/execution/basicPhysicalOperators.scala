@@ -511,7 +511,7 @@ case class OutputFakerExec(output: Seq[Attribute], child: SparkPlan) extends Spa
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
