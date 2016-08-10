@@ -173,8 +173,8 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
  * Creates a ChiSquared feature selector.
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
- *                       Note that if the number of features is < numTopFeatures, then this will
- *                       select all features.
+ *                       Note that if the number of features is less than numTopFeatures,
+ *                       then this will select all features.
  */
 @Since("1.3.0")
 class ChiSqSelector @Since("1.3.0") (
@@ -192,6 +192,31 @@ class ChiSqSelector @Since("1.3.0") (
     val indices = Statistics.chiSqTest(data)
       .zipWithIndex.sortBy { case (res, _) => -res.statistic }
       .take(numTopFeatures)
+      .map { case (_, indices) => indices }
+      .sorted
+    new ChiSqSelectorModel(indices)
+  }
+}
+
+/**
+ * Creates a ChiSquared feature selector by False Positive Rate (FPR) test.
+ * @param alpha the highest p-value for features to be kept
+ */
+@Since("2.1.0")
+class ChiSqSelectorByFpr @Since("2.1.0") (
+  @Since("2.1.0") val alpha: Double) extends Serializable {
+
+  /**
+   * Returns a ChiSquared feature selector by FPR.
+   *
+   * @param data an `RDD[LabeledPoint]` containing the labeled dataset with categorical features.
+   *             Real-valued features will be treated as categorical for each distinct value.
+   *             Apply feature discretizer before using this function.
+   */
+  @Since("2.1.0")
+  def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
+    val indices = Statistics.chiSqTest(data)
+      .zipWithIndex.filter { case (res, _) => res.pValue < alpha }
       .map { case (_, indices) => indices }
       .sorted
     new ChiSqSelectorModel(indices)
