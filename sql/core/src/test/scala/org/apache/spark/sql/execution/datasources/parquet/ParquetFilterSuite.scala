@@ -552,11 +552,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             val numRowGroups = AccumulatorContext.lookForAccumulatorByName("numRowGroups")
             assert(numRowGroups.isDefined)
             assert(func(numRowGroups.get.asInstanceOf[LongAccumulator].value))
-            // As accumulator is referred by weak reference in AccumulatorContext,
-            // sometimes `accu` will be early released if JVM finds it is not used anymore.
-            // This optimization causes previous asserts failed. So adding an additional assert
-            // on `accu` here.
-            assert(accu != null)
+            AccumulatorContext.remove(accu.id)
           }
         }
       }
