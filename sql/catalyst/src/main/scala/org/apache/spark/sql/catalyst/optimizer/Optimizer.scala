@@ -121,7 +121,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
-      CollapseProject) :: Nil
+      CollapseProject) ::
+    Batch("Insert Scanner", Once,
+      InsertRelationScanner) :: Nil
   }
 
   /**
@@ -1089,6 +1091,22 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
+ * Insert a [[Scanner]] operator over [[MultiInstanceRelation]], then combine [[Project]]s and
+ * [[Filter]]s with this operator, then the planner can match on the [[Scanner]] node directly.
+ */
+object InsertRelationScanner extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case relation: MultiInstanceRelation =>
+      Scanner(relation.output, Nil, relation)
+    case Project(fields, child: Scanner) if fields.forall(_.deterministic) =>
+      child.copy(projectList = fields)
+    case Filter(condition, child: Scanner) if condition.deterministic =>
+      val newFilters = splitConjunctivePredicates(condition) ++ child.filters
+      child.copy(filters = newFilters)
   }
 }
 

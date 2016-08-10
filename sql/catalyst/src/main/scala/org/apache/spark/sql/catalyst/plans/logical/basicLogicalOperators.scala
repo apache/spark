@@ -115,6 +115,28 @@ case class Filter(condition: Expression, child: LogicalPlan)
   }
 }
 
+case class Scanner(projectList: Seq[NamedExpression], filters: Seq[Expression], child: LogicalPlan)
+  extends UnaryNode {
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override def maxRows: Option[Long] = child.maxRows
+
+  override lazy val resolved: Boolean = {
+    val hasSpecialExpressions = projectList.exists ( _.collect {
+      case agg: AggregateExpression => agg
+      case generator: Generator => generator
+      case window: WindowExpression => window
+    }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+  }
+
+  override def validConstraints: Set[Expression] =
+    child.constraints
+      .union(getAliasedConstraints(projectList))
+      .union(filters.filterNot(SubqueryExpression.hasCorrelatedSubquery).toSet)
+}
+
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   protected def leftConstraints: Set[Expression] = left.constraints
