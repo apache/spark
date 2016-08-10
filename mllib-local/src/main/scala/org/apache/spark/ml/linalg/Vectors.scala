@@ -554,9 +554,8 @@ class SparseVector @Since("2.0.0") (
     @Since("2.0.0") val indices: Array[Int],
     @Since("2.0.0") val values: Array[Double]) extends Vector {
 
-  validate()
-
-  private def validate(): Unit = {
+  // validate the data
+  {
     require(size >= 0, "The size of the requested sparse vector must be greater than 0.")
     require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
       s" indices match the dimension of the values. You provided ${indices.length} indices and " +
@@ -565,9 +564,11 @@ class SparseVector @Since("2.0.0") (
       s"which exceeds the specified vector size ${size}.")
 
     var prev = -1
+    if (indices.nonEmpty) {
+      require(indices(0) >= 0, s"Found negative index: ${indices(0)}.")
+    }
     indices.foreach { i =>
-      require(i >= 0, s"Found negative indice: $i.")
-      require(prev < i, s"Found duplicate indices: $i.")
+      require(prev < i, s"Found duplicate index: $i.")
       prev = i
     }
     require(prev < size, s"You may not write an element to index $prev because the declared " +
