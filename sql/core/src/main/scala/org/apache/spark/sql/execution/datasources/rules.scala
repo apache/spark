@@ -277,13 +277,10 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
  */
 object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
-
-    def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
-
     plan.foreach {
       case CreateTable(tableDesc, _, Some(_))
           if tableDesc.provider.get == "hive" =>
-        failAnalysis("Hive support is required to use CREATE Hive TABLE AS SELECT")
+        throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
 
       case _ => // OK
     }

@@ -1578,7 +1578,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
-  test("Create Cataloged Table As Select") {
+  test("Create Hive Table As Select") {
     import testImplicits._
     withTable("t", "t1") {
       var e = intercept[AnalysisException] {

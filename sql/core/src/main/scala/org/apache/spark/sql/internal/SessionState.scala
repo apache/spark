@@ -118,8 +118,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules =
-        Seq(PreWriteCheck(conf, catalog),
-          HiveOnlyCheck)
+        Seq(PreWriteCheck(conf, catalog), HiveOnlyCheck)
     }
   }
 
