@@ -137,6 +137,9 @@ class HiveDDLSuite
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
         assert(tableMetadata.comment == Option("BLABLA"))
         assert(viewMetadata.comment == Option("no comment"))
+        // Ensure that `comment` is removed from the table property
+        assert(tableMetadata.properties.get("comment").isEmpty)
+        assert(viewMetadata.properties.get("comment").isEmpty)
       }
     }
   }
