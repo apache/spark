@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -42,7 +43,7 @@ import org.apache.spark.sql.types.{DataType, LongType}
       less than 1 billion partitions, and each partition has less than 8 billion records.""",
   extended = "> SELECT _FUNC_();\n 0")
 case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
-  with Nondeterministic {
+  with Nondeterministic with Logging {
 
   def this() = {
     this(offset = 0)
@@ -50,6 +51,7 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
 
   def this(offset: Expression) = {
     this(offset = MonotonicallyIncreasingID.parseExpression(offset))
+    logDebug(s"offset is $offset")
   }
 
   /**
