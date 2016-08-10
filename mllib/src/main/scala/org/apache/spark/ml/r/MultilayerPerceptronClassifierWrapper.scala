@@ -27,12 +27,15 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class MultilayerPerceptronClassifierWrapper private (
-    val pipeline: PipelineModel) extends MLWritable with Logging{
+    val pipeline: PipelineModel,
+    val layers: Array[Int],
+    val weights: Array[Double]
+  ) extends MLWritable with Logging{
 
   import MultilayerPerceptronClassifierWrapper._
   logWarning("private[r] class MultilayerPerceptronClassifierWrapper() hahaha")
@@ -40,15 +43,15 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
   private val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
     pipeline.stages.head.asInstanceOf[MultilayerPerceptronClassificationModel]
 
-  lazy val layers: Array[Int] = multilayerPerceptronClassificationModel.layers.toArray
+//  lazy val layers: Array[Int] = multilayerPerceptronClassificationModel.layers.toArray
 
-  lazy val tables: Array[Double] =
-    multilayerPerceptronClassificationModel.weights.toArray.map(math.exp)
+//  lazy val tables: Array[Double] =
+//    multilayerPerceptronClassificationModel.weights.toArray.map(math.exp)
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
-      .drop(PREDICTED_LABEL_INDEX_COL)
-      .drop(multilayerPerceptronClassificationModel.getFeaturesCol)
+//      .drop(PREDICTED_LABEL_INDEX_COL)
+//      .drop(multilayerPerceptronClassificationModel.getFeaturesCol)
   }
 
   /**
@@ -91,8 +94,17 @@ private[r] object MultilayerPerceptronClassifierWrapper
       .setOutputCol(PREDICTED_LABEL_COL)
     val pipeline = new Pipeline()
       .setStages(Array(mlp))
-    val model = pipeline.fit(data)
-    new MultilayerPerceptronClassifierWrapper(model)
+      .fit(data)
+
+    val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
+    pipeline.stages.head.asInstanceOf[MultilayerPerceptronClassificationModel]
+
+    val weights = multilayerPerceptronClassificationModel.weights.toArray
+    val layersFromPipeline = multilayerPerceptronClassificationModel.layers
+    logWarning("weights")
+    logWarning(weights.toString)
+
+    new MultilayerPerceptronClassifierWrapper(pipeline, layersFromPipeline, weights)
   }
 
   /**
@@ -113,11 +125,11 @@ private[r] object MultilayerPerceptronClassifierWrapper
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
-      val labels = (rMetadata \ "labels").extract[Array[String]]
-      val features = (rMetadata \ "features").extract[Array[String]]
+      val layers = (rMetadata \ "layers").extract[Array[Int]]
+      val weights = (rMetadata \ "weights").extract[Array[Double]]
 
       val pipeline = PipelineModel.load(pipelinePath)
-      new MultilayerPerceptronClassifierWrapper(pipeline)
+      new MultilayerPerceptronClassifierWrapper(pipeline, layers, weights)
     }
   }
 
@@ -129,8 +141,8 @@ private[r] object MultilayerPerceptronClassifierWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labels" -> instance.layers.toSeq) ~
-        ("features" -> instance.tables.toSeq)
+        ("layers" -> instance.layers.toSeq) ~
+        ("weights" -> instance.weights.toArray.toSeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
