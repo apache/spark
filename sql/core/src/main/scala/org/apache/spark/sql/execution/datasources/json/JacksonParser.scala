@@ -56,7 +56,7 @@ class JacksonParser(
       dataType: DataType): Any = parser.getCurrentToken match {
     case VALUE_STRING if parser.getTextLength < 1 =>
       // If conversion is failed, this produces `null` rather than
-      // returning empty string. This will protect the mismatch of types.
+      // rather than throw exception. This will protect the mismatch of types.
       null
 
     case token =>
@@ -368,7 +368,7 @@ class JacksonParser(
   }
 
   /**
-   * Parse an object as a Map, preserving all fields
+   * Parse an object as a Map, preserving all fields.
    */
   private def convertMap(
       parser: JsonParser,
@@ -384,7 +384,7 @@ class JacksonParser(
   }
 
   /**
-   * Parse an object as a Array
+   * Parse an object as a Array.
    */
   private def convertArray(
       parser: JsonParser,
