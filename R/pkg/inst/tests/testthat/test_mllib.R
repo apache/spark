@@ -326,10 +326,29 @@ test_that("spark.mlp", {
   model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs", maxIter = 100,
                      tol = 0.5, stepSize = 1 )
 
-  summary(model)
+  summary <- summary(model)
+  expect_equal(summary$labelCount, 3)
+  expect_equal(summary$layers, c(4, 5, 4, 3))
+  expect_equal(length(summary$weights), 64)
+
   mlpTestDF <- df
-  mlpPredictions <- predict(model, mlpTestDF)
-  showDF(mlpPredictions)
+  mlpPredictions <- collect(select(predict(model, mlpTestDF), "pred_label_idx"))
+  expect_equal(head(mlpPredictions$pred_label_idx, 6), c(0, 1, 1, 1, 1, 1))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "spark-mlp", fileext = ".tmp")
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
+  summary2 <- summary(model2)
+
+  expect_equal(summary2$labelCount, 3)
+  expect_equal(summary2$layers, c(4, 5, 4, 3))
+  expect_equal(length(summary2$weights), 64)
+
+  unlink(modelPath)
+
 })
 
 test_that("spark.naiveBayes", {

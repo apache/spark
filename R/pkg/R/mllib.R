@@ -489,7 +489,7 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
             jobj <- object@jobj
             labelCount <- callJMethod(jobj, "labelCount")
             layers <- callJMethod(jobj, "layers")
-            layers <- t(as.matrix(unlist(layers)))
+            layers <- unlist(layers)
             weights <- callJMethod(jobj, "weights")
             weights <- matrix(weights, nrow = length(weights))
             return(list(labelCount = labelCount, layers = layers, weights = weights))
