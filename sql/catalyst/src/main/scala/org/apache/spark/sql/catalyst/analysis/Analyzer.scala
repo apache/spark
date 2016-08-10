@@ -125,9 +125,11 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
-      case With(child, relations) if relations.nonEmpty =>
-        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)])((resolved, r) =>
-          resolved ++ Seq(r._1 -> ResolveRelations(substituteCTE(r._2, resolved)))))
+      case With(child, relations) =>
+        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
+          case (resolved, (name, relation)) =>
+            resolved :+ name -> ResolveRelations(substituteCTE(relation, resolved))
+        })
       case other => other
     }
 
