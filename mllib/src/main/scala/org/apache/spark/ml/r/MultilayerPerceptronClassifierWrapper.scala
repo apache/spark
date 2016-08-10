@@ -22,12 +22,8 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier}
-import org.apache.spark.ml.feature.{IndexToString, RFormula}
-import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{MLReadable, MLReader, MLWritable, MLWriter}
 import org.apache.spark.sql.{DataFrame, Dataset}
 
@@ -36,23 +32,10 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
     val labelCount: Long,
     val layers: Array[Int],
     val weights: Array[Double]
-  ) extends MLWritable with Logging{
-
-  import MultilayerPerceptronClassifierWrapper._
-  logWarning("private[r] class MultilayerPerceptronClassifierWrapper() hahaha")
-
-  private val multilayerPerceptronClassificationModel: MultilayerPerceptronClassificationModel =
-    pipeline.stages.head.asInstanceOf[MultilayerPerceptronClassificationModel]
-
-//  lazy val layers: Array[Int] = multilayerPerceptronClassificationModel.layers.toArray
-
-//  lazy val tables: Array[Double] =
-//    multilayerPerceptronClassificationModel.weights.toArray.map(math.exp)
+  ) extends MLWritable {
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
-//      .drop(PREDICTED_LABEL_INDEX_COL)
-//      .drop(multilayerPerceptronClassificationModel.getFeaturesCol)
   }
 
   /**
@@ -63,7 +46,7 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 }
 
 private[r] object MultilayerPerceptronClassifierWrapper
-  extends MLReadable[MultilayerPerceptronClassifierWrapper] with Logging {
+  extends MLReadable[MultilayerPerceptronClassifierWrapper] {
 
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
@@ -78,7 +61,6 @@ private[r] object MultilayerPerceptronClassifierWrapper
       stepSize: Double,
       seed: Int
      ): MultilayerPerceptronClassifierWrapper = {
-    logWarning("inside wrapper fit() hahaha")
     // get labels and feature names from output schema
     val schema = data.schema
 
@@ -102,8 +84,6 @@ private[r] object MultilayerPerceptronClassifierWrapper
     val weights = multilayerPerceptronClassificationModel.weights.toArray
     val layersFromPipeline = multilayerPerceptronClassificationModel.layers
     val labelCount = data.select("label").distinct().count()
-    logWarning("weights")
-    logWarning(weights.toString)
 
     new MultilayerPerceptronClassifierWrapper(pipeline, labelCount, layersFromPipeline, weights)
   }
