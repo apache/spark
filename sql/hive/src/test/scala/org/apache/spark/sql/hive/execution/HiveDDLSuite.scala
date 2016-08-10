@@ -136,9 +136,7 @@ class HiveDDLSuite
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
         assert(tableMetadata.comment == Option("BLABLA"))
-        assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
         assert(viewMetadata.comment == Option("no comment"))
-        assert(viewMetadata.properties.get("comment") == Option("no comment"))
       }
     }
   }

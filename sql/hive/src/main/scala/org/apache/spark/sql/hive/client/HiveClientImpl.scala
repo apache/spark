@@ -413,7 +413,7 @@ private[hive] class HiveClientImpl(
           properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
             .map(_.asScala.toMap).orNull
         ),
-        properties = properties,
+        properties = properties.filterKeys(_ != "comment"),
         comment = properties.get("comment"),
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
