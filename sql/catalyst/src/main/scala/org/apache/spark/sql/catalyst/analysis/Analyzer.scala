@@ -126,23 +126,19 @@ class Analyzer(
     // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
       case With(child, relations) if relations.nonEmpty =>
-        var resolvedRelations = Seq(relations.head._1 -> ResolveRelations(relations.head._2))
-        relations.tail.foreach { case (name, relation) =>
-          resolvedRelations = resolvedRelations ++
-            Seq(name -> ResolveRelations(substituteCTE(relation, resolvedRelations)))
-        }
-        substituteCTE(child, resolvedRelations)
+        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)])((resolved, r) =>
+          resolved ++ Seq(r._1 -> ResolveRelations(substituteCTE(r._2, resolved)))))
       case other => other
     }
 
     def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
       plan transformDown {
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.find(_._1 == u.tableIdentifier.table).map(_._2).map {
-            relation =>
+          val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
+            .map(_._2).map { relation =>
               val withAlias = u.alias.map(SubqueryAlias(_, relation))
               withAlias.getOrElse(relation)
-          }
+            }
           substituted.getOrElse(u)
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
