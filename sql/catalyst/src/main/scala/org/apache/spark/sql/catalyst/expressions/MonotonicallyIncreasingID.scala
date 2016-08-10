@@ -69,13 +69,6 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
 
   override def dataType: DataType = LongType
 
-  private def parseExpression(expr: Expression): Long = expr match {
-    case IntegerLiteral(i) => i.toLong
-    case NonNullLiteral(l, LongType) => l.toString.toLong
-    case _ => throw new AnalysisException("The offset must be " +
-      "an integer or long literal.")
-  }
-
   override protected def evalInternal(input: InternalRow): Long = {
     val currentCount = count
     count += 1
@@ -97,4 +90,13 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
   override def prettyName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
+}
+
+object MonotonicallyIncreasingID {
+  private def parseExpression(expr: Expression): Long = expr match {
+    case IntegerLiteral(i) => i.toLong
+    case NonNullLiteral(l, LongType) => l.toString.toLong
+    case _ => throw new AnalysisException("The offset must be " +
+      "an integer or long literal.")
+  }
 }
