@@ -171,9 +171,6 @@ private[hive] class TestHiveSparkSession(
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
 
-  /** The location of the hive source code. */
-  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
-
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
    * to ensure it exists
