@@ -90,7 +90,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions += (key -> value)
+    val normalizedKey = if (key.toLowerCase == "path") "path" else key
+    this.extraOptions += (normalizedKey -> value)
     this
   }
 
@@ -121,7 +122,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
-    this.extraOptions ++= options
+    val normalizedOptions =
+      options.map(kv => if (kv._1.toLowerCase == "path") kv.copy(_1 = "path") else kv)
+    this.extraOptions ++= normalizedOptions
     this
   }
 

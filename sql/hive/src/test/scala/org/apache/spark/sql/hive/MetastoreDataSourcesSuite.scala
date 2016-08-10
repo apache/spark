@@ -1170,8 +1170,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
         val catalogTable = sharedState.externalCatalog.getTable("default", "t")
         // there should not be a lowercase key 'path' now
-        assert(catalogTable.storage.properties.get("path").isEmpty)
-        assert(catalogTable.storage.properties.get("PATH").isDefined)
+        assert(catalogTable.storage.properties.get("path").isDefined)
+        assert(catalogTable.storage.properties.get("PATH").isEmpty)
       }
     }
   }
