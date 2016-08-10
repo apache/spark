@@ -402,7 +402,7 @@ object QueryTest {
         s"""
         |Results do not match for query:
         |Timezone: ${TimeZone.getDefault}
-        |Timezone Env: ${sys.env("TZ")}
+        |Timezone Env: ${sys.env.getOrElse("TZ", "")}
         |
         |${df.queryExecution}
         |== Results ==
@@ -480,6 +480,14 @@ object QueryTest {
     checkAnswer(df, expectedAnswer.asScala) match {
       case Some(errorMessage) => errorMessage
       case None => null
+    }
+  }
+}
+
+class QueryTestSuite extends QueryTest with test.SharedSQLContext {
+  test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
+    intercept[org.scalatest.exceptions.TestFailedException] {
+      checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
   }
 }
