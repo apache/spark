@@ -1368,42 +1368,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("Floating point number format") {
-    checkAnswer(
-      sql("SELECT 0.3"), Row(BigDecimal(0.3))
-    )
-
-    checkAnswer(
-      sql("SELECT -0.8"), Row(BigDecimal(-0.8))
-    )
-
-    checkAnswer(
-      sql("SELECT .5"), Row(BigDecimal(0.5))
-    )
-
-    checkAnswer(
-      sql("SELECT -.18"), Row(BigDecimal(-0.18))
-    )
-  }
-
-  test("Auto cast integer type") {
-    checkAnswer(
-      sql(s"SELECT ${Int.MaxValue + 1L}"), Row(Int.MaxValue + 1L)
-    )
-
-    checkAnswer(
-      sql(s"SELECT ${Int.MinValue - 1L}"), Row(Int.MinValue - 1L)
-    )
-
-    checkAnswer(
-      sql("SELECT 9223372036854775808"), Row(new java.math.BigDecimal("9223372036854775808"))
-    )
-
-    checkAnswer(
-      sql("SELECT -9223372036854775809"), Row(new java.math.BigDecimal("-9223372036854775809"))
-    )
-  }
-
   test("Test to check we can apply sign to expression") {
 
     checkAnswer(
