@@ -76,7 +76,12 @@ abstract class AggregationIterator(
     val functions = new Array[AggregateFunction](expressions.length)
     var i = 0
     while (i < expressions.length) {
-      val func = expressions(i).aggregateFunction
+      val func = expressions(i).aggregateFunction match {
+        // We can only set buffer offsets for `ImperativeAggregate` once, so we need to make a new
+        // instance before set buffer offsets for it.
+        case i: ImperativeAggregate => i.newInstance()
+        case other => other
+      }
       val funcWithBoundReferences: AggregateFunction = expressions(i).mode match {
         case Partial | Complete if func.isInstanceOf[ImperativeAggregate] =>
           // We need to create BoundReferences if the function is not an

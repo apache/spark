@@ -224,6 +224,9 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
  */
 abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
 
+  // Although `mutableBufferRow` and `inputBufferRow` are 2 mutable fields in `ImperativeAggregate`,
+  // they can only be set once, thus make `ImperativeAggregate` kind of immutable and stateless.
+
   /**
    * The aggregation operator keeps a large shared mutable buffer row for all aggregate functions,
    * each aggregate function should only access a slice of this shared buffer.
@@ -256,6 +259,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * }}}
    */
   final def setMutableBufferOffset(offset: Int): Unit = {
+    assert(mutableBufferRow == null)
     mutableBufferRow = new SlicedMutableRow(offset, aggBufferAttributes.length)
   }
 
@@ -285,6 +289,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * }}}
    */
   final def setInputBufferOffset(offset: Int): Unit = {
+    assert(inputBufferRow == null)
     inputBufferRow = new SlicedInternalRow(offset, aggBufferAttributes.length)
   }
 
@@ -303,6 +308,10 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
   final override def eval(aggBuffer: InternalRow): Any = {
     assert(aggBuffer.isInstanceOf[MutableRow])
     doEval(mutableBufferRow.target(aggBuffer.asInstanceOf[MutableRow]))
+  }
+
+  final def newInstance(): ImperativeAggregate = {
+    makeCopy(mapProductIterator(_.asInstanceOf[AnyRef])).asInstanceOf[ImperativeAggregate]
   }
 
   // Note: although all subclasses implement inputAggBufferAttributes by simply cloning
