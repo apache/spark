@@ -52,7 +52,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class ParquetFileFormat
+class ParquetFileFormat
   extends FileFormat
   with DataSourceRegister
   with Logging
@@ -269,7 +269,7 @@ private[sql] class ParquetFileFormat
     true
   }
 
-  override private[sql] def buildReaderWithPartitionValues(
+  override def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -430,7 +430,7 @@ private[sql] class ParquetFileFormat
  * writes the data to the path used to generate the output writer. Callers of this factory
  * has to ensure which files are to be considered as committed.
  */
-private[sql] class ParquetOutputWriterFactory(
+private[parquet] class ParquetOutputWriterFactory(
     sqlConf: SQLConf,
     dataSchema: StructType,
     hadoopConf: Configuration,
@@ -479,7 +479,7 @@ private[sql] class ParquetOutputWriterFactory(
    * Returns a [[OutputWriter]] that writes data to the give path without using
    * [[OutputCommitter]].
    */
-  override private[sql] def newWriter(path: String): OutputWriter = new OutputWriter {
+  override def newWriter(path: String): OutputWriter = new OutputWriter {
 
     // Create TaskAttemptContext that is used to pass on Configuration to the ParquetRecordWriter
     private val hadoopTaskAttemptId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
@@ -526,7 +526,7 @@ private[sql] class ParquetOutputWriterFactory(
 
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
-private[sql] class ParquetOutputWriter(
+private[parquet] class ParquetOutputWriter(
     path: String,
     bucketId: Option[Int],
     context: TaskAttemptContext)
@@ -564,12 +564,12 @@ private[sql] class ParquetOutputWriter(
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
-  override protected[sql] def writeInternal(row: InternalRow): Unit = recordWriter.write(null, row)
+  override def writeInternal(row: InternalRow): Unit = recordWriter.write(null, row)
 
   override def close(): Unit = recordWriter.close(context)
 }
 
-private[sql] object ParquetFileFormat extends Logging {
+object ParquetFileFormat extends Logging {
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 
@@ -637,7 +637,7 @@ private[sql] object ParquetFileFormat extends Logging {
    * distinguish binary and string).  This method generates a correct schema by merging Metastore
    * schema data types and Parquet schema field names.
    */
-  private[sql] def mergeMetastoreParquetSchema(
+  def mergeMetastoreParquetSchema(
       metastoreSchema: StructType,
       parquetSchema: StructType): StructType = {
     def schemaConflictMessage: String =

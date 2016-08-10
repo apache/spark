@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, Catal
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -94,6 +93,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         .add("col2", "string")
         .add("a", "int")
         .add("b", "int"),
+      provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L)
   }
@@ -357,6 +357,43 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
+  }
+
+  test("create table - duplicate column names in the table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int, a string) USING json")
+    }
+    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
+  }
+
+  test("create table - partition column names not in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
+    }
+    assert(e.message == "partition column c is not defined in table `tbl`, " +
+      "defined table columns are: a, b")
+  }
+
+  test("create table - bucket column names not in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
+    }
+    assert(e.message == "bucket column c is not defined in table `tbl`, " +
+      "defined table columns are: a, b")
+  }
+
+  test("create table - column repeated in partition columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) USING json PARTITIONED BY (a, a)")
+    }
+    assert(e.message == "Found duplicate column(s) in partition: a")
+  }
+
+  test("create table - column repeated in bucket columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) USING json CLUSTERED BY (a, a) INTO 4 BUCKETS")
+    }
+    assert(e.message == "Found duplicate column(s) in bucket: a")
   }
 
   test("Describe Table with Corrupted Schema") {
@@ -825,6 +862,55 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("alter table: add partition (datasource table)") {
     testAddPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: recover partitions (sequential)") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
+      testRecoverPartitions()
+    }
+  }
+
+  test("alter table: recover partition (parallel)") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
+      testRecoverPartitions()
+    }
+  }
+
+  private def testRecoverPartitions() {
+    val catalog = spark.sessionState.catalog
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
+    }
+
+    val tableIdent = TableIdentifier("tab1")
+    createTable(catalog, tableIdent)
+    val part1 = Map("a" -> "1", "b" -> "5")
+    createTablePartition(catalog, part1, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+
+    val part2 = Map("a" -> "2", "b" -> "6")
+    val root = new Path(catalog.getTableMetadata(tableIdent).storage.locationUri.get)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    // valid
+    fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    // invalid
+    fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
+    fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
+    fs.mkdirs(new Path(root, "a=4")) // not enough columns
+    fs.createNewFile(new Path(new Path(root, "a=1"), "b=4"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS"))  // _SUCCESS
+    fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary"))  // _temporary
+    fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4"))  // start with .
+
+    try {
+      sql("ALTER TABLE tab1 RECOVER PARTITIONS")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2))
+    } finally {
+      fs.delete(root, true)
+    }
   }
 
   test("alter table: add partition is not supported for views") {
@@ -1469,7 +1555,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[ParseException] {
+        val e = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE TABLE jsonTable
@@ -1479,9 +1565,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
              |)
              |CLUSTERED BY (inexistentColumnA) SORTED BY (inexistentColumnB) INTO 2 BUCKETS
            """.stripMargin)
-        }.getMessage
-        assert(e.contains(
-          "Expected explicit specification of table schema when using CLUSTERED BY clause"))
+        }
+        assert(e.message == "Cannot specify bucketing information if the table schema is not " +
+          "specified when creating and will be inferred at runtime")
       }
     }
   }

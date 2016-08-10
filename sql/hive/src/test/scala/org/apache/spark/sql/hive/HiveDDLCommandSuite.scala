@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.types.StructType
 
@@ -36,8 +38,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case c: CreateTableCommand => (c.table, c.ifNotExists)
-      case c: CreateHiveTableAsSelectLogicalPlan => (c.tableDesc, c.allowExisting)
+      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
     }.head
   }
 
@@ -499,8 +500,13 @@ class HiveDDLCommandSuite extends PlanTest {
     }
   }
 
-  test("MSCK repair table (not supported)") {
-    assertUnsupported("MSCK REPAIR TABLE tab1")
+  test("MSCK REPAIR table") {
+    val sql = "MSCK REPAIR TABLE tab1"
+    val parsed = parser.parsePlan(sql)
+    val expected = AlterTableRecoverPartitionsCommand(
+      TableIdentifier("tab1", None),
+      "MSCK REPAIR TABLE")
+    comparePlans(parsed, expected)
   }
 
   test("create table like") {

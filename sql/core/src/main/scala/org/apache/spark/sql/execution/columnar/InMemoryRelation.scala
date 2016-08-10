@@ -34,7 +34,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.CollectionAccumulator
 
 
-private[sql] object InMemoryRelation {
+object InMemoryRelation {
   def apply(
       useCompression: Boolean,
       batchSize: Int,
@@ -55,15 +55,15 @@ private[sql] object InMemoryRelation {
 private[columnar]
 case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
-private[sql] case class InMemoryRelation(
+case class InMemoryRelation(
     output: Seq[Attribute],
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
     @transient child: SparkPlan,
     tableName: Option[String])(
-    @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    private[sql] val batchStats: CollectionAccumulator[InternalRow] =
+    @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
+    val batchStats: CollectionAccumulator[InternalRow] =
       child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
   extends logical.LeafNode with MultiInstanceRelation {
 
