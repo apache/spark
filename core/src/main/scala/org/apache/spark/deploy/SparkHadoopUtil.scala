@@ -25,7 +25,6 @@ import java.util.{Arrays, Comparator, Date}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
