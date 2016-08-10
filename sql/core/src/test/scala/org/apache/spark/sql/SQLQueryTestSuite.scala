@@ -150,7 +150,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     val expectedOutputs: Seq[QueryOutput] = {
       val goldenOutput = fileToString(new File(testCase.resultFile))
       val segments = goldenOutput.split("-- !query.+\n")
-      assert(segments.size == outputs.size * 3 + 1)  // each query has 3 segments, plus the header
+
+      // each query has 3 segments, plus the header
+      assert(segments.size == outputs.size * 3 + 1,
+        s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
+        s"Try regenerate the result files.")
       Seq.tabulate(outputs.size) { i =>
         QueryOutput(
           sql = segments(i * 3 + 1).trim,
