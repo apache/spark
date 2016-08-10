@@ -265,7 +265,7 @@ private[spark] object AccumulatorContext {
   private[spark] def lookForAccumulatorByName(name: String): Option[AccumulatorV2[_, _]] = {
     originals.values().asScala.find { ref =>
       val acc = ref.get
-      acc.name.isDefined && acc.name.get == name
+      acc != null && acc.name.isDefined && acc.name.get == name
     }.map(_.get)
   }
 
