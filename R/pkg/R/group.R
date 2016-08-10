@@ -59,8 +59,8 @@ setMethod("show", "GroupedData",
 #' Count the number of rows for each group.
 #' The resulting SparkDataFrame will also contain the grouping columns.
 #'
-#' @param x a GroupedData
-#' @return a SparkDataFrame
+#' @param x a GroupedData.
+#' @return A SparkDataFrame.
 #' @rdname count
 #' @aliases count,GroupedData-method
 #' @export

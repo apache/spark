@@ -260,12 +260,13 @@ createDataFrame <- function(x, ...) {
   dispatchFunc("createDataFrame(data, schema = NULL)", x, ...)
 }
 
+#' @param samplingRatio Currently not used.
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
 #' @method as.DataFrame default
 #' @note as.DataFrame since 1.6.0
-as.DataFrame.default <- function(data, schema = NULL) {
+as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(data, schema)
 }
 
@@ -729,7 +730,7 @@ dropTempView <- function(viewName) {
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
 #' @param na.strings Default string value for NA when source is "csv"
-#' @param ... additional argument(s) passed to the method.
+#' @param ... additional external data source specific named propertie(s).
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
@@ -844,7 +845,7 @@ createExternalTable <- function(x, ...) {
 #'                      clause expressions used to split the column `partitionColumn` evenly.
 #'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
-#' @param ... additional argument(s) passed to the method.
+#' @param ... additional JDBC database connection named propertie(s).
 #' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc

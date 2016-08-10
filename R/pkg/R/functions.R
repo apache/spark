@@ -445,8 +445,8 @@ setMethod("cosh",
 #'
 #' Returns the number of items in a group. This is a column aggregate function.
 #'
-#' @rdname nrow
-#' @name count
+#' @rdname n
+#' @name n
 #' @family agg_funcs
 #' @aliases count,Column-method
 #' @export
@@ -1272,9 +1272,9 @@ setMethod("round",
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
 #' @param x Column to compute on.
-#' @param scale round to `scale` digits to the right of the decimal point when `scale` > 0,
-#'        the nearest even number when `scale` = 0, and `scale` digits to the left
-#'        of the decimal point when `scale` <= 0.
+#' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
+#'        the nearest even number when \code{scale} = 0, and `scale` digits to the left
+#'        of the decimal point when \code{scale} < 0.
 #' @rdname bround
 #' @name bround
 #' @family math_funcs
@@ -1557,7 +1557,7 @@ setMethod("stddev_samp",
 #' Creates a new struct column that composes multiple input columns.
 #'
 #' @param x a column to compute on.
-#' @param ... additional column(s) to be included.
+#' @param ... optional column(s) to be included.
 #'
 #' @rdname struct
 #' @name struct
@@ -2269,8 +2269,8 @@ setMethod("n_distinct", signature(x = "Column"),
             countDistinct(x, ...)
           })
 
-#' @rdname nrow
-#'
+#' @param x a Column.
+#' @rdname n
 #' @name n
 #' @aliases n,Column-method
 #' @export
@@ -2649,7 +2649,7 @@ setMethod("expr", signature(x = "character"),
 #'
 #' @param format a character object of format strings.
 #' @param x a Column object.
-#' @param ... additional columns.
+#' @param ... additional Column(s).
 #' @family string_funcs
 #' @rdname format_string
 #' @name format_string
@@ -3034,8 +3034,8 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' Otherwise \code{no} is returned for unmatched conditions.
 #'
 #' @param test a Column expression that describes the condition.
-#' @param yes return values for true elements of test.
-#' @param no return values for false elements of test.
+#' @param yes return values for \code{TRUE} elements of test.
+#' @param no return values for \code{FALSE} elements of test.
 #' @family normal_funcs
 #' @rdname ifelse
 #' @name ifelse
