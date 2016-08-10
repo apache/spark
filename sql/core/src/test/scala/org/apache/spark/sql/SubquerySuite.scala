@@ -598,6 +598,13 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       case c: CommonSubqueryExec => c.subquery.child
     }.distinct
     assert(commonSubqueries3.length == 1)
+
+    // Using a self-join as CTE to test if de-duplicated attributes work for this.
+    val df4 = sql("WITH j AS (SELECT * FROM (SELECT * FROM l JOIN l)) SELECT * FROM j j1, j j2")
+    val commonSubqueries4 = df4.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries4.length == 1)
   }
 
   test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {
