@@ -562,7 +562,7 @@ class GBTParams(TreeEnsembleParams):
 
     .. versionadded:: 1.4.0
     """
-    supportedLossTypes = ["logistic"]
+    supportedLossTypes = ["logistic", "bernoulli"]
 
 
 @inherit_doc
@@ -899,20 +899,20 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="bernoulli",
                  maxIter=20, stepSize=0.1, seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
+                 lossType="bernoulli", maxIter=20, stepSize=0.1, seed=None)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1)
+                         lossType="bernoulli", maxIter=20, stepSize=0.1)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
