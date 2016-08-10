@@ -38,17 +38,18 @@ private[sql] case class CommonSubquery(
 
   override lazy val statistics: Statistics = _statistics
 
-  if (_computedOutput == null) {
-    _computedOutput = child.execute()
-  }
-
   lazy val numRows: Long = computedOutput.count
 
   def withOutput(newOutput: Seq[Attribute]): CommonSubquery = {
     CommonSubquery(newOutput, child)(_statistics, _computedOutput)
   }
 
-  def computedOutput: RDD[InternalRow] = _computedOutput
+  def computedOutput: RDD[InternalRow] = this.synchronized {
+    if (_computedOutput == null) {
+      _computedOutput = child.execute()
+    }
+    _computedOutput
+  }
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_statistics, _computedOutput)
