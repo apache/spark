@@ -25,7 +25,9 @@ import org.apache.spark.internal.Logging
 /**
  * ::DeveloperApi::
  * BlockReplicationPrioritization provides logic for prioritizing a sequence of peers for
- * replicating blocks
+ * replicating blocks. BlockManager will replicate to each peer returned in order until the
+ * desired replication order is reached. If a replication fails, prioritize() will be called
+ * again to get a fresh prioritization.
  */
 @DeveloperApi
 trait BlockReplicationPrioritization {

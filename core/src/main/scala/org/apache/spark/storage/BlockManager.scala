@@ -1163,9 +1163,9 @@ private[spark] class BlockManager(
     var peersFailedToReplicateTo = Set.empty[BlockManagerId]
     var numFailures = 0
 
-    while(numFailures <= maxReplicationFailures
-          && !peersForReplication.isEmpty
-          && peersReplicatedTo.size != numPeersToReplicateTo) {
+    while(numFailures <= maxReplicationFailures &&
+      !peersForReplication.isEmpty &&
+      peersReplicatedTo.size != numPeersToReplicateTo) {
       val peer = peersForReplication.head
       try {
         val onePeerStartTime = System.currentTimeMillis
@@ -1180,8 +1180,6 @@ private[spark] class BlockManager(
           classTag)
         logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
           s" in ${System.currentTimeMillis - onePeerStartTime} ms")
-        // the block was replicated, lets update state and move ahead
-
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
       } catch {

@@ -138,9 +138,7 @@ class BlockManagerMasterEndpoint(
       }
   }
 
-  private def getTopologyInfoForHost(host: String): String = {
-    topologyMapper.getTopologyForHost(host)
-  }
+  private def getTopologyInfoForHost(h: String): String = topologyMapper.getTopologyForHost(h)
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
