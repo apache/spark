@@ -33,7 +33,7 @@ private[sql] case class CommonSubqueryExec(
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(subquery) ++ super.innerChildren
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
