@@ -274,7 +274,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
          """.stripMargin
       if (userSpecifiedSchema.isEmpty && userSpecifiedPartitionCols.nonEmpty) {
         val e = intercept[AnalysisException](sql(sqlCreateTable)).getMessage
-        assert(e.contains("Cannot specify partition columns"))
+        assert(e.contains("Cannot specify partition information"))
       } else {
         sql(sqlCreateTable)
         val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName))
