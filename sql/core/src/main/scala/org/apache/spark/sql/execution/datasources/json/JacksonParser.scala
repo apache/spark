@@ -54,7 +54,7 @@ class JacksonParser(
   private def failedConversion(
       parser: JsonParser,
       dataType: DataType): Any = parser.getCurrentToken match {
-    case _ if parser.getTextLength < 1 =>
+    case VALUE_STRING if parser.getTextLength < 1 =>
       // If conversion is failed, this produces `null` rather than
       // returning empty string. This will protect the mismatch of types.
       null
@@ -134,7 +134,7 @@ class JacksonParser(
    */
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_TRUE => true
           case VALUE_FALSE => false
@@ -143,7 +143,7 @@ class JacksonParser(
       }
 
     case ByteType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getByteValue
           case _ => failedConversion(parser, dataType)
@@ -151,7 +151,7 @@ class JacksonParser(
       }
 
     case ShortType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getShortValue
           case _ => failedConversion(parser, dataType)
@@ -159,7 +159,7 @@ class JacksonParser(
       }
 
     case IntegerType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getIntValue
           case _ => failedConversion(parser, dataType)
@@ -167,7 +167,7 @@ class JacksonParser(
       }
 
     case LongType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT => parser.getLongValue
           case _ => failedConversion(parser, dataType)
@@ -175,7 +175,7 @@ class JacksonParser(
       }
 
     case FloatType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
             parser.getFloatValue
@@ -199,7 +199,7 @@ class JacksonParser(
       }
 
     case DoubleType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
             parser.getDoubleValue
@@ -223,7 +223,7 @@ class JacksonParser(
       }
 
     case StringType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
             UTF8String.fromString(parser.getText)
@@ -238,7 +238,7 @@ class JacksonParser(
       }
 
     case TimestampType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
             // This one will lose microseconds parts.
@@ -253,7 +253,7 @@ class JacksonParser(
       }
 
     case DateType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING =>
             val stringValue = parser.getText
@@ -271,7 +271,7 @@ class JacksonParser(
       }
 
     case BinaryType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case VALUE_STRING => parser.getBinaryValue
           case _ => failedConversion(parser, dataType)
@@ -279,7 +279,7 @@ class JacksonParser(
       }
 
     case dt: DecimalType =>
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
             Decimal(parser.getDecimalValue, dt.precision, dt.scale)
@@ -290,7 +290,7 @@ class JacksonParser(
 
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case START_OBJECT => convertObject(parser, st, fieldConverters)
           case _ => failedConversion(parser, st)
@@ -299,7 +299,7 @@ class JacksonParser(
 
     case at: ArrayType =>
       val elementConverter = makeConverter(at.elementType)
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case START_ARRAY => convertArray(parser, elementConverter)
           case _ => failedConversion(parser, at)
@@ -308,7 +308,7 @@ class JacksonParser(
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
-      (parser: JsonParser) => convertField(parser) {
+      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
         parser.getCurrentToken match {
           case START_OBJECT => convertMap(parser, valueConverter)
           case _ => failedConversion(parser, mt)
@@ -324,29 +324,22 @@ class JacksonParser(
   }
 
   /**
-   * This converts a field. If this is called after `START_OBJECT`, then, the next token can be
+   * This handles nulls ahead before trying to check the tokens, and applies
+   * the conversion function. Also, it checks `FIELD_NAME` if exists and then skip.
+   * If this is called after `START_OBJECT`, then, the next token can be
    * `FIELD_NAME`. Since the names are kept in `JacksonParser.convertObject`, this `FIELD_NAME`
    * token can be skipped as below. When this is called after `START_ARRAY`, the tokens become
    * ones about values until `END_ARRAY`. In this case, we don't have to skip.
    */
-  private def convertField(parser: JsonParser)(f: => Any): Any = {
+  private def handleNullAndFieldTokens (parser: JsonParser)(f: => Any): Any = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
-        parser.nextToken
-        convertValue(parser)(f)
-
-      case _ =>
-        convertValue(parser)(f)
-    }
-  }
-
-  /**
-   * This converts a value. The given function `f` is responsible for converting the actual values
-   * but before trying to convert it, here we check if the current value should be converted into
-   * null or not. This should be checked for all the data types.
-   */
-  private def convertValue(parser: JsonParser)(f: => Any): Any = {
-    parser.getCurrentToken match {
+        parser.nextToken match {
+          // Before trying to convert it, here we check if the current value should be converted
+          // into null or not. This should be checked for all the data types.
+          case null | VALUE_NULL => null
+          case _ => f
+        }
       case null | VALUE_NULL => null
       case _ => f
     }
