@@ -551,6 +551,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     sql("DROP TABLE IF EXISTS createdJsonTable")
   }
 
+  test("case insensitive option - path") {
+    val tableName = "createdJsonTable"
+    withTable(tableName) {
+      withTempPath { tempPath =>
+        val path = tempPath.getCanonicalPath
+        val df = spark.range(10).toDF()
+        df.write.format("json").save(path)
+        sparkSession.catalog.createExternalTable(
+          tableName,
+          "org.apache.spark.sql.json",
+          Map("PATH" -> path))
+        checkAnswer(
+          table("createdJsonTable"),
+          df)
+      }
+    }
+  }
+
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempView("jt") {
