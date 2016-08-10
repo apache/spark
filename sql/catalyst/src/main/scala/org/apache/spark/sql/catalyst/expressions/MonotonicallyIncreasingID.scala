@@ -48,11 +48,8 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
     this(offset = 0)
   }
 
-  def this(offset: Expression) = offset match {
-    case IntegerLiteral(i) => this(offset = i.toLong)
-    case NonNullLiteral(l, LongType) => this(offset = l.toString.toLong)
-    case _ => throw new AnalysisException("The offset must be " +
-      "an integer or long literal.")
+  def this(offset: Expression) = {
+    this(offset = offset.asInstanceOf[IntegerLiteral].toLong)
   }
 
   /**
