@@ -16,17 +16,17 @@
 #
 library(SparkR)
 
-sparkR.session()
+sc <- sparkR.session()
 
-helloTest <- SparkR:::callJStatic("sparkR.test.hello",
+helloTest <- SparkR:::callJStatic("sparkrtest.DummyClass",
                                   "helloWorld",
                                   "Dave")
+stopifnot(identical(helloTest, "Hello Dave"))
 
-basicFunction <- SparkR:::callJStatic("sparkR.test.basicFunction",
+basicFunction <- SparkR:::callJStatic("sparkrtest.DummyClass",
                                       "addStuff",
                                       2L,
                                       2L)
+stopifnot(basicFunction == 4L)
 
 sparkR.session.stop()
-output <- c(helloTest, basicFunction)
-writeLines(output)

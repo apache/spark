@@ -19,6 +19,7 @@ package org.apache.spark.deploy.mesos
 
 import java.util.Date
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.Command
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterRetryState
 
@@ -40,11 +41,14 @@ private[spark] class MesosDriverDescription(
     val cores: Double,
     val supervise: Boolean,
     val command: Command,
-    val schedulerProperties: Map[String, String],
+    schedulerProperties: Map[String, String],
     val submissionId: String,
     val submissionDate: Date,
     val retryState: Option[MesosClusterRetryState] = None)
   extends Serializable {
+
+  val conf = new SparkConf(false)
+  schedulerProperties.foreach {case (k, v) => conf.set(k, v)}
 
   def copy(
       name: String = name,
@@ -53,11 +57,12 @@ private[spark] class MesosDriverDescription(
       cores: Double = cores,
       supervise: Boolean = supervise,
       command: Command = command,
-      schedulerProperties: Map[String, String] = schedulerProperties,
+      schedulerProperties: SparkConf = conf,
       submissionId: String = submissionId,
       submissionDate: Date = submissionDate,
       retryState: Option[MesosClusterRetryState] = retryState): MesosDriverDescription = {
-    new MesosDriverDescription(name, jarUrl, mem, cores, supervise, command, schedulerProperties,
+
+    new MesosDriverDescription(name, jarUrl, mem, cores, supervise, command, conf.getAll.toMap,
       submissionId, submissionDate, retryState)
   }
 

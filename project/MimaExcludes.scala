@@ -38,7 +38,9 @@ object MimaExcludes {
   lazy val v21excludes = v20excludes ++ {
     Seq(
       // [SPARK-16199][SQL] Add a method to list the referenced columns in data source Filter
-      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references")
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.references"),
+      // [SPARK-16853][SQL] Fixes encoder error in DataSet typed select
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.Dataset.select")
     )
   }
 

@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.nio.ByteBuffer
 
 import scala.language.implicitConversions
-import scala.language.postfixOps
 import scala.language.reflectiveCalls
 import scala.reflect.ClassTag
 
