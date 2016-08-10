@@ -519,11 +519,12 @@ class SparseVector(Vector):
                         "Indices %s and %s are not strictly increasing"
                         % (self.indices[i], self.indices[i + 1]))
 
-        assert np.max(self.indices) < self.size, \
-            "Index %d is out of the the size of vector with size=%d" \
-            % (np.max(self.indices), self.size)
-        assert np.min(self.indices) >= 0, \
-            "Contains negative index %d" % (np.min(self.indices))
+        if self.indices.size > 0:
+            assert np.max(self.indices) < self.size, \
+                "Index %d is out of the the size of vector with size=%d" \
+                % (np.max(self.indices), self.size)
+            assert np.min(self.indices) >= 0, \
+                "Contains negative index %d" % (np.min(self.indices))
 
     def numNonzeros(self):
         """
