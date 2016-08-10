@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
  *
  * @param params Parameters object
  */
-private[sql] class CsvReader(params: CSVOptions) {
+private[csv] class CsvReader(params: CSVOptions) {
 
   private val parser: CsvParser = {
     val settings = new CsvParserSettings()
@@ -65,7 +65,7 @@ private[sql] class CsvReader(params: CSVOptions) {
  * @param params Parameters object for configuration
  * @param headers headers for columns
  */
-private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
+private[csv] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
 
@@ -78,7 +78,7 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   writerSettings.setNullValue(params.nullValue)
   writerSettings.setEmptyValue(params.nullValue)
   writerSettings.setSkipEmptyLines(true)
-  writerSettings.setQuoteAllFields(false)
+  writerSettings.setQuoteAllFields(params.quoteAll)
   writerSettings.setHeaders(headers: _*)
   writerSettings.setQuoteEscapingEnabled(params.escapeQuotes)
 

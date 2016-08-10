@@ -60,6 +60,7 @@ import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.StructType$;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -136,8 +137,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    this.sparkSchema = new ParquetSchemaConverter(configuration).convert(requestedSchema);
-    this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
+    String sparkRequestedSchemaString =
+        configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
+    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    this.reader = new ParquetFileReader(
+        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }
@@ -201,7 +205,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
-    this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
+    this.reader = new ParquetFileReader(
+        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }

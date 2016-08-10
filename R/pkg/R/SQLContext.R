@@ -48,7 +48,9 @@ getInternalType <- function(x) {
 #' @return whatever the target returns
 #' @noRd
 dispatchFunc <- function(newFuncSig, x, ...) {
-  funcName <- as.character(sys.call(sys.parent())[[1]])
+  # When called with SparkR::createDataFrame, sys.call()[[1]] returns c(::, SparkR, createDataFrame)
+  callsite <- as.character(sys.call(sys.parent())[[1]])
+  funcName <- callsite[[length(callsite)]]
   f <- get(paste0(funcName, ".default"))
   # Strip sqlContext from list of parameters and then pass the rest along.
   contextNames <- c("org.apache.spark.sql.SQLContext",
@@ -267,6 +269,9 @@ as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(data, schema, samplingRatio)
 }
 
+#' @rdname createDataFrame
+#' @aliases as.DataFrame
+#' @export
 as.DataFrame <- function(x, ...) {
   dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
 }
@@ -714,11 +719,14 @@ dropTempView <- function(viewName) {
 #'
 #' The data source is specified by the `source` and a set of options(...).
 #' If `source` is not specified, the default data source configured by
-#' "spark.sql.sources.default" will be used.
+#' "spark.sql.sources.default" will be used. \cr
+#' Similar to R read.csv, when `source` is "csv", by default, a value of "NA" will be interpreted
+#' as NA.
 #'
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
+#' @param na.strings Default string value for NA when source is "csv"
 #' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
@@ -735,7 +743,7 @@ dropTempView <- function(viewName) {
 #' @name read.df
 #' @method read.df default
 #' @note read.df since 1.4.0
-read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
+read.df.default <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   sparkSession <- getSparkSession()
   options <- varargsToEnv(...)
   if (!is.null(path)) {
@@ -743,6 +751,9 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   }
   if (is.null(source)) {
     source <- getDefaultSqlSource()
+  }
+  if (source == "csv" && is.null(options[["nullValue"]])) {
+    options[["nullValue"]] <- na.strings
   }
   if (!is.null(schema)) {
     stopifnot(class(schema) == "structType")

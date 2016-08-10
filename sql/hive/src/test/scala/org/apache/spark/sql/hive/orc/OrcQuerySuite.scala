@@ -93,7 +93,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
     sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
-    withTempTable("t") {
+    withTempView("t") {
       checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
   }
@@ -161,6 +161,29 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-16610: Respect orc.compress option when compression is unset") {
+    // Respect `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("orc.compress", "ZLIB")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+
+    // `compression` overrides `orc.compress`.
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .option("compression", "ZLIB")
+        .option("orc.compress", "SNAPPY")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+  }
+
   // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
@@ -222,7 +245,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("overwriting") {
@@ -232,7 +255,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true)
+    sessionState.catalog.dropTable(TableIdentifier("tmp"), ignoreIfNotExists = true, purge = false)
   }
 
   test("self-join") {
@@ -310,7 +333,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val path = dir.getCanonicalPath
 
       withTable("empty_orc") {
-        withTempTable("empty", "single") {
+        withTempView("empty", "single") {
           spark.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
@@ -402,7 +425,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("Verify the ORC conversion parameter: CONVERT_METASTORE_ORC") {
-    withTempTable("single") {
+    withTempView("single") {
       val singleRowDF = Seq((0, "foo")).toDF("key", "value")
       singleRowDF.createOrReplaceTempView("single")
 

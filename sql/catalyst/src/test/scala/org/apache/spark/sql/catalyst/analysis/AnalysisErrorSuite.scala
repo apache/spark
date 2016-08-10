@@ -278,6 +278,21 @@ class AnalysisErrorSuite extends AnalysisTest {
       testRelation.output.length.toString :: Nil)
 
   errorTest(
+    "union with incompatible column types",
+    testRelation.union(nestedRelation),
+    "union" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "intersect with incompatible column types",
+    testRelation.intersect(nestedRelation),
+    "intersect" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "except with incompatible column types",
+    testRelation.except(nestedRelation),
+    "except" :: "the compatible column types" :: Nil)
+
+  errorTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
@@ -350,6 +365,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode('list).asc),
     "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+  )
+
+  errorTest(
+    "num_rows in limit clause must be equal to or greater than 0",
+    listRelation.limit(-1),
+    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
   )
 
   errorTest(
@@ -527,5 +548,22 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan4 = Filter(
+      Exists(
+        Limit(1,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in a LIMIT" :: Nil)
+
+    val plan5 = Filter(
+      Exists(
+        Sample(0.0, 0.5, false, 1L,
+          Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))().select('b)
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan5,
+                        "Accessing outer query column is not allowed in a TABLESAMPLE" :: Nil)
   }
 }

@@ -79,7 +79,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            |)
          """.stripMargin)
 
-      withTempTable("expectedJsonTable") {
+      withTempView("expectedJsonTable") {
         read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
         checkAnswer(
           sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
@@ -109,7 +109,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       assert(expectedSchema === table("jsonTable").schema)
 
-      withTempTable("expectedJsonTable") {
+      withTempView("expectedJsonTable") {
         read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
         checkAnswer(
           sql("SELECT b, `<d>`.`=` FROM jsonTable"),
@@ -191,10 +191,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         sql("REFRESH TABLE jsonTable")
 
-        // Check that the refresh worked
+        // After refresh, schema is not changed.
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
-          Row("a1", "b1", "c1"))
+          Row("a1", "b1"))
       }
     }
   }
@@ -247,7 +247,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            |)
          """.stripMargin)
 
-      withTempTable("expectedJsonTable") {
+      withTempView("expectedJsonTable") {
         read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
 
         checkAnswer(
@@ -553,7 +553,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
-      withTempTable("jt") {
+      withTempView("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").createOrReplaceTempView("jt")
 
         withTable("test_parquet_ctas") {
@@ -703,7 +703,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           createDataSourceTable(
             sparkSession = spark,
             tableIdent = TableIdentifier("wide_schema"),
-            userSpecifiedSchema = Some(schema),
+            schema = schema,
             partitionColumns = Array.empty[String],
             bucketSpec = None,
             provider = "json",
@@ -726,14 +726,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
         tableType = CatalogTableType.MANAGED,
-        schema = Seq.empty,
+        schema = new StructType,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
           outputFormat = None,
           serde = None,
           compressed = false,
-          serdeProperties = Map(
+          properties = Map(
             "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
         ),
         properties = Map(
@@ -741,14 +741,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           DATASOURCE_SCHEMA -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
-      sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
+      sharedState.externalCatalog.createTable(hiveTable, ignoreIfExists = false)
 
       sessionState.refreshTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
 
       // Checks the DESCRIBE output.
-      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", "") :: Nil)
+      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", null) :: Nil)
     }
   }
 
@@ -988,7 +988,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
-        userSpecifiedSchema = Some(schema),
+        schema = schema,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
@@ -998,12 +998,12 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
       assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
-        .forall(column => CatalystSqlParser.parseDataType(column.dataType) == StringType))
+        .forall(_.dataType == StringType))
 
       createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("skip_hive_metadata"),
-        userSpecifiedSchema = Some(schema),
+        schema = schema,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
         provider = "parquet",
@@ -1013,8 +1013,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       // As a proxy for verifying that the table was stored in SparkSQL format,
       // we verify that the table has a column type as array of StringType.
       assert(sharedState.externalCatalog.getTable("default", "skip_hive_metadata")
-        .schema.forall { c =>
-          CatalystSqlParser.parseDataType(c.dataType) == ArrayType(StringType) })
+        .schema.forall(_.dataType == ArrayType(StringType)))
     }
   }
 
@@ -1171,8 +1170,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
         val catalogTable = sharedState.externalCatalog.getTable("default", "t")
         // there should not be a lowercase key 'path' now
-        assert(catalogTable.storage.serdeProperties.get("path").isEmpty)
-        assert(catalogTable.storage.serdeProperties.get("PATH").isDefined)
+        assert(catalogTable.storage.properties.get("path").isEmpty)
+        assert(catalogTable.storage.properties.get("PATH").isDefined)
       }
     }
   }
