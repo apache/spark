@@ -30,8 +30,8 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * instance of this class while processing many rows.
  */
 trait BaseSlicedInternalRow extends InternalRow {
-  def baseRow: InternalRow
-  def offset: Int
+  protected def baseRow: InternalRow
+  protected def offset: Int
 
   protected def toBaseIndex(index: Int): Int = {
     assert(index >= 0, "index (" + index + ") should >= 0")
@@ -73,7 +73,9 @@ trait BaseSlicedInternalRow extends InternalRow {
   }
 }
 
-case class SlicedInternalRow(offset: Int, numFields: Int) extends BaseSlicedInternalRow {
+class SlicedInternalRow(protected val offset: Int, val numFields: Int)
+  extends BaseSlicedInternalRow {
+
   private var _baseRow: InternalRow = _
   def target(row: InternalRow): SlicedInternalRow = {
     _baseRow = row
@@ -83,7 +85,7 @@ case class SlicedInternalRow(offset: Int, numFields: Int) extends BaseSlicedInte
   def baseRow: InternalRow = _baseRow
 }
 
-case class SlicedMutableRow(offset: Int, numFields: Int)
+class SlicedMutableRow(protected val offset: Int, val numFields: Int)
   extends MutableRow with BaseSlicedInternalRow {
 
   private var _baseRow: MutableRow = _

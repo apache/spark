@@ -256,8 +256,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * }}}
    */
   final def setMutableBufferOffset(offset: Int): Unit = {
-    assert(mutableBufferRow == null)
-    mutableBufferRow = SlicedMutableRow(offset, aggBufferAttributes.length)
+    mutableBufferRow = new SlicedMutableRow(offset, aggBufferAttributes.length)
   }
 
   /**
@@ -286,8 +285,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    * }}}
    */
   final def setInputBufferOffset(offset: Int): Unit = {
-    assert(inputBufferRow == null)
-    inputBufferRow = SlicedInternalRow(offset, aggBufferAttributes.length)
+    inputBufferRow = new SlicedInternalRow(offset, aggBufferAttributes.length)
   }
 
   final def initialize(mutableAggBuffer: MutableRow): Unit = {
