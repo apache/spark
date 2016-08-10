@@ -19,6 +19,8 @@ package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.network.shuffle.RetryingBlockPreparer.PreparerStarter
+
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
@@ -29,7 +31,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher}
+import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
@@ -110,6 +112,39 @@ private[spark] class NettyBlockTransferService(
       case e: Exception =>
         logError("Exception while beginning fetchBlocks", e)
         blockIds.foreach(listener.onBlockFetchFailure(_, e))
+    }
+  }
+
+  override def prepareBlocks(
+                              host: String,
+                              port: Int,
+                              execId: String,
+                              prepareBlockIds: Array[String],
+                              releaseBlockIds: Array[String],
+                              listener: BlockPreparingListener): Unit = {
+    logDebug(s"send prepare block info to $host:$port (executor id $execId)")
+
+    try{
+      val blockPrepareStarter = new PreparerStarter {
+        override def createAndStart(prepareBlockIds: Array[String], releaseBlockIds: Array[String],
+                                    listener: BlockPreparingListener): Unit = {
+          val client = clientFactory.createClient(host, port)
+          new BlockToPrepareInfoSender(client, appId, execId, prepareBlockIds.toArray,
+            releaseBlockIds, listener).start()
+        }
+      }
+
+      val maxRetries = transportConf.maxIORetries()
+      if (maxRetries > 0) {
+        new RetryingBlockPreparer(transportConf, blockPrepareStarter, prepareBlockIds,
+          releaseBlockIds, listener).start()
+      } else {
+        blockPrepareStarter.createAndStart(prepareBlockIds, releaseBlockIds, listener)
+      }
+    } catch {
+      case e : Exception =>
+        logError("Exception while sending the block list", e)
+        listener.onBlockPrepareFailure(e)
     }
   }
 
