@@ -864,6 +864,55 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testAddPartitions(isDatasourceTable = true)
   }
 
+  test("alter table: recover partitions (sequential)") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
+      testRecoverPartitions()
+    }
+  }
+
+  test("alter table: recover partition (parallel)") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
+      testRecoverPartitions()
+    }
+  }
+
+  private def testRecoverPartitions() {
+    val catalog = spark.sessionState.catalog
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
+    }
+
+    val tableIdent = TableIdentifier("tab1")
+    createTable(catalog, tableIdent)
+    val part1 = Map("a" -> "1", "b" -> "5")
+    createTablePartition(catalog, part1, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+
+    val part2 = Map("a" -> "2", "b" -> "6")
+    val root = new Path(catalog.getTableMetadata(tableIdent).storage.locationUri.get)
+    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    // valid
+    fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
+    fs.mkdirs(new Path(new Path(root, "A=2"), "B=6"))
+    // invalid
+    fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
+    fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
+    fs.mkdirs(new Path(root, "a=4")) // not enough columns
+    fs.createNewFile(new Path(new Path(root, "a=1"), "b=4"))  // file
+    fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS"))  // _SUCCESS
+    fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary"))  // _temporary
+    fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4"))  // start with .
+
+    try {
+      sql("ALTER TABLE tab1 RECOVER PARTITIONS")
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2))
+    } finally {
+      fs.delete(root, true)
+    }
+  }
+
   test("alter table: add partition is not supported for views") {
     assertUnsupported("ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')")
   }

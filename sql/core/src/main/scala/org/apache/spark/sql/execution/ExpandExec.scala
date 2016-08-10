@@ -39,7 +39,7 @@ case class ExpandExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  private[sql] override lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it

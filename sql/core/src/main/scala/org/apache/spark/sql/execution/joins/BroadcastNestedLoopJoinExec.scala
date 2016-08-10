@@ -37,7 +37,7 @@ case class BroadcastNestedLoopJoinExec(
     condition: Option[Expression],
     withinBroadcastThreshold: Boolean = true) extends BinaryExecNode {
 
-  override private[sql] lazy val metrics = Map(
+  override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   /** BuildRight means the right relation <=> the broadcast relation. */

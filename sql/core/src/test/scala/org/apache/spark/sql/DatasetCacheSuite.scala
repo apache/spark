@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 

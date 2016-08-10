@@ -21,8 +21,6 @@ import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
@@ -38,7 +36,7 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
-private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
@@ -197,7 +195,7 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -277,10 +275,7 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-private[sql] case class PreWriteCheck(
-    sqlConf: SQLConf,
-    catalog: SessionCatalog,
-    sparkConf: SparkConf)
+case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
@@ -290,9 +285,6 @@ private[sql] case class PreWriteCheck(
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case CreateTable(tableDesc, _, Some(_))
-          if tableDesc.provider.get == "hive" && sparkConf.get(CATALOG_IMPLEMENTATION) != "hive" =>
-        failAnalysis("Hive support is required to use CREATE Hive TABLE AS SELECT")
       case c @ CreateTable(tableDesc, mode, query) if c.resolved =>
         // Since we are saving table metadata to metastore, we should make sure the table name
         // and database name don't break some common restrictions, e.g. special chars except
@@ -342,7 +334,7 @@ private[sql] case class PreWriteCheck(
         }
 
         PartitioningUtils.validatePartitionColumn(
-          r.schema, part.keySet.toSeq, sqlConf.caseSensitiveAnalysis)
+          r.schema, part.keySet.toSeq, conf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {

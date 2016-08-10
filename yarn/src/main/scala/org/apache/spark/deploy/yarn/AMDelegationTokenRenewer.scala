@@ -19,8 +19,6 @@ package org.apache.spark.deploy.yarn
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.language.postfixOps
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
@@ -128,7 +126,7 @@ private[yarn] class AMDelegationTokenRenewer(
     try {
       val remoteFs = FileSystem.get(freshHadoopConf)
       val credentialsPath = new Path(credentialsFile)
-      val thresholdTime = System.currentTimeMillis() - (daysToKeepFiles days).toMillis
+      val thresholdTime = System.currentTimeMillis() - (daysToKeepFiles.days).toMillis
       hadoopUtil.listFilesSorted(
         remoteFs, credentialsPath.getParent,
         credentialsPath.getName, SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)
