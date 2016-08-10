@@ -208,6 +208,9 @@ class JacksonParser(
 
         case VALUE_NUMBER_INT =>
           parser.getLongValue * 1000000L
+
+        case VALUE_NUMBER_FLOAT =>
+          math.round(parser.getDoubleValue * 1000000L)
       }
 
     case DateType =>
