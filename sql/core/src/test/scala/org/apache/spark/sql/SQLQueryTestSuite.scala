@@ -225,19 +225,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   /** Load built-in test tables into the SparkSession. */
   private def loadTestData(session: SparkSession): Unit = {
-    session.createDataFrame((1 to 100).map(i => (i, i.toString)))
-      .createOrReplaceTempView("testdata")
+    import session.implicits._
 
-    session.createDataFrame(
-      (Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
+    (1 to 100).map(i => (i, i.toString)).toDF("key", "value").createOrReplaceTempView("testdata")
+
+    ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
+      .toDF("arraycol", "nestedarraycol")
       .createOrReplaceTempView("arraydata")
 
-    session.createDataFrame(
-      Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
-        Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
-        Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
-        Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
-        Tuple1(Map(1 -> "a5")) :: Nil)
+    (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
+      Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
+      Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
+      Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
+      Tuple1(Map(1 -> "a5")) :: Nil)
+      .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
   }
 

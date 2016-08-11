@@ -5,7 +5,7 @@
 -- !query 0
 select * from testdata limit 2
 -- !query 0 schema
-struct<_1:int,_2:string>
+struct<key:int,value:string>
 -- !query 0 output
 1	1
 2	2
@@ -14,7 +14,7 @@ struct<_1:int,_2:string>
 -- !query 1
 select * from arraydata limit 2
 -- !query 1 schema
-struct<_1:array<int>,_2:array<array<int>>>
+struct<arraycol:array<int>,nestedarraycol:array<array<int>>>
 -- !query 1 output
 [1,2,3]	[[1,2,3]]
 [2,3,4]	[[2,3,4]]
@@ -23,7 +23,7 @@ struct<_1:array<int>,_2:array<array<int>>>
 -- !query 2
 select * from mapdata limit 2
 -- !query 2 schema
-struct<_1:map<int,string>>
+struct<mapcol:map<int,string>>
 -- !query 2 output
 {1:"a1",2:"b1",3:"c1",4:"d1",5:"e1"}
 {1:"a2",2:"b2",3:"c2",4:"d2"}
@@ -32,7 +32,7 @@ struct<_1:map<int,string>>
 -- !query 3
 select * from testdata limit 2 + 1
 -- !query 3 schema
-struct<_1:int,_2:string>
+struct<key:int,value:string>
 -- !query 3 output
 1	1
 2	2
@@ -42,7 +42,7 @@ struct<_1:int,_2:string>
 -- !query 4
 select * from testdata limit CAST(1 AS int)
 -- !query 4 schema
-struct<_1:int,_2:string>
+struct<key:int,value:string>
 -- !query 4 output
 1	1
 
@@ -62,7 +62,7 @@ select * from testdata limit key > 3
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`key`' given input columns: [_1, _2]; line 1 pos 29
+The limit expression must evaluate to a constant value, but got (testdata.`key` > 3);
 
 
 -- !query 7
