@@ -627,6 +627,7 @@ quotedIdentifier
 number
     : DECIMAL_VALUE            #decimalLiteral
     | SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
+    | MINUS INTEGER_VALUE      #negativeIntegerLiteral
     | INTEGER_VALUE            #integerLiteral
     | BIGINT_LITERAL           #bigIntLiteral
     | SMALLINT_LITERAL         #smallIntLiteral

@@ -1256,16 +1256,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a negative integral literal expression. The code selects the most narrow integral type
+   * possible, either a BigDecimal, a Long or an Integer is returned.
+   */
+  override def visitNegativeIntegerLiteral(
+      ctx: NegativeIntegerLiteralContext): Literal = withOrigin(ctx) {
+    createIntegralLiteral(ctx.getText)
+  }
+
+  /**
    * Create an integral literal expression. The code selects the most narrow integral type
    * possible, either a BigDecimal, a Long or an Integer is returned.
    */
   override def visitIntegerLiteral(ctx: IntegerLiteralContext): Literal = withOrigin(ctx) {
-    BigDecimal(ctx.getText) match {
-      case v if v.isValidInt =>
-        Literal(v.intValue())
-      case v if v.isValidLong =>
-        Literal(v.longValue())
-      case v => Literal(v.underlying())
+    createIntegralLiteral(ctx.getText)
+  }
+
+  private def createIntegralLiteral(s: String): Literal = {
+    val bigDecimal = BigDecimal(s)
+    if (bigDecimal.isValidInt) {
+      Literal(bigDecimal.intValue())
+    } else if (bigDecimal.isValidLong) {
+      Literal(bigDecimal.longValue())
+    } else {
+      Literal(bigDecimal.underlying())
     }
   }
 

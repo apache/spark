@@ -5,7 +5,7 @@
 -- !query 0
 select 1, -1
 -- !query 0 schema
-struct<1:int,(-1):int>
+struct<1:int,-1:int>
 -- !query 0 output
 1	-1
 
@@ -13,7 +13,7 @@ struct<1:int,(-1):int>
 -- !query 1
 select 2147483648, -2147483649
 -- !query 1 schema
-struct<2147483648:bigint,(-2147483649):bigint>
+struct<2147483648:bigint,-2147483649:bigint>
 -- !query 1 output
 2147483648	-2147483649
 
@@ -21,7 +21,7 @@ struct<2147483648:bigint,(-2147483649):bigint>
 -- !query 2
 select 9223372036854775807, -9223372036854775808
 -- !query 2 schema
-struct<9223372036854775807:bigint,(-9223372036854775808):decimal(19,0)>
+struct<9223372036854775807:bigint,-9223372036854775808:bigint>
 -- !query 2 output
 9223372036854775807	-9223372036854775808
 
@@ -29,7 +29,7 @@ struct<9223372036854775807:bigint,(-9223372036854775808):decimal(19,0)>
 -- !query 3
 select 9223372036854775808, -9223372036854775809
 -- !query 3 schema
-struct<9223372036854775808:decimal(19,0),(-9223372036854775809):decimal(19,0)>
+struct<9223372036854775808:decimal(19,0),-9223372036854775809:decimal(19,0)>
 -- !query 3 output
 9223372036854775808	-9223372036854775809
 
