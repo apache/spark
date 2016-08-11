@@ -81,8 +81,8 @@ class JacksonParser(
       parser: JsonParser,
       dataType: DataType): PartialFunction[JsonToken, Any] = {
     case VALUE_STRING if parser.getTextLength < 1 =>
-      // If conversion is failed, this produces `null` rather than
-      // rather than throw exception. This will protect the mismatch of types.
+      // If conversion is failed, this produces `null` rather than throwing exception.
+      // This will protect the mismatch of types.
       null
 
     case token =>
@@ -286,22 +286,29 @@ class JacksonParser(
 
   /**
    * This handles nulls ahead before trying to check the tokens, and applies the conversion
-   * function and then checks failed the conversion afterward if it `f` fails to convert the value.
+   * function and then checks failed the conversion afterward if the `f` fails to convert
+   * the value.
    *
    * In more details, it checks `FIELD_NAME` if exists and then skip. If this is called after
    * `START_OBJECT`, then, the next token can be `FIELD_NAME`. Since the names are kept in
    * `JacksonParser.convertObject`, this `FIELD_NAME` token can be skipped as below. When this
-   * is called after `START_ARRAY`, the tokens become ones about values until `END_ARRAY`.
-   * In this case, we don't have to skip.
+   * is called after `START_ARRAY`, the tokens are consecutive tokens for values without
+   * `FIELD_NAME` until `END_ARRAY`. In this case, we don't have to skip.
    *
-   * We check if the current token is null or not after that. Then, we apply `f` to convert
-   * the value and then we check failed conversion afterward if it `f` fails to convert the value.
+   * For example, parsing ["a", "b", "c"] will produce the tokens as below:
+   *
+   *   [START_ARRAY, VALUE_STRING, VALUE_STRING, VALUE_STRING, END_ARRAY]
+   *
+   * Then, we check if the current token is null or not. Then, we apply `f` to convert
+   * the value and then we check failed conversion afterward if the `f` fails to convert the value.
    */
   private def parseJsonToken(
       parser: JsonParser,
       dataType: DataType)(f: PartialFunction[JsonToken, Any]): Any = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
+        // Here, probably we are parsing consecutive fields in JSON document between `START_OBJECT`
+        // and `END_OBJECT` tokens.
         parser.nextToken()
         parseJsonToken(parser, dataType)(f)
 
