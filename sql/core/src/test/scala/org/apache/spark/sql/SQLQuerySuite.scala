@@ -2888,26 +2888,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         data.selectExpr("`part.col1`", "`col.1`"))
     }
   }
-
-  test("SPARK-16771: WITH clause should not fall into infinite loop") {
-    val m = intercept[AnalysisException] {
-      sql("WITH t AS (SELECT 1 FROM t) SELECT * FROM t")
-    }.getMessage
-    assert(m.contains("Table or view not found: t"))
-
-    spark.range(3).createOrReplaceTempView("t")
-    checkAnswer(sql("WITH t AS (SELECT 1 FROM t) SELECT * FROM t"),
-      Row(1) :: Row(1) :: Row(1) :: Nil)
-  }
-
-  test("SPARK-16771: WITH clauses should not fall into infinite loop") {
-    val m = intercept[AnalysisException] {
-      sql("WITH t1 AS (SELECT 1 FROM t2), t2 AS (SELECT 1 FROM t1) SELECT * FROM t1, t2")
-    }.getMessage
-    assert(m.contains("Table or view not found: t2"))
-
-    spark.range(2).createOrReplaceTempView("t2")
-    checkAnswer(sql("WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1, t2"),
-      Row(0, 2) :: Row(1, 2) :: Row(0, 2) :: Row(1, 2) :: Nil)
-  }
 }
