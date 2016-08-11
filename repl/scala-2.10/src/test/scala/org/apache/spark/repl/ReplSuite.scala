@@ -363,4 +363,15 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
   }
+
+  test("SI-9734 class defined with paste mode mismatches") {
+    val output = runInterpreter("local",
+      """
+        |case class Data(i: Int); val d = Data(1)
+        |val d2: Data = d
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("d2: Data = Data(1)", output)
+  }
 }

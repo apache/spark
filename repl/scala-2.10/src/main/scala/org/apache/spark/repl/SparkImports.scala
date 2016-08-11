@@ -208,7 +208,7 @@ private[repl] trait SparkImports {
             val valName = "$VAL" + newValId()
 
             if(!code.toString.endsWith(".`" + imv + "`;\n")) { // Which means already imported
-                code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+                code.append(s"val $valName: ${objName}.INSTANCE.type = ${objName}.INSTANCE;\n")
                 code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
             }
             // code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
