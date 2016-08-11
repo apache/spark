@@ -57,9 +57,6 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'
 #' Saves the MLlib model to the input path. For more information, see the specific
 #' MLlib model below.
-#' @param object a fitted ML model object.
-#' @param path the directory where the model is saved.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname write.ml
 #' @name write.ml
 #' @export
@@ -72,8 +69,6 @@ NULL
 #'
 #' Makes predictions from a MLlib model. For more information, see the specific
 #' MLlib model below.
-#' @param object a fitted ML model object.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname predict
 #' @name predict
 #' @export
@@ -148,15 +143,6 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' Generalized Linear Models (R-compliant)
 #'
 #' Fits a generalized linear model, similarly to R's glm().
-#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data SparkDataFrame for training.
-#' @param family a description of the error distribution and link function to be used in the model.
-#'               This can be a character string naming a family function, a family function or
-#'               the result of a call to a family function. Refer R family at
-#'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
-#' @param epsilon positive convergence tolerance of iterations.
-#' @param maxit integer giving the maximal number of IRLS iterations.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -620,7 +606,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @export
 #' @note summary(AFTSurvivalRegressionModel) since 2.0.0
 setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
-          function(object, ...) {
+          function(object) {
             jobj <- object@jobj
             features <- callJMethod(jobj, "rFeatures")
             coefficients <- callJMethod(jobj, "rCoefficients")

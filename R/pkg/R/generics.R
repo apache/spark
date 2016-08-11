@@ -410,6 +410,8 @@ setGeneric("cache", function(x) { standardGeneric("cache") })
 #' @export
 setGeneric("collect", function(x, ...) { standardGeneric("collect") })
 
+#' @param do.NULL currently not used.
+#' @param prefix currently not used.
 #' @rdname columns
 #' @export
 setGeneric("colnames", function(x, do.NULL = TRUE, prefix = "col") { standardGeneric("colnames") })
@@ -576,6 +578,8 @@ setGeneric("limit", function(x, num) {standardGeneric("limit") })
 #' @export
 setGeneric("merge")
 
+#' @param .data a SparkDataFrame.
+#' @param ... additional column argument(s) each in the form name = col.
 #' @rdname mutate
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
@@ -952,8 +956,8 @@ setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 #' @export
 setGeneric("decode", function(x, charset) { standardGeneric("decode") })
 
-#' @rdname dense_rank
-#' @export
+# @rdname dense_rank
+# @export
 setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
 
 #' @rdname encode
@@ -980,6 +984,8 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
+#' @param x a Column of unix timestamp.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname from_unixtime
 #' @export
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
@@ -1016,6 +1022,8 @@ setGeneric("isnan", function(x) { standardGeneric("isnan") })
 #' @export
 setGeneric("kurtosis", function(x) { standardGeneric("kurtosis") })
 
+#' @param x the column as a character string or a Column to compute on.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname lag
 #' @export
 setGeneric("lag", function(x, ...) { standardGeneric("lag") })
@@ -1046,6 +1054,9 @@ setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 #' @export
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
+#' @param substr a character string to be matched.
+#' @param str a Column where matches are sought for each entry.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname locate
 #' @export
 setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
@@ -1070,8 +1081,8 @@ setGeneric("md5", function(x) { standardGeneric("md5") })
 #' @export
 setGeneric("minute", function(x) { standardGeneric("minute") })
 
-#' @rdname monotonically_increasing_id
-#' @export
+# @rdname monotonically_increasing_id
+# @export
 setGeneric("monotonically_increasing_id",
            function(x) { standardGeneric("monotonically_increasing_id") })
 
@@ -1150,7 +1161,7 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 
 #' @rdname rint
 #' @export
-setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+setGeneric("rint", function(x) { standardGeneric("rint") })
 
 # @rdname row_number
 # @export
@@ -1164,6 +1175,8 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 
+#' @param x Column to compute on.
+#' @param na.rm currently not used.
 #' @rdname sd
 #' @export
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
@@ -1212,8 +1225,8 @@ setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array")
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
-#' @rdname spark_partition_id
-#' @export
+# @rdname spark_partition_id
+# @export
 setGeneric("spark_partition_id", function(x) { standardGeneric("spark_partition_id") })
 
 #' @rdname sd
@@ -1280,6 +1293,8 @@ setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timesta
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
+#' @param x a Column to compute on.
+#' @param y,na.rm,use currently not used.
 #' @rdname var
 #' @export
 setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
@@ -1300,6 +1315,8 @@ setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 #' @export
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
+#' @param x a time Column. Must be of TimestampType.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname window
 #' @export
 setGeneric("window", function(x, ...) { standardGeneric("window") })
@@ -1312,10 +1329,57 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
 
+#' @param formula a symbolic description of the model to be fitted. If \code{data} is a
+#'                SparkDataFrame, currently only a few formula operators are supported,
+#'                including '~', '.', ':', '+', and '-'.
+#' @param data a SparkDataFrame or (R glm) data.frame, list or environment for training.
+#' @param family a description of the error distribution and link function to be used in the model.
+#'               This can be a character string naming a family function, a family function or
+#'               the result of a call to a family function. Refer R family at
+#'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
+#' @param epsilon positive convergence tolerance of iterations.
+#' @param maxit integer giving the maximal number of IRLS iterations.
+#' @param weights an optional vector of 'prior weights' to be used in the fitting process.
+#'                Should be NULL or a numeric vector.
+#' @param subset an optional vector specifying a subset of observations to be used in the
+#'               fitting process.
+#' @param na.action a function which indicates what should happen when the data contain NAs.
+#'                  The default is set by the na.action setting of options, and is na.fail
+#'                  if that is unset. The 'factory-fresh' default is na.omit. Another possible
+#'                  value is NULL, no action. Value na.exclude can be useful.
+#' @param start starting values for the parameters in the linear predictor.
+#' @param etastart starting values for the linear predictor.
+#' @param mustart starting values for the vector of means.
+#' @param offset this can be used to specify an a priori known component to be included in
+#'               the linear predictor during fitting. This should be NULL or
+#'               a numeric vector of length equal to the number of cases. One or more offset
+#'               terms can be included in the formula instead or as well, and if more than
+#'               one is specified their sum is used. See model.offset.
+#' @param control a list of parameters for controlling the fitting process. For glm.fit
+#'                this is passed to glm.control.
+#' @param model a logical value indicating whether model frame should be included as
+#'              a component of the returned value.
+#' @param method the method to be used in fitting the model. The default method
+#'               "glm.fit" uses iteratively reweighted least squares (IWLS): the alternative
+#'               "model.frame" returns the model frame and does no fitting.
+#'               User-supplied fitting functions can be supplied either as a function or
+#'               a character string naming a function, with a function which takes the same
+#'               arguments as glm.fit. If specified as a character string it is looked up from
+#'               within the stats namespace.
+#' @param x,y logical values indicating whether the response vector and model matrix
+#'            used in the fitting process should be returned as components of the returned value.
+#' @param contrasts an optional list. See the contrasts.arg of model.matrix.default.
+#' @param ...	arguments to be used to form the default control argument if it is
+#'            not supplied directly.
 #' @rdname glm
+#' @details If \code{data} is a data.frame, list or environment, \code{glm} behaves the same as
+#'          \code{glm} in the \code{stats} package. If \code{data} is a SparkDataFrame,
+#'          \code{spark.glm} is called.
 #' @export
 setGeneric("glm")
 
+#' @param object a fitted ML model object.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname predict
 #' @export
 setGeneric("predict", function(object, ...) { standardGeneric("predict") })
@@ -1340,6 +1404,9 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula) { standardGeneric("spark.survreg") })
 
+#' @param object a fitted ML model object.
+#' @param path the directory where the model is saved.
+#' @param ... additional argument(s) passed to the method.
 #' @rdname write.ml
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })

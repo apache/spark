@@ -237,8 +237,8 @@ setMethod("between", signature(x = "Column"),
 #'
 #' @param x a Column object.
 #' @param dataType a character object describing the target data type.
-#'        See \href{
-#'        https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
+#'        See
+#'        \href{https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
 #'        Spark Data Types} for available data types.
 #' @rdname cast
 #' @name cast
@@ -261,10 +261,12 @@ setMethod("cast",
 
 #' Match a column with given values.
 #'
+#' @param x a Column.
+#' @param table a collection of values (coercible to list) to compare with.
 #' @rdname match
 #' @name %in%
 #' @aliases %in%,Column-method
-#' @return a matched values as a result of comparing with given values.
+#' @return A matched values as a result of comparing with given values.
 #' @export
 #' @examples
 #' \dontrun{
@@ -284,6 +286,9 @@ setMethod("%in%",
 #' If values in the specified column are null, returns the value.
 #' Can be used in conjunction with `when` to specify a default value for expressions.
 #'
+#' @param x a Column.
+#' @param value value to replace when the corresponding entry in \code{x} is NA.
+#'              Can be a single value or a Column.
 #' @rdname otherwise
 #' @name otherwise
 #' @family colum_func
