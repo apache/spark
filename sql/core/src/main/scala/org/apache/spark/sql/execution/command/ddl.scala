@@ -471,6 +471,7 @@ case class AlterTableRecoverPartitionsCommand(
     }
 
     val root = new Path(table.storage.locationUri.get)
+    logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
     // Dummy jobconf to get to the pathFilter defined in configuration
     // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
@@ -478,16 +479,21 @@ case class AlterTableRecoverPartitionsCommand(
     val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
     val partitionSpecsAndLocs = scanPartitions(
       spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase))
+    val total = partitionSpecsAndLocs.length
+    logInfo(s"Found $total partitions in $root")
+    var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches.
     partitionSpecsAndLocs.iterator.grouped(1024).foreach { batch =>
       val parts = batch.map { case (spec, location) =>
         // inherit table storage format (possibly except for location)
         CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
-      }
-      spark.sessionState.catalog.createPartitions(tableName,
-        parts.toArray[CatalogTablePartition], ignoreIfExists = true)
+      }.toArray[CatalogTablePartition]
+      spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
+      done += parts.length
+      logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
+    logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
   }
 
