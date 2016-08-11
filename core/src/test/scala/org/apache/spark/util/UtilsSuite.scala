@@ -894,10 +894,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     for {
       _ <- 0 until numTrials
       trial = Utils.randomizeInPlace(range.toArray, rand)
-    } for {
       i <- range
-      j = trial(i)
-    } results(i)(j) += 1L
+    } results(i)(trial(i)) += 1L
 
     val chi = new ChiSquareTest()
 
