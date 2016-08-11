@@ -74,26 +74,6 @@ class JacksonParser(
   }
 
   /**
-   * This function will be called afterward except the case for `StringType`. we
-   * throw an exception when it is failed unless the value is null.
-   */
-  private def failedConversion(
-      parser: JsonParser,
-      dataType: DataType): PartialFunction[JsonToken, Any] = {
-    case VALUE_STRING if parser.getTextLength < 1 =>
-      // If conversion is failed, this produces `null` rather than throwing exception.
-      // This will protect the mismatch of types.
-      null
-
-    case token =>
-      // We cannot parse this token based on the given data type. So, we throw a
-      // SparkSQLJsonProcessingException and this exception will be caught by
-      // `parse` method.
-      throw new SparkSQLJsonProcessingException(
-        s"Failed to parse a value for data type $dataType (current token: $token).")
-  }
-
-  /**
    * Create a converter which converts the JSON documents held by the `JsonParser`
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
@@ -316,6 +296,26 @@ class JacksonParser(
 
       case other => f.applyOrElse(other, failedConversion(parser, dataType))
     }
+  }
+
+  /**
+   * This function will be called afterward except the case for `StringType`. we
+   * throw an exception when it is failed unless the value is null.
+   */
+  private def failedConversion(
+                                parser: JsonParser,
+                                dataType: DataType): PartialFunction[JsonToken, Any] = {
+    case VALUE_STRING if parser.getTextLength < 1 =>
+      // If conversion is failed, this produces `null` rather than throwing exception.
+      // This will protect the mismatch of types.
+      null
+
+    case token =>
+      // We cannot parse this token based on the given data type. So, we throw a
+      // SparkSQLJsonProcessingException and this exception will be caught by
+      // `parse` method.
+      throw new SparkSQLJsonProcessingException(
+        s"Failed to parse a value for data type $dataType (current token: $token).")
   }
 
   /**
