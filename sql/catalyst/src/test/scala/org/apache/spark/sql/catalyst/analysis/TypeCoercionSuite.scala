@@ -283,6 +283,24 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal(1), StringType)
         :: Cast(Literal("a"), StringType)
         :: Nil))
+
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal.create(null, DecimalType(5, 3))
+        :: Literal(1)
+        :: Nil),
+      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(13, 3))
+        :: Literal(1).cast(DecimalType(13, 3))
+        :: Nil))
+
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal.create(null, DecimalType(5, 3))
+        :: Literal.create(null, DecimalType(22, 10))
+        :: Literal.create(null, DecimalType(38, 38))
+        :: Nil),
+      CreateArray(Literal.create(null, DecimalType(5, 3)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(22, 10)).cast(DecimalType(38, 38))
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
+        :: Nil))
   }
 
   test("CreateMap casts") {
@@ -298,6 +316,17 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal.create(2.0, FloatType), FloatType)
         :: Literal("b")
         :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal.create(null, DecimalType(5, 3))
+        :: Literal("a")
+        :: Literal.create(2.0, FloatType)
+        :: Literal("b")
+        :: Nil),
+      CreateMap(Literal.create(null, DecimalType(5, 3)).cast(DoubleType)
+        :: Literal("a")
+        :: Literal.create(2.0, FloatType).cast(DoubleType)
+        :: Literal("b")
+        :: Nil))
     // type coercion for map values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
@@ -309,6 +338,17 @@ class TypeCoercionSuite extends PlanTest {
         :: Cast(Literal("a"), StringType)
         :: Literal(2)
         :: Cast(Literal(3.0), StringType)
+        :: Nil))
+    ruleTest(TypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal(1)
+        :: Literal.create(null, DecimalType(38, 0))
+        :: Literal(2)
+        :: Literal.create(null, DecimalType(38, 38))
+        :: Nil),
+      CreateMap(Literal(1)
+        :: Literal.create(null, DecimalType(38, 0)).cast(DecimalType(38, 38))
+        :: Literal(2)
+        :: Literal.create(null, DecimalType(38, 38)).cast(DecimalType(38, 38))
         :: Nil))
     // type coercion for both map keys and values
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -343,6 +383,33 @@ class TypeCoercionSuite extends PlanTest {
         operator(Cast(Literal(1L), DecimalType(22, 0))
           :: Cast(Literal(1), DecimalType(22, 0))
           :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1.0)
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Literal(1)
+          :: Nil),
+        operator(Literal(1.0).cast(DoubleType)
+          :: Literal.create(null, DecimalType(10, 5)).cast(DoubleType)
+          :: Literal(1).cast(DoubleType)
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(null, DecimalType(15, 0))
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Literal(1)
+          :: Nil),
+        operator(Literal.create(null, DecimalType(15, 0)).cast(DecimalType(20, 5))
+          :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(20, 5))
+          :: Literal(1).cast(DecimalType(20, 5))
+          :: Nil))
+      ruleTest(TypeCoercion.FunctionArgumentConversion,
+        operator(Literal.create(2L, LongType)
+          :: Literal(1)
+          :: Literal.create(null, DecimalType(10, 5))
+          :: Nil),
+        operator(Literal.create(2L, LongType).cast(DecimalType(25, 5))
+          :: Literal(1).cast(DecimalType(25, 5))
+          :: Literal.create(null, DecimalType(10, 5)).cast(DecimalType(25, 5))
           :: Nil))
     }
   }

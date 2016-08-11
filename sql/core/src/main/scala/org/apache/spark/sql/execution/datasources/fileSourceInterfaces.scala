@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
-import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -30,6 +29,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
@@ -76,7 +76,7 @@ abstract class OutputWriterFactory extends Serializable {
    * through the [[OutputWriterFactory]] implementation.
    * @since 2.0.0
    */
-  private[sql] def newWriter(path: String): OutputWriter = {
+  def newWriter(path: String): OutputWriter = {
     throw new UnsupportedOperationException("newInstance with just path not supported")
   }
 }
@@ -263,7 +263,7 @@ trait FileFormat {
    * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
    * returns.
    */
-  private[sql] def buildReaderWithPartitionValues(
+  def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -357,7 +357,7 @@ trait FileCatalog {
 /**
  * Helper methods for gathering metadata from HDFS.
  */
-private[sql] object HadoopFsRelation extends Logging {
+object HadoopFsRelation extends Logging {
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
@@ -440,7 +440,8 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkSession: SparkSession): mutable.LinkedHashSet[FileStatus] = {
+      sparkSession: SparkSession,
+      ignoreFileNotFound: Boolean): mutable.LinkedHashSet[FileStatus] = {
     assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
@@ -461,9 +462,11 @@ private[sql] object HadoopFsRelation extends Logging {
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       paths.map(new Path(_)).flatMap { path =>
         val fs = path.getFileSystem(serializableConfiguration.value)
-        // TODO: We need to avoid of using Try at here.
-        Try(listLeafFiles(fs, fs.getFileStatus(path), pathFilter))
-          .getOrElse(Array.empty[FileStatus])
+        try {
+          listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
+        } catch {
+          case e: java.io.FileNotFoundException if ignoreFileNotFound => Array.empty[FileStatus]
+        }
       }
     }.map { status =>
       val blockLocations = status match {

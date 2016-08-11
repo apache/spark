@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
@@ -59,12 +59,11 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
   }
 
 }
+
 /**
- * :: Experimental ::
  * PCA trains a model to project vectors to a lower dimensional space of the top [[PCA!.k]]
  * principal components.
  */
-@Experimental
 @Since("1.5.0")
 class PCA @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
@@ -116,14 +115,12 @@ object PCA extends DefaultParamsReadable[PCA] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[PCA]]. Transforms vectors to a lower dimensional space.
  *
  * @param pc A principal components Matrix. Each column is one principal component.
  * @param explainedVariance A vector of proportions of variance explained by
  *                          each principal component.
  */
-@Experimental
 @Since("1.5.0")
 class PCAModel private[ml] (
     @Since("1.5.0") override val uid: String,
@@ -206,24 +203,22 @@ object PCAModel extends MLReadable[PCAModel] {
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
-      // explainedVariance field is not present in Spark <= 1.6
-      val versionRegex = "([0-9]+)\\.([0-9]+).*".r
-      val hasExplainedVariance = metadata.sparkVersion match {
-        case versionRegex(major, minor) =>
-          major.toInt >= 2 || (major.toInt == 1 && minor.toInt > 6)
-        case _ => false
-      }
+      val versionRegex = "([0-9]+)\\.(.+)".r
+      val versionRegex(major, _) = metadata.sparkVersion
 
       val dataPath = new Path(path, "data").toString
-      val model = if (hasExplainedVariance) {
+      val model = if (major.toInt >= 2) {
         val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
           sparkSession.read.parquet(dataPath)
             .select("pc", "explainedVariance")
             .head()
         new PCAModel(metadata.uid, pc, explainedVariance)
       } else {
-        val Row(pc: DenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
-        new PCAModel(metadata.uid, pc, Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
+        // pc field is the old matrix format in Spark <= 1.6
+        // explainedVariance field is not present in Spark <= 1.6
+        val Row(pc: OldDenseMatrix) = sparkSession.read.parquet(dataPath).select("pc").head()
+        new PCAModel(metadata.uid, pc.asML,
+          Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector])
       }
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

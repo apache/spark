@@ -410,6 +410,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * - UNION [DISTINCT]
    * - UNION ALL
    * - EXCEPT [DISTINCT]
+   * - MINUS [DISTINCT]
    * - INTERSECT [DISTINCT]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
@@ -428,6 +429,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.EXCEPT if all =>
         throw new ParseException("EXCEPT ALL is not supported.", ctx)
       case SqlBaseParser.EXCEPT =>
+        Except(left, right)
+      case SqlBaseParser.SETMINUS if all =>
+        throw new ParseException("MINUS ALL is not supported.", ctx)
+      case SqlBaseParser.SETMINUS =>
         Except(left, right)
     }
   }
@@ -1023,6 +1028,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a current timestamp/date expression. These are different from regular function because
+   * they do not require the user to specify braces when calling them.
+   */
+  override def visitTimeFunctionCall(ctx: TimeFunctionCallContext): Expression = withOrigin(ctx) {
+    ctx.name.getType match {
+      case SqlBaseParser.CURRENT_DATE =>
+        CurrentDate()
+      case SqlBaseParser.CURRENT_TIMESTAMP =>
+        CurrentTimestamp()
+    }
+  }
+
+  /**
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
@@ -1430,13 +1448,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
-
-    // Add the comment to the metadata.
-    val builder = new MetadataBuilder
-    if (STRING != null) {
-      builder.putString("comment", string(STRING))
-    }
-
-    StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
+    val structField = StructField(identifier.getText, typedVisit(dataType), nullable = true)
+    if (STRING == null) structField else structField.withComment(string(STRING))
   }
 }

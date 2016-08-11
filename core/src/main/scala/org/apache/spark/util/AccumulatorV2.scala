@@ -23,6 +23,8 @@ import java.util.ArrayList
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
 
@@ -131,7 +133,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def reset(): Unit
 
   /**
-   * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
+   * Takes the inputs and accumulates.
    */
   def add(v: IN): Unit
 
@@ -255,6 +257,16 @@ private[spark] object AccumulatorContext {
    */
   def clear(): Unit = {
     originals.clear()
+  }
+
+  /**
+   * Looks for a registered accumulator by accumulator name.
+   */
+  private[spark] def lookForAccumulatorByName(name: String): Option[AccumulatorV2[_, _]] = {
+    originals.values().asScala.find { ref =>
+      val acc = ref.get
+      acc != null && acc.name.isDefined && acc.name.get == name
+    }.map(_.get)
   }
 
   // Identifier for distinguishing SQL metrics from other accumulators

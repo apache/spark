@@ -152,8 +152,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress))
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress)),
+      None,
+      None,
+      sc.conf.getOption("spark.mesos.driver.frameworkId")
     )
+
+    unsetFrameworkID(sc)
     startScheduler(driver)
   }
 
@@ -220,9 +225,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
 
-    conf.getOption("spark.mesos.uris").map { uris =>
-      setupUris(uris, command)
-    }
+    conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
 
     command.build()
   }
@@ -244,7 +247,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       d: org.apache.mesos.SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     appId = frameworkId.getValue
     mesosExternalShuffleClient.foreach(_.init(appId))
-    logInfo("Registered as framework ID " + appId)
     markRegistered()
   }
 
@@ -409,8 +411,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .addAllResources(memResourcesToUse.asJava)
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
-            MesosSchedulerBackendUtil
-              .setupContainerBuilderDockerInfo(image, sc.conf, taskBuilder.getContainerBuilder)
+            MesosSchedulerBackendUtil.setupContainerBuilderDockerInfo(
+              image,
+              sc.conf,
+              taskBuilder.getContainerBuilder
+            )
           }
 
           tasks(offer.getId) ::= taskBuilder.build()
@@ -553,7 +558,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       taskId: String,
       reason: String): Unit = {
     stateLock.synchronized {
-      removeExecutor(taskId, SlaveLost(reason))
+      // Do not call removeExecutor() after this scheduler backend was stopped because
+      // removeExecutor() internally will send a message to the driver endpoint but
+      // the driver endpoint is not available now, otherwise an exception will be thrown.
+      if (!stopCalled) {
+        removeExecutor(taskId, SlaveLost(reason))
+      }
       slaves(slaveId).taskIDs.remove(taskId)
     }
   }

@@ -89,9 +89,11 @@ private object PostgresDialect extends JdbcDialect {
     //
     // See: https://jdbc.postgresql.org/documentation/head/query.html#query-with-cursor
     //
-    if (properties.getOrElse("fetchsize", "0").toInt > 0) {
+    if (properties.getOrElse(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "0").toInt > 0) {
       connection.setAutoCommit(false)
     }
 
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
 }

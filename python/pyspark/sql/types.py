@@ -486,8 +486,8 @@ class StructType(DataType):
                DataType object.
 
         >>> struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
-        >>> struct2 = StructType([StructField("f1", StringType(), True),\
-         StructField("f2", StringType(), True, None)])
+        >>> struct2 = StructType([StructField("f1", StringType(), True), \\
+        ...     StructField("f2", StringType(), True, None)])
         >>> struct1 == struct2
         True
         >>> struct1 = StructType().add(StructField("f1", StringType(), True))
@@ -648,10 +648,13 @@ class UserDefinedType(DataType):
         return cls._cached_sql_type
 
     def toInternal(self, obj):
-        return self._cachedSqlType().toInternal(self.serialize(obj))
+        if obj is not None:
+            return self._cachedSqlType().toInternal(self.serialize(obj))
 
     def fromInternal(self, obj):
-        return self.deserialize(self._cachedSqlType().fromInternal(obj))
+        v = self._cachedSqlType().fromInternal(obj)
+        if v is not None:
+            return self.deserialize(v)
 
     def serialize(self, obj):
         """
@@ -783,9 +786,10 @@ def _parse_struct_fields_string(s):
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
-    to `DataType.simpleString`, except that top level struct type can omit the `struct<>` and
-    atomic types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
-    ByteType. We can also use `int` as a short name for IntegerType.
+    to :class:`DataType.simpleString`, except that top level struct type can omit
+    the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
+    of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
+    for :class:`IntegerType`.
 
     >>> _parse_datatype_string("int ")
     IntegerType
