@@ -29,15 +29,9 @@ struct<1:tinyint>
 -- !query 3
 select 127Y, -128Y
 -- !query 3 schema
-struct<>
+struct<127:tinyint,-128:tinyint>
 -- !query 3 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Value out of range. Value:"128" Radix:10(line 1, pos 14)
-
-== SQL ==
-select 127Y, -128Y
---------------^^^
+127	-128
 
 
 -- !query 4
@@ -65,15 +59,9 @@ struct<1:smallint>
 -- !query 6
 select 32767S, -32768S
 -- !query 6 schema
-struct<>
+struct<32767:smallint,-32768:smallint>
 -- !query 6 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Value out of range. Value:"32768" Radix:10(line 1, pos 16)
-
-== SQL ==
-select 32767S, -32768S
-----------------^^^
+32767	-32768
 
 
 -- !query 7
@@ -101,15 +89,9 @@ struct<1:bigint,2147483648:bigint>
 -- !query 9
 select 9223372036854775807L, -9223372036854775808L
 -- !query 9 schema
-struct<>
+struct<9223372036854775807:bigint,-9223372036854775808:bigint>
 -- !query 9 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-For input string: "9223372036854775808"(line 1, pos 30)
-
-== SQL ==
-select 9223372036854775807L, -9223372036854775808L
-------------------------------^^^
+9223372036854775807	-9223372036854775808
 
 
 -- !query 10
@@ -129,7 +111,7 @@ select 9223372036854775808L
 -- !query 11
 select 1, -1
 -- !query 11 schema
-struct<1:int,(-1):int>
+struct<1:int,-1:int>
 -- !query 11 output
 1	-1
 
@@ -137,7 +119,7 @@ struct<1:int,(-1):int>
 -- !query 12
 select 2147483647, -2147483648
 -- !query 12 schema
-struct<2147483647:int,(-2147483648):bigint>
+struct<2147483647:int,-2147483648:int>
 -- !query 12 output
 2147483647	-2147483648
 
@@ -145,7 +127,7 @@ struct<2147483647:int,(-2147483648):bigint>
 -- !query 13
 select 9223372036854775807, -9223372036854775808
 -- !query 13 schema
-struct<9223372036854775807:bigint,(-9223372036854775808):decimal(19,0)>
+struct<9223372036854775807:bigint,-9223372036854775808:bigint>
 -- !query 13 output
 9223372036854775807	-9223372036854775808
 
@@ -153,7 +135,7 @@ struct<9223372036854775807:bigint,(-9223372036854775808):decimal(19,0)>
 -- !query 14
 select 9223372036854775808, -9223372036854775809
 -- !query 14 schema
-struct<9223372036854775808:decimal(19,0),(-9223372036854775809):decimal(19,0)>
+struct<9223372036854775808:decimal(19,0),-9223372036854775809:decimal(19,0)>
 -- !query 14 output
 9223372036854775808	-9223372036854775809
 
@@ -193,7 +175,7 @@ struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double
 -- !query 18
 select -1D, -1.2D, -1e10, -1.5e5, -.10D, -0.10D, -.1e5
 -- !query 18 schema
-struct<(-1.0):double,(-1.2):double,(-1.0E10):double,(-150000.0):double,(-0.1):double,(-0.1):double,(-10000.0):double>
+struct<-1.0:double,-1.2:double,-1.0E10:double,-150000.0:double,-0.1:double,-0.1:double,-10000.0:double>
 -- !query 18 output
 -1.0	-1.2	-1.0E10	-150000.0	-0.1	-0.1	-10000.0
 
@@ -215,7 +197,7 @@ select .e3
 -- !query 20
 select 1E309, -1E309
 -- !query 20 schema
-struct<Infinity:double,(-Infinity):double>
+struct<Infinity:double,-Infinity:double>
 -- !query 20 output
 Infinity	-Infinity
 
@@ -223,7 +205,7 @@ Infinity	-Infinity
 -- !query 21
 select 0.3, -0.8, .5, -.18, 0.1111, .1111
 -- !query 21 schema
-struct<0.3:decimal(1,1),(-0.8):decimal(1,1),0.5:decimal(1,1),(-0.18):decimal(2,2),0.1111:decimal(4,4),0.1111:decimal(4,4)>
+struct<0.3:decimal(1,1),-0.8:decimal(1,1),0.5:decimal(1,1),-0.18:decimal(2,2),0.1111:decimal(4,4),0.1111:decimal(4,4)>
 -- !query 21 output
 0.3	-0.8	0.5	-0.18	0.1111	0.1111
 

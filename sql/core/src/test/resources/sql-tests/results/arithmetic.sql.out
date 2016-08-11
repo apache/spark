@@ -5,7 +5,7 @@
 -- !query 0
 select -100
 -- !query 0 schema
-struct<(-100):int>
+struct<-100:int>
 -- !query 0 output
 -100
 
@@ -21,7 +21,7 @@ struct<230:int>
 -- !query 2
 select -5.2
 -- !query 2 schema
-struct<(-5.2):decimal(2,1)>
+struct<-5.2:decimal(2,1)>
 -- !query 2 output
 -5.2
 
@@ -61,7 +61,7 @@ struct<(-max(key)):int,max(key):int>
 -- !query 7
 select - (-10)
 -- !query 7 schema
-struct<(-(-10)):int>
+struct<(--10):int>
 -- !query 7 output
 10
 
@@ -85,7 +85,7 @@ struct<(-max(key)):int>
 -- !query 10
 select - - 3
 -- !query 10 schema
-struct<(-(-3)):int>
+struct<(--3):int>
 -- !query 10 output
 3
 
@@ -173,6 +173,6 @@ struct<(5 % 3):int>
 -- !query 21
 select pmod(-7, 3)
 -- !query 21 schema
-struct<pmod((-7), 3):int>
+struct<pmod(-7, 3):int>
 -- !query 21 output
 2
