@@ -146,16 +146,20 @@ public class SparkVectorizedOrcRecordReader
 
     @Override
     public boolean next(NullWritable key, VectorizedRowBatch value) throws IOException {
-      try {
-        reader.nextBatch(value);
-        if (value == null || value.endOfFile || value.size == 0) {
-          return false;
+      if (reader.hasNext()) {
+        try {
+          reader.nextBatch(value);
+          if (value == null || value.endOfFile || value.size == 0) {
+            return false;
+          }
+        } catch (Exception e) {
+          throw new RuntimeException(e);
         }
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+        progress = reader.getProgress();
+        return true;
+      } else {
+        return false;
       }
-      progress = reader.getProgress();
-      return true;
     }
 
     @Override

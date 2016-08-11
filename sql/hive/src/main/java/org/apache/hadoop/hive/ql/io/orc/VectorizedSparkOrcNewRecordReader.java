@@ -114,7 +114,7 @@ public class VectorizedSparkOrcNewRecordReader
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
-    if (indexOfRow == numRowsOfBatch && progress < 1.0f) {
+    if (indexOfRow == numRowsOfBatch) {
       if (reader.next(NullWritable.get(), internalValue)) {
         if (internalValue.endOfFile) {
           progress = 1.0f;
