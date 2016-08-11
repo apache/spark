@@ -45,8 +45,8 @@ private[hive] case class MetastoreRelation(
     tableName: String,
     partitionPruningPred: Seq[Expression] = Seq.empty)
     (val catalogTable: CatalogTable,
-     @transient private val client: HiveClient,
-     @transient private val sparkSession: SparkSession)
+     @transient val client: HiveClient,
+     @transient val sparkSession: SparkSession)
   extends LeafNode with MultiInstanceRelation with FileRelation with CatalogRelation {
 
   override def equals(other: Any): Boolean = other match {

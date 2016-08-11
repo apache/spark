@@ -52,7 +52,8 @@ case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with 
             predicate.references.subsetOf(partitionKeyIds)
         }
         if (pruningPredicates.nonEmpty) {
-          filter.withNewChildren(Seq(relation.copy(partitionPruningPred = pruningPredicates)()))
+          filter.withNewChildren(Seq(relation.copy(partitionPruningPred = pruningPredicates)(
+            relation.catalogTable, relation.client, relation.sparkSession)))
         } else {
           filter
         }
