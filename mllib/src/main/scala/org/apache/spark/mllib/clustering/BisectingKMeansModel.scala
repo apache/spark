@@ -23,7 +23,7 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
@@ -32,8 +32,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 
 /**
- * :: Experimental ::
- *
  * Clustering model produced by [[BisectingKMeans]].
  * The prediction is done level-by-level from the root node to a leaf node, and at each node among
  * its children the closest to the input point is selected.
@@ -41,7 +39,6 @@ import org.apache.spark.sql.{Row, SparkSession}
  * @param root the root node of the clustering tree
  */
 @Since("1.6.0")
-@Experimental
 class BisectingKMeansModel private[clustering] (
     private[clustering] val root: ClusteringTreeNode
   ) extends Serializable with Saveable with Logging {

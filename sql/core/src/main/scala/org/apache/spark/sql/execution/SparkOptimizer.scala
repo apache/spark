@@ -30,6 +30,7 @@ class SparkOptimizer(
   extends Optimizer(catalog, conf) {
 
   override def batches: Seq[Batch] = super.batches :+
+    Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog, conf)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }

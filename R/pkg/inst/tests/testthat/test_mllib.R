@@ -20,7 +20,7 @@ library(testthat)
 context("MLlib functions")
 
 # Tests for MLlib functions in SparkR
-sparkSession <- sparkR.session()
+sparkSession <- sparkR.session(enableHiveSupport = FALSE)
 
 test_that("formula of spark.glm", {
   training <- suppressWarnings(createDataFrame(iris))
@@ -111,6 +111,28 @@ test_that("spark.glm summary", {
   expect_true(all(
     rownames(stats$coefficients) ==
     c("(Intercept)", "Sepal_Length", "Sepal_Width")))
+  expect_equal(stats$dispersion, rStats$dispersion)
+  expect_equal(stats$null.deviance, rStats$null.deviance)
+  expect_equal(stats$deviance, rStats$deviance)
+  expect_equal(stats$df.null, rStats$df.null)
+  expect_equal(stats$df.residual, rStats$df.residual)
+  expect_equal(stats$aic, rStats$aic)
+
+  # Test spark.glm works with weighted dataset
+  a1 <- c(0, 1, 2, 3)
+  a2 <- c(5, 2, 1, 3)
+  w <- c(1, 2, 3, 4)
+  b <- c(1, 0, 1, 0)
+  data <- as.data.frame(cbind(a1, a2, w, b))
+  df <- suppressWarnings(createDataFrame(data))
+
+  stats <- summary(spark.glm(df, b ~ a1 + a2, family = "binomial", weightCol = "w"))
+  rStats <- summary(glm(b ~ a1 + a2, family = "binomial", data = data, weights = w))
+
+  coefs <- unlist(stats$coefficients)
+  rCoefs <- unlist(rStats$coefficients)
+  expect_true(all(abs(rCoefs - coefs) < 1e-3))
+  expect_true(all(rownames(stats$coefficients) == c("(Intercept)", "a1", "a2")))
   expect_equal(stats$dispersion, rStats$dispersion)
   expect_equal(stats$null.deviance, rStats$null.deviance)
   expect_equal(stats$deviance, rStats$deviance)
@@ -453,3 +475,5 @@ test_that("spark.survreg", {
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })
+
+sparkR.session.stop()

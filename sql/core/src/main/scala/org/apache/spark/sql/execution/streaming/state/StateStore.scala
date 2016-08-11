@@ -113,7 +113,7 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
  */
-private[sql] object StateStore extends Logging {
+object StateStore extends Logging {
 
   val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60

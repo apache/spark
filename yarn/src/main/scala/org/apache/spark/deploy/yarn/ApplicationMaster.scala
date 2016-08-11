@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
@@ -49,14 +50,6 @@ private[spark] class ApplicationMaster(
     args: ApplicationMasterArguments,
     client: YarnRMClient)
   extends Logging {
-
-  // Load the properties file with the Spark configuration and set entries as system properties,
-  // so that user code run inside the AM also has access to them.
-  if (args.propertiesFile != null) {
-    Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
-      sys.props(k) = v
-    }
-  }
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
@@ -120,7 +113,7 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+  private var credentialRenewer: AMCredentialRenewer = _
 
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in
@@ -243,10 +236,11 @@ private[spark] class ApplicationMaster(
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
-        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
+        credentialRenewer =
+          new ConfigurableCredentialManager(sparkConf, yarnConf).credentialRenewer()
+        credentialRenewer.scheduleLoginFromKeytab()
       }
 
       if (isClusterMode) {
@@ -313,7 +307,10 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
-        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
+        if (!inShutdown && credentialRenewer != null) {
+          credentialRenewer.stop()
+          credentialRenewer = null
+        }
       }
     }
   }
@@ -743,6 +740,15 @@ object ApplicationMaster extends Logging {
   def main(args: Array[String]): Unit = {
     SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
+
+    // Load the properties file with the Spark configuration and set entries as system properties,
+    // so that user code run inside the AM also has access to them.
+    // Note: we must do this before SparkHadoopUtil instantiated
+    if (amArgs.propertiesFile != null) {
+      Utils.getPropertiesFromFile(amArgs.propertiesFile).foreach { case (k, v) =>
+        sys.props(k) = v
+      }
+    }
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient)
       System.exit(master.run())

@@ -128,7 +128,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
-    withTempTable("t1", "t2") {
+    withTempView("t1", "t2") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
 
@@ -267,7 +267,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15832: Test embedded existential predicate sub-queries") {
-    withTempTable("t1", "t2", "t3", "t4", "t5") {
+    withTempView("t1", "t2", "t3", "t4", "t5") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
       Seq((1, 1), (2, 2), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t3")
@@ -571,4 +571,33 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
   }
+
+  test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from onerow t1
+            | where exists (select 1 from onerow t2 where t1.c1=t2.c1)
+            | and   exists (select 1 from onerow LIMIT 1)""".stripMargin),
+        Row(1) :: Nil)
+     }
+   }
+
+  test("SPARK-16804: Correlated subqueries containing LIMIT - 2") {
+    withTempView("onerow") {
+      Seq(1).toDF("c1").createOrReplaceTempView("onerow")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from onerow t1
+            | where exists (select 1
+            |               from   (select 1 from onerow t2 LIMIT 1)
+            |               where  t1.c1=t2.c1)""".stripMargin),
+        Row(1) :: Nil)
+     }
+   }
 }

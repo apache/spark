@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.CharArrayWriter
 
-import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
@@ -162,7 +161,7 @@ private[json] class JsonOutputWriter(
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
-  private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+  private[this] val gen = new JacksonGenerator(dataSchema, writer)
   private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
@@ -181,7 +180,7 @@ private[json] class JsonOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    JacksonGenerator(dataSchema, gen)(row)
+    gen.write(row)
     gen.flush()
 
     result.set(writer.toString)
