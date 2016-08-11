@@ -235,9 +235,8 @@ triplet view of a graph to render a collection of strings describing relationshi
 val graph: Graph[(String, String), String] // Constructed from above
 // Use the triplets view to create an RDD of facts.
 val facts: RDD[String] =
-  graph.triplets.map { triplet =>
-    triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  }
+  graph.triplets.map(triplet =>
+    triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1)
 facts.collect.foreach(println(_))
 {% endhighlight %}
 
