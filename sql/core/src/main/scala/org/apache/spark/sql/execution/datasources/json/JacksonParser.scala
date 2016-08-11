@@ -265,30 +265,16 @@ class JacksonParser(
   }
 
   /**
-   * This handles nulls ahead before trying to check the tokens, and applies the conversion
-   * function and then checks failed the conversion afterward if the `f` fails to convert
-   * the value.
-   *
-   * In more details, it checks `FIELD_NAME` if exists and then skip. If this is called after
-   * `START_OBJECT`, then, the next token can be `FIELD_NAME`. Since the names are kept in
-   * `JacksonParser.convertObject`, this `FIELD_NAME` token can be skipped as below. When this
-   * is called after `START_ARRAY`, the tokens are consecutive tokens for values without
-   * `FIELD_NAME` until `END_ARRAY`. In this case, we don't have to skip.
-   *
-   * For example, parsing ["a", "b", "c"] will produce the tokens as below:
-   *
-   *   [START_ARRAY, VALUE_STRING, VALUE_STRING, VALUE_STRING, END_ARRAY]
-   *
-   * Then, we check if the current token is null or not. Then, we apply `f` to convert
-   * the value and then we check failed conversion afterward if the `f` fails to convert the value.
+   * This method skips `FIELD_NAME`s at the beginning, and handles nulls ahead before trying
+   * to parse the JSON token using given function `f`. If the `f` failed to parse and convert the
+   * token, call `failedConversion` to handle the token.
    */
   private def parseJsonToken(
       parser: JsonParser,
       dataType: DataType)(f: PartialFunction[JsonToken, Any]): Any = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
-        // Here, probably we are parsing consecutive pairs of a field name and a value
-        // in a JSON object between `START_OBJECT` and `END_OBJECT` tokens.
+        // There are useless FIELD_NAMEs between START_OBJECT and END_OBJECT tokens
         parser.nextToken()
         parseJsonToken(parser, dataType)(f)
 
@@ -299,8 +285,8 @@ class JacksonParser(
   }
 
   /**
-   * This function will be called afterward except the case for `StringType`. we
-   * throw an exception when it is failed unless the value is null.
+   * This function throws an exception for failed conversion, but returns null for empty string,
+   * to guard the non string types.
    */
   private def failedConversion(
       parser: JsonParser,
