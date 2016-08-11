@@ -1449,8 +1449,10 @@ Apart from these, the following properties are also available, and may be useful
             the properties must be overwritten in the protocol-specific namespace.</p>
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
-            particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            only <code>fs</code> for file server.</p>
+            particular protocol denoted by <code>YYY</code>. Example values for <code>YYY</code>
+            include <code>fs</code>, <code>ui</code>, <code>standalone</code>, and
+            <code>historyServer</code>.  See <a href="security.html#ssl-configuration">SSL
+            Configuration</a> for details on hierarchical SSL configuration for services.</p>
         </td>
     </tr>
     <tr>
