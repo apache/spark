@@ -126,7 +126,7 @@ ssc.awaitTermination()  // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/NetworkWordCount.scala).
+[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/NetworkWordCount.scala).
 <br>
 
 </div>
@@ -216,7 +216,7 @@ jssc.awaitTermination();   // Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
+[JavaNetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaNetworkWordCount.java).
 <br>
 
 </div>
@@ -277,7 +277,7 @@ ssc.awaitTermination()  # Wait for the computation to terminate
 {% endhighlight %}
 
 The complete code can be found in the Spark Streaming example
-[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/network_wordcount.py).
+[NetworkWordCount]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/network_wordcount.py).
 <br>
 
 </div>
@@ -854,7 +854,7 @@ JavaPairDStream<String, Integer> runningCounts = pairs.updateStateByKey(updateFu
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Java code, take a look at the example
-[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming
+[JavaStatefulNetworkWordCount.java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming
 /JavaStatefulNetworkWordCount.java).
 
 </div>
@@ -877,7 +877,7 @@ runningCounts = pairs.updateStateByKey(updateFunction)
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Python code, take a look at the example
-[stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py).
+[stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/stateful_network_wordcount.py).
 
 </div>
 </div>
@@ -1428,7 +1428,7 @@ wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
@@ -1491,7 +1491,7 @@ wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() 
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
@@ -1526,7 +1526,7 @@ wordCounts.foreachRDD(echo)
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/recoverable_network_wordcount.py).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/recoverable_network_wordcount.py).
 
 </div>
 </div>
@@ -1564,7 +1564,7 @@ words.foreachRDD { rdd =>
 
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/SqlNetworkWordCount.scala).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/SqlNetworkWordCount.scala).
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
@@ -1619,7 +1619,7 @@ words.foreachRDD(
 );
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaSqlNetworkWordCount.java).
 </div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
@@ -1661,7 +1661,7 @@ def process(time, rdd):
 words.foreachRDD(process)
 {% endhighlight %}
 
-See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/sql_network_wordcount.py).
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/sql_network_wordcount.py).
 
 </div>
 </div>
