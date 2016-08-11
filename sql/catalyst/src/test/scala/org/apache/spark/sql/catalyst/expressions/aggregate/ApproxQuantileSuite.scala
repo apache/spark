@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.stat
+package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.stat.StatFunctions.QuantileSummaries
-
 
 class ApproxQuantileSuite extends SparkFunSuite {
 

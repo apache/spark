@@ -536,6 +536,167 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an array of approximate percentile values of a numeric column in
+   * the group.
+   *
+   * @param e numeric column to compute approximate percentile values on
+   * @param pc an array of double values representing the percentiles requested
+   * @param B approximation accuracy at the cost of memory. Higher values yield better
+   *          approximations; the default is 1,000
+   *
+   * @return returns the array of approximate percentile values
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(e: Column, pc: Seq[Double], B: Int): Column = withAggregateFunction {
+    new PercentileApprox(e.expr, CreateArray(pc.map(v => Literal(v))), Literal(B))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an array of approximate percentile values of a numeric column in
+   * the group.
+   *
+   * @param columnName numeric column to compute approximate percentile values on
+   * @param pc an array of double values representing the percentiles requested
+   * @param B approximation accuracy at the cost of memory. Higher values yield better
+   *          approximations; the default is 1,000
+   *
+   * @return returns the array of approximate percentile values
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(columnName: String, pc: Seq[Double], B: Int): Column = {
+    approxPercentile(Column(columnName), pc, B)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an array of approximate percentile values of a numeric column in
+   * the group.
+   *
+   * @param e numeric column to compute approximate percentile values on
+   * @param pc an array of double values representing the percentiles requested
+   *
+   * @return returns the array of approximate percentile values
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(e: Column, pc: Seq[Double]): Column = withAggregateFunction {
+    new PercentileApprox(e.expr, CreateArray(pc.map(v => Literal(v))))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an array of approximate percentile values of a numeric column in
+   * the group.
+   *
+   * @param columnName numeric column to compute approximate percentile values on
+   * @param pc an array of double values representing the percentiles requested
+   *
+   * @return returns the array of approximate percentile values
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(columnName: String, pc: Seq[Double]): Column = {
+    approxPercentile(Column(columnName), pc)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an approximate pth percentile value of a numeric column in the
+   * group.
+   *
+   * @param e numeric column to compute approximate percentile values on
+   * @param pc the percentile requested
+   * @param B approximation accuracy at the cost of memory. Higher values yield better
+   *          approximations; the default is 1,000
+   *
+   * @return returns the approximate pth percentile value
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(e: Column, pc: Double, B: Int): Column = withAggregateFunction {
+    new PercentileApprox(e.expr, Literal(pc), Literal(B))
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an approximate pth percentile value of a numeric column in the
+   * group.
+   *
+   * @param columnName numeric column to compute approximate percentile values on
+   * @param pc the percentile requested
+   * @param B approximation accuracy at the cost of memory. Higher values yield better
+   *          approximations; the default is 1,000
+   *
+   * @return returns the approximate pth percentile value
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(columnName: String, pc: Double, B: Int): Column = {
+    approxPercentile(Column(columnName), pc, B)
+  }
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an approximate pth percentile value of a numeric column in the
+   * group.
+   *
+   * @param e numeric column to compute approximate percentile values on
+   * @param pc the percentile requested
+   *
+   * @return returns the approximate pth percentile value
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(e: Column, pc: Double): Column = withAggregateFunction {
+    new PercentileApprox(e.expr, Literal(pc))
+  }
+
+
+  /**
+   * :: Experimental ::
+   *
+   * Aggregate function: returns an approximate pth percentile value of a numeric column in the
+   * group.
+   *
+   * @param columnName numeric column to compute approximate percentile values on
+   * @param pc the percentile requested
+   *
+   * @return returns the approximate pth percentile value
+   *
+   * @group agg_funcs
+   * @since 2.1.0
+   */
+  @Experimental
+  def approxPercentile(columnName: String, pc: Double): Column = {
+    approxPercentile(Column(columnName), pc)
+  }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
