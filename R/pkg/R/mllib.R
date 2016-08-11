@@ -68,7 +68,7 @@ setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"
 #' @name write.ml
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}
-#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.kmeans}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{read.ml}
 NULL
 
@@ -80,7 +80,7 @@ NULL
 #' @name predict
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}
-#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.kmeans}, \link{spark.mlp}, \link{spark.naiveBayes}, \link{spark.survreg}
 NULL
 
 #' Generalized Linear Models
@@ -427,26 +427,31 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' Only categorical data is supported.
+#' For more details, see
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html
+#' #multilayer-perceptron-classifier}{Multilayerperceptron classifier}.
 #'
 #' @param data A \code{SparkDataFrame} of observations and labels for model fitting
-#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param blockSize BlockSize parameter
-#' @param initialWeights InitialWeights parameter
 #' @param layers Layers parameter
-#' @param solver Solver parameter
+#' @param solver Solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs"
+#' @param maxIter Maximum iteration number
+#' @param tol Convergence tolerance of iterations
+#' @param stepSize StepSize parameter
+#' @param seed Seed parameter for weights initialization
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model
 #' @rdname spark.mlp
 #' @aliases spark.mlp,SparkDataFrame,formula-method
 #' @name spark.mlp
-#' @seealso \link{spark.mlp}
+#' @seealso \link{read.ml}
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(infert)
+#' df <- read.df("data/mllib/sample_multiclass_classification_data.txt", source = "libsvm")
 #'
 #' # fit a Multilayer Perceptron Classification Model
-#' model <- spark.mlp(df, education ~ ., layers = (4, 5, 4, 3), blockSize = 128, seed = 1234L, maxIter = 100)
+#' model <- spark.mlp(df, blockSize = 128, layers = c(4, 5, 4, 3), solver = "l-bfgs",
+#'                    maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
 #'
 #' # get the summary of the model
 #' summary(model)
@@ -575,7 +580,7 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
 #' @rdname spark.survreg
 #' @export
 #' @note write.ml(AFTSurvivalRegressionModel, character) since 2.0.0
-#' @seealso \link{read.ml}
+#' @seealso \link{write.ml}
 setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
