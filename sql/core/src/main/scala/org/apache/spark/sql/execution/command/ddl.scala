@@ -478,12 +478,16 @@ case class AlterTableRecoverPartitionsCommand(
     val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
     val partitionSpecsAndLocs = scanPartitions(
       spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase))
-    val parts = partitionSpecsAndLocs.map { case (spec, location) =>
-      // inherit table storage format (possibly except for location)
-      CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
+    // we should split them into smaller batches.
+    partitionSpecsAndLocs.iterator.grouped(1024).foreach { batch =>
+      val parts = batch.map { case (spec, location) =>
+        // inherit table storage format (possibly except for location)
+        CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
+      }
+      spark.sessionState.catalog.createPartitions(tableName,
+        parts.toArray[CatalogTablePartition], ignoreIfExists = true)
     }
-    spark.sessionState.catalog.createPartitions(tableName,
-      parts.toArray[CatalogTablePartition], ignoreIfExists = true)
     Seq.empty[Row]
   }
 
