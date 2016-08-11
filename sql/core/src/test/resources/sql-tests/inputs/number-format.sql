@@ -3,10 +3,13 @@
 -- parse as ints
 select 1, -1;
 
--- parse as longs
+-- parse as longs (Int.MaxValue + 1, and Int.MinValue - 1)
 select 2147483648, -2147483649;
 
--- parse as decimals
+-- parse long min and max value
+select 9223372036854775807, -9223372036854775808;
+
+-- parse as decimals (Long.MaxValue + 1, and Long.MinValue - 1)
 select 9223372036854775808, -9223372036854775809;
 
 -- various floating point (decimal) formats
