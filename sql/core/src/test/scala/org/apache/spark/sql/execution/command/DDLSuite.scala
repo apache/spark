@@ -677,7 +677,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("create temporary view using") {
-    val csvFile = Thread.currentThread().getContextClassLoader.getResource("cars.csv").toString()
+    val csvFile =
+      Thread.currentThread().getContextClassLoader.getResource("test-data/cars.csv").toString
     withView("testview") {
       sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1: String, c2: String)  USING " +
         "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
