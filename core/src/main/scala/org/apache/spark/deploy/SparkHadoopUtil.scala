@@ -107,6 +107,14 @@ class SparkHadoopUtil extends Logging {
         if (key.startsWith("spark.hadoop.")) {
           hadoopConf.set(key.substring("spark.hadoop.".length), value)
         }
+	// Copy any "fs.swift2d.foo=bar" properties into conf as "fs.swift2d.foo=bar"
+        else if (key.startsWith("fs.swift2d")){
+          hadoopConf.set(key, value)
+        }
+        // Copy any "fs.s3x.foo=bar" properties into conf as "fs.s3x.foo=bar"
+        else if (key.startsWith("fs.s3")){
+          hadoopConf.set(key, value)
+        }
       }
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
