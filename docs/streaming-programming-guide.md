@@ -863,7 +863,7 @@ Java code, take a look at the example
 {% highlight python %}
 def updateFunction(newValues, runningCount):
     if runningCount is None:
-       runningCount = 0
+        runningCount = 0
     return sum(newValues, runningCount)  # add the new values with the previous running count to get the new count
 {% endhighlight %}
 
@@ -903,10 +903,10 @@ spam information (maybe generated with Spark as well) and then filtering based o
 {% highlight scala %}
 val spamInfoRDD = ssc.sparkContext.newAPIHadoopRDD(...) // RDD containing spam information
 
-val cleanedDStream = wordCounts.transform(rdd => {
+val cleanedDStream = wordCounts.transform { rdd =>
   rdd.join(spamInfoRDD).filter(...) // join data stream with spam information to do data cleaning
   ...
-})
+}
 {% endhighlight %}
 
 </div>
@@ -1142,12 +1142,12 @@ val joinedStream = windowedStream.transform { rdd => rdd.join(dataset) }
 JavaPairRDD<String, String> dataset = ...
 JavaPairDStream<String, String> windowedStream = stream.window(Durations.seconds(20));
 JavaPairDStream<String, String> joinedStream = windowedStream.transform(
-    new Function<JavaRDD<Tuple2<String, String>>, JavaRDD<Tuple2<String, String>>>() {
-        @Override 
-        public JavaRDD<Tuple2<String, String>> call(JavaRDD<Tuple2<String, String>> rdd) {
-            return rdd.join(dataset);
-        }
+  new Function<JavaRDD<Tuple2<String, String>>, JavaRDD<Tuple2<String, String>>>() {
+    @Override
+    public JavaRDD<Tuple2<String, String>> call(JavaRDD<Tuple2<String, String>> rdd) {
+      return rdd.join(dataset);
     }
+  }
 );
 {% endhighlight %}
 </div>
@@ -1611,7 +1611,7 @@ words.foreachRDD(
 
       // Do word count on table using SQL and print it
       DataFrame wordCountsDataFrame =
-          spark.sql("select word, count(*) as total from words group by word");
+        spark.sql("select word, count(*) as total from words group by word");
       wordCountsDataFrame.show();
       return null;
     }
@@ -1759,11 +1759,11 @@ This behavior is made simple by using `StreamingContext.getOrCreate`. This is us
 {% highlight scala %}
 // Function to create and setup a new StreamingContext
 def functionToCreateContext(): StreamingContext = {
-    val ssc = new StreamingContext(...)   // new context
-    val lines = ssc.socketTextStream(...) // create DStreams
-    ...
-    ssc.checkpoint(checkpointDirectory)   // set checkpoint directory
-    ssc
+  val ssc = new StreamingContext(...)   // new context
+  val lines = ssc.socketTextStream(...) // create DStreams
+  ...
+  ssc.checkpoint(checkpointDirectory)   // set checkpoint directory
+  ssc
 }
 
 // Get StreamingContext from checkpoint data or create a new one

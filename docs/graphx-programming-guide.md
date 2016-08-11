@@ -235,8 +235,9 @@ triplet view of a graph to render a collection of strings describing relationshi
 val graph: Graph[(String, String), String] // Constructed from above
 // Use the triplets view to create an RDD of facts.
 val facts: RDD[String] =
-  graph.triplets.map(triplet =>
-    triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1)
+  graph.triplets.map { triplet =>
+    triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+  }
 facts.collect.foreach(println(_))
 {% endhighlight %}
 
@@ -421,15 +422,15 @@ val graph = Graph(users, relationships, defaultUser)
 // Notice that there is a user 0 (for which we have no information) connected to users
 // 4 (peter) and 5 (franklin).
 graph.triplets.map(
-    triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  ).collect.foreach(println(_))
+  triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+).collect.foreach(println(_))
 // Remove missing vertices as well as the edges to connected to them
 val validGraph = graph.subgraph(vpred = (id, attr) => attr._2 != "Missing")
 // The valid subgraph will disconnect users 4 and 5 by removing user 0
 validGraph.vertices.collect.foreach(println(_))
 validGraph.triplets.map(
-    triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
-  ).collect.foreach(println(_))
+  triplet => triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1
+).collect.foreach(println(_))
 {% endhighlight %}
 
 > Note in the above example only the vertex predicate is provided.  The `subgraph` operator defaults
