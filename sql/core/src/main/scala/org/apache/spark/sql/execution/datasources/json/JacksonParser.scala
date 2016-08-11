@@ -51,22 +51,6 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
-  private def failedConversion(
-      parser: JsonParser,
-      dataType: DataType): Any = parser.getCurrentToken match {
-    case VALUE_STRING if parser.getTextLength < 1 =>
-      // If conversion is failed, this produces `null` rather than
-      // rather than throw exception. This will protect the mismatch of types.
-      null
-
-    case token =>
-      // We cannot parse this token based on the given data type. So, we throw a
-      // SparkSQLJsonProcessingException and this exception will be caught by
-      // parseJson method.
-      throw new SparkSQLJsonProcessingException(
-        s"Failed to parse a value for data type $dataType (current token: $token).")
-  }
-
   private def failedRecord(record: String): Seq[InternalRow] = {
     // create a row even if no corrupt record column is present
     if (options.failFast) {
@@ -94,7 +78,7 @@ class JacksonParser(
     case st: StructType =>
       val elementConverter = makeConverter(st)
       val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => parser.getCurrentToken match {
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
         case START_OBJECT => convertObject(parser, st, fieldConverters)
           // SPARK-3308: support reading top level JSON arrays and take every element
           // in such an array as a row
@@ -110,19 +94,17 @@ class JacksonParser(
           // List([str_a_2,null], [null,str_b_3])
           //
         case START_ARRAY => convertArray(parser, elementConverter)
-        case _ => failedConversion(parser, st)
       }
 
     case ArrayType(st: StructType, _) =>
       val elementConverter = makeConverter(st)
       val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => parser.getCurrentToken match {
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
         // the business end of SPARK-3308:
         // when an object is found but an array is requested just wrap it in a list.
         // This is being wrapped in `JacksonParser.parse`.
         case START_OBJECT => convertObject(parser, st, fieldConverters)
         case START_ARRAY => convertArray(parser, elementConverter)
-        case _ => failedConversion(parser, st)
       }
 
     case _ => makeConverter(dataType)
@@ -134,185 +116,136 @@ class JacksonParser(
    */
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BooleanType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_TRUE => true
-          case VALUE_FALSE => false
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_TRUE => true
+        case VALUE_FALSE => false
       }
 
     case ByteType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_NUMBER_INT => parser.getByteValue
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getByteValue
       }
 
     case ShortType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_NUMBER_INT => parser.getShortValue
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getShortValue
       }
 
     case IntegerType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_NUMBER_INT => parser.getIntValue
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getIntValue
       }
 
     case LongType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_NUMBER_INT => parser.getLongValue
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_NUMBER_INT => parser.getLongValue
       }
 
     case FloatType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
-            parser.getFloatValue
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
+          parser.getFloatValue
 
-          case VALUE_STRING =>
-            // Special case handling for NaN and Infinity.
-            val value = parser.getText
-            val lowerCaseValue = value.toLowerCase
-            if (lowerCaseValue.equals("nan") ||
-              lowerCaseValue.equals("infinity") ||
-              lowerCaseValue.equals("-infinity") ||
-              lowerCaseValue.equals("inf") ||
-              lowerCaseValue.equals("-inf")) {
-              value.toFloat
-            } else {
-              throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
-            }
-
-          case _ => failedConversion(parser, dataType)
-        }
+        case VALUE_STRING =>
+          // Special case handling for NaN and Infinity.
+          val value = parser.getText
+          val lowerCaseValue = value.toLowerCase
+          if (lowerCaseValue.equals("nan") ||
+            lowerCaseValue.equals("infinity") ||
+            lowerCaseValue.equals("-infinity") ||
+            lowerCaseValue.equals("inf") ||
+            lowerCaseValue.equals("-inf")) {
+            value.toFloat
+          } else {
+            throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
+          }
       }
 
     case DoubleType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
-            parser.getDoubleValue
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT =>
+          parser.getDoubleValue
 
-          case VALUE_STRING =>
-            // Special case handling for NaN and Infinity.
-            val value = parser.getText
-            val lowerCaseValue = value.toLowerCase
-            if (lowerCaseValue.equals("nan") ||
-              lowerCaseValue.equals("infinity") ||
-              lowerCaseValue.equals("-infinity") ||
-              lowerCaseValue.equals("inf") ||
-              lowerCaseValue.equals("-inf")) {
-              value.toDouble
-            } else {
-              throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
-            }
-
-          case _ => failedConversion(parser, dataType)
-        }
+        case VALUE_STRING =>
+          // Special case handling for NaN and Infinity.
+          val value = parser.getText
+          val lowerCaseValue = value.toLowerCase
+          if (lowerCaseValue.equals("nan") ||
+            lowerCaseValue.equals("infinity") ||
+            lowerCaseValue.equals("-infinity") ||
+            lowerCaseValue.equals("inf") ||
+            lowerCaseValue.equals("-inf")) {
+            value.toDouble
+          } else {
+            throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
+          }
       }
 
     case StringType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_STRING =>
-            UTF8String.fromString(parser.getText)
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_STRING =>
+          UTF8String.fromString(parser.getText)
 
-          case _ =>
-            val writer = new ByteArrayOutputStream()
-            Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
-              generator => generator.copyCurrentStructure(parser)
-            }
-            UTF8String.fromBytes(writer.toByteArray)
-        }
+        case _ =>
+          val writer = new ByteArrayOutputStream()
+          Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
+            generator => generator.copyCurrentStructure(parser)
+          }
+          UTF8String.fromBytes(writer.toByteArray)
       }
 
     case TimestampType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_STRING =>
-            // This one will lose microseconds parts.
-            // See https://issues.apache.org/jira/browse/SPARK-10681.
-            DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_STRING =>
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
 
-          case VALUE_NUMBER_INT =>
-            parser.getLongValue * 1000000L
-
-          case _ => failedConversion(parser, dataType)
-        }
+        case VALUE_NUMBER_INT =>
+          parser.getLongValue * 1000000L
       }
 
     case DateType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_STRING =>
-            val stringValue = parser.getText
-            if (stringValue.contains("-")) {
-              // The format of this string will probably be "yyyy-mm-dd".
-              DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
-            } else {
-              // In Spark 1.5.0, we store the data as number of days since epoch in string.
-              // So, we just convert it to Int.
-              stringValue.toInt
-            }
-
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_STRING =>
+          val stringValue = parser.getText
+          if (stringValue.contains("-")) {
+            // The format of this string will probably be "yyyy-mm-dd".
+            DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(parser.getText).getTime)
+          } else {
+            // In Spark 1.5.0, we store the data as number of days since epoch in string.
+            // So, we just convert it to Int.
+            stringValue.toInt
+          }
       }
 
     case BinaryType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case VALUE_STRING => parser.getBinaryValue
-          case _ => failedConversion(parser, dataType)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case VALUE_STRING => parser.getBinaryValue
       }
 
     case dt: DecimalType =>
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
-            Decimal(parser.getDecimalValue, dt.precision, dt.scale)
-
-          case _ => failedConversion(parser, dt)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT) =>
+          Decimal(parser.getDecimalValue, dt.precision, dt.scale)
       }
 
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter)
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case START_OBJECT => convertObject(parser, st, fieldConverters)
-          case _ => failedConversion(parser, st)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case START_OBJECT => convertObject(parser, st, fieldConverters)
       }
 
     case at: ArrayType =>
       val elementConverter = makeConverter(at.elementType)
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case START_ARRAY => convertArray(parser, elementConverter)
-          case _ => failedConversion(parser, at)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case START_ARRAY => convertArray(parser, elementConverter)
       }
 
     case mt: MapType =>
       val valueConverter = makeConverter(mt.valueType)
-      (parser: JsonParser) => handleNullAndFieldTokens(parser) {
-        parser.getCurrentToken match {
-          case START_OBJECT => convertMap(parser, valueConverter)
-          case _ => failedConversion(parser, mt)
-        }
+      (parser: JsonParser) => parseJsonToken(parser, dataType) {
+        case START_OBJECT => convertMap(parser, valueConverter)
       }
 
     case udt: UserDefinedType[_] =>
@@ -320,28 +253,54 @@ class JacksonParser(
 
     case _ =>
       (parser: JsonParser) =>
-        failedConversion(parser, dataType)
+        parseJsonToken(parser, dataType) {
+          case token =>
+            throw new SparkSQLJsonProcessingException(
+              s"Failed to parse a value for data type $dataType (current token: $token).")
+        }
   }
 
   /**
-   * This handles nulls ahead before trying to check the tokens, and applies
-   * the conversion function. Also, it checks `FIELD_NAME` if exists and then skip.
-   * If this is called after `START_OBJECT`, then, the next token can be
-   * `FIELD_NAME`. Since the names are kept in `JacksonParser.convertObject`, this `FIELD_NAME`
-   * token can be skipped as below. When this is called after `START_ARRAY`, the tokens become
-   * ones about values until `END_ARRAY`. In this case, we don't have to skip.
+   * This handles nulls ahead before trying to check the tokens, and applies the conversion
+   * function and then checks failed the conversion afterward if it `f` fails to convert the value.
+   *
+   * In more details, it checks `FIELD_NAME` if exists and then skip. If this is called after
+   * `START_OBJECT`, then, the next token can be `FIELD_NAME`. Since the names are kept in
+   * `JacksonParser.convertObject`, this `FIELD_NAME` token can be skipped as below. When this
+   * is called after `START_ARRAY`, the tokens become ones about values until `END_ARRAY`.
+   * In this case, we don't have to skip.
+   *
+   * We check if the current token is null or not after that. Then, we apply `f` to convert
+   * the value and then we check failed conversion afterward if it `f` fails to convert the value.
    */
-  private def handleNullAndFieldTokens (parser: JsonParser)(f: => Any): Any = {
+  private def parseJsonToken(
+      parser: JsonParser,
+      dataType: DataType)(f: PartialFunction[JsonToken, Any]): Any = {
     parser.getCurrentToken match {
       case FIELD_NAME =>
-        parser.nextToken match {
-          // Before trying to convert it, here we check if the current value should be converted
-          // into null or not. This should be checked for all the data types.
-          case null | VALUE_NULL => null
-          case _ => f
-        }
+        parser.nextToken()
+        parseJsonToken(parser, dataType)(f)
+
       case null | VALUE_NULL => null
-      case _ => f
+
+      case other => f.orElse {
+        // We should specify the type of this `PartialFunction`. Otherwise this will
+        // throw a compilation error, "The argument types of an anonymous function
+        // must be fully known. (SLS 8.5)".
+        {
+          case VALUE_STRING if parser.getTextLength < 1 =>
+            // If conversion is failed, this produces `null` rather than
+            // rather than throw exception. This will protect the mismatch of types.
+            null
+
+          case token =>
+            // We cannot parse this token based on the given data type. So, we throw a
+            // SparkSQLJsonProcessingException and this exception will be caught by
+            // parseJson method.
+            throw new SparkSQLJsonProcessingException(
+              s"Failed to parse a value for data type $dataType (current token: $token).")
+        }: PartialFunction[JsonToken, Any]
+      }.apply(other)
     }
   }
 
