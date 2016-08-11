@@ -41,5 +41,12 @@ select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5;
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;
 
+-- super large decimal numbers
+select 1234567890123456789012345678901234567890;
+select 1234567890123456789012345678901234567890.0;
+
+-- super large scientific notation numbers should still be valid doubles
+select 123456789012345678901234567890123456789e10, 123456789012345678901234567890123456789.1e10;
+
 -- string
 select "Hello Peter!";
