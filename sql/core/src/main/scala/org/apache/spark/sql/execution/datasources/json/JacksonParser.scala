@@ -303,8 +303,8 @@ class JacksonParser(
    * throw an exception when it is failed unless the value is null.
    */
   private def failedConversion(
-                                parser: JsonParser,
-                                dataType: DataType): PartialFunction[JsonToken, Any] = {
+      parser: JsonParser,
+      dataType: DataType): PartialFunction[JsonToken, Any] = {
     case VALUE_STRING if parser.getTextLength < 1 =>
       // If conversion is failed, this produces `null` rather than throwing exception.
       // This will protect the mismatch of types.
