@@ -571,7 +571,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.enabled</code></td>
   <td>true</td>
   <td>
-    Whether to run web ui service inside spark application.
+    Whether to run the web UI for the Spark application.
   </td>
 </tr>
 <tr>
