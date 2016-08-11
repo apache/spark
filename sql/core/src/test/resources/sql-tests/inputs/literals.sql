@@ -6,17 +6,17 @@ select null;
 -- boolean
 select true, false;
 
--- byte
-select 1Y, 1 Y, 127 Y, -127 Y;
+-- byte (tinyint)
+select 1Y, 127Y, -127Y;
 select 128Y;
 
--- short
-select 1S, 1 S, 32767 S, -32767 S;
-select 32768 S;
+-- short (smallint)
+select 1S, 32767S, -32767S;
+select 32768S;
 
--- long
-select 1L, 1 L, 2147483648 L, 9223372036854775807 L;
-select 9223372036854775808 L;
+-- long (bigint)
+select 1L, 2147483648L, 9223372036854775807L;
+select 9223372036854775808L;
 
 -- integral parsing
 
@@ -36,7 +36,7 @@ select 9223372036854775807, -9223372036854775808;
 select 9223372036854775808, -9223372036854775809;
 
 -- double
-select 1D, 1 D, 1.2D, 1e10, 1.5e5, .10 D, 0.10 D, .1e5;
+select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5;
 
 -- decimal parsing
 select 0.3, -0.8, .5, -.18, 0.1111, .1111;

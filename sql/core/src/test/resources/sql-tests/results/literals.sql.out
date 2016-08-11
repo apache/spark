@@ -19,11 +19,11 @@ true	false
 
 
 -- !query 2
-select 1Y, 1 Y, 127 Y, -127 Y
+select 1Y, 127Y, -127Y
 -- !query 2 schema
-struct<1:tinyint,Y:int,Y:int,Y:int>
+struct<1:tinyint,127:tinyint,(-127):tinyint>
 -- !query 2 output
-1	1	127	-127
+1	127	-127
 
 
 -- !query 3
@@ -41,35 +41,47 @@ select 128Y
 
 
 -- !query 4
-select 1S, 1 S, 32767 S, -32767 S
+select 1S, 32767S, -32767S
 -- !query 4 schema
-struct<1:smallint,S:int,S:int,S:int>
+struct<1:smallint,32767:smallint,(-32767):smallint>
 -- !query 4 output
-1	1	32767	-32767
+1	32767	-32767
 
 
 -- !query 5
-select 32768 S
+select 32768S
 -- !query 5 schema
-struct<S:int>
+struct<>
 -- !query 5 output
-32768
+org.apache.spark.sql.catalyst.parser.ParseException
+
+Value out of range. Value:"32768" Radix:10(line 1, pos 7)
+
+== SQL ==
+select 32768S
+-------^^^
 
 
 -- !query 6
-select 1L, 1 L, 2147483648 L, 9223372036854775807 L
+select 1L, 2147483648L, 9223372036854775807L
 -- !query 6 schema
-struct<1:bigint,L:int,L:bigint,L:bigint>
+struct<1:bigint,2147483648:bigint,9223372036854775807:bigint>
 -- !query 6 output
-1	1	2147483648	9223372036854775807
+1	2147483648	9223372036854775807
 
 
 -- !query 7
-select 9223372036854775808 L
+select 9223372036854775808L
 -- !query 7 schema
-struct<L:decimal(19,0)>
+struct<>
 -- !query 7 output
-9223372036854775808
+org.apache.spark.sql.catalyst.parser.ParseException
+
+For input string: "9223372036854775808"(line 1, pos 7)
+
+== SQL ==
+select 9223372036854775808L
+-------^^^
 
 
 -- !query 8
@@ -113,11 +125,11 @@ struct<9223372036854775808:decimal(19,0),(-9223372036854775809):decimal(19,0)>
 
 
 -- !query 13
-select 1D, 1 D, 1.2D, 1e10, 1.5e5, .10 D, 0.10 D, .1e5
+select 1D, 1.2D, 1e10, 1.5e5, .10D, 0.10D, .1e5
 -- !query 13 schema
-struct<1.0:double,D:int,1.2:double,1.0E10:double,150000.0:double,D:decimal(2,2),D:decimal(2,2),10000.0:double>
+struct<1.0:double,1.2:double,1.0E10:double,150000.0:double,0.1:double,0.1:double,10000.0:double>
 -- !query 13 output
-1.0	1	1.2	1.0E10	150000.0	0.1	0.1	10000.0
+1.0	1.2	1.0E10	150000.0	0.1	0.1	10000.0
 
 
 -- !query 14
