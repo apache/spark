@@ -82,7 +82,7 @@ select tImEstAmp '2016-03-11 20:54:00.000';
 -- invalid timestamp
 select timestamp '2016-33-11 20:54:00.000';
 
--- internal
+-- interval
 select interval 13.123456789 seconds, interval -13.123456789 second;
 select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond, 9 microsecond;
 -- ns is not supported
