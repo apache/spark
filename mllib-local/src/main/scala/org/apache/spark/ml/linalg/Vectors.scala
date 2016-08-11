@@ -208,11 +208,7 @@ object Vectors {
    */
   @Since("2.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-
-
     val (indices, values) = elements.sortBy(_._1).unzip
-
-
     new SparseVector(size, indices.toArray, values.toArray)
   }
 
@@ -563,16 +559,15 @@ class SparseVector @Since("2.0.0") (
     require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
       s"which exceeds the specified vector size ${size}.")
 
-    var prev = -1
     if (indices.nonEmpty) {
       require(indices(0) >= 0, s"Found negative index: ${indices(0)}.")
     }
+    var prev = -1
     indices.foreach { i =>
-      require(prev < i, s"Found duplicate index: $i.")
+      require(prev < i, s"Index $i follows $prev and is not strictly increasing")
       prev = i
     }
-    require(prev < size, s"You may not write an element to index $prev because the declared " +
-      s"size of your vector is $size")
+    require(prev < size, s"Index $prev out of bounds for vector of size $size")
   }
 
   override def toString: String =
