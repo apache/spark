@@ -2100,6 +2100,11 @@ object CleanupAliases extends Rule[LogicalPlan] {
         projectList.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
       Project(cleanedProjectList, child)
 
+    case Scanner(projectList, filters, child) =>
+      val cleanedProjectList =
+        projectList.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      Scanner(cleanedProjectList, filters, child)
+
     case Aggregate(grouping, aggs, child) =>
       val cleanedAggs = aggs.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
       Aggregate(grouping.map(trimAliases), cleanedAggs, child)

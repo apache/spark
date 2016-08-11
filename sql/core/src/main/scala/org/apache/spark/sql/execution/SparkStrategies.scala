@@ -412,8 +412,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case BroadcastHint(child) => planLater(child) :: Nil
       case Scanner(projectList, filters, child) =>
         if (filters != Nil) {
-          val condition = filters.reduceLeft(expressions.And)
+          val condition = filters.reduceLeft(And)
           planLater(Project(projectList, Filter(condition, child))) :: Nil
+        } else if (projectList.equals(child.output)) {
+          planLater(child) :: Nil
         } else {
           planLater(Project(projectList, child)) :: Nil
         }
