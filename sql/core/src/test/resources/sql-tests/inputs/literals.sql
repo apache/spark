@@ -66,7 +66,7 @@ select 'hello' 'world', 'hello' " " 'lee';
 -- single quote within double quotes
 select "hello 'peter'";
 select 'pattern%', 'no-pattern\%', 'pattern\\%', 'pattern\\\%';
-select '\0', '\'', '"', '\n', '\r', '\t', 'Z';
+select '\'', '"', '\n', '\r', '\t', 'Z';
 -- "Hello!" in octals
 select '\110\145\154\154\157\041';
 -- "World :)" in unicode
