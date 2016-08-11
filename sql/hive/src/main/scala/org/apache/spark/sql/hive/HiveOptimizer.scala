@@ -52,9 +52,10 @@ case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with 
             predicate.references.subsetOf(partitionKeyIds)
         }
         if (pruningPredicates.nonEmpty) {
-          relation.partitionPruningPred = pruningPredicates
+          filter.withNewChildren(Seq(relation.copy(partitionPruningPred = pruningPredicates)()))
+        } else {
+          filter
         }
-        filter
     }
   }
 }

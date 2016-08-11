@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.BooleanType
 private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
-    var partitionPruningPred: Seq[Expression] = Seq.empty[Expression])
+    partitionPruningPred: Seq[Expression] = Seq.empty)
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
      @transient private val sparkSession: SparkSession)
