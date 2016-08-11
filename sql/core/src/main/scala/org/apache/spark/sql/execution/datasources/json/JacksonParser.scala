@@ -288,7 +288,7 @@ class JacksonParser(
     parser.getCurrentToken match {
       case FIELD_NAME =>
         // Here, probably we are parsing consecutive pairs of a field name and a value
-        // in a JSON document between `START_OBJECT` and `END_OBJECT` tokens.
+        // in a JSON object between `START_OBJECT` and `END_OBJECT` tokens.
         parser.nextToken()
         parseJsonToken(parser, dataType)(f)
 
