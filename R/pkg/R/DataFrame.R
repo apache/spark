@@ -177,9 +177,10 @@ setMethod("isLocal",
 #' Print the first numRows rows of a SparkDataFrame
 #'
 #' @param numRows the number of rows to print. Defaults to 20.
-#' @param truncate whether truncate long strings. If \code{TRUE}, strings more than 20 characters will be
-#'    truncated. However, if set greater than zero, truncates strings longer than `truncate`
-#'    characters and all cells will be aligned right.
+#' @param truncate whether truncate long strings. If \code{TRUE}, strings more than
+#'                 20 characters will be truncated. However, if set greater than zero,
+#'                 truncates strings longer than `truncate` characters and all cells
+#'                 will be aligned right.
 #' @family SparkDataFrame functions
 #' @aliases showDF,SparkDataFrame-method
 #' @rdname showDF
@@ -255,11 +256,11 @@ setMethod("dtypes",
             })
           })
 
-#' Column names
+#' Column Names of SparkDataFrame
 #'
-#' Return all column names as a list
+#' Return all column names as a list.
 #'
-#' @param x A SparkDataFrame
+#' @param x a SparkDataFrame.
 #'
 #' @family SparkDataFrame functions
 #' @rdname columns
@@ -316,7 +317,8 @@ setMethod("colnames",
             columns(x)
           })
 
-#' @param value a character vector. Must have the same length as the number of columns in the SparkDataFrame.
+#' @param value a character vector. Must have the same length as the number
+#'              of columns in the SparkDataFrame.
 #' @rdname columns
 #' @aliases colnames<-,SparkDataFrame-method
 #' @name colnames<-
@@ -508,8 +510,6 @@ setMethod("registerTempTable",
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
 #'
-#' @param x a SparkDataFrame.
-#' @param tableName a character vector containing the name of the table.
 #' @param overwrite a logical argument indicating whether or not to overwrite.
 #' the existing rows in the table.
 #'
@@ -1200,6 +1200,7 @@ setMethod("toRDD",
 #' Groups the SparkDataFrame using the specified columns, so we can run aggregation on them.
 #'
 #' @param x a SparkDataFrame
+#' @param ... variable(s) (character names(s) or Column(s)) to group on.
 #' @return a GroupedData
 #' @family SparkDataFrame functions
 #' @aliases groupBy,SparkDataFrame-method
@@ -1631,6 +1632,7 @@ getColumn <- function(x, c) {
   column(callJMethod(x@sdf, "col", c))
 }
 
+#' @param name name of a Column (without being wrapped by \code{""}).
 #' @rdname select
 #' @name $
 #' @aliases $,SparkDataFrame-method
@@ -1640,6 +1642,7 @@ setMethod("$", signature(x = "SparkDataFrame"),
             getColumn(x, name)
           })
 
+#' @param value a Column or NULL. If NULL, the specified Column is dropped.
 #' @rdname select
 #' @name $<-
 #' @aliases $<-,SparkDataFrame-method
@@ -1714,12 +1717,13 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' Subset
 #'
 #' Return subsets of SparkDataFrame according to given conditions
-#' @param x A SparkDataFrame
-#' @param subset (Optional) A logical expression to filter on rows
-#' @param select expression for the single Column or a list of columns to select from the SparkDataFrame
+#' @param x a SparkDataFrame.
+#' @param i,subset (Optional) a logical expression to filter on rows.
+#' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
-#' Otherwise, a SparkDataFrame will always be returned.
-#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns
+#'             Otherwise, a SparkDataFrame will always be returned.
+#' @param ... currently not used.
+#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
@@ -1754,9 +1758,12 @@ setMethod("subset", signature(x = "SparkDataFrame"),
 #' Select
 #'
 #' Selects a set of columns with names or Column expressions.
-#' @param x A SparkDataFrame
-#' @param col A list of columns or single Column or name
-#' @return A new SparkDataFrame with selected columns
+#' @param x a SparkDataFrame.
+#' @param col a list of columns or single Column or name.
+#' @param ... additional column(s) if only one column is specified in \code{col}.
+#'            If more than one column is assigned in \code{col}, \code{...}
+#'            should be left empty.
+#' @return A new SparkDataFrame with selected columns.
 #' @export
 #' @family SparkDataFrame functions
 #' @rdname select
@@ -1853,9 +1860,9 @@ setMethod("selectExpr",
 #' Return a new SparkDataFrame by adding a column or replacing the existing column
 #' that has the same name.
 #'
-#' @param x A SparkDataFrame
-#' @param colName A column name.
-#' @param col A Column expression.
+#' @param x a SparkDataFrame.
+#' @param colName a column name.
+#' @param col a Column expression.
 #' @return A SparkDataFrame with the new column added or the existing column replaced.
 #' @family SparkDataFrame functions
 #' @aliases withColumn,SparkDataFrame,character,Column-method
@@ -1884,8 +1891,6 @@ setMethod("withColumn",
 #'
 #' Return a new SparkDataFrame with the specified columns added or replaced.
 #'
-#' @param .data A SparkDataFrame
-#' @param col a named argument of the form name = col
 #' @return A new SparkDataFrame with the new columns added or replaced.
 #' @family SparkDataFrame functions
 #' @aliases mutate,SparkDataFrame-method
@@ -1962,6 +1967,7 @@ setMethod("mutate",
             do.call(select, c(x, colList, deDupCols))
           })
 
+#' @param _data a SparkDataFrame.
 #' @export
 #' @rdname mutate
 #' @aliases transform,SparkDataFrame-method
@@ -2274,11 +2280,18 @@ setMethod("join",
 #'   specified, the common column names in \code{x} and \code{y} will be used.
 #' @param by.x a character vector specifying the joining columns for x.
 #' @param by.y a character vector specifying the joining columns for y.
+#' @param all a boolean value setting \code{all.x} and \code{all.y}
+#'            if any of them are unset.
 #' @param all.x a boolean value indicating whether all the rows in x should
 #'              be including in the join
 #' @param all.y a boolean value indicating whether all the rows in y should
 #'              be including in the join
 #' @param sort a logical argument indicating whether the resulting columns should be sorted
+#' @param suffixes a string vector of length 2 used to make colnames of
+#'                 \code{x} and \code{y} unique.
+#'                 The first element is appended to each colname of \code{x}.
+#'                 The second element is appended to each colname of \code{y}.
+#' @param ... additional argument(s) passed to the method.
 #' @details  If all.x and all.y are set to FALSE, a natural join will be returned. If
 #'   all.x is set to TRUE and all.y is set to FALSE, a left outer join will
 #'   be returned. If all.x is set to FALSE and all.y is set to TRUE, a right
@@ -2307,7 +2320,7 @@ setMethod("merge",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
                    all = FALSE, all.x = all, all.y = all,
-                   sort = TRUE, suffixes = c("_x", "_y"), ... ) {
+                   sort = TRUE, suffixes = c("_x", "_y"), ...) {
 
             if (length(suffixes) != 2) {
               stop("suffixes must have length 2")
@@ -2462,6 +2475,7 @@ setMethod("unionAll",
 #'
 #' @param x a SparkDataFrame.
 #' @param ... additional SparkDataFrame(s).
+#' @param deparse.level dummy variable, currently not used.
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
 #' @aliases rbind,SparkDataFrame-method

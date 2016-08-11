@@ -23,6 +23,7 @@ NULL
 #' A new \linkS4class{Column} is created to represent the literal value.
 #' If the parameter is a \linkS4class{Column}, it is returned unchanged.
 #'
+#' @param x a literal value or a Column.
 #' @family normal_funcs
 #' @rdname lit
 #' @name lit
@@ -485,6 +486,7 @@ setMethod("crc32",
 #' Calculates the hash code of given columns, and returns the result as a int column.
 #'
 #' @param x Column to compute on.
+#' @param ... additional Column(s) to be included.
 #'
 #' @rdname hash
 #' @name hash
@@ -1314,8 +1316,6 @@ setMethod("rtrim",
 #'
 #' Aggregate function: alias for \link{stddev_samp}
 #'
-#' @param x Column to compute on.
-#'
 #' @rdname sd
 #' @name sd
 #' @family agg_funcs
@@ -1827,8 +1827,6 @@ setMethod("upper",
 #' var
 #'
 #' Aggregate function: alias for \link{var_samp}.
-#'
-#' @param x Column to compute on.
 #'
 #' @rdname var
 #' @name var
@@ -2672,6 +2670,9 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' representing the timestamp of that moment in the current system time zone in the given
 #' format.
 #'
+#' @param format the target format. See
+#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#'               Customizing Formats} for available options.
 #' @family datetime_funcs
 #' @rdname from_unixtime
 #' @name from_unixtime
@@ -2698,19 +2699,19 @@ setMethod("from_unixtime", signature(x = "Column"),
 #' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
 #' the order of months are not supported.
 #'
-#' The time column must be of TimestampType.
-#'
-#' Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
-#' interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
-#' If the `slideDuration` is not provided, the windows will be tumbling windows.
-#'
-#' The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
-#' window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
-#' past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
-#'
-#' The output column will be a struct called 'window' by default with the nested columns 'start'
-#' and 'end'.
-#'
+#' @param windowDuration a string specifying the width of the window, e.g. '1 second',
+#'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
+#'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+#' @param slideDuration a string specifying the sliding interval of the window. Same format as
+#'                      \code{windowDuration}. A new window will be generated every
+#'                      \code{slideDuration}. Must be less than or equal to
+#'                      the \code{windowDuration}.
+#' @param startTime the offset with respect to 1970-01-01 00:00:00 UTC with which to start
+#'                  window intervals. For example, in order to have hourly tumbling windows
+#'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
+#'                  \code{startTime} as \code{"15 minutes"}.
+#' @return An output column of struct called 'window' by default with the nested columns 'start'
+#'         and 'end'.
 #' @family datetime_funcs
 #' @rdname window
 #' @name window
@@ -2762,6 +2763,7 @@ setMethod("window", signature(x = "Column"),
 #' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
 #' could not be found in str.
 #'
+#' @param pos start position of search.
 #' @family string_funcs
 #' @rdname locate
 #' @aliases locate,character,Column-method
@@ -2781,6 +2783,9 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #'
 #' Left-pad the string column with
 #'
+#' @param x the string Column to be left-padded.
+#' @param len maximum length of each output result.
+#' @param pad a character string to be padded with.
 #' @family string_funcs
 #' @rdname lpad
 #' @aliases lpad,Column,numeric,character-method
@@ -2858,6 +2863,9 @@ setMethod("randn", signature(seed = "numeric"),
 #'
 #' Extract a specific(idx) group identified by a java regex, from the specified string column.
 #'
+#' @param x a string Column.
+#' @param pattern a regular expression.
+#' @param idx a group index.
 #' @family string_funcs
 #' @rdname regexp_extract
 #' @name regexp_extract
@@ -2878,6 +2886,9 @@ setMethod("regexp_extract",
 #'
 #' Replace all substrings of the specified string value that match regexp with rep.
 #'
+#' @param x a string Column.
+#' @param pattern a regular expression.
+#' @param replacement a character string that a matched \code{pattern} is replaced with.
 #' @family string_funcs
 #' @rdname regexp_replace
 #' @name regexp_replace
@@ -2898,6 +2909,9 @@ setMethod("regexp_replace",
 #'
 #' Right-padded with pad to a length of len.
 #'
+#' @param x the string Column to be right-padded.
+#' @param len maximum length of each output result.
+#' @param pad a character string to be padded with.
 #' @family string_funcs
 #' @rdname rpad
 #' @name rpad
@@ -2920,6 +2934,11 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' returned. If count is negative, every to the right of the final delimiter (counting from the
 #' right) is returned. substring_index performs a case-sensitive match when searching for delim.
 #'
+#' @param x a Column.
+#' @param delim a delimiter string.
+#' @param count number of occurrences of \code{delim} before the substring is returned.
+#'              A positive number means counting from the left, while negative means
+#'              counting from the right.
 #' @family string_funcs
 #' @rdname substring_index
 #' @aliases substring_index,Column,character,numeric-method
@@ -2947,6 +2966,11 @@ setMethod("substring_index",
 #' The translate will happen when any character in the string matching with the character
 #' in the matchingString.
 #'
+#' @param x a string Column.
+#' @param matchingString a source string where each character will be translated.
+#' @param replaceString a target string where each \code{matchingString} character will
+#'                      be replaced by the character in \code{replaceString}
+#'                      at the same location, if any.
 #' @family string_funcs
 #' @rdname translate
 #' @name translate
@@ -2995,6 +3019,10 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
             column(jc)
           })
 
+#' @param x a Column of date, in string, date or timestamp type.
+#' @param format the target format. See
+#'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#'               Customizing Formats} for available options.
 #' @rdname unix_timestamp
 #' @name unix_timestamp
 #' @aliases unix_timestamp,Column,character-method
@@ -3122,6 +3150,9 @@ setMethod("dense_rank",
 #'
 #' This is equivalent to the LAG function in SQL.
 #'
+#' @param offset the number of rows back from the current row from which to obtain a value.
+#'               If not specified, the default is 1.
+#' @param defaultValue default to use when the offset row does not exist.
 #' @rdname lag
 #' @name lag
 #' @aliases lag,characterOrColumn-method
