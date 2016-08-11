@@ -51,6 +51,10 @@ class JacksonParser(
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
 
+  /**
+   * This function deals with the cases it fails to parse. This function will be called
+   * when exceptions are caught during converting. This functions also deals with `mode` option.
+   */
   private def failedRecord(record: String): Seq[InternalRow] = {
     // create a row even if no corrupt record column is present
     if (options.failFast) {
@@ -67,6 +71,26 @@ class JacksonParser(
       }
       Seq(row)
     }
+  }
+
+  /**
+   * This function will be called afterward except the case for `StringType`. we
+   * throw an exception when it is failed unless the value is null.
+   */
+  private def failedConversion(
+      parser: JsonParser,
+      dataType: DataType): PartialFunction[JsonToken, Any] = {
+    case VALUE_STRING if parser.getTextLength < 1 =>
+      // If conversion is failed, this produces `null` rather than
+      // rather than throw exception. This will protect the mismatch of types.
+      null
+
+    case token =>
+      // We cannot parse this token based on the given data type. So, we throw a
+      // SparkSQLJsonProcessingException and this exception will be caught by
+      // `parse` method.
+      throw new SparkSQLJsonProcessingException(
+        s"Failed to parse a value for data type $dataType (current token: $token).")
   }
 
   /**
@@ -187,6 +211,7 @@ class JacksonParser(
           UTF8String.fromString(parser.getText)
 
         case _ =>
+          // Note that it always tries to convert the data as string without the case of failure.
           val writer = new ByteArrayOutputStream()
           Utils.tryWithResource(factory.createGenerator(writer, JsonEncoding.UTF8)) {
             generator => generator.copyCurrentStructure(parser)
@@ -253,11 +278,10 @@ class JacksonParser(
 
     case _ =>
       (parser: JsonParser) =>
-        parseJsonToken(parser, dataType) {
-          case token =>
-            throw new SparkSQLJsonProcessingException(
-              s"Failed to parse a value for data type $dataType (current token: $token).")
-        }
+        // Here, we pass empty `PartialFunction` so that this case can be
+        // handled as a failed conversion. It will throw an exception as
+        // long as the value is not null.
+        parseJsonToken(parser, dataType)(PartialFunction.empty[JsonToken, Any])
   }
 
   /**
@@ -283,24 +307,7 @@ class JacksonParser(
 
       case null | VALUE_NULL => null
 
-      case other => f.orElse {
-        // We should specify the type of this `PartialFunction`. Otherwise this will
-        // throw a compilation error, "The argument types of an anonymous function
-        // must be fully known. (SLS 8.5)".
-        {
-          case VALUE_STRING if parser.getTextLength < 1 =>
-            // If conversion is failed, this produces `null` rather than
-            // rather than throw exception. This will protect the mismatch of types.
-            null
-
-          case token =>
-            // We cannot parse this token based on the given data type. So, we throw a
-            // SparkSQLJsonProcessingException and this exception will be caught by
-            // parseJson method.
-            throw new SparkSQLJsonProcessingException(
-              s"Failed to parse a value for data type $dataType (current token: $token).")
-        }: PartialFunction[JsonToken, Any]
-      }.apply(other)
+      case other => f.applyOrElse(other, failedConversion(parser, dataType))
     }
   }
 
@@ -310,11 +317,11 @@ class JacksonParser(
    */
   private def convertObject(
       parser: JsonParser,
-      currentSchema: StructType,
+      schema: StructType,
       fieldConverters: Seq[ValueConverter]): InternalRow = {
-    val row = new GenericMutableRow(currentSchema.length)
+    val row = new GenericMutableRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
-      currentSchema.getFieldIndex(parser.getCurrentName) match {
+      schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           row.update(index, fieldConverters(index).apply(parser))
 
@@ -370,6 +377,8 @@ class JacksonParser(
             case null => failedRecord(input)
             case row: InternalRow => row :: Nil
             case array: ArrayData =>
+              // Here, as we support reading top level JSON arrays and take every element
+              // in such an array as a row, this case is possible.
               if (array.numElements() == 0) {
                 Nil
               } else {
