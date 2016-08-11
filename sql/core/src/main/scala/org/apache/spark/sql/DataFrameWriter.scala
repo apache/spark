@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -423,6 +423,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     props.putAll(connectionProperties)
     val conn = JdbcUtils.createConnectionFactory(url, props)()
 
+    // to add required options like URL and dbtable
+    val params = extraOptions.toMap ++ Map("url" -> url, "dbtable" -> table)
+    val jdbcOptions = new JDBCOptions(params)
+
     try {
       var tableExists = JdbcUtils.tableExists(conn, url, table)
 
@@ -435,7 +439,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        if (extraOptions.getOrElse("truncate", "false").toBoolean &&
+        if (jdbcOptions.isTruncate &&
             JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
           JdbcUtils.truncateTable(conn, table)
         } else {
@@ -450,7 +454,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // To allow certain options to append when create a new table, which can be
         // table_options or partition_options.
         // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-        val createtblOptions = extraOptions.getOrElse("createTableOptions", "")
+        val createtblOptions = jdbcOptions.createTableOptions
         val sql = s"CREATE TABLE $table ($schema) $createtblOptions"
         val statement = conn.createStatement
         try {
