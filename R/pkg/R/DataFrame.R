@@ -359,6 +359,24 @@ setMethod("colnames<-",
             dataFrame(sdf)
           })
 
+specialtypeshandle <- function(type) {
+  if (!is.null(PRIMITIVE_TYPES[[type]])) {
+    type
+  } else {
+      firstChar <- substr(type, 1, 1)
+      returntype <- NULL
+      switch (firstChar,
+              d = {
+                  m <- regexec("^decimal(.+)", type)
+                  matchedStrings <- regmatches(type, m)
+                  if (length(matchedStrings[[1]]) >= 2) {
+                    returntype <- "double"
+                  }
+              })
+      returntype
+  }
+}
+
 #' coltypes
 #'
 #' Get column types of a SparkDataFrame
@@ -397,7 +415,11 @@ setMethod("coltypes",
                 }
 
                 if (is.null(type)) {
-                  stop(paste("Unsupported data type: ", x))
+                  specialtype <- specialtypeshandle(x)
+                  if (is.null(specialtype)) {
+                    stop(paste("Unsupported data type: ", x))
+                  }
+                  type <- specialtype
                 }
               }
               type
@@ -1063,6 +1085,13 @@ setMethod("collect",
                   df[[colIndex]] <- col
                 } else {
                   colType <- dtypes[[colIndex]][[2]]
+                  if (is.null(PRIMITIVE_TYPES[[colType]])) {
+                    specialtype <- specialtypeshandle(colType)
+                    if (!is.null(specialtype)) {
+                      colType <- specialtype
+                    }
+                  }
+
                   # Note that "binary" columns behave like complex types.
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
