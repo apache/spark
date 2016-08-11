@@ -20,9 +20,12 @@ package org.apache.spark.sql
 import java.io.File
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 
 /**
  * End-to-end test cases for SQL queries.
@@ -126,14 +129,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       cleaned.split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
     }
 
+    // Create a local SparkSession to have stronger isolation between different test cases.
+    // This does not isolate catalog changes.
+    val localSparkSession = spark.newSession()
+
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
-      val df = spark.sql(sql)
+      val (schema, output) = getNormalizedResult(localSparkSession, sql)
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = df.schema.catalogString,
-        output = df.queryExecution.hiveResultString().mkString("\n"))
+        schema = schema.catalogString,
+        output = output.mkString("\n"))
     }
 
     if (regenerateGoldenFiles) {
@@ -174,6 +181,23 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       assertResult(expected.schema, s"Schema should match for query #$i") { output.schema }
       assertResult(expected.output, s"Result should match for query #$i") { output.output }
     }
+  }
+
+  /** Executes a query and returns the result as (schema of the output, normalized output). */
+  private def getNormalizedResult(session: SparkSession, sql: String): (StructType, Seq[String]) = {
+    // Returns true if the plan is supposed to be sorted.
+    def isSorted(plan: LogicalPlan): Boolean = plan match {
+      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+      case PhysicalOperation(_, _, Sort(_, true, _)) => true
+      case _ => plan.children.iterator.exists(isSorted)
+    }
+
+    val df = session.sql(sql)
+    val schema = df.schema
+    val answer = df.queryExecution.hiveResultString()
+
+    // If the output is not pre-sorted, sort it.
+    if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
   }
 
   private def listTestCases(): Seq[TestCase] = {

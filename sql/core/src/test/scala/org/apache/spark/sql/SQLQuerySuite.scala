@@ -38,26 +38,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   setupTestData()
 
-  test("having clause") {
-    withTempView("hav") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
-        .createOrReplaceTempView("hav")
-      checkAnswer(
-        sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
-        Row("one", 6) :: Row("three", 3) :: Nil)
-    }
-  }
-
-  test("having condition contains grouping column") {
-    withTempView("hav") {
-      Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
-        .createOrReplaceTempView("hav")
-      checkAnswer(
-        sql("SELECT count(k) FROM hav GROUP BY v + 1 HAVING v + 1 = 2"),
-        Row(1) :: Nil)
-    }
-  }
-
   test("SPARK-8010: promote numeric to string") {
     val df = Seq((1, 1)).toDF("key", "value")
     df.createOrReplaceTempView("src")
@@ -1969,15 +1949,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-11032: resolve having correctly") {
-    withTempView("src") {
-      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("src")
-      checkAnswer(
-        sql("SELECT MIN(t.i) FROM (SELECT * FROM src WHERE i > 0) t HAVING(COUNT(1) > 0)"),
-        Row(1))
-    }
-  }
-
   test("SPARK-11303: filter should not be pushed down into sample") {
     val df = spark.range(100)
     List(true, false).foreach { withReplacement =>
@@ -2517,30 +2488,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("natural join") {
-    val df1 = Seq(("one", 1), ("two", 2), ("three", 3)).toDF("k", "v1")
-    val df2 = Seq(("one", 1), ("two", 22), ("one", 5)).toDF("k", "v2")
-    withTempView("nt1", "nt2") {
-      df1.createOrReplaceTempView("nt1")
-      df2.createOrReplaceTempView("nt2")
-      checkAnswer(
-        sql("SELECT * FROM nt1 natural join nt2 where k = \"one\""),
-        Row("one", 1, 1) :: Row("one", 1, 5) :: Nil)
-
-      checkAnswer(
-        sql("SELECT * FROM nt1 natural left join nt2 order by v1, v2"),
-        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Row("three", 3, null) :: Nil)
-
-      checkAnswer(
-        sql("SELECT * FROM nt1 natural right join nt2 order by v1, v2"),
-        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Nil)
-
-      checkAnswer(
-        sql("SELECT count(*) FROM nt1 natural full outer join nt2"),
-        Row(4) :: Nil)
-    }
-  }
-
   test("join with using clause") {
     val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
       ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")
@@ -2990,14 +2937,5 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         readBack.selectExpr("`part.col1`", "`col.1`"),
         data.selectExpr("`part.col1`", "`col.1`"))
     }
-  }
-
-  test("current_date and current_timestamp literals") {
-    // NOTE that I am comparing the result of the literal with the result of the function call.
-    // This is done to prevent the test from failing because we are comparing a result to an out
-    // dated timestamp (quite likely) or date (very unlikely - but equally annoying).
-    checkAnswer(
-      sql("select current_date = current_date(), current_timestamp = current_timestamp()"),
-      Seq(Row(true, true)))
   }
 }
