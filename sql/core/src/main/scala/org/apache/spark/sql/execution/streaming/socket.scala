@@ -23,6 +23,7 @@ import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import javax.annotation.concurrent.GuardedBy
+import javax.xml.transform.stream.StreamSource
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
@@ -45,16 +46,13 @@ object TextSocketSource {
  * support for fault recovery and keeping all of the text read in memory forever.
  */
 class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlContext: SQLContext)
-  extends Source with Logging
+  extends MemoryStream[(String, Timestamp)](-1, sqlContext) with Logging
 {
   @GuardedBy("this")
   private var socket: Socket = null
 
   @GuardedBy("this")
   private var readThread: Thread = null
-
-  @GuardedBy("this")
-  private var lines = new ArrayBuffer[(String, Timestamp)]
 
   initialize()
 
@@ -74,7 +72,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
               return
             }
             TextSocketSource.this.synchronized {
-              lines += ((line,
+              addData((line,
                 Timestamp.valueOf(
                   TextSocketSource.DATE_FORMAT.format(Calendar.getInstance().getTime()))
                 ))
@@ -92,21 +90,18 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
   override def schema: StructType = if (includeTimestamp) TextSocketSource.SCHEMA_TIMESTAMP
   else TextSocketSource.SCHEMA_REGULAR
 
-  /** Returns the maximum available offset for this source. */
-  override def getOffset: Option[Offset] = synchronized {
-    if (lines.isEmpty) None else Some(LongOffset(lines.size - 1))
-  }
 
   /** Returns the data that is between the offsets (`start`, `end`]. */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
-    val startIdx = start.map(_.asInstanceOf[LongOffset].offset.toInt + 1).getOrElse(0)
-    val endIdx = end.asInstanceOf[LongOffset].offset.toInt + 1
-    val data = synchronized { lines.slice(startIdx, endIdx) }
-    import sqlContext.implicits._
+    val rawBatch = super.getBatch(start, end)
+
+    // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
+    // if requested.
     if (includeTimestamp) {
-      data.toDF("value", "timestamp")
+      rawBatch.toDF("value", "timestamp")
     } else {
-      data.map(_._1).toDF("value")
+      // Strip out timestamp
+      rawBatch.select("_1").toDF("value")
     }
   }
 

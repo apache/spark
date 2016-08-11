@@ -32,11 +32,15 @@ trait Source {
 
   /**
    * Returns the highest offset that this source has <b>removed</b> from its internal buffer
-   * in response to a call to `doneWithBatch`.
-   * Returns `None` if this source has not removed any data. */
+   * in response to a call to `commit`.
+   * Returns `None` if this source has not removed any data.
+   */
   def getMinOffset: Option[Offset]
 
-  /** Returns the maximum available offset for this source. */
+  /**
+   * Returns the maximum available offset for this source.
+   * Returns `None` if this source has never received any data.
+   */
   def getMaxOffset: Option[Offset]
 
   /**

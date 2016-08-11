@@ -21,7 +21,9 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Map
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -72,6 +74,8 @@ class StreamExecution(
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
    * input source.
+   * Only the scheduler thread should modify this field, and only in atomic steps. Other threads
+   * must create a local copy before iterating over this data structure.
    */
   @volatile
   private[sql] var committedOffsets = new StreamProgress
@@ -79,6 +83,8 @@ class StreamExecution(
   /**
    * Tracks the offsets that are available to be processed, but have not yet be committed to the
    * sink.
+   * Only the scheduler thread should modify this field, and only in atomic steps. Other threads
+   * must create a local copy before iterating over this data structure.
    */
   @volatile
   private var availableOffsets = new StreamProgress
@@ -248,6 +254,21 @@ class StreamExecution(
             logDebug(s"Resuming with committed offsets: $committedOffsets")
         }
 
+        // Compare the offsets we just read from the checkpoint against the
+        // sources' own checkpoint data.
+        val offsetChanges = mutable.Map[Source, Offset]()
+        committedOffsets.map {
+          case (src, checkptOffset) =>
+            val srcOffset = src.getMinOffset
+            if (srcOffset.isDefined && srcOffset.get > checkptOffset) {
+              logWarning(s"Source $src lost offsets between $checkptOffset " +
+                s"and $srcOffset when resuming. Skipping ahead to $srcOffset.")
+              offsetChanges += (src -> srcOffset.get)
+            }
+        }
+        committedOffsets ++= offsetChanges
+
+
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         currentBatchId = 0
@@ -277,7 +298,7 @@ class StreamExecution(
     val hasNewData = {
       awaitBatchLock.lock()
       try {
-        val newData = uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+        val newData = uniqueSources.flatMap(s => s.getMaxOffset.map(o => s -> o))
         availableOffsets ++= newData
 
         if (dataAvailable) {
@@ -294,6 +315,12 @@ class StreamExecution(
       assert(offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
         s"Concurrent update to the log. Multiple streaming jobs detected for $currentBatchId")
       logInfo(s"Committed offsets for batch $currentBatchId.")
+
+      // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
+      // sources to discard batches from the *previous* batch.
+      committedOffsets.foreach {
+        case (src, off) => src.commit(off)
+      }
     } else {
       awaitBatchLock.lock()
       try {
@@ -374,6 +401,8 @@ class StreamExecution(
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
+
+
     postEvent(new QueryProgress(this.toInfo))
   }
 
@@ -399,7 +428,7 @@ class StreamExecution(
 
   /**
    * Blocks the current thread until processing for data from the given `source` has reached at
-   * least the given `Offset`. This method is indented for use primarily when writing tests.
+   * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
   def awaitOffset(source: Source, newOffset: Offset): Unit = {
     def notDone = {

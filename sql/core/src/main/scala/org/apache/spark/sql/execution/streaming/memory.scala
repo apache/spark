@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -51,11 +51,18 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected val logicalPlan = StreamingExecutionRelation(this)
   protected val output = logicalPlan.output
 
+  /**
+   * All batches from `lastCommittedOffset + 1` to `currentOffset`, inclusive.
+   * Stored in a ListBuffer to facilitate removing committed batches.
+   */
   @GuardedBy("this")
-  protected val batches = new ArrayBuffer[Dataset[A]]
+  protected val batches = new ListBuffer[Dataset[A]]
 
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
+
+  @GuardedBy("this")
+  protected var lastCommittedOffset : LongOffset = new LongOffset(-1)
 
   def schema: StructType = encoder.schema
 
@@ -84,22 +91,33 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
-  override def getOffset: Option[Offset] = synchronized {
-    if (batches.isEmpty) {
+  override def getMinOffset: Option[Offset] = synchronized {
+    if (lastCommittedOffset.offset == -1) {
+      None
+    } else {
+      Some(lastCommittedOffset)
+    }
+  }
+
+  override def getMaxOffset: Option[Offset] = synchronized {
+    if (currentOffset.offset == -1) {
       None
     } else {
       Some(currentOffset)
     }
   }
 
-  /**
-   * Returns the data that is between the offsets (`start`, `end`].
-   */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startOrdinal =
       start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
-    val newBlocks = synchronized { batches.slice(startOrdinal, endOrdinal) }
+
+    // Internal buffer only holds the batches after lastCommittedOffset
+    val newBlocks = synchronized {
+      val sliceStart = startOrdinal - lastCommittedOffset.offset.toInt
+      val sliceEnd = endOrdinal - lastCommittedOffset.offset.toInt
+      batches.slice(sliceStart, sliceEnd)
+    }
 
     logDebug(
       s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
@@ -109,6 +127,23 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       .getOrElse {
         sys.error("No data selected!")
       }
+  }
+
+  override def commit(end: Offset): Unit = synchronized {
+    if (end.isInstanceOf[LongOffset]) {
+      val newOffset = end.asInstanceOf[LongOffset]
+      val offsetDiff = (newOffset.offset - lastCommittedOffset.offset).toInt
+
+      if (offsetDiff < 0) {
+        sys.error(s"Offsets committed out of order: $lastCommittedOffset followed by $end")
+      }
+
+      batches.trimStart(offsetDiff)
+      lastCommittedOffset = newOffset
+    } else {
+      sys.error(s"MemoryStream.commit() received an offset ($end) that did not originate with " +
+        s"an instance of this class")
+    }
   }
 
   override def stop() {}
