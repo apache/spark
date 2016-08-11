@@ -143,7 +143,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       QueryOutput(
         sql = sql,
         schema = schema.catalogString,
-        output = output.mkString("\n"))
+        output = output.mkString("\n").trim)
     }
 
     if (regenerateGoldenFiles) {
@@ -180,9 +180,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
 
     outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-      assertResult(expected.sql, s"SQL query should match for query #$i") { output.sql }
-      assertResult(expected.schema, s"Schema should match for query #$i") { output.schema }
-      assertResult(expected.output, s"Result should match for query #$i") { output.output }
+      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
+        output.sql
+      }
+      assertResult(expected.schema, s"Schema did not match for query #$i\n${expected.sql}") {
+        output.schema
+      }
+      assertResult(expected.output, s"Result dit not match for query #$i\n${expected.sql}") {
+        output.output
+      }
     }
   }
 
