@@ -457,10 +457,6 @@ case class AlterTableRecoverPartitionsCommand(
       throw new AnalysisException(
         s"Operation not allowed: $cmd on datasource tables: $tableName")
     }
-    if (table.tableType != CatalogTableType.EXTERNAL) {
-      throw new AnalysisException(
-        s"Operation not allowed: $cmd only works on external tables: $tableName")
-    }
     if (!DDLUtils.isTablePartitioned(table)) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableName")
