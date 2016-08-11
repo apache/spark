@@ -1299,7 +1299,7 @@ def regexp_extract(str, pattern, idx):
     >>> df = sqlContext.createDataFrame([('100-200',)], ['str'])
     >>> df.select(regexp_extract('str', '(\d+)-(\d+)', 1).alias('d')).collect()
     [Row(d=u'100')]
-    >>> df = spark.createDataFrame([('aaaac',)], ['str'])
+    >>> df = sqlContext.createDataFrame([('aaaac',)], ['str'])
     >>> df.select(regexp_extract('str', '(a+)(b)?(c)', 2).alias('d')).collect()
     [Row(d=u'')]
     """
