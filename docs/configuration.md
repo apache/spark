@@ -1161,51 +1161,65 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.recoveryTime</code></td>
+  <td><code>spark.blacklist.timeout</code></td>
   <td>1h</td>
   <td>
-    How long a node or executor is blacklisted for the entire application, before it is
-    unconditionally removed from the blacklist to attempt running new tasks.
+    (Experimental) How long a node or executor is blacklisted for the entire application, before it
+    is unconditionally removed from the blacklist to attempt running new tasks.
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.maxTaskAttemptsPerNode</code></td>
+  <td><code>spark.blacklist.task.maxTaskAttemptsPerExecutor</code></td>
   <td>2</td>
   <td>
-    For a given task, how many executors the task can fail on, before the entire node is blacklisted
-    for the given task
+    (Experimental) For a given task, how many times it can be retried on one executor before the
+    executor is blacklisted for that task.
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.maxFailedTasksPerExecutorStage</code>
+  <td><code>spark.blacklist.task.maxTaskAttemptsPerNode</code></td>
   <td>2</td>
   <td>
-    How many different tasks must fail on one executor, within one stage, before the executor is
-    blacklisted for that stage.
+    (Experimental) For a given task, how many times it can be retried on one node, before the entire
+    node is blacklisted for that task.
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.maxFailedExecutorsPerNodeStage</code></td>
+  <td><code>spark.blacklist.stage.maxFailedTasksPerExecutor</code>
   <td>2</td>
   <td>
-    How many different executors are marked as failed for a given stage, before the entire node
-    is marked as failed for the stage.
+    (Experimental) How many different tasks must fail on one executor, within one stage, before the
+    executor is blacklisted for that stage.
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.maxFailedTasksPerExecutor</code></td>
+  <td><code>spark.blacklist.stage.maxFailedExecutorsPerNode</code></td>
   <td>2</td>
   <td>
-    How many different tasks must fail on one executor, in successful task sets, before the executor
-    is blacklisted for the entire application.
+    (Experimental) How many different executors are marked as failed for a given stage, before the
+    entire node is marked as failed for the stage.
   </td>
 </tr>
 <tr>
-  <td><code>spark.blacklist.maxFailedExecutorsPerNode</code></td>
+  <td><code>spark.blacklist.application.maxFailedTasksPerExecutor</code></td>
   <td>2</td>
   <td>
-    How many different executors must be blacklisted for the entire application, before the node is
-    blacklisted for the entire application.
+    (Experimental) How many different tasks must fail on one executor, in successful task sets,
+    before the executor is blacklisted for the entire application.  Blacklisted executors will
+    be automatically added back to the pool of available resources after the timeout specified by
+    <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
+    may get marked as idle and be reclaimed by the cluster manager.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blacklist.application.maxFailedExecutorsPerNode</code></td>
+  <td>2</td>
+  <td>
+    (Experimental) How many different executors must be blacklisted for the entire application,
+    before the node is blacklisted for the entire application.  Blacklisted nodes will
+    be automatically added back to the pool of available resources after the timeout specified by
+    <code>spark.blacklist.timeout</code>.  Note that with dynamic allocation, though, the executors
+    may get marked as idle and be reclaimed by the cluster manager.
   </td>
 </tr>
 <tr>

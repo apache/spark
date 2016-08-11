@@ -54,8 +54,7 @@ import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, ThreadUtils, Ut
 private[spark] class TaskSchedulerImpl private[scheduler](
     val sc: SparkContext,
     val maxTaskFailures: Int,
-    private[scheduler] val blacklistTracker: Option[BlacklistTracker],
-    private val clock: Clock = new SystemClock,
+    private val blacklistTracker: Option[BlacklistTracker],
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
@@ -66,7 +65,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
     this(sc, maxTaskFailures, TaskSchedulerImpl.createBlacklistTracker(sc.conf),
-      clock = new SystemClock, isLocal = isLocal)
+      isLocal = isLocal)
   }
 
   val conf = sc.conf
@@ -110,7 +109,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
-  protected val executorsByHost = new HashMap[String, HashSet[String]]
+  protected val hostToExecutors = new HashMap[String, HashSet[String]]
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
@@ -217,7 +216,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   private[scheduler] def createTaskSetManager(
       taskSet: TaskSet,
       maxTaskFailures: Int): TaskSetManager = {
-    new TaskSetManager(this, taskSet, maxTaskFailures, clock)
+    new TaskSetManager(this, blacklistTracker, taskSet, maxTaskFailures, new SystemClock)
   }
 
   override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = synchronized {
@@ -245,7 +244,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
    * cleaned up.
    */
-  def taskSetFinished(manager: TaskSetManager, success: Boolean): Unit = synchronized {
+  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
     taskSetsByStageIdAndAttempt.get(manager.taskSet.stageId).foreach { taskSetsForStage =>
       taskSetsForStage -= manager.taskSet.stageAttemptId
       if (taskSetsForStage.isEmpty) {
@@ -253,20 +252,14 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }
     manager.parent.removeSchedulable(manager)
-    if (success) {
-      blacklistTracker.foreach(_.taskSetSucceeded(manager.execToFailures))
-      logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
-        s" ${manager.parent.name}")
-    } else {
-      logInfo(s"Removed TaskSet ${manager.taskSet.id}, since it failed, from pool" +
-        s" ${manager.parent.name}")
-    }
+    logInfo(s"Removed TaskSet ${manager.taskSet.id}, whose tasks have all completed, from pool" +
+      s" ${manager.parent.name}")
   }
 
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
-      shuffledOffers: IndexedSeq[WorkerOffer],
+      shuffledOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
@@ -276,11 +269,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       val offer = shuffledOffers(i)
       val host = offer.host
       val execId = offer.executorId
-      val offerBlacklisted = blacklistTracker.map { bl =>
-        taskSet.isNodeBlacklistedForTaskSet(host) ||
-          taskSet.isExecutorBlacklistedForTaskSet(execId)
-      }.getOrElse(false)
-      if (!offerBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
+      if (availableCpus(i) >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
             tasks(i) += task
@@ -301,21 +290,10 @@ private[spark] class TaskSchedulerImpl private[scheduler](
         }
       }
     }
-    if (!launchedTask) {
-      blacklistTracker.foreach(taskSet.abortIfCompletelyBlacklisted(executorsByHost, _))
+    if (!launchedTask && blacklistTracker.isDefined) {
+      taskSet.abortIfCompletelyBlacklisted(hostToExecutors)
     }
     return launchedTask
-  }
-
-  private[scheduler] def areAllExecutorsBlacklisted(): Boolean = {
-    blacklistTracker match {
-      case Some(bl) =>
-        executorsByHost.forall { case (host, execs) =>
-          bl.isNodeBlacklisted(host) ||
-            execs.forall(bl.isExecutorBlacklisted(_))
-        }
-      case None => false
-    }
   }
 
   /**
@@ -328,11 +306,11 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
-      if (!executorsByHost.contains(o.host)) {
-        executorsByHost(o.host) = new HashSet[String]()
+      if (!hostToExecutors.contains(o.host)) {
+        hostToExecutors(o.host) = new HashSet[String]()
       }
       if (!executorIdToTaskCount.contains(o.executorId)) {
-        executorsByHost(o.host) += o.executorId
+        hostToExecutors(o.host) += o.executorId
         executorAdded(o.executorId, o.host)
         executorIdToHost(o.executorId) = o.host
         executorIdToTaskCount(o.executorId) = 0
@@ -343,38 +321,21 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       }
     }
 
-    // ensure that we periodically check if executors can be removed from the blacklist, without
-    // requiring a separate thread and added synchronization overhead
+    // Before making any offers, remove any nodes from the blacklist whose blacklist has expired. Do
+    // this here to avoid a separate thread and added synchronization overhead, and also because
+    // updating the blacklist is only relevant when task offers are being made.
     blacklistTracker.foreach(_.expireExecutorsInBlacklist())
 
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
-    val filteredOffers: IndexedSeq[WorkerOffer] = (blacklistTracker match {
-      case Some(bl) => offers.filter { offer =>
+    val filteredOffers = blacklistTracker.map { bl =>
+      offers.filter { offer =>
         !bl.isNodeBlacklisted(offer.host) &&
           !bl.isExecutorBlacklisted(offer.executorId)
       }
-      case None => offers
-    }) match {
-        // toIndexedSeq always makes an *immutable* IndexedSeq, though we don't care if its mutable
-        // or immutable.  So we do this to avoid making a pointless copy
-      case is: IndexedSeq[WorkerOffer] => is
-      case other: Seq[WorkerOffer] => other.toIndexedSeq
-    }
-    if (offers.nonEmpty && filteredOffers.isEmpty) {
-      // Its possible that all the executors are now blacklisted, though we haven't aborted stages
-      // during the check in resourceOfferSingleTaskSet.  If so, fail all existing task sets to
-      // avoid unschedulability.
-      if (areAllExecutorsBlacklisted()) {
-        sortedTaskSets.foreach { tsm =>
-          tsm.abort(s"All executors are blacklisted, so aborting ${tsm.taskSet}")
-        }
-      }
-      return Seq()
-    }
+    }.getOrElse(offers)
 
-    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.  We will
-    // index into this list by position later, so we want an IndexedSeq so its efficient.
-    val shuffledOffers: IndexedSeq[WorkerOffer] = Random.shuffle(filteredOffers).toIndexedSeq
+    // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
+    val shuffledOffers = Random.shuffle(filteredOffers)
     // Build a list of tasks to assign to each worker.
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
@@ -393,7 +354,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
         launchedTask = resourceOfferSingleTaskSet(
-            taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
+          taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
       } while (launchedTask)
     }
 
@@ -487,7 +448,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       taskSetManager: TaskSetManager,
       tid: Long,
       taskState: TaskState,
-      reason: TaskEndReason): Unit = synchronized {
+      reason: TaskFailedReason): Unit = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
     if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
       // Need to revive offers again now that the task set manager state has been updated to
@@ -598,10 +559,10 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     executorIdToTaskCount -= executorId
 
     val host = executorIdToHost(executorId)
-    val execs = executorsByHost.getOrElse(host, new HashSet)
+    val execs = hostToExecutors.getOrElse(host, new HashSet)
     execs -= executorId
     if (execs.isEmpty) {
-      executorsByHost -= host
+      hostToExecutors -= host
       for (rack <- getRackForHost(host); hosts <- hostsByRack.get(rack)) {
         hosts -= host
         if (hosts.isEmpty) {
@@ -614,23 +575,19 @@ private[spark] class TaskSchedulerImpl private[scheduler](
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
     }
-    blacklistTracker.foreach(_.removeExecutor(executorId))
+    blacklistTracker.foreach(_.handleRemovedExecutor(executorId))
   }
 
   def executorAdded(execId: String, host: String) {
     dagScheduler.executorAdded(execId, host)
   }
 
-  def getHostForExecutor(execId: String): String = synchronized {
-    executorIdToHost(execId)
-  }
-
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
-    executorsByHost.get(host).map(_.toSet)
+    hostToExecutors.get(host).map(_.toSet)
   }
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
-    executorsByHost.contains(host)
+    hostToExecutors.contains(host)
   }
 
   def hasHostAliveOnRack(rack: String): Boolean = synchronized {

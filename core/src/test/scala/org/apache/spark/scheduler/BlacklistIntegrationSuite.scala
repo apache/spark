@@ -95,8 +95,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     // to reliably reproduce the failure, we have to use 1 task.  That way, we ensure this
     // 1 task gets rotated through enough bad executors on the host to fail the taskSet,
     // before we have a bunch of different tasks fail in the executors so we blacklist them.
-    // But the point here is -- we never try scheduling tasks on the good host-1, since we
-    // hit too many failures trying our preferred host-0.
+    // But the point here is -- without blacklisting, we would never schedule anything on the good
+    // host-1 before we hit too many failures trying our preferred host-0.
     val rdd = new MockRDDWithLocalityPrefs(sc, 1, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 1).toArray)

@@ -100,44 +100,49 @@ package object config {
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")
-    .booleanConf
-    .createOptional
+      .booleanConf
+      .createOptional
+
+  private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
+    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+      .intConf
+      .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
-    ConfigBuilder("spark.blacklist.maxTaskAttemptsPerNode")
-    .intConf
-    .createWithDefault(2)
+    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
+      .intConf
+      .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
-    ConfigBuilder("spark.blacklist.maxFailedTasksPerExecutor")
-    .intConf
-    .createWithDefault(2)
+    ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
+      .intConf
+      .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
-    ConfigBuilder("spark.blacklist.maxFailedTasksPerExecutorStage")
-    .intConf
-    .createWithDefault(2)
+    ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .intConf
+      .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
-    ConfigBuilder("spark.blacklist.maxFailedExecutorsPerNode")
-    .intConf
-    .createWithDefault(2)
+    ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
+      .intConf
+      .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
-    ConfigBuilder("spark.blacklist.maxFailedExecutorsPerNodeStage")
-    .intConf
-    .createWithDefault(2)
+    ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
+      .intConf
+      .createWithDefault(2)
 
-  private[spark] val BLACKLIST_EXPIRY_TIMEOUT_CONF =
-    ConfigBuilder("spark.scheduler.blacklist.recoverPeriod")
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createOptional
+  private[spark] val BLACKLIST_TIMEOUT_CONF =
+    ConfigBuilder("spark.blacklist.timeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 
   private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
     ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createOptional
+      .internal()
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
   // End blacklist confs
 
   // Note: This is a SQL config but needs to be in core because the REPL depends on it

@@ -104,7 +104,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     val host = executorIdToHost.get(execId)
     assert(host != None)
     val hostId = host.get
-    val executorsOnHost = executorsByHost(hostId)
+    val executorsOnHost = hostToExecutors(hostId)
     executorsOnHost -= execId
     for (rack <- getRackForHost(hostId); hosts <- hostsByRack.get(rack)) {
       hosts -= hostId
@@ -114,7 +114,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
     }
   }
 
-  override def taskSetFinished(manager: TaskSetManager, success: Boolean): Unit = {
+  override def taskSetFinished(manager: TaskSetManager): Unit = {
     finishedManagers += manager
   }
 
@@ -128,7 +128,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 
   def addExecutor(execId: String, host: String) {
     executors.put(execId, host)
-    val executorsOnHost = executorsByHost.getOrElseUpdate(host, new mutable.HashSet[String])
+    val executorsOnHost = hostToExecutors.getOrElseUpdate(host, new mutable.HashSet[String])
     executorsOnHost += execId
     executorIdToHost += execId -> host
     for (rack <- getRackForHost(host)) {
@@ -415,7 +415,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val rescheduleDelay = 300L
     val conf = new SparkConf().
       set(config.BLACKLIST_ENABLED.key, "true").
-      set(config.BLACKLIST_EXPIRY_TIMEOUT_CONF.key, rescheduleDelay.toString).
+      set(config.BLACKLIST_TIMEOUT_CONF.key, rescheduleDelay.toString).
       // don't wait to jump locality levels in this test
       set("spark.locality.wait", "0")
 
