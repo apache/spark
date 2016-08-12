@@ -29,6 +29,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
   private lazy val sparkContext: SparkContext = {
     initialSession = SparkSession.builder()
       .master("local")
+      .appName("SparkSessionBuilderSuite")
       .config("spark.ui.enabled", value = false)
       .config("some-config", "v2")
       .getOrCreate()
@@ -74,19 +75,19 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
   }
 
   test("create a new session if the default session has been stopped") {
-    val defaultSession = SparkSession.builder().getOrCreate()
+    val defaultSession = SparkSession.builder().appName("test").getOrCreate()
     SparkSession.setDefaultSession(defaultSession)
     defaultSession.stop()
-    val newSession = SparkSession.builder().master("local").getOrCreate()
+    val newSession = SparkSession.builder().appName("test").master("local").getOrCreate()
     assert(newSession != defaultSession)
     newSession.stop()
   }
 
   test("create a new session if the active thread session has been stopped") {
-    val activeSession = SparkSession.builder().master("local").getOrCreate()
+    val activeSession = SparkSession.builder().appName("test").master("local").getOrCreate()
     SparkSession.setActiveSession(activeSession)
     activeSession.stop()
-    val newSession = SparkSession.builder().master("local").getOrCreate()
+    val newSession = SparkSession.builder().appName("test").master("local").getOrCreate()
     assert(newSession != activeSession)
     newSession.stop()
   }
@@ -104,14 +105,14 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
-    val session = SparkSession.builder().master("local").getOrCreate()
+    val session = SparkSession.builder().appName("test").master("local").getOrCreate()
     assert(session.sessionState.newHadoopConf().get("hive.in.test") == "true")
     assert(session.sparkContext.hadoopConfiguration.get("hive.in.test") == "true")
     session.stop()
   }
 
   test("SPARK-15991: Set global Hadoop conf") {
-    val session = SparkSession.builder().master("local").getOrCreate()
+    val session = SparkSession.builder().appName("test").master("local").getOrCreate()
     val mySpecialKey = "my.special.key.15991"
     val mySpecialValue = "msv"
     try {

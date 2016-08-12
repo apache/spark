@@ -815,11 +815,6 @@ object SparkSession {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
-          // set app name if not given
-          if (!options.contains("spark.app.name")) {
-            options += "spark.app.name" -> java.util.UUID.randomUUID().toString
-          }
-
           val sparkConf = new SparkConf()
           options.foreach { case (k, v) => sparkConf.set(k, v) }
           val sc = SparkContext.getOrCreate(sparkConf)
