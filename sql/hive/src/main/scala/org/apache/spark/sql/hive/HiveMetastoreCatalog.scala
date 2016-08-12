@@ -136,12 +136,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
-    // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
-    val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
-    new Path(new Path(client.getDatabase(dbName).locationUri), tblName).toString
-  }
-
   private def getCached(
       tableIdentifier: QualifiedTableName,
       pathsInMetastore: Seq[String],

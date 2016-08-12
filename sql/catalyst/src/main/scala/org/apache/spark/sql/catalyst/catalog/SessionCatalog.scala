@@ -496,6 +496,22 @@ class SessionCatalog(
   }
 
   /**
+   * Invalidate all the cache entries.
+   */
+  def invalidateCache(): Unit = { /* no-op */ }
+
+  /**
+   * Directly put the cache entry for a metastore table, if any.
+   */
+  def cacheDataSourceTable(name: TableIdentifier, plan: LogicalPlan): Unit = { /* no-op */ }
+
+  /**
+   * Get the cache entry for a metastore table, if given.
+   * If cache missed, returns None. It will not invoke automatic loading.
+   */
+  def getCachedDataSourceTableIfPresent(name: TableIdentifier): Option[LogicalPlan] = { None }
+
+  /**
    * Drop all existing temporary tables.
    * For testing only.
    */

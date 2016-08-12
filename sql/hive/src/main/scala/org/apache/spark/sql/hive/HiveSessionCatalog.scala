@@ -21,6 +21,7 @@ import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
@@ -116,12 +117,22 @@ private[sql] class HiveSessionCatalog(
     metastoreCatalog.refreshTable(name)
   }
 
-  def invalidateCache(): Unit = {
-    metastoreCatalog.cachedDataSourceTables.invalidateAll()
+  override def invalidateCache(): Unit = {
+    metastoreCatalog.invalidateAll()
+  }
+
+  override def cacheDataSourceTable(name: TableIdentifier, plan: LogicalPlan): Unit = {
+    metastoreCatalog.cacheTable(name, plan)
+  }
+
+  override def getCachedDataSourceTableIfPresent(name: TableIdentifier): Option[LogicalPlan] = {
+    metastoreCatalog.getTableIfPresent(name)
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
-    metastoreCatalog.hiveDefaultTableFilePath(name)
+    // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
+    val dbName = name.database.getOrElse(getCurrentDatabase)
+    new Path(new Path(getDatabaseMetadata(dbName).locationUri), name.table).toString
   }
 
   // For testing only
