@@ -181,7 +181,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     val m = intercept[org.h2.jdbc.JdbcSQLException] {
       df.write.option("createTableOptions", "ENGINE tableEngineName")
       .jdbc(url1, "TEST.CREATETBLOPTS", properties)
-      }.getMessage
+    }.getMessage
     assert(m.contains("Class \"TABLEENGINENAME\" not found"))
     JdbcDialects.unregisterDialect(testH2Dialect)
   }
