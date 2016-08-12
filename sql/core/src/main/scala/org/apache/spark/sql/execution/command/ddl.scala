@@ -17,22 +17,25 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.collection.GenSeq
+import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTablePartition, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
+import org.apache.spark.sql.execution.datasources.HadoopFsRelation.{FakeBlockLocation, FakeFileStatus}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableConfiguration
 
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -443,6 +446,30 @@ case class AlterTableDropPartitionCommand(
 case class AlterTableRecoverPartitionsCommand(
     tableName: TableIdentifier,
     cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
+
+  // These are two fast stats in Hive Metastore
+  // see https://github.com/apache/hive/blob/master/
+  //   common/src/java/org/apache/hadoop/hive/common/StatsSetupConst.java#L88
+  val NUM_FILES = "numFiles"
+  val TOTAL_SIZE = "totalSize"
+
+  private def getPathFilter(hadoopConf: Configuration): PathFilter = {
+    // Dummy jobconf to get to the pathFilter defined in configuration
+    // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
+    val jobConf = new JobConf(hadoopConf, this.getClass)
+    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+    new PathFilter {
+      override def accept(path: Path): Boolean = {
+        val name = path.getName
+        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
+          pathFilter == null || pathFilter.accept(path)
+        } else {
+          false
+        }
+      }
+    }
+  }
+
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
@@ -469,21 +496,55 @@ case class AlterTableRecoverPartitionsCommand(
     val root = new Path(table.storage.locationUri.get)
     logInfo(s"Recover all the partitions in $root")
     val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
-    // Dummy jobconf to get to the pathFilter defined in configuration
-    // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
-    val jobConf = new JobConf(spark.sparkContext.hadoopConfiguration, this.getClass)
-    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+
+    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val pathFilter = getPathFilter(hadoopConf)
     val partitionSpecsAndLocs = scanPartitions(
-      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase))
+      spark, fs, pathFilter, root, Map(), table.partitionColumnNames.map(_.toLowerCase), threshold)
     val total = partitionSpecsAndLocs.length
     logInfo(s"Found $total partitions in $root")
+
+    val partitionStats: GenMap[String, (Int, Long)] = if (total > threshold) {
+      val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+      val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
+
+      // Set the number of parallelism to prevent following file listing from generating many tasks
+      // in case of large #defaultParallelism.
+      val numParallelism = Math.min(serializedPaths.size, 10000)
+      // gather the fast stats for all the partitions otherwise Hive metastore will list all the
+      // files for all the new partitions in sequential way, which is super slow.
+      logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
+      spark.sparkContext.parallelize(serializedPaths, numParallelism)
+        .mapPartitions { paths =>
+          val pathFilter = getPathFilter(serializableConfiguration.value)
+          paths.map(new Path(_)).map{ path =>
+            val fs = path.getFileSystem(serializableConfiguration.value)
+            val statuses = fs.listStatus(path, pathFilter)
+            (path.toString, (statuses.length, statuses.map(_.getLen).sum))
+          }
+        }.collectAsMap()
+    } else {
+      partitionSpecsAndLocs.map { case (_, location) =>
+        val statuses = fs.listStatus(location, pathFilter)
+        (location.toString, (statuses.length, statuses.map(_.getLen).sum))
+      }.toMap
+    }
+    logInfo(s"Finished to gather the fast stats for all $total partitions.")
+
     var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
     // we should split them into smaller batches.
     partitionSpecsAndLocs.iterator.grouped(1024).foreach { batch =>
       val parts = batch.map { case (spec, location) =>
         // inherit table storage format (possibly except for location)
-        CatalogTablePartition(spec, table.storage.copy(locationUri = Some(location.toUri.toString)))
+        val (numFiles, totalSize) = partitionStats(location.toString)
+        // This two fast stat could prevent Hive metastore to list the files again.
+        val params = Map(NUM_FILES -> numFiles.toString, TOTAL_SIZE -> totalSize.toString)
+        CatalogTablePartition(
+          spec,
+          table.storage.copy(locationUri = Some(location.toUri.toString)),
+          params)
       }.toArray[CatalogTablePartition]
       spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
       done += parts.length
@@ -501,15 +562,16 @@ case class AlterTableRecoverPartitionsCommand(
       filter: PathFilter,
       path: Path,
       spec: TablePartitionSpec,
-      partitionNames: Seq[String]): GenSeq[(TablePartitionSpec, Path)] = {
+      partitionNames: Seq[String],
+      threshold: Int): GenSeq[(TablePartitionSpec, Path)] = {
     if (partitionNames.length == 0) {
       return Seq(spec -> path)
     }
 
-    val statuses = fs.listStatus(path)
-    val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
+    val statuses = fs.listStatus(path, filter)
     val statusPar: GenSeq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
+        // parallelize the list of partitions here, then we can have better parallelism later.
         val parArray = statuses.par
         parArray.tasksupport = evalTaskSupport
         parArray
@@ -525,16 +587,14 @@ case class AlterTableRecoverPartitionsCommand(
         val value = PartitioningUtils.unescapePathName(ps(1))
         // comparing with case-insensitive, but preserve the case
         if (columnName == partitionNames(0)) {
-          scanPartitions(
-            spark, fs, filter, st.getPath, spec ++ Map(columnName -> value), partitionNames.drop(1))
+          scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(columnName -> value),
+            partitionNames.drop(1), threshold)
         } else {
           logWarning(s"expect partition column ${partitionNames(0)}, but got ${ps(0)}, ignore it")
           Seq()
         }
       } else {
-        if (name != "_SUCCESS" && name != "_temporary" && !name.startsWith(".")) {
-          logWarning(s"ignore ${new Path(path, name)}")
-        }
+        logWarning(s"ignore ${new Path(path, name)}")
         Seq()
       }
     }
