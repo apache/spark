@@ -18,11 +18,14 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -72,5 +75,41 @@ private[hive] trait HiveStrategies {
       case _ =>
         Nil
     }
+  }
+}
+
+/**
+ * Creates any tables required for query execution.
+ * For example, because of a CREATE TABLE X AS statement.
+ */
+class CreateTables(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Wait until children are resolved.
+    case p: LogicalPlan if !p.childrenResolved => p
+
+    case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
+      val catalog = sparkSession.sessionState.catalog
+      val dbName = tableDesc.identifier.database.getOrElse(catalog.getCurrentDatabase).toLowerCase
+
+      val newTableDesc = if (tableDesc.storage.serde.isEmpty) {
+        // add default serde
+        tableDesc.withNewStorage(
+          serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+      } else {
+        tableDesc
+      }
+
+      // Currently we will never hit this branch, as SQL string API can only use `Ignore` or
+      // `ErrorIfExists` mode, and `DataFrameWriter.saveAsTable` doesn't support hive serde
+      // tables yet.
+      if (mode == SaveMode.Append || mode == SaveMode.Overwrite) {
+        throw new AnalysisException("" +
+          "CTAS for hive serde tables does not support append or overwrite semantics.")
+      }
+
+      execution.CreateHiveTableAsSelectCommand(
+        newTableDesc.copy(identifier = TableIdentifier(tableDesc.identifier.table, Some(dbName))),
+        query,
+        mode == SaveMode.Ignore)
   }
 }

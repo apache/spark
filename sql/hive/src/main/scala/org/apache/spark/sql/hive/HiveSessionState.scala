@@ -64,7 +64,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
-        catalog.CreateTables ::
+        new CreateTables(sparkSession) ::
         PreprocessDDL(conf) ::
         PreprocessTableInsertion(conf) ::
         DataSourceAnalysis(conf) ::
