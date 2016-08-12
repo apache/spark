@@ -305,6 +305,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @return \code{spark.posterior} returns a SparkDataFrame containing posterior probabilities
 #'         vectors named "topicDistribution"
 #' @rdname spark.lda
+#' @aliases spark.lda,spark.posterior,LDAModel-method,SparkDataFrame
 #' @export
 #' @note spark.posterior(LDAModel) since 2.1.0
 setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkDataFrame"),
@@ -328,6 +329,7 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 #'         \code{vocabulary}, whole terms of the training corpus, NULL if libsvm format file used as
 #'         training set.
 #' @rdname spark.lda
+#' @aliases summary,spark.lda,LDAModel-method
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
@@ -354,6 +356,7 @@ setMethod("summary", signature(object = "LDAModel"),
 #' @return \code{spark.perplexity} returns the log perplexity of given SparkDataFrame, or the log
 #'         perplexity of the training data if missing argument "data".
 #' @rdname spark.lda
+#" @aliases spark.perplexity,spark.lda,LDAModel-method
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("spark.perplexity", signature(object = "LDAModel"),
@@ -369,6 +372,7 @@ setMethod("spark.perplexity", signature(object = "LDAModel"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.lda
+#' @aliases write.ml,LDAModel-method,character-method
 #' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(LDAModel, character) since 2.1.0
@@ -715,7 +719,8 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/topicmodels/}
+#' @aliases spark.lda,SparkDataFrame
+#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/}
 #' @export
 #' @examples
 #' \dontrun{
