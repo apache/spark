@@ -1097,7 +1097,7 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @param rank rank of the matrix factorization (> 0)
 #' @param reg regularization parameter (>= 0)
 #' @param maxIter maximum number of iterations (>= 0)
-
+#' @param ... additional named argument(s) such as \code{nonnegative}.
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame
@@ -1174,7 +1174,7 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 #'         rank, regularization parameter and maximum number of iterations used in training
 #' @rdname spark.als
 #' @export
-#' @note summary(ALSModel) since 2.0.0
+#' @note summary(ALSModel) since 2.1.0
 setMethod("summary", signature(object = "ALSModel"),
 function(object, ...) {
     jobj <- object@jobj
