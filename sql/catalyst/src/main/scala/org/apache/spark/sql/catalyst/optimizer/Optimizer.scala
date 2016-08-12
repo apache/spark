@@ -1105,7 +1105,12 @@ object InsertRelationScanner extends Rule[LogicalPlan] with PredicateHelper {
     case Project(fields, child: Scanner) if fields.forall(_.deterministic) =>
       child.copy(projectList = fields)
     case Filter(condition, child: Scanner) if condition.deterministic =>
-      val newFilters = splitConjunctivePredicates(condition) ++ child.filters
+      val aliasMap = AttributeMap(child.projectList.collect {
+        case a: Alias => (a.toAttribute, a.child)
+      })
+
+      val newFilters =
+        splitConjunctivePredicates(replaceAlias(condition, aliasMap)) ++ child.filters
       child.copy(filters = newFilters)
     case Scanner(fields, filters, child: Scanner) =>
       val newFilters = filters ++ child.filters
