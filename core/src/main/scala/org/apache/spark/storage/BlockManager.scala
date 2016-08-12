@@ -498,7 +498,8 @@ private[spark] class BlockManager(
         diskStore.getBytes(blockId)
       } else if (level.useMemory && memoryStore.contains(blockId)) {
         // The block was not found on disk, so serialize an in-memory copy:
-        serializerManager.dataSerialize(blockId, memoryStore.getValues(blockId).get)
+        serializerManager.dataSerializeWithExplicitClassTag(
+          blockId, memoryStore.getValues(blockId).get, info.classTag)
       } else {
         handleLocalReadFailure(blockId)
       }
