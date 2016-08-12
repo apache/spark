@@ -1190,7 +1190,7 @@ private[spark] class BlockManager(
           // we don't want peers we have already replicated to and the ones that
           // have failed previously
           val filteredPeers = getPeers(true).filter { p =>
-            !(peersFailedToReplicateTo.contains(p) || peersReplicatedTo.contains(p))
+            !peersFailedToReplicateTo.contains(p) && !peersReplicatedTo.contains(p)
           }
 
           numFailures += 1
