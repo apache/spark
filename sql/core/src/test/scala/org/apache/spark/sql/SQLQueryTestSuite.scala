@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
  * End-to-end test cases for SQL queries.
@@ -229,6 +229,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     files ++ dirs.flatMap(listFilesRecursively)
   }
 
+  private def getFilePath(path: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(path).toString
+  }
+
   /** Load built-in test tables into the SparkSession. */
   private def loadTestData(session: SparkSession): Unit = {
     import session.implicits._
@@ -246,6 +250,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       Tuple1(Map(1 -> "a5")) :: Nil)
       .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
+
+    val srcSchema = new StructType().add("key", IntegerType).add("value", StringType)
+    session.read.schema(srcSchema).json(getFilePath("test-data/kv1.json"))
+      .createOrReplaceTempView("src")
   }
 
   private val originalTimeZone = TimeZone.getDefault
