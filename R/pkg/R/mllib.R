@@ -57,7 +57,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'
 #' @param jobj a Java object reference to the backing Scala MultilayerPerceptronClassifierWrapper
 #' @export
-#' @note MultilayerPerceptronClassificationModel since 2.0.0
+#' @note MultilayerPerceptronClassificationModel since 2.1.0
 setClass("MultilayerPerceptronClassificationModel", representation(jobj = "jobj"))
 
 #' Saves the MLlib model to the input path
@@ -433,7 +433,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'
 #' @param data A \code{SparkDataFrame} of observations and labels for model fitting
 #' @param blockSize BlockSize parameter
-#' @param layers Layers parameter
+#' @param layers Integer vector containing the number of nodes for each layer
 #' @param solver Solver parameter, supported options: "gd" (minibatch gradient descent) or "l-bfgs"
 #' @param maxIter Maximum iteration number
 #' @param tol Convergence tolerance of iterations
@@ -441,7 +441,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param seed Seed parameter for weights initialization
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame,formula-method
+#' @aliases spark.mlp,SparkDataFrame
 #' @name spark.mlp
 #' @seealso \link{read.ml}
 #' @export
@@ -471,7 +471,8 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
                    tol = 0.5, stepSize = 1, seed = 1, ...) {
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
-                                solver, as.integer(maxIter), tol, stepSize, as.integer(seed))
+                                as.character(solver), as.integer(maxIter), as.numeric(tol),
+                                as.integer(stepSize), as.integer(seed))
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
 
@@ -481,8 +482,9 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction"
 #' @rdname spark.mlp
+#' @aliases spark.mlp,SparkDataFrame
 #' @export
-#' @note predict(MultilayerPerceptronClassificationModel) since 2.0.0
+#' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
@@ -495,13 +497,13 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 #'         \code{tables}, conditional probabilities given the target label
 #' @rdname spark.mlp
 #' @export
-#' @note summary(MultilayerPerceptronClassificationModel) since 2.0.0
+#' @aliases spark.mlp,SparkDataFrame
+#' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, ...) {
             jobj <- object@jobj
             labelCount <- callJMethod(jobj, "labelCount")
-            layers <- callJMethod(jobj, "layers")
-            layers <- unlist(layers)
+            layers <- unlist(callJMethod(jobj, "layers"))
             weights <- callJMethod(jobj, "weights")
             weights <- matrix(weights, nrow = length(weights))
             return(list(labelCount = labelCount, layers = layers, weights = weights))
@@ -633,9 +635,10 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.mlp
+#' @aliases spark.mlp,SparkDataFrame
 #' @export
 #' @seealso \link{write.ml}
-#' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.0.0
+#' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationModel",
           path = "character"),
           function(object, path, overwrite = FALSE) {

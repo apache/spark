@@ -32,7 +32,6 @@ object MultilayerPerceptronClassifierExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
-      .master("local[4]")
       .appName("MultilayerPerceptronClassifierExample")
       .getOrCreate()
 
