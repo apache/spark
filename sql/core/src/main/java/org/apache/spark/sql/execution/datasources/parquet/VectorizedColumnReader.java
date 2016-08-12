@@ -236,7 +236,7 @@ public class VectorizedColumnReader {
           decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
         column.setDictionary(null);
-        if (isRepeatedColumn) {
+        if (asComplexColElement) {
           column.reserve(Math.max(remaining, rowId + num));
         }
         switch (descriptor.getType()) {
