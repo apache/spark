@@ -538,9 +538,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ false :+ false, builder, verbose))
+        depth + 2, lastChildren :+ children.isEmpty :+ false, builder, verbose))
       innerChildren.last.generateTreeString(
-        depth + 2, lastChildren :+ false :+ true, builder, verbose)
+        depth + 2, lastChildren :+ children.isEmpty :+ true, builder, verbose)
     }
 
     if (children.nonEmpty) {

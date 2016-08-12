@@ -135,10 +135,20 @@ class HiveDDLSuite
         sql(s"CREATE VIEW $viewName COMMENT 'no comment' AS SELECT * FROM $tabName")
         val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
-        assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
-        assert(viewMetadata.properties.get("comment") == Option("no comment"))
+        assert(tableMetadata.comment == Option("BLABLA"))
+        assert(viewMetadata.comment == Option("no comment"))
+        // Ensure that `comment` is removed from the table property
+        assert(tableMetadata.properties.get("comment").isEmpty)
+        assert(viewMetadata.properties.get("comment").isEmpty)
       }
     }
+  }
+
+  test("create table: partition column names exist in table definition") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
+    }
+    assert(e.message == "Found duplicate column(s) in table definition of `tbl`: a")
   }
 
   test("add/drop partitions - external table") {

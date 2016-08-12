@@ -964,7 +964,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .mkString("/")
 
       // Loads partition data to a temporary table to verify contents
-      val path = s"${sparkSession.warehousePath}/dynamic_part_table/$partFolder/part-00000"
+      val path = s"${sparkSession.getWarehousePath}/dynamic_part_table/$partFolder/part-00000"
 
       sql("DROP TABLE IF EXISTS dp_verify")
       sql("CREATE TABLE dp_verify(intcol INT)")

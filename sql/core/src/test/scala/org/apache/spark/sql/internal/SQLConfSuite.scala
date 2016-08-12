@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -28,7 +30,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
     // clear().
-    val newContext = new SQLContext(sparkContext)
+    val newContext = new SQLContext(SparkSession.builder().sparkContext(sparkContext).getOrCreate())
     assert(newContext.getConf("spark.sql.testkey", "false") === "true")
   }
 
@@ -214,7 +216,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       // to get the default value, always unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
       assert(spark.sessionState.conf.warehousePath
-        === s"file:${System.getProperty("user.dir")}/spark-warehouse")
+        === new Path(s"${System.getProperty("user.dir")}/spark-warehouse").toString)
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
