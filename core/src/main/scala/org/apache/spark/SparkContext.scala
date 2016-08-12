@@ -1473,7 +1473,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *                             This includes running, pending, and completed tasks.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  private[spark] override def requestTotalExecutors(
+  @DeveloperApi
+  override def requestTotalExecutors(
       numExecutors: Int,
       localityAwareTasks: Int,
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
@@ -2261,9 +2262,10 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
         setActiveContext(new SparkContext(config), allowMultipleContexts = false)
-      }
-      if (config.getAll.nonEmpty) {
-        logWarning("Use an existing SparkContext, some configuration may not take effect.")
+      } else {
+        if (config.getAll.nonEmpty) {
+          logWarning("Using an existing SparkContext; some configuration may not take effect.")
+        }
       }
       activeContext.get()
     }
@@ -2280,7 +2282,12 @@ object SparkContext extends Logging {
    * even if multiple contexts are allowed.
    */
   def getOrCreate(): SparkContext = {
-    getOrCreate(new SparkConf())
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      if (activeContext.get() == null) {
+        setActiveContext(new SparkContext(), allowMultipleContexts = false)
+      }
+      activeContext.get()
+    }
   }
 
   /**

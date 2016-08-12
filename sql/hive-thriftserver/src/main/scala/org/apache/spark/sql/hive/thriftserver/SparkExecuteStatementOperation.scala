@@ -51,6 +51,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
+  private var iterHeader: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
@@ -110,6 +111,14 @@ private[hive] class SparkExecuteStatementOperation(
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+
+    // Reset iter to header when fetching start from first row
+    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+      val (ita, itb) = iterHeader.duplicate
+      iter = ita
+      iterHeader = itb
+    }
+
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -228,6 +237,9 @@ private[hive] class SparkExecuteStatementOperation(
           result.collect().iterator
         }
       }
+      val (itra, itrb) = iter.duplicate
+      iterHeader = itra
+      iter = itrb
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>

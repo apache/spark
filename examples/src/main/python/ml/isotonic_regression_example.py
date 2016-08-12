@@ -44,8 +44,8 @@ if __name__ == "__main__":
 
     # Trains an isotonic regression model.
     model = IsotonicRegression().fit(dataset)
-    print("Boundaries in increasing order: " + str(model.boundaries))
-    print("Predictions associated with the boundaries: " + str(model.predictions))
+    print("Boundaries in increasing order: %s\n" % str(model.boundaries))
+    print("Predictions associated with the boundaries: %s\n" % str(model.predictions))
 
     # Makes predictions.
     model.transform(dataset).show()
