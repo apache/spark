@@ -31,21 +31,14 @@ import org.apache.spark.sql.types._
 
 /**
  * Legacy catalog for interacting with the Hive metastore.
- *
- * This is still used for things like creating data source tables, but in the future will be
- * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
-private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
-  private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
-
+private[hive] class HiveMetastoreCatalog(spark: SparkSession) extends Logging {
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getCurrentDatabase: String = sessionState.catalog.getCurrentDatabase
-
   private def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
-      tableIdent.database.getOrElse(getCurrentDatabase).toLowerCase,
+      tableIdent.database.getOrElse(spark.sessionState.catalog.getCurrentDatabase).toLowerCase,
       tableIdent.table.toLowerCase)
   }
 
@@ -54,7 +47,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
-        val table = sparkSession.sharedState.externalCatalog.getTable(in.database, in.name)
+        val table = spark.sharedState.externalCatalog.getTable(in.database, in.name)
 
         // TODO: the following code is duplicated with FindDataSourceTable.readDataSourceTable
 
@@ -106,7 +99,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         val options = table.storage.properties
         val dataSource =
           DataSource(
-            sparkSession,
+            spark,
             userSpecifiedSchema = userSpecifiedSchema,
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
