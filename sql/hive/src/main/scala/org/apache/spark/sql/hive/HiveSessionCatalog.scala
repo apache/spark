@@ -126,8 +126,9 @@ private[sql] class HiveSessionCatalog(
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
-    val dbName = name.database.getOrElse(getCurrentDatabase)
-    new Path(new Path(getDatabaseMetadata(dbName).locationUri), name.table).toString
+    val dbName = name.database.getOrElse(getCurrentDatabase).toLowerCase
+    val tableName = name.table.toLowerCase
+    new Path(new Path(getDatabaseMetadata(dbName).locationUri), tableName).toString
   }
 
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
