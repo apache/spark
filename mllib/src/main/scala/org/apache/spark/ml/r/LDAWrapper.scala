@@ -25,7 +25,6 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.clustering.{LDA, LDAModel}
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
@@ -73,7 +72,7 @@ private[r] class LDAWrapper private (
   override def write: MLWriter = new LDAWrapper.LDAWrapperWriter(this)
 }
 
-private[r] object LDAWrapper extends MLReadable[LDAWrapper] with Logging {
+private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
 
   val TOKENIZER_COL = s"${Identifiable.randomUID("rawTokens")}"
   val STOPWORDS_REMOVER_COL = s"${Identifiable.randomUID("tokens")}"
@@ -118,11 +117,9 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] with Logging {
     val featureSchema = data.schema(features)
     val stages = featureSchema.dataType match {
       case d: StringType =>
-        logDebug(s"Feature ($features) schema is StringType, use the built-in preprocessor.")
         getPreStages(features, customizedStopWords, maxVocabSize) ++
           Array(lda.setFeaturesCol(COUNT_VECTOR_COL))
       case d: VectorUDT =>
-        logDebug(s"Feature ($features) schema is VectorUDT, use the LDA directly.")
         Array(lda.setFeaturesCol(features))
       case _ =>
         throw new SparkException(
