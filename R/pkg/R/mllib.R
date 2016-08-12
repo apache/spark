@@ -472,7 +472,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
-                                as.integer(stepSize), as.integer(seed))
+                                as.numeric(stepSize), as.integer(seed))
             return(new("MultilayerPerceptronClassificationModel", jobj = jobj))
           })
 
