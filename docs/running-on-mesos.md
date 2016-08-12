@@ -467,7 +467,28 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the Spark Mesos dispatcher webui_url for interacting with the framework.
     If unset it will point to Spark's internal web UI.
   </td>
+  </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.driverDefault.[PropertyName]</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set default properties for drivers submitted through the
+    dispatcher.  For example,
+    spark.mesos.dispatcher.driverProperty.spark.executor.memory=32g
+    results in the executors for all drivers submitted in cluster mode
+    to run in 32g containers.
+</td>
 </tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.historyServer.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the URL of the <a href="http://spark.apache.org/docs/latest/monitoring.html#viewing-after-the-fact">history
+    server</a>.  The dispatcher will then link each driver to its entry
+    in the history server.
+  </td>
+</tr>
+
 </table>
 
 # Troubleshooting and Debugging

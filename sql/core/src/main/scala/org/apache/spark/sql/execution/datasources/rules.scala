@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
-private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
@@ -195,7 +195,7 @@ case class PreprocessDDL(conf: SQLConf) extends Rule[LogicalPlan] {
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
-private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -273,9 +273,24 @@ private[sql] case class PreprocessTableInsertion(conf: SQLConf) extends Rule[Log
 }
 
 /**
+ * A rule to check whether the functions are supported only when Hive support is enabled
+ */
+object HiveOnlyCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case CreateTable(tableDesc, _, Some(_))
+          if tableDesc.provider.get == "hive" =>
+        throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
+
+      case _ => // OK
+    }
+  }
+}
+
+/**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
-private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
+case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
   extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }

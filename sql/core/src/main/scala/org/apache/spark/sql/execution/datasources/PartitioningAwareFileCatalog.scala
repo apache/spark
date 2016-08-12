@@ -204,6 +204,6 @@ abstract class PartitioningAwareFileCatalog(
 
   private def isDataPath(path: Path): Boolean = {
     val name = path.getName
-    !(name.startsWith("_") || name.startsWith("."))
+    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }
 }
