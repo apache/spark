@@ -131,12 +131,6 @@ private[sql] class HiveSessionCatalog(
     new Path(new Path(getDatabaseMetadata(dbName).locationUri), name.table).toString
   }
 
-  // For testing only
-  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
-  }
-
   override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
     makeFunctionBuilder(funcName, Utils.classForName(className))
   }

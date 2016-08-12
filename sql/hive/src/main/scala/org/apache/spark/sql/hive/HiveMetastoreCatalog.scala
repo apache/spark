@@ -43,7 +43,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
   private def getCurrentDatabase: String = sessionState.catalog.getCurrentDatabase
 
-  def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
+  private def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
       tableIdent.database.getOrElse(getCurrentDatabase).toLowerCase,
       tableIdent.table.toLowerCase)
