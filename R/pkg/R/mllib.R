@@ -441,7 +441,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param seed Seed parameter for weights initialization
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame
+#' @aliases spark.mlp,SparkDataFrame-method
 #' @name spark.mlp
 #' @seealso \link{read.ml}
 #' @export
@@ -482,7 +482,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction"
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame
+#' @aliases spark.mlp,SparkDataFrame-method
 #' @export
 #' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
@@ -497,7 +497,7 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 #'         \code{tables}, conditional probabilities given the target label
 #' @rdname spark.mlp
 #' @export
-#' @aliases spark.mlp,SparkDataFrame
+#' @aliases spark.mlp,SparkDataFrame-method
 #' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, ...) {
@@ -635,7 +635,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame
+#' @aliases spark.mlp,SparkDataFrame-method
 #' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
