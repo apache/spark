@@ -29,10 +29,11 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
@@ -63,9 +64,30 @@ private[sql] class HiveSessionCatalog(
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
+      val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+      val newName = name.copy(database = Option(database), table = table)
+      val metadata = getTableMetadata(newName)
+      if (DDLUtils.isDatasourceTable(metadata.properties)) {
+        val dataSourceTable = metastoreCatalog.getTable(newName)
+        val qualifiedTable = SubqueryAlias(table, dataSourceTable)
+        // Then, if alias is specified, wrap the table with a Subquery using the alias.
+        // Otherwise, wrap the table with a Subquery using the table name.
+        alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+      } else if (metadata.tableType == CatalogTableType.VIEW) {
+        val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+        alias match {
+          case None =>
+            SubqueryAlias(metadata.identifier.table,
+              sparkSession.sessionState.sqlParser.parsePlan(viewText))
+          case Some(aliasText) =>
+            SubqueryAlias(aliasText, sparkSession.sessionState.sqlParser.parsePlan(viewText))
+        }
+      } else {
+        val qualifiedTable =
+          MetastoreRelation(
+            databaseName = database, tableName = table)(metadata, client, sparkSession)
+        alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+      }
     } else {
       val relation = tempTables(table)
       val tableWithQualifiers = SubqueryAlias(table, relation)

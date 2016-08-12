@@ -136,51 +136,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  def refreshTable(tableIdent: TableIdentifier): Unit = {
-    // refreshTable does not eagerly reload the cache. It just invalidate the cache.
-    // Next time when we use the table, it will be populated in the cache.
-    // Since we also cache ParquetRelations converted from Hive Parquet tables and
-    // adding converted ParquetRelations into the cache is not defined in the load function
-    // of the cache (instead, we add the cache entry in convertToParquetRelation),
-    // it is better at here to invalidate the cache to avoid confusing waring logs from the
-    // cache loader (e.g. cannot find data source provider, which is only defined for
-    // data source table.).
-    cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
-  }
-
   def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
     val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
     new Path(new Path(client.getDatabase(dbName).locationUri), tblName).toString
-  }
-
-  def lookupRelation(
-      tableIdent: TableIdentifier,
-      alias: Option[String]): LogicalPlan = {
-    val qualifiedTableName = getQualifiedTableName(tableIdent)
-    val table = client.getTable(qualifiedTableName.database, qualifiedTableName.name)
-
-    if (table.properties.get(DATASOURCE_PROVIDER).isDefined) {
-      val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
-      val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
-      // Then, if alias is specified, wrap the table with a Subquery using the alias.
-      // Otherwise, wrap the table with a Subquery using the table name.
-      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
-    } else if (table.tableType == CatalogTableType.VIEW) {
-      val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
-      alias match {
-        case None =>
-          SubqueryAlias(table.identifier.table,
-            sparkSession.sessionState.sqlParser.parsePlan(viewText))
-        case Some(aliasText) =>
-          SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText))
-      }
-    } else {
-      val qualifiedTable =
-        MetastoreRelation(
-          qualifiedTableName.database, qualifiedTableName.name)(table, client, sparkSession)
-      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
-    }
   }
 
   private def getCached(
@@ -459,6 +418,41 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           query,
           mode == SaveMode.Ignore)
     }
+  }
+
+  /**
+   * Data Source Table is inserted directly, using Cache.put.
+   * Note, this is not using automatic cache loading.
+   */
+  def cacheTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
+    cachedDataSourceTables.put(getQualifiedTableName(tableIdent), plan)
+  }
+
+  def getTableIfPresent(tableIdent: TableIdentifier): Option[LogicalPlan] = {
+    cachedDataSourceTables.getIfPresent(getQualifiedTableName(tableIdent)) match {
+      case null => None // Cache miss
+      case o: LogicalPlan => Option(o.asInstanceOf[LogicalPlan])
+    }
+  }
+
+  def getTable(tableIdent: TableIdentifier): LogicalPlan = {
+    cachedDataSourceTables.get(getQualifiedTableName(tableIdent))
+  }
+
+  def refreshTable(tableIdent: TableIdentifier): Unit = {
+    // refreshTable does not eagerly reload the cache. It just invalidate the cache.
+    // Next time when we use the table, it will be populated in the cache.
+    // Since we also cache ParquetRelations converted from Hive Parquet tables and
+    // adding converted ParquetRelations into the cache is not defined in the load function
+    // of the cache (instead, we add the cache entry in convertToParquetRelation),
+    // it is better at here to invalidate the cache to avoid confusing waring logs from the
+    // cache loader (e.g. cannot find data source provider, which is only defined for
+    // data source table.).
+    cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
+  }
+
+  def invalidateAll(): Unit = {
+    cachedDataSourceTables.invalidateAll()
   }
 }
 
