@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
@@ -69,7 +68,7 @@ private[sql] class HiveSessionCatalog(
       val newName = name.copy(database = Option(database), table = table)
       val metadata = getTableMetadata(newName)
       if (DDLUtils.isDatasourceTable(metadata.properties)) {
-        val dataSourceTable = metastoreCatalog.getTable(newName)
+        val dataSourceTable = metadataCache.getTable(newName)
         val qualifiedTable = SubqueryAlias(table, dataSourceTable)
         // Then, if alias is specified, wrap the table with a Subquery using the alias.
         // Otherwise, wrap the table with a Subquery using the table name.
@@ -106,23 +105,23 @@ private[sql] class HiveSessionCatalog(
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific
   // things so it would be a lot of work to split its functionality between HiveSessionCatalog
   // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
+  private val metadataCache = new MetadataCache(sparkSession)
 
   override def refreshTable(name: TableIdentifier): Unit = {
     super.refreshTable(name)
-    metastoreCatalog.refreshTable(name)
+    metadataCache.refreshTable(name)
   }
 
   override def invalidateCache(): Unit = {
-    metastoreCatalog.invalidateAll()
+    metadataCache.invalidateAll()
   }
 
   override def cacheDataSourceTable(name: TableIdentifier, plan: LogicalPlan): Unit = {
-    metastoreCatalog.cacheTable(name, plan)
+    metadataCache.cacheTable(name, plan)
   }
 
   override def getCachedDataSourceTableIfPresent(name: TableIdentifier): Option[LogicalPlan] = {
-    metastoreCatalog.getTableIfPresent(name)
+    metadataCache.getTableIfPresent(name)
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
