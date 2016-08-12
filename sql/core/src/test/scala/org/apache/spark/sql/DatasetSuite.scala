@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
-import scala.language.postfixOps
-
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -182,6 +180,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.select(expr("_2 + 1").as[Int]),
       2, 3, 4)
+  }
+
+  test("SPARK-16853: select, case class and tuple") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.select(expr("struct(_2, _2)").as[(Int, Int)]): Dataset[(Int, Int)],
+      (1, 1), (2, 2), (3, 3))
+
+    checkDataset(
+      ds.select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]): Dataset[ClassData],
+      ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
   }
 
   test("select 2") {

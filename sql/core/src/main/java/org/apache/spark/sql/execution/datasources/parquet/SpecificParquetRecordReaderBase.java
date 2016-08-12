@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import scala.Option;
+
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
@@ -61,8 +63,12 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter;
 import org.apache.spark.sql.execution.datasources.parquet.ParquetStruct;
+import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.StructType$;
+import org.apache.spark.util.AccumulatorV2;
+import org.apache.spark.util.LongAccumulator;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -145,9 +151,22 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.parquetSchema =
       new ParquetSchemaConverter(configuration).getParquetStruct(requestedSchema);
-    this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
+    this.reader = new ParquetFileReader(
+        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
+    }
+
+    // For test purpose.
+    // If the predefined accumulator exists, the row group number to read will be updated
+    // to the accumulator. So we can check if the row groups are filtered or not in test case.
+    TaskContext taskContext = TaskContext$.MODULE$.get();
+    if (taskContext != null) {
+      Option<AccumulatorV2<?, ?>> accu = (Option<AccumulatorV2<?, ?>>) taskContext.taskMetrics()
+        .lookForAccumulatorByName("numRowGroups");
+      if (accu.isDefined()) {
+        ((LongAccumulator)accu.get()).add((long)blocks.size());
+      }
     }
   }
 
@@ -209,7 +228,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     this.sparkSchema = new ParquetSchemaConverter(config).convert(requestedSchema);
-    this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
+    this.reader = new ParquetFileReader(
+        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     for (BlockMetaData block : blocks) {
       this.totalRowCount += block.getRowCount();
     }

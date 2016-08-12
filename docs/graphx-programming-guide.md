@@ -67,23 +67,6 @@ operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operato
 [aggregateMessages](#aggregateMessages)) as well as an optimized variant of the [Pregel](#pregel) API. In addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
 [builders](#graph_builders) to simplify graph analytics tasks.
 
-
-## Migrating from Spark 1.1
-
-GraphX in Spark 1.2 contains a few user facing API changes:
-
-1. To improve performance we have introduced a new version of
-[`mapReduceTriplets`][Graph.mapReduceTriplets] called
-[`aggregateMessages`][Graph.aggregateMessages] which takes the messages previously returned from
-[`mapReduceTriplets`][Graph.mapReduceTriplets] through a callback ([`EdgeContext`][EdgeContext])
-rather than by return value.
-We are deprecating [`mapReduceTriplets`][Graph.mapReduceTriplets] and encourage users to consult
-the [transition guide](#mrTripletsTransition).
-
-2. In Spark 1.0 and 1.1, the type signature of [`EdgeRDD`][EdgeRDD] switched from
-`EdgeRDD[ED]` to `EdgeRDD[ED, VD]` to enable some caching optimizations.  We have since discovered
-a more elegant solution and have restored the type signature to the more natural `EdgeRDD[ED]` type.
-
 # Getting Started
 
 To get started you first need to import Spark and GraphX into your project, as follows:

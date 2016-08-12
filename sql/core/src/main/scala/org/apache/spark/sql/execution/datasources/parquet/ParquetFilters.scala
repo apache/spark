@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
-private[sql] object ParquetFilters {
+private[parquet] object ParquetFilters {
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
     case BooleanType =>

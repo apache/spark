@@ -106,12 +106,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
-
-      JacksonParser.parseJson(
-        lines,
-        requiredSchema,
-        columnNameOfCorruptRecord,
-        parsedOptions)
+      val parser = new JacksonParser(requiredSchema, columnNameOfCorruptRecord, parsedOptions)
+      lines.flatMap(parser.parse)
     }
   }
 

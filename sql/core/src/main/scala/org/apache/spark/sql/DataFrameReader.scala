@@ -319,16 +319,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         columnNameOfCorruptRecord,
         parsedOptions)
     }
+    val parsed = jsonRDD.mapPartitions { iter =>
+      val parser = new JacksonParser(schema, columnNameOfCorruptRecord, parsedOptions)
+      iter.flatMap(parser.parse)
+    }
 
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(
-        schema.toAttributes,
-        JacksonParser.parse(
-          jsonRDD,
-          schema,
-          columnNameOfCorruptRecord,
-          parsedOptions))(sparkSession))
+      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
   }
 
   /**

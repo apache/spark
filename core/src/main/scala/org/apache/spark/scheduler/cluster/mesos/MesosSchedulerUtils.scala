@@ -33,6 +33,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
+
 /**
  * Shared trait for implementing a Mesos Scheduler. This holds common state and helper
  * methods and Mesos scheduler will use.
@@ -79,7 +80,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       credBuilder.setPrincipal(principal)
     }
     conf.getOption("spark.mesos.secret").foreach { secret =>
-      credBuilder.setSecret(ByteString.copyFromUtf8(secret))
+      credBuilder.setSecret(secret)
     }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(
@@ -356,4 +357,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForReachedMaxCores", "120s")
   }
 
+  /**
+   * spark.mesos.driver.frameworkId is set by the cluster dispatcher to correlate driver
+   * submissions with frameworkIDs.  However, this causes issues when a driver process launches
+   * more than one framework (more than one SparkContext(, because they all try to register with
+   * the same frameworkID.  To enforce that only the first driver registers with the configured
+   * framework ID, the driver calls this method after the first registration.
+   */
+  def unsetFrameworkID(sc: SparkContext) {
+    sc.conf.remove("spark.mesos.driver.frameworkId")
+    System.clearProperty("spark.mesos.driver.frameworkId")
+  }
 }

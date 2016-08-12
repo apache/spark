@@ -194,7 +194,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Validate the log directory.
     val path = new Path(logDir)
     if (!fs.exists(path)) {
-      var msg = s"Log directory specified does not exist: $logDir."
+      var msg = s"Log directory specified does not exist: $logDir"
       if (logDir == DEFAULT_LOG_DIR) {
         msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
       }
