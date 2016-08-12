@@ -97,7 +97,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       }
       // Check for duplicate names.
       checkDuplicateKeys(ctes, ctx)
-      With(query, ctes.toMap)
+      With(query, ctes)
     }
   }
 
