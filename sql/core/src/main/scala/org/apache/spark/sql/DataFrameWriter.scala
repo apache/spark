@@ -415,47 +415,49 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
 
+    // to add required options like URL and dbtable
+    val params = extraOptions.toMap ++ Map("url" -> url, "dbtable" -> table)
+    val jdbcOptions = new JDBCOptions(params)
+    val jdbcUrl = jdbcOptions.url
+    val jdbcTable = jdbcOptions.table
+
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
       props.put(key, value)
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnectionFactory(url, props)()
-
-    // to add required options like URL and dbtable
-    val params = extraOptions.toMap ++ Map("url" -> url, "dbtable" -> table)
-    val jdbcOptions = new JDBCOptions(params)
+    val conn = JdbcUtils.createConnectionFactory(jdbcUrl, props)()
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
+      var tableExists = JdbcUtils.tableExists(conn, jdbcUrl, jdbcTable)
 
       if (mode == SaveMode.Ignore && tableExists) {
         return
       }
 
       if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $table already exists.")
+        sys.error(s"Table $jdbcTable already exists.")
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
         if (jdbcOptions.isTruncate &&
-            JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
-          JdbcUtils.truncateTable(conn, table)
+            JdbcUtils.isCascadingTruncateTable(jdbcUrl) == Some(false)) {
+          JdbcUtils.truncateTable(conn, jdbcTable)
         } else {
-          JdbcUtils.dropTable(conn, table)
+          JdbcUtils.dropTable(conn, jdbcTable)
           tableExists = false
         }
       }
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, url)
+        val schema = JdbcUtils.schemaString(df, jdbcUrl)
         // To allow certain options to append when create a new table, which can be
         // table_options or partition_options.
         // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
         val createtblOptions = jdbcOptions.createTableOptions
-        val sql = s"CREATE TABLE $table ($schema) $createtblOptions"
+        val sql = s"CREATE TABLE $jdbcTable ($schema) $createtblOptions"
         val statement = conn.createStatement
         try {
           statement.executeUpdate(sql)
@@ -467,7 +469,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       conn.close()
     }
 
-    JdbcUtils.saveTable(df, url, table, props)
+    JdbcUtils.saveTable(df, jdbcUrl, jdbcTable, props)
   }
 
   /**
