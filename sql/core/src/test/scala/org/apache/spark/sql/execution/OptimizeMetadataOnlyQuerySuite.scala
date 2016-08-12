@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.{Scanner, LocalRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Scanner}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
