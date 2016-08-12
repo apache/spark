@@ -505,51 +505,11 @@ case class AlterTableRecoverPartitionsCommand(
     val total = partitionSpecsAndLocs.length
     logInfo(s"Found $total partitions in $root")
 
-    val partitionStats: GenMap[String, (Int, Long)] = if (total > threshold) {
-      val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-      val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
-
-      // Set the number of parallelism to prevent following file listing from generating many tasks
-      // in case of large #defaultParallelism.
-      val numParallelism = Math.min(serializedPaths.size, 10000)
-      // gather the fast stats for all the partitions otherwise Hive metastore will list all the
-      // files for all the new partitions in sequential way, which is super slow.
-      logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
-      spark.sparkContext.parallelize(serializedPaths, numParallelism)
-        .mapPartitions { paths =>
-          val pathFilter = getPathFilter(serializableConfiguration.value)
-          paths.map(new Path(_)).map{ path =>
-            val fs = path.getFileSystem(serializableConfiguration.value)
-            val statuses = fs.listStatus(path, pathFilter)
-            (path.toString, (statuses.length, statuses.map(_.getLen).sum))
-          }
-        }.collectAsMap()
-    } else {
-      partitionSpecsAndLocs.map { case (_, location) =>
-        val statuses = fs.listStatus(location, pathFilter)
-        (location.toString, (statuses.length, statuses.map(_.getLen).sum))
-      }.toMap
-    }
+    val partitionStats = gatherPartitionStats(
+      spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
     logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
-    var done = 0L
-    // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
-    // we should split them into smaller batches.
-    partitionSpecsAndLocs.iterator.grouped(1024).foreach { batch =>
-      val parts = batch.map { case (spec, location) =>
-        // inherit table storage format (possibly except for location)
-        val (numFiles, totalSize) = partitionStats(location.toString)
-        // This two fast stat could prevent Hive metastore to list the files again.
-        val params = Map(NUM_FILES -> numFiles.toString, TOTAL_SIZE -> totalSize.toString)
-        CatalogTablePartition(
-          spec,
-          table.storage.copy(locationUri = Some(location.toUri.toString)),
-          params)
-      }.toArray[CatalogTablePartition]
-      spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
-      done += parts.length
-      logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
-    }
+    addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
     logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
   }
@@ -564,7 +524,7 @@ case class AlterTableRecoverPartitionsCommand(
       spec: TablePartitionSpec,
       partitionNames: Seq[String],
       threshold: Int): GenSeq[(TablePartitionSpec, Path)] = {
-    if (partitionNames.length == 0) {
+    if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
 
@@ -586,17 +546,79 @@ case class AlterTableRecoverPartitionsCommand(
         // TODO: Validate the value
         val value = PartitioningUtils.unescapePathName(ps(1))
         // comparing with case-insensitive, but preserve the case
-        if (columnName == partitionNames(0)) {
+        if (columnName == partitionNames.head) {
           scanPartitions(spark, fs, filter, st.getPath, spec ++ Map(columnName -> value),
             partitionNames.drop(1), threshold)
         } else {
-          logWarning(s"expect partition column ${partitionNames(0)}, but got ${ps(0)}, ignore it")
+          logWarning(s"expect partition column ${partitionNames.head}, but got ${ps(0)}, ignore it")
           Seq()
         }
       } else {
         logWarning(s"ignore ${new Path(path, name)}")
         Seq()
       }
+    }
+  }
+
+  private def gatherPartitionStats(
+      spark: SparkSession,
+      partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
+      fs: FileSystem,
+      pathFilter: PathFilter,
+      threshold: Int): GenMap[String, (Int, Long)] = {
+    if (partitionSpecsAndLocs.length > threshold) {
+      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+      val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
+
+      // Set the number of parallelism to prevent following file listing from generating many tasks
+      // in case of large #defaultParallelism.
+      val numParallelism = Math.min(serializedPaths.length, 10000)
+      // gather the fast stats for all the partitions otherwise Hive metastore will list all the
+      // files for all the new partitions in sequential way, which is super slow.
+      logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
+      spark.sparkContext.parallelize(serializedPaths, numParallelism)
+        .mapPartitions { paths =>
+          val pathFilter = getPathFilter(serializableConfiguration.value)
+          paths.map(new Path(_)).map{ path =>
+            val fs = path.getFileSystem(serializableConfiguration.value)
+            val statuses = fs.listStatus(path, pathFilter)
+            (path.toString, (statuses.length, statuses.map(_.getLen).sum))
+          }
+        }.collectAsMap()
+    } else {
+      partitionSpecsAndLocs.map { case (_, location) =>
+        val statuses = fs.listStatus(location, pathFilter)
+        (location.toString, (statuses.length, statuses.map(_.getLen).sum))
+      }.toMap
+    }
+  }
+
+  private def addPartitions(
+      spark: SparkSession,
+      table: CatalogTable,
+      partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
+      partitionStats: GenMap[String, (Int, Long)]): Unit = {
+    val total = partitionSpecsAndLocs.length
+    var done = 0L
+    // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
+    // we should split them into smaller batches.
+    val parArray = partitionSpecsAndLocs.toArray.grouped(100).toArray.par
+    parArray.tasksupport = evalTaskSupport
+    parArray.foreach { batch =>
+      val parts = batch.map { case (spec, location) =>
+        // inherit table storage format (possibly except for location)
+        val (numFiles, totalSize) = partitionStats(location.toString)
+        // This two fast stat could prevent Hive metastore to list the files again.
+        val params = Map(NUM_FILES -> numFiles.toString, TOTAL_SIZE -> totalSize.toString)
+        CatalogTablePartition(
+          spec,
+          table.storage.copy(locationUri = Some(location.toUri.toString)),
+          params)
+      }
+      spark.sessionState.catalog.createPartitions(tableName, parts, ignoreIfExists = true)
+      done += parts.length
+      logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
   }
 }
