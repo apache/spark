@@ -46,9 +46,9 @@ import java.util.Arrays;
 import java.util.Iterator;
 
 SparkSession spark = SparkSession
-    .builder()
-    .appName("JavaStructuredNetworkWordCount")
-    .getOrCreate();
+  .builder()
+  .appName("JavaStructuredNetworkWordCount")
+  .getOrCreate();
 {% endhighlight %}
 
 </div>
@@ -95,7 +95,7 @@ This `lines` DataFrame represents an unbounded table containing the streaming te
 
 {% highlight java %}
 // Create DataFrame representing the stream of input lines from connection to localhost:9999
-Dataset<String> lines = spark
+Dataset<Row> lines = spark
   .readStream()
   .format("socket")
   .option("host", "localhost")
@@ -104,14 +104,14 @@ Dataset<String> lines = spark
 
 // Split the lines into words
 Dataset<String> words = lines
-    .as(Encoders.STRING())
-    .flatMap(
-        new FlatMapFunction<String, String>() {
-          @Override
-          public Iterator<String> call(String x) {
-            return Arrays.asList(x.split(" ")).iterator();
-          }
-        }, Encoders.STRING());
+  .as(Encoders.STRING())
+  .flatMap(
+    new FlatMapFunction<String, String>() {
+      @Override
+      public Iterator<String> call(String x) {
+        return Arrays.asList(x.split(" ")).iterator();
+      }
+    }, Encoders.STRING());
 
 // Generate running word count
 Dataset<Row> wordCounts = words.groupBy("value").count();
@@ -125,11 +125,11 @@ This `lines` DataFrame represents an unbounded table containing the streaming te
 {% highlight python %}
 # Create DataFrame representing the stream of input lines from connection to localhost:9999
 lines = spark\
-   .readStream\
-   .format('socket')\
-   .option('host', 'localhost')\
-   .option('port', 9999)\
-   .load()
+    .readStream\
+    .format('socket')\
+    .option('host', 'localhost')\
+    .option('port', 9999)\
+    .load()
 
 # Split the lines into words
 words = lines.select(
@@ -434,11 +434,11 @@ val spark: SparkSession = ...
 
 // Read text from socket 
 val socketDF = spark
-    .readStream
-    .format("socket")
-    .option("host", "localhost")
-    .option("port", 9999)
-    .load()
+  .readStream
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .load()
 
 socketDF.isStreaming    // Returns True for DataFrames that have streaming sources
 
@@ -447,10 +447,10 @@ socketDF.printSchema
 // Read all the csv files written atomically in a directory
 val userSchema = new StructType().add("name", "string").add("age", "integer")
 val csvDF = spark
-    .readStream
-    .option("sep", ";")
-    .schema(userSchema)      // Specify schema of the csv files
-    .csv("/path/to/directory")    // Equivalent to format("csv").load("/path/to/directory")
+  .readStream
+  .option("sep", ";")
+  .schema(userSchema)      // Specify schema of the csv files
+  .csv("/path/to/directory")    // Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
 </div>
@@ -461,11 +461,11 @@ SparkSession spark = ...
 
 // Read text from socket 
 Dataset[Row] socketDF = spark
-    .readStream()
-    .format("socket")
-    .option("host", "localhost")
-    .option("port", 9999)
-    .load();
+  .readStream()
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .load();
 
 socketDF.isStreaming();    // Returns True for DataFrames that have streaming sources
 
@@ -474,10 +474,10 @@ socketDF.printSchema();
 // Read all the csv files written atomically in a directory
 StructType userSchema = new StructType().add("name", "string").add("age", "integer");
 Dataset[Row] csvDF = spark
-    .readStream()
-    .option("sep", ";")
-    .schema(userSchema)      // Specify schema of the csv files
-    .csv("/path/to/directory");    // Equivalent to format("csv").load("/path/to/directory")
+  .readStream()
+  .option("sep", ";")
+  .schema(userSchema)      // Specify schema of the csv files
+  .csv("/path/to/directory");    // Equivalent to format("csv").load("/path/to/directory")
 {% endhighlight %}
 
 </div>
@@ -549,12 +549,12 @@ import org.apache.spark.sql.expressions.javalang.typed;
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder;
 
 public class DeviceData {
-    private String device;
-    private String type;
-    private Double signal;
-    private java.sql.Date time;
-    ...
-    // Getter and setter methods for each field
+  private String device;
+  private String type;
+  private Double signal;
+  private java.sql.Date time;
+  ...
+  // Getter and setter methods for each field
 }
 
 Dataset<Row> df = ...;    // streaming DataFrame with IOT device data with schema { device: string, type: string, signal: double, time: DateType }
@@ -828,33 +828,33 @@ val noAggDF = deviceDataDf.select("device").where("signal > 10")
 
 // Print new data to console
 noAggDF
-   .writeStream
-   .format("console")
-   .start()
+  .writeStream
+  .format("console")
+  .start()
 
 // Write new data to Parquet files
 noAggDF
-   .writeStream
-   .parquet("path/to/destination/directory")
-   .start()
+  .writeStream
+  .parquet("path/to/destination/directory")
+  .start()
    
 // ========== DF with aggregation ==========
 val aggDF = df.groupBy(“device”).count()
 
 // Print updated aggregations to console
 aggDF
-   .writeStream
-   .outputMode("complete")
-   .format("console")
-   .start()
+  .writeStream
+  .outputMode("complete")
+  .format("console")
+  .start()
 
 // Have all the aggregates in an in-memory table 
 aggDF
-   .writeStream
-   .queryName("aggregates")    // this query name will be the table name
-   .outputMode("complete")
-   .format("memory")
-   .start()
+  .writeStream
+  .queryName("aggregates")    // this query name will be the table name
+  .outputMode("complete")
+  .format("memory")
+  .start()
 
 spark.sql("select * from aggregates").show()   // interactively query in-memory table
 {% endhighlight %}
@@ -868,33 +868,33 @@ Dataset<Row> noAggDF = deviceDataDf.select("device").where("signal > 10");
 
 // Print new data to console
 noAggDF
-   .writeStream()
-   .format("console")
-   .start();
+  .writeStream()
+  .format("console")
+  .start();
 
 // Write new data to Parquet files
 noAggDF
-   .writeStream()
-   .parquet("path/to/destination/directory")
-   .start();
+  .writeStream()
+  .parquet("path/to/destination/directory")
+  .start();
    
 // ========== DF with aggregation ==========
 Dataset<Row> aggDF = df.groupBy(“device”).count();
 
 // Print updated aggregations to console
 aggDF
-   .writeStream()
-   .outputMode("complete")
-   .format("console")
-   .start();
+  .writeStream()
+  .outputMode("complete")
+  .format("console")
+  .start();
 
 // Have all the aggregates in an in-memory table 
 aggDF
-   .writeStream()
-   .queryName("aggregates")    // this query name will be the table name
-   .outputMode("complete")
-   .format("memory")
-   .start();
+  .writeStream()
+  .queryName("aggregates")    // this query name will be the table name
+  .outputMode("complete")
+  .format("memory")
+  .start();
 
 spark.sql("select * from aggregates").show();   // interactively query in-memory table
 {% endhighlight %}
@@ -908,33 +908,33 @@ noAggDF = deviceDataDf.select("device").where("signal > 10")
 
 # Print new data to console
 noAggDF\
-   .writeStream()\
-   .format("console")\
-   .start()
+    .writeStream()\
+    .format("console")\
+    .start()
 
 # Write new data to Parquet files
 noAggDF\
-   .writeStream()\
-   .parquet("path/to/destination/directory")\
-   .start()
+    .writeStream()\
+    .parquet("path/to/destination/directory")\
+    .start()
    
 # ========== DF with aggregation ==========
 aggDF = df.groupBy(“device”).count()
 
 # Print updated aggregations to console
 aggDF\
-   .writeStream()\
-   .outputMode("complete")\
-   .format("console")\
-   .start()
+    .writeStream()\
+    .outputMode("complete")\
+    .format("console")\
+    .start()
 
 # Have all the aggregates in an in memory table. The query name will be the table name
 aggDF\
-   .writeStream()\
-   .queryName("aggregates")\
-   .outputMode("complete")\
-   .format("memory")\
-   .start()
+    .writeStream()\
+    .queryName("aggregates")\
+    .outputMode("complete")\
+    .format("memory")\
+    .start()
 
 spark.sql("select * from aggregates").show()   # interactively query in-memory table
 {% endhighlight %}
@@ -1093,11 +1093,11 @@ In case of a failure or intentional shutdown, you can recover the previous progr
 
 {% highlight scala %}
 aggDF
-   .writeStream
-   .outputMode("complete")
-   .option(“checkpointLocation”, “path/to/HDFS/dir”)
-   .format("memory")
-   .start()
+  .writeStream
+  .outputMode("complete")
+  .option(“checkpointLocation”, “path/to/HDFS/dir”)
+  .format("memory")
+  .start()
 {% endhighlight %}
 
 </div>
@@ -1105,11 +1105,11 @@ aggDF
 
 {% highlight java %}
 aggDF
-   .writeStream()
-   .outputMode("complete")
-   .option(“checkpointLocation”, “path/to/HDFS/dir”)
-   .format("memory")
-   .start();
+  .writeStream()
+  .outputMode("complete")
+  .option(“checkpointLocation”, “path/to/HDFS/dir”)
+  .format("memory")
+  .start();
 {% endhighlight %}
 
 </div>
@@ -1117,11 +1117,11 @@ aggDF
 
 {% highlight python %}
 aggDF\
-   .writeStream()\
-   .outputMode("complete")\
-   .option(“checkpointLocation”, “path/to/HDFS/dir”)\
-   .format("memory")\
-   .start()
+    .writeStream()\
+    .outputMode("complete")\
+    .option(“checkpointLocation”, “path/to/HDFS/dir”)\
+    .format("memory")\
+    .start()
 {% endhighlight %}
 
 </div>

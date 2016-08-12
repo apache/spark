@@ -410,6 +410,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * - UNION [DISTINCT]
    * - UNION ALL
    * - EXCEPT [DISTINCT]
+   * - MINUS [DISTINCT]
    * - INTERSECT [DISTINCT]
    */
   override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
@@ -428,6 +429,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.EXCEPT if all =>
         throw new ParseException("EXCEPT ALL is not supported.", ctx)
       case SqlBaseParser.EXCEPT =>
+        Except(left, right)
+      case SqlBaseParser.SETMINUS if all =>
+        throw new ParseException("MINUS ALL is not supported.", ctx)
+      case SqlBaseParser.SETMINUS =>
         Except(left, right)
     }
   }

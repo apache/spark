@@ -7,7 +7,7 @@ Author: The Apache Software Foundation
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
 Depends:
     R (>= 3.0),
-    methods,
+    methods
 Suggests:
     testthat,
     e1071,
@@ -31,6 +31,7 @@ Collate:
     'context.R'
     'deserialize.R'
     'functions.R'
+    'install.R'
     'mllib.R'
     'serialize.R'
     'sparkR.R'
