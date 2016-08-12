@@ -108,9 +108,6 @@ private[sql] class HiveSessionCatalog(
   // and HiveCatalog. We should still do it at some point...
   private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
 
-  val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
-  val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-
   override def refreshTable(name: TableIdentifier): Unit = {
     super.refreshTable(name)
     metastoreCatalog.refreshTable(name)
