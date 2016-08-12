@@ -883,8 +883,6 @@ class BinaryLogisticRegressionSummary private[classification] (
    *
    * Note: This ignores instance weights (setting all to 1.0) from `LogisticRegression.weightCol`.
    *       This will change in later Spark versions.
-   *
-   * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
   @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
@@ -947,8 +945,8 @@ class BinaryLogisticRegressionSummary private[classification] (
 }
 
 /**
- * LogisticAggregator computes the gradient and loss for binary logistic loss function, as used
- * in binary classification for instances in sparse or dense vector in an online fashion.
+ * LogisticAggregator computes the gradient and loss for binary or multinomial logistic loss
+ * function, as used in classification for instances in sparse or dense vector in an online fashion.
  *
  * Two LogisticAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
@@ -973,12 +971,11 @@ private class LogisticAggregator(
 
   private val totalCoefficientLength = {
     val cols = if (fitIntercept) numFeatures + 1 else numFeatures
-    val rows = if (multinomial) numClasses else math.max(1, numClasses - 1)
+    val rows = if (multinomial) numClasses else 1
     rows * cols
   }
 
-  private val gradientSumArray =
-    Array.ofDim[Double](totalCoefficientLength)
+  private val gradientSumArray = Array.ofDim[Double](totalCoefficientLength)
 
   /** Update gradient and loss using binary loss function. */
   private def binaryUpdateInPlace(
