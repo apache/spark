@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 /**
  * Options for the JDBC data source.
  */
-private[sql] class JDBCOptions(
+class JDBCOptions(
     @transient private val parameters: Map[String, String])
   extends Serializable {
 
