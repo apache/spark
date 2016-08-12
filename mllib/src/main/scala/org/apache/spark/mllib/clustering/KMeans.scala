@@ -414,7 +414,7 @@ class KMeans private (
           }
         }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs
-        .aggregate(new Array[Double](runs))(
+        .treeAggregate(new Array[Double](runs))(
           seqOp = (s, v) => {
             // s += v
             var r = 0
