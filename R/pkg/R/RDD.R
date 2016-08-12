@@ -67,7 +67,7 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
   .Object
 })
 
-setMethod("show", "RDD",
+setMethod("showRDD", "RDD",
           function(object) {
               cat(paste(callJMethod(getJRDD(object), "toString"), "\n", sep = ""))
           })
@@ -215,7 +215,7 @@ setValidity("RDD",
 #' @rdname cache-methods
 #' @aliases cache,RDD-method
 #' @noRd
-setMethod("cache",
+setMethod("cacheRDD",
           signature(x = "RDD"),
           function(x) {
             callJMethod(getJRDD(x), "cache")
@@ -235,12 +235,12 @@ setMethod("cache",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 2L)
-#' persist(rdd, "MEMORY_AND_DISK")
+#' persistRDD(rdd, "MEMORY_AND_DISK")
 #'}
 #' @rdname persist
 #' @aliases persist,RDD-method
 #' @noRd
-setMethod("persist",
+setMethod("persistRDD",
           signature(x = "RDD", newLevel = "character"),
           function(x, newLevel = "MEMORY_ONLY") {
             callJMethod(getJRDD(x), "persist", getStorageLevel(newLevel))
@@ -259,12 +259,12 @@ setMethod("persist",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 2L)
 #' cache(rdd) # rdd@@env$isCached == TRUE
-#' unpersist(rdd) # rdd@@env$isCached == FALSE
+#' unpersistRDD(rdd) # rdd@@env$isCached == FALSE
 #'}
 #' @rdname unpersist-methods
 #' @aliases unpersist,RDD-method
 #' @noRd
-setMethod("unpersist",
+setMethod("unpersistRDD",
           signature(x = "RDD"),
           function(x) {
             callJMethod(getJRDD(x), "unpersist")
@@ -351,7 +351,7 @@ setMethod("numPartitions",
 #' @rdname collect-methods
 #' @aliases collect,RDD-method
 #' @noRd
-setMethod("collect",
+setMethod("collectRDD",
           signature(x = "RDD"),
           function(x, flatten = TRUE) {
             # Assumes a pairwise RDD is backed by a JavaPairRDD.
@@ -411,13 +411,13 @@ setMethod("collectAsMap",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' count(rdd) # 10
+#' countRDD(rdd) # 10
 #' length(rdd) # Same as count
 #'}
 #' @rdname count
 #' @aliases count,RDD-method
 #' @noRd
-setMethod("count",
+setMethod("countRDD",
           signature(x = "RDD"),
           function(x) {
             countPartition <- function(part) {
@@ -431,10 +431,10 @@ setMethod("count",
 #' Return the number of elements in the RDD
 #' @rdname count
 #' @noRd
-setMethod("length",
+setMethod("lengthRDD",
           signature(x = "RDD"),
           function(x) {
-            count(x)
+            countRDD(x)
           })
 
 #' Return the count of each unique value in this RDD as a list of
@@ -768,13 +768,13 @@ setMethod("foreachPartition",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' take(rdd, 2L) # list(1, 2)
+#' takeRDD(rdd, 2L) # list(1, 2)
 #'}
 # nolint end
 #' @rdname take
 #' @aliases take,RDD,numeric-method
 #' @noRd
-setMethod("take",
+setMethod("takeRDD",
           signature(x = "RDD", num = "numeric"),
           function(x, num) {
             resList <- list()
@@ -817,13 +817,13 @@ setMethod("take",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' first(rdd)
+#' firstRDD(rdd)
 #' }
 #' @noRd
-setMethod("first",
+setMethod("firstRDD",
           signature(x = "RDD"),
           function(x) {
-            take(x, 1)[[1]]
+            takeRDD(x, 1)[[1]]
           })
 
 #' Removes the duplicates from RDD.
@@ -838,13 +838,13 @@ setMethod("first",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, c(1,2,2,3,3,3))
-#' sort(unlist(collect(distinct(rdd)))) # c(1, 2, 3)
+#' sort(unlist(collect(distinctRDD(rdd)))) # c(1, 2, 3)
 #'}
 # nolint end
 #' @rdname distinct
 #' @aliases distinct,RDD-method
 #' @noRd
-setMethod("distinct",
+setMethod("distinctRDD",
           signature(x = "RDD"),
           function(x, numPartitions = SparkR:::getNumPartitions(x)) {
             identical.mapped <- lapply(x, function(x) { list(x, NULL) })
@@ -942,7 +942,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
             fraction <- 0.0
             total <- 0
             multiplier <- 3.0
-            initialCount <- count(x)
+            initialCount <- countRDD(x)
             maxSelected <- 0
             MAXINT <- .Machine$integer.max
 
@@ -1019,12 +1019,12 @@ setMethod("keyBy",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(1, 2, 3, 4, 5, 6, 7), 4L)
 #' getNumPartitions(rdd)                   # 4
-#' getNumPartitions(repartition(rdd, 2L))  # 2
+#' getNumPartitions(repartitionRDD(rdd, 2L))  # 2
 #'}
 #' @rdname repartition
 #' @aliases repartition,RDD
 #' @noRd
-setMethod("repartition",
+setMethod("repartitionRDD",
           signature(x = "RDD"),
           function(x, numPartitions) {
             if (!is.null(numPartitions) && is.numeric(numPartitions)) {
@@ -1064,7 +1064,7 @@ setMethod("coalesce",
                         })
                }
                shuffled <- lapplyPartitionsWithIndex(x, func)
-               repartitioned <- partitionBy(shuffled, numPartitions)
+               repartitioned <- partitionByRDD(shuffled, numPartitions)
                values(repartitioned)
              } else {
                jrdd <- callJMethod(getJRDD(x), "coalesce", numPartitions, shuffle)

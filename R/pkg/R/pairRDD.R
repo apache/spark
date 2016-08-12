@@ -198,13 +198,13 @@ setMethod("flatMapValues",
 #' sc <- sparkR.init()
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
 #' rdd <- parallelize(sc, pairs)
-#' parts <- partitionBy(rdd, 2L)
+#' parts <- partitionByRDD(rdd, 2L)
 #' collectPartition(parts, 0L) # First partition should contain list(1, 2) and list(1, 4)
 #'}
 #' @rdname partitionBy
 #' @aliases partitionBy,RDD,integer-method
 #' @noRd
-setMethod("partitionBy",
+setMethod("partitionByRDD",
           signature(x = "RDD"),
           function(x, numPartitions, partitionFunc = hashCode) {
             stopifnot(is.numeric(numPartitions))
@@ -270,7 +270,7 @@ setMethod("partitionBy",
 setMethod("groupByKey",
           signature(x = "RDD", numPartitions = "numeric"),
           function(x, numPartitions) {
-            shuffled <- partitionBy(x, numPartitions)
+            shuffled <- partitionByRDD(x, numPartitions)
             groupVals <- function(part) {
               vals <- new.env()
               keys <- new.env()
@@ -342,7 +342,7 @@ setMethod("reduceByKey",
               convertEnvsToList(keys, vals)
             }
             locallyReduced <- lapplyPartition(x, reduceVals)
-            shuffled <- partitionBy(locallyReduced, numToInt(numPartitions))
+            shuffled <- partitionByRDD(locallyReduced, numToInt(numPartitions))
             lapplyPartition(shuffled, reduceVals)
           })
 
@@ -453,7 +453,7 @@ setMethod("combineByKey",
               convertEnvsToList(keys, combiners)
             }
             locallyCombined <- lapplyPartition(x, combineLocally)
-            shuffled <- partitionBy(locallyCombined, numToInt(numPartitions))
+            shuffled <- partitionByRDD(locallyCombined, numToInt(numPartitions))
             mergeAfterShuffle <- function(part) {
               combiners <- new.env()
               keys <- new.env()
@@ -563,13 +563,13 @@ setMethod("foldByKey",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
 #' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
-#' join(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
+#' joinRDD(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3))
 #'}
 # nolint end
 #' @rdname join-methods
 #' @aliases join,RDD,RDD-method
 #' @noRd
-setMethod("join",
+setMethod("joinRDD",
           signature(x = "RDD", y = "RDD"),
           function(x, y, numPartitions) {
             xTagged <- lapply(x, function(i) { list(i[[1]], list(1L, i[[2]])) })
@@ -784,7 +784,7 @@ setMethod("sortByKey",
             rangeBounds <- list()
 
             if (numPartitions > 1) {
-              rddSize <- count(x)
+              rddSize <- countRDD(x)
               # constant from Spark's RangePartitioner
               maxSampleSize <- numPartitions * 20
               fraction <- min(maxSampleSize / max(rddSize, 1), 1.0)
@@ -822,7 +822,7 @@ setMethod("sortByKey",
               sortKeyValueList(part, decreasing = !ascending)
             }
 
-            newRDD <- partitionBy(x, numPartitions, rangePartitionFunc)
+            newRDD <- partitionByRDD(x, numPartitions, rangePartitionFunc)
             lapplyPartition(newRDD, partitionFunc)
           })
 
