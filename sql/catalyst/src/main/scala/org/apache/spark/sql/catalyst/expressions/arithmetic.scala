@@ -57,7 +57,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     }
   }
 
-  override def sql: String = s"(-${child.sql})"
+  override def sql: String = s"(- ${child.sql})"
 }
 
 @ExpressionDescription(
@@ -75,7 +75,7 @@ case class UnaryPositive(child: Expression)
 
   protected override def nullSafeEval(input: Any): Any = input
 
-  override def sql: String = s"(+${child.sql})"
+  override def sql: String = s"(+ ${child.sql})"
 }
 
 /**
