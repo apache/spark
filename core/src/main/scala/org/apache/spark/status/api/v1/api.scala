@@ -75,7 +75,11 @@ class ExecutorSummary private[spark](
     val totalShuffleWrite: Long,
     val isBlacklisted: Boolean,
     val maxMemory: Long,
-    val executorLogs: Map[String, String])
+    val executorLogs: Map[String, String],
+    val onHeapMemoryUsed: Long,
+    val offHeapMemoryUsed: Long,
+    val maxOnHeapMemory: Long,
+    val maxOffHeapMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,

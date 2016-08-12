@@ -378,7 +378,11 @@ $(document).ready(function () {
                         {data: 'rddBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.memoryUsed, type) + ' / ' + formatBytes(row.maxMemory, type)) : row.memoryUsed;
+                                return '<div>' +
+                                    (type === 'display' ? (formatBytes(row.onHeapMemoryUsed, type) + ' / ' + formatBytes(row.maxOnHeapMemory, type)) : row.maxOnHeapMemory) + ' (On Heap)' +
+                                    '</div><div>' +
+                                    (type === 'display' ? (formatBytes(row.offHeapMemoryUsed, type) + ' / ' + formatBytes(row.maxOffHeapMemory, type)) : row.maxOffHeapMemory) + ' (Off Heap)' +
+                                    '</div>' ;
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},

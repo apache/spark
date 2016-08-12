@@ -40,7 +40,8 @@ private[ui] case class ExecutorSummaryInfo(
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
     isBlacklisted: Int,
-    maxMemory: Long,
+    maxOnHeapMem: Long,
+    maxOffHeapMem: Long,
     executorLogs: Map[String, String])
 
 
@@ -81,6 +82,10 @@ private[spark] object ExecutorsPage {
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
+    val onHeapMemUsed = status.onHeapMemUsed
+    val offHeapMemUsed = status.offHeapMemUsed
+    val maxOnHeapMem = status.maxOnHeapMem
+    val maxOffHeapMem = status.maxOffHeapMem
     val diskUsed = status.diskUsed
     val taskSummary = listener.executorToTaskSummary.getOrElse(execId, ExecutorTaskSummary(execId))
 
@@ -104,7 +109,11 @@ private[spark] object ExecutorsPage {
       taskSummary.shuffleWrite,
       taskSummary.isBlacklisted,
       maxMem,
-      taskSummary.executorLogs
+      taskSummary.executorLogs,
+      onHeapMemUsed,
+      offHeapMemUsed,
+      maxOnHeapMem,
+      maxOffHeapMem
     )
   }
 }

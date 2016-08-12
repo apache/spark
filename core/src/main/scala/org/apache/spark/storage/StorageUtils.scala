@@ -35,7 +35,10 @@ import org.apache.spark.internal.Logging
  * class cannot mutate the source of the information. Accesses are not thread-safe.
  */
 @DeveloperApi
-class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
+class StorageStatus(
+    val blockManagerId: BlockManagerId,
+    val maxOnHeapMem: Long,
+    val maxOffHeapMem: Long) {
 
   /**
    * Internal representation of the blocks stored in this block manager.
@@ -51,7 +54,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    *
    * As with the block maps, we store the storage information separately for RDD blocks and
    * non-RDD blocks for the same reason. In particular, RDD storage information is stored
-   * in a map indexed by the RDD ID to the following 4-tuple:
+   * in a map indexed by the RDD ID to the following 3-tuple:
    *
    *   (memory size, disk size, storage level)
    *
@@ -60,11 +63,17 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    * non-RDD blocks contains only the first 3 fields (in the same order).
    */
   private val _rddStorageInfo = new mutable.HashMap[Int, (Long, Long, StorageLevel)]
-  private var _nonRddStorageInfo: (Long, Long) = (0L, 0L)
+
+  // On-heap memory, off-heap memory and disk usage of non rdd storage
+  private var _nonRddStorageInfo: (Long, Long, Long) = (0L, 0L, 0L)
 
   /** Create a storage status with an initial set of blocks, leaving the source unmodified. */
-  def this(bmid: BlockManagerId, maxMem: Long, initialBlocks: Map[BlockId, BlockStatus]) {
-    this(bmid, maxMem)
+  def this(
+      bmid: BlockManagerId,
+      maxOnHeapMem: Long,
+      maxOffHeapMem: Long,
+      initialBlocks: Map[BlockId, BlockStatus]) {
+    this(bmid, maxOnHeapMem, maxOffHeapMem)
     initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
   }
 
@@ -176,17 +185,42 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
    */
   def numRddBlocksById(rddId: Int): Int = _rddBlocks.get(rddId).map(_.size).getOrElse(0)
 
-  /** Return the memory remaining in this block manager. */
-  def memRemaining: Long = maxMem - memUsed
+  /** Return the max memory can be used by this block manager. */
+  def maxMem: Long = maxOnHeapMem + maxOffHeapMem
 
-  /** Return the memory used by this block manager. */
-  def memUsed: Long = _nonRddStorageInfo._1 + cacheSize
+  /** Return the memory remaining in this block manager. */
+  def memRemaining: Long = onHeapMemRemaining + offHeapMemRemaining
 
   /** Return the memory used by caching RDDs */
-  def cacheSize: Long = _rddBlocks.keys.toSeq.map(memUsedByRdd).sum
+  def cacheSize: Long = onHeapCacheSize + offHeapCacheSize
+
+  /** Return the memory used by this block manager. */
+  def memUsed: Long = onHeapMemUsed + offHeapMemUsed
+
+  /** Return the on-heap memory remaining in this block manager. */
+  def onHeapMemRemaining: Long = maxOnHeapMem - onHeapMemUsed
+
+  /** Return the off-heap memory remaining in this block manager. */
+  def offHeapMemRemaining: Long = maxOffHeapMem - offHeapMemUsed
+
+  /** Return the on-heap memory used by this block manager. */
+  def onHeapMemUsed: Long = _nonRddStorageInfo._1 + onHeapCacheSize
+
+  /** Return the off-heap memory used by this block manager. */
+  def offHeapMemUsed: Long = _nonRddStorageInfo._2 + offHeapCacheSize
+
+  /** Return the memory used by on-heap caching RDDs */
+  def onHeapCacheSize: Long = {
+    _rddStorageInfo.filter(!_._2._3.useOffHeap).map(_._2._1).sum
+  }
+
+  /** Return the memory used by off-heap caching RDDs */
+  def offHeapCacheSize: Long = {
+    _rddStorageInfo.filter(_._2._3.useOffHeap).map(_._2._1).sum
+  }
 
   /** Return the disk space used by this block manager. */
-  def diskUsed: Long = _nonRddStorageInfo._2 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
+  def diskUsed: Long = _nonRddStorageInfo._3 + _rddBlocks.keys.toSeq.map(diskUsedByRdd).sum
 
   /** Return the memory used by the given RDD in this block manager in O(1) time. */
   def memUsedByRdd(rddId: Int): Long = _rddStorageInfo.get(rddId).map(_._1).getOrElse(0L)
@@ -212,8 +246,10 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
         _rddStorageInfo.get(rddId)
           .map { case (mem, disk, _) => (mem, disk) }
           .getOrElse((0L, 0L))
-      case _ =>
-        _nonRddStorageInfo
+      case _ if !level.useOffHeap =>
+        (_nonRddStorageInfo._1, _nonRddStorageInfo._3)
+      case _ if level.useOffHeap =>
+        (_nonRddStorageInfo._2, _nonRddStorageInfo._3)
     }
     val newMem = math.max(oldMem + changeInMem, 0L)
     val newDisk = math.max(oldDisk + changeInDisk, 0L)
@@ -228,7 +264,11 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
           _rddStorageInfo(rddId) = (newMem, newDisk, level)
         }
       case _ =>
-        _nonRddStorageInfo = (newMem, newDisk)
+        _nonRddStorageInfo = if (!level.useOffHeap) {
+          (newMem, _nonRddStorageInfo._2, newDisk)
+        } else {
+          (_nonRddStorageInfo._1, newMem, newDisk)
+        }
     }
   }
 

@@ -74,8 +74,9 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
     synchronized {
       val blockManagerId = blockManagerAdded.blockManagerId
       val executorId = blockManagerId.executorId
-      val maxMem = blockManagerAdded.maxMem
-      val storageStatus = new StorageStatus(blockManagerId, maxMem)
+      val maxOnHeapMem = blockManagerAdded.maxOnHeapMem.getOrElse(blockManagerAdded.maxMem)
+      val maxOffHeapMem = blockManagerAdded.maxOffHeapMem.getOrElse(0L)
+      val storageStatus = new StorageStatus(blockManagerId, maxOnHeapMem, maxOffHeapMem)
       executorIdToStorageStatus(executorId) = storageStatus
 
       // Try to remove the dead storage status if same executor register the block manager twice.
