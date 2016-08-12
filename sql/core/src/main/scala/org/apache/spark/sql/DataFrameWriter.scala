@@ -23,9 +23,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -366,15 +368,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
-        val cmd =
-          CreateTableUsingAsSelect(
-            tableIdent,
-            source,
-            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-            getBucketSpec,
-            mode,
-            extraOptions.toMap,
-            df.logicalPlan)
+        val tableDesc = CatalogTable(
+          identifier = tableIdent,
+          tableType = CatalogTableType.EXTERNAL,
+          storage = CatalogStorageFormat.empty.copy(properties = extraOptions.toMap),
+          schema = new StructType,
+          provider = Some(source),
+          partitionColumnNames = partitioningColumns.getOrElse(Nil),
+          bucketSpec = getBucketSpec
+        )
+        val cmd = CreateTable(tableDesc, mode, Some(df.logicalPlan))
         df.sparkSession.sessionState.executePlan(cmd).toRdd
     }
   }
@@ -387,12 +390,25 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
+   * You can set the following JDBC-specific option(s) for storing JDBC:
+   * <li>`truncate` (default `false`): use `TRUNCATE TABLE` instead of `DROP TABLE`.</li>
+   *
+   * In case of failures, users should turn off `truncate` option to use `DROP TABLE` again. Also,
+   * due to the different behavior of `TRUNCATE TABLE` among DBMS, it's not always safe to use this.
+   * MySQLDialect, DB2Dialect, MsSqlServerDialect, DerbyDialect, and OracleDialect supports this
+   * while PostgresDialect and default JDBCDirect doesn't. For unknown and unsupported JDBCDirect,
+   * the user option `truncate` is ignored.
+   *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`
    * @param table Name of the table in the external database.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included. "batchsize" can be used to control the
-   *                             number of rows per insert.
+   *                             number of rows per insert. "isolationLevel" can be one of
+   *                             "NONE", "READ_COMMITTED", "READ_UNCOMMITTED", "REPEATABLE_READ",
+   *                             or "SERIALIZABLE", corresponding to standard transaction
+   *                             isolation levels defined by JDBC's Connection object, with default
+   *                             of "READ_UNCOMMITTED".
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
@@ -419,8 +435,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
-        tableExists = false
+        if (extraOptions.getOrElse("truncate", "false").toBoolean &&
+            JdbcUtils.isCascadingTruncateTable(url) == Some(false)) {
+          JdbcUtils.truncateTable(conn, table)
+        } else {
+          JdbcUtils.dropTable(conn, table)
+          tableExists = false
+        }
       }
 
       // Create the table if the table didn't exist.

@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * for classes whose fields are entirely defined by constructor params but should not be
  * case classes.
  */
-private[sql] trait DefinedByConstructorParams
+trait DefinedByConstructorParams
 
 
 /**
@@ -472,29 +472,17 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         val TypeRef(_, _, Seq(keyType, valueType)) = t
+        val keyClsName = getClassNameFromType(keyType)
+        val valueClsName = getClassNameFromType(valueType)
+        val keyPath = s"""- map key class: "$keyClsName"""" +: walkedTypePath
+        val valuePath = s"""- map value class: "$valueClsName"""" +: walkedTypePath
 
-        val keys =
-          Invoke(
-            Invoke(inputObject, "keysIterator",
-              ObjectType(classOf[scala.collection.Iterator[_]])),
-            "toSeq",
-            ObjectType(classOf[scala.collection.Seq[_]]))
-        val convertedKeys = toCatalystArray(keys, keyType)
-
-        val values =
-          Invoke(
-            Invoke(inputObject, "valuesIterator",
-              ObjectType(classOf[scala.collection.Iterator[_]])),
-            "toSeq",
-            ObjectType(classOf[scala.collection.Seq[_]]))
-        val convertedValues = toCatalystArray(values, valueType)
-
-        val Schema(keyDataType, _) = schemaFor(keyType)
-        val Schema(valueDataType, valueNullable) = schemaFor(valueType)
-        NewInstance(
-          classOf[ArrayBasedMapData],
-          convertedKeys :: convertedValues :: Nil,
-          dataType = MapType(keyDataType, valueDataType, valueNullable))
+        ExternalMapToCatalyst(
+          inputObject,
+          dataTypeFor(keyType),
+          serializerFor(_, keyType, keyPath),
+          dataTypeFor(valueType),
+          serializerFor(_, valueType, valuePath))
 
       case t if t <:< localTypeOf[String] =>
         StaticInvoke(
@@ -720,7 +708,7 @@ object ScalaReflection extends ScalaReflection {
   /**
    * Whether the fields of the given type is defined entirely by its constructor parameters.
    */
-  private[sql] def definedByConstructorParams(tpe: Type): Boolean = {
+  def definedByConstructorParams(tpe: Type): Boolean = {
     tpe <:< localTypeOf[Product] || tpe <:< localTypeOf[DefinedByConstructorParams]
   }
 

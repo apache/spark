@@ -47,7 +47,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
         }
       }
 
-      input.map { value =>
+      input.foreach { value =>
         val row = new GenericMutableRow(1)
         columnType.setField(row, 0, value)
         builder.appendFrom(row, 0)

@@ -44,6 +44,9 @@ setMethod("initialize", "Column", function(.Object, jc) {
   .Object
 })
 
+#' @rdname column
+#' @name column
+#' @aliases column,jobj-method
 setMethod("column",
           signature(x = "jobj"),
           function(x) {
@@ -52,6 +55,7 @@ setMethod("column",
 
 #' @rdname show
 #' @name show
+#' @aliases show,Column-method
 #' @export
 #' @note show(Column) since 1.4.0
 setMethod("show", "Column",
@@ -131,8 +135,12 @@ createMethods()
 #'
 #' Set a new name for a column
 #'
+#' @param object Column to rename
+#' @param data new name to use
+#'
 #' @rdname alias
 #' @name alias
+#' @aliases alias,Column-method
 #' @family colum_func
 #' @export
 #' @note alias since 1.4.0
@@ -153,6 +161,7 @@ setMethod("alias",
 #' @rdname substr
 #' @name substr
 #' @family colum_func
+#' @aliases substr,Column-method
 #'
 #' @param start starting position
 #' @param stop ending position
@@ -171,8 +180,9 @@ setMethod("substr", signature(x = "Column"),
 #' @rdname startsWith
 #' @name startsWith
 #' @family colum_func
+#' @aliases startsWith,Column-method
 #'
-#' @param x vector of character string whose “starts” are considered
+#' @param x vector of character string whose "starts" are considered
 #' @param prefix character vector (often of length one)
 #' @note startsWith since 1.4.0
 setMethod("startsWith", signature(x = "Column"),
@@ -189,8 +199,9 @@ setMethod("startsWith", signature(x = "Column"),
 #' @rdname endsWith
 #' @name endsWith
 #' @family colum_func
+#' @aliases endsWith,Column-method
 #'
-#' @param x vector of character string whose “ends” are considered
+#' @param x vector of character string whose "ends" are considered
 #' @param suffix character vector (often of length one)
 #' @note endsWith since 1.4.0
 setMethod("endsWith", signature(x = "Column"),
@@ -206,6 +217,7 @@ setMethod("endsWith", signature(x = "Column"),
 #' @rdname between
 #' @name between
 #' @family colum_func
+#' @aliases between,Column-method
 #'
 #' @param bounds lower and upper bounds
 #' @note between since 1.5.0
@@ -224,10 +236,10 @@ setMethod("between", signature(x = "Column"),
 #' @rdname cast
 #' @name cast
 #' @family colum_func
+#' @aliases cast,Column-method
 #'
 #' @examples \dontrun{
 #'   cast(df$age, "string")
-#'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
 #' @note cast since 1.4.0
 setMethod("cast",
@@ -235,12 +247,8 @@ setMethod("cast",
           function(x, dataType) {
             if (is.character(dataType)) {
               column(callJMethod(x@jc, "cast", dataType))
-            } else if (is.list(dataType)) {
-              json <- tojson(dataType)
-              jdataType <- callJStatic("org.apache.spark.sql.types.DataType", "fromJson", json)
-              column(callJMethod(x@jc, "cast", jdataType))
             } else {
-              stop("dataType should be character or list")
+              stop("dataType should be character")
             }
           })
 
@@ -248,7 +256,7 @@ setMethod("cast",
 #'
 #' @rdname match
 #' @name %in%
-#' @aliases %in%
+#' @aliases %in%,Column-method
 #' @return a matched values as a result of comparing with given values.
 #' @export
 #' @examples
@@ -272,6 +280,7 @@ setMethod("%in%",
 #' @rdname otherwise
 #' @name otherwise
 #' @family colum_func
+#' @aliases otherwise,Column-method
 #' @export
 #' @note otherwise since 1.5.0
 setMethod("otherwise",

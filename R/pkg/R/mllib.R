@@ -99,6 +99,9 @@ NULL
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param tol Positive convergence tolerance of iterations.
 #' @param maxIter Integer giving the maximal number of IRLS iterations.
+#' @param weightCol The weight column name. If this is not set or NULL, we treat all instance
+#'                  weights as 1.0.
+#' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
 #' @rdname spark.glm
 #' @name spark.glm
@@ -126,7 +129,7 @@ NULL
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -139,10 +142,13 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             }
 
             formula <- paste(deparse(formula), collapse = "")
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter))
+                                tol, as.integer(maxIter), weightCol)
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
@@ -158,6 +164,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
+#' @param weightCol The weight column name. If this is not set or NULL, we treat all instance
+#'                  weights as 1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -172,8 +180,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @note glm since 1.5.0
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25) {
-            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
+          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL) {
+            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
@@ -400,6 +408,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
 #' @param initMode The initialization algorithm choosen to fit the model
 #' @return \code{spark.kmeans} returns a fitted k-means model
 #' @rdname spark.kmeans
+#' @aliases spark.kmeans,SparkDataFrame,formula-method
 #' @name spark.kmeans
 #' @export
 #' @examples
@@ -512,6 +521,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param smoothing Smoothing parameter
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model
 #' @rdname spark.naiveBayes
+#' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
 #' @export
@@ -606,7 +616,6 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.kmeans
-#' @name write.ml
 #' @export
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),

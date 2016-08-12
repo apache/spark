@@ -1059,14 +1059,15 @@ class SparkILoop(
   @deprecated("Use `process` instead", "2.9.0")
   private def main(settings: Settings): Unit = process(settings)
 
-  private[repl] def getAddedJars(): Array[String] = {
+  @DeveloperApi
+  def getAddedJars(): Array[String] = {
     val conf = new SparkConf().setMaster(getMaster())
     val envJars = sys.env.get("ADD_JARS")
     if (envJars.isDefined) {
       logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
     val jars = {
-      val userJars = Utils.getUserJars(conf)
+      val userJars = Utils.getUserJars(conf, isShell = true)
       if (userJars.isEmpty) {
         envJars.getOrElse("")
       } else {

@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -79,6 +79,13 @@ class SparkSession private(
 
   sparkContext.assertNotStopped()
 
+  /**
+   * The version of Spark on which this application is running.
+   *
+   * @since 2.0.0
+   */
+  def version: String = SPARK_VERSION
+
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
@@ -108,9 +115,11 @@ class SparkSession private(
 
   /**
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
+   *
+   * @since 2.0.0
    */
   @transient
-  private[spark] val sqlContext: SQLContext = new SQLContext(this)
+  val sqlContext: SQLContext = new SQLContext(this)
 
   /**
    * Runtime configuration interface for Spark.

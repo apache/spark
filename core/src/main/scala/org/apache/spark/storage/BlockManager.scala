@@ -96,7 +96,8 @@ private[spark] class BlockManager(
   // However, since we use this only for reporting and logging, what we actually want here is
   // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
   // to revisit whether reporting this value as the "max" is intuitive to the user.
-  private val maxMemory = memoryManager.maxOnHeapStorageMemory
+  private val maxMemory =
+    memoryManager.maxOnHeapStorageMemory + memoryManager.maxOffHeapStorageMemory
 
   // Port used by the external shuffle service. In Yarn mode, this may be already be
   // set through the Hadoop configuration as the server is launched in the Yarn NM.
@@ -802,7 +803,7 @@ private[spark] class BlockManager(
       val putBlockStatus = getCurrentBlockStatus(blockId, info)
       val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
-        // Now that the block is in either the memory, externalBlockStore, or disk store,
+        // Now that the block is in either the memory or disk store,
         // tell the master about it.
         info.size = size
         if (tellMaster) {
