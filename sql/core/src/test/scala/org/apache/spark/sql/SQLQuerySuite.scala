@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io.File
 import java.math.MathContext
 import java.sql.{Date, Timestamp}
 
@@ -2589,6 +2590,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
+  }
+
+  test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
+    withTempDir { dir =>
+      val parquetDir = new File(dir, "parquet").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
+      spark.read.parquet(parquetDir)
+    }
   }
 
   test("SPARK-16644: Aggregate should not put aggregate expressions to constraints") {

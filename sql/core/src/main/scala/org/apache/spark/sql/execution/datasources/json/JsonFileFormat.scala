@@ -55,7 +55,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
-        name.startsWith("_") || name.startsWith(".")
+        (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
       }.toArray
 
       val jsonSchema = InferSchema.infer(
