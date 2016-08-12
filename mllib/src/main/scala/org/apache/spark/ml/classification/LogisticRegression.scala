@@ -341,8 +341,9 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
+        val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), featuresStd, featuresMean, regParamL2)
+          $(standardization), bcFeaturesStd, featuresMean, regParamL2)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -437,6 +438,7 @@ class LogisticRegression @Since("1.2.0") (
           rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
           i += 1
         }
+        bcFeaturesStd.unpersist(blocking = false)
 
         if ($(fitIntercept)) {
           (Vectors.dense(rawCoefficients.dropRight(1)).compressed, rawCoefficients.last,
@@ -933,6 +935,8 @@ class BinaryLogisticRegressionSummary private[classification] (
  * Two LogisticAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
+ * @param bcCoeffs the broadcast coefficients vector.
+ * @param bcFeaturesStd the broadcast featureStd array.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
@@ -1070,11 +1074,11 @@ private class LogisticCostFun(
     numClasses: Int,
     fitIntercept: Boolean,
     standardization: Boolean,
-    featuresStd: Array[Double],
+    bcFeaturesStd: Broadcast[Array[Double]],
     featuresMean: Array[Double],
     regParamL2: Double) extends DiffFunction[BDV[Double]] {
 
-  val bcFeaturesStd = instances.context.broadcast(featuresStd)
+  @transient lazy val featuresStd = bcFeaturesStd.value
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
