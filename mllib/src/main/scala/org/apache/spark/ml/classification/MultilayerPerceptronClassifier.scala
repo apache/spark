@@ -380,4 +380,3 @@ object MultilayerPerceptronClassificationModel
     }
   }
 }
-
