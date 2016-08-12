@@ -138,8 +138,6 @@ class BlockManagerMasterEndpoint(
       }
   }
 
-  private def getTopologyInfoForHost(h: String): String = topologyMapper.getTopologyForHost(h)
-
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the slaves.
@@ -321,7 +319,7 @@ class BlockManagerMasterEndpoint(
       dummyId.executorId,
       dummyId.host,
       dummyId.port,
-      Some(getTopologyInfoForHost(dummyId.host)))
+      Some(topologyMapper.getTopologyForHost(dummyId.host)))
 
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
