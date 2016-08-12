@@ -69,6 +69,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}
 #' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.isoreg}
 #' @seealso \link{read.ml}
 NULL
 
@@ -81,6 +82,7 @@ NULL
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}
 #' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.isoreg}
 NULL
 
 #' Generalized Linear Models
@@ -333,6 +335,12 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' model <- spark.isoreg(df, label ~ feature, isotonic = FALSE)
 #' # return model boundaries and prediction as lists
 #' result <- summary(model, df)
+#' # prediction based on fitted model
+#' predict_data <- list(list(-2.0), list(-1.0), list(0.5),
+#'                 list(0.75), list(1.0), list(2.0), list(9.0))
+#' predict_df <- createDataFrame(predict_data, c("feature"))
+#' # get prediction column
+#' predict_result <- collect(select(predict(model, predict_df), "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -359,24 +367,24 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 
 #  Predicted values based on an isotonicRegression model
 
-#' @param object a fitted isotonicRegressionModel
+#' @param object a fitted IsotonicRegressionModel
 #' @param newData SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
 #' @rdname spark.isoreg
 #' @export
-#' @note predict(isotonicRegressionModel) since 2.1.0
+#' @note predict(IsotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#  Get the summary of a isotonicRegressionModel model
+#  Get the summary of an IsotonicRegressionModel model
 
-#' @param object a fitted isotonicRegressionModel
+#' @param object a fitted IsotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
 #' @export
-#' @note summary(isotonicRegressionModel) since 2.1.0
+#' @note summary(IsotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj
@@ -619,7 +627,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
-#  Save fitted isotonicRegressionModel to the input path
+#  Save fitted IsotonicRegressionModel to the input path
 
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
