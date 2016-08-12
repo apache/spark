@@ -974,8 +974,17 @@ private[spark] class BlockManager(
         if (level.replication > 1) {
           val remoteStartTime = System.currentTimeMillis
           val bytesToReplicate = doGetLocalBytes(blockId, info)
+          // [SPARK-16550] Erase the typed classTag when using default serialization, since
+          // NettyBlockRpcServer crashes when deserializing repl-defined classes.
+          // TODO(ekl) remove this once the classloader issue on the remote end is fixed.
+          val remoteClassTag = classTag
+//          if (!serializerManager.canUseKryo(classTag)) {
+//            scala.reflect.classTag[Any]
+//          } else {
+//            classTag
+//          }
           try {
-            replicate(blockId, bytesToReplicate, level, classTag)
+            replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
             bytesToReplicate.dispose()
           }
