@@ -627,6 +627,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.retainedTasks</code></td>
+  <td>10000</td>
+  <td>
+    How many tasks the Spark UI and status APIs remember before garbage
+    collecting, if <code>spark.ui.trimTasks</code> is true.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.trimTasks</code></td>
+  <td>false</td>
+  <td>
+    Whether the Spark UI and status APIs will garbage collect tasks.
+  </td>
+</tr>
+<tr>
   <td><code>spark.worker.ui.retainedExecutors</code></td>
   <td>1000</td>
   <td>
