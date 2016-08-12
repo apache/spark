@@ -749,7 +749,7 @@ class DecisionTreeModel(JavaModel):
 
 
 @inherit_doc
-class TreeEnsembleModels(JavaModel):
+class TreeEnsembleModel(JavaModel):
     """
     (private abstraction)
 
@@ -909,7 +909,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestRegressionModel(TreeEnsembleModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -1047,7 +1047,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(TreeEnsembleModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`GBTRegressor`.
 

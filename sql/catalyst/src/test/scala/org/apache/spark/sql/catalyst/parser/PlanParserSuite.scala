@@ -81,7 +81,7 @@ class PlanParserSuite extends PlanTest {
       val ctes = namedPlans.map {
         case (name, cte) =>
           name -> SubqueryAlias(name, cte)
-      }.toMap
+      }
       With(plan, ctes)
     }
     assertEqual(

@@ -364,7 +364,7 @@ object HadoopFsRelation extends Logging {
     // We filter everything that starts with _ and ., except _common_metadata and _metadata
     // because Parquet needs to find those metadata files from leaf files returned by this method.
     // We should refactor this logic to not mix metadata files with data files.
-    (pathName.startsWith("_") || pathName.startsWith(".")) &&
+    ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
       !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
 
