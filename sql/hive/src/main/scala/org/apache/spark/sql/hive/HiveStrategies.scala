@@ -403,7 +403,4 @@ object ConvertMetastoreTablesUtils extends Logging {
       }
     }
   }
-
 }
-
-
