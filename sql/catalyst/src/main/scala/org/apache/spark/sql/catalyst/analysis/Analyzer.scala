@@ -132,12 +132,12 @@ class Analyzer(
   object CTESubqueryAnalysis extends Rule[LogicalPlan] {
     def substitutePreviousCTE(
         plan: LogicalPlan,
-        ctes: Seq[(String, CommonSubqueryAlias)]): LogicalPlan = {
+        ctes: Seq[(String, SubqueryAlias)]): LogicalPlan = {
       plan transformDown {
         case u: UnresolvedRelation =>
           val substituted = ctes.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).map { relation =>
-              val withAlias = u.alias.map(CommonSubqueryAlias(_, relation.child))
+              val withAlias = u.alias.map(SubqueryAlias(_, relation.child))
               withAlias.getOrElse(relation)
             }
           substituted.getOrElse(u)
@@ -146,9 +146,9 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case With(child, relations) =>
-        val analyzedRelations = relations.foldLeft(Seq.empty[(String, CommonSubqueryAlias)]) {
+        val analyzedRelations = relations.foldLeft(Seq.empty[(String, SubqueryAlias)]) {
           case (analyzed, (name, relation)) =>
-            val newRelation = CommonSubqueryAlias(relation.alias,
+            val newRelation = SubqueryAlias(relation.alias,
               execute(substitutePreviousCTE(relation.child, analyzed)))
             analyzed :+ name -> newRelation
         }
@@ -176,7 +176,7 @@ class Analyzer(
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(CommonSubqueryAlias(_, relation))
+            val withAlias = u.alias.map(SubqueryAlias(_, relation))
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)

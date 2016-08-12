@@ -2055,7 +2055,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes the [[CommonSubqueryAlias]] operators which are used only once from the plan.
+ * Removes the [[SubqueryAlias]] operators which are used only once from the plan.
  */
 object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -2064,14 +2064,14 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     val noRecursiveSubqueryPlan = plan.transformDown {
       // Eliminate the recursive subqueries which have the same output.
-      case s @ CommonSubqueryAlias(_, child)
-          if child.find(p => p.isInstanceOf[CommonSubqueryAlias] && p.sameResult(s)).isDefined =>
+      case s @ SubqueryAlias(_, child)
+          if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
         child
     }
 
     noRecursiveSubqueryPlan.foreach {
       // Collect the subqueries that are used more than once in the query.
-      case CommonSubqueryAlias(_, child) =>
+      case SubqueryAlias(_, child) =>
         if (subqueries.indexWhere(s => s.sameResult(child)) >= 0) {
           // If the plan with same results can be found.
           duplicateSubqueries += child
@@ -2084,7 +2084,7 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
 
     noRecursiveSubqueryPlan.transformDown {
       // Only eliminate the subqueries that are used only once in the query.
-      case CommonSubqueryAlias(_, child)
+      case SubqueryAlias(_, child)
           if duplicateSubqueries.indexWhere(s => s.sameResult(child)) < 0 =>
         child
     }

@@ -106,8 +106,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    *
    * This is only used for Common Table Expressions.
    */
-  override def visitNamedQuery(ctx: NamedQueryContext): CommonSubqueryAlias = withOrigin(ctx) {
-    CommonSubqueryAlias(ctx.name.getText, plan(ctx.queryNoWith))
+  override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
+    SubqueryAlias(ctx.name.getText, plan(ctx.queryNoWith))
   }
 
   /**

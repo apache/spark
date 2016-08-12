@@ -396,7 +396,7 @@ case class InsertIntoTable(
  *                     key is the alias of the CTE definition,
  *                     value is the CTE definition.
  */
-case class With(child: LogicalPlan, cteRelations: Map[String, CommonSubqueryAlias])
+case class With(child: LogicalPlan, cteRelations: Map[String, SubqueryAlias])
     extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
@@ -695,17 +695,17 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
-case class CommonSubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
+case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case c: CommonSubqueryAlias =>
+    case c: SubqueryAlias =>
       val thisChild = child.collectFirst {
-        case p: LogicalPlan if !p.isInstanceOf[CommonSubqueryAlias] => p
+        case p: LogicalPlan if !p.isInstanceOf[SubqueryAlias] => p
       }
       val otherChild = c.child.collectFirst {
-        case p: LogicalPlan if !p.isInstanceOf[CommonSubqueryAlias] => p
+        case p: LogicalPlan if !p.isInstanceOf[SubqueryAlias] => p
       }
       if (thisChild.isDefined && otherChild.isDefined) {
         thisChild.get.sameResult(otherChild.get)
@@ -714,11 +714,6 @@ case class CommonSubqueryAlias(alias: String, child: LogicalPlan) extends UnaryN
       }
     case o => child.sameResult(o)
   }
-}
-
-case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 
 /**

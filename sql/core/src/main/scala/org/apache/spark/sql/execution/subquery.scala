@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.logical.{CommonSubqueryAlias, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.subquery.SubqueryDedup
 import org.apache.spark.sql.internal.SQLConf
@@ -201,7 +201,7 @@ case class DedupCommonSubqueries(sparkSession: SparkSession) extends Rule[Logica
   def apply(plan: LogicalPlan): LogicalPlan = {
     val dedup = new SubqueryDedup()
     plan.transformDown {
-      case s: CommonSubqueryAlias =>
+      case s: SubqueryAlias =>
         val optimized = sparkSession.sessionState.optimizer.execute(s.child)
         dedup.createCommonSubquery(sparkSession, optimized)
     }
