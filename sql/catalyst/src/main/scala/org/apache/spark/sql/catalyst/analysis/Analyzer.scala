@@ -81,6 +81,8 @@ class Analyzer(
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
+    Batch("CTESubqueryAnalysis", Once,
+      CTESubqueryAnalysis),
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -118,6 +120,42 @@ class Analyzer(
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
+
+  /**
+   * Analyses subqueries in CTE.
+   * In order to de-duplicate common subqueries in CTE, the underlying plans in the common
+   * subqueries should have the same attributes (i.e., no differences of expression IDs). To
+   * achieve this, we have to analyse the subqueries' parsed logical plans in advance, instead
+   * of just interpolating the parsed logical plans and analysing them individually. Because
+   * that will generate different attributes.
+   */
+  object CTESubqueryAnalysis extends Rule[LogicalPlan] {
+    def substitutePreviousCTE(
+        plan: LogicalPlan,
+        ctes: Seq[(String, CommonSubqueryAlias)]): LogicalPlan = {
+      plan transformDown {
+        case u: UnresolvedRelation =>
+          val substituted = ctes.find(x => resolver(x._1, u.tableIdentifier.table))
+            .map(_._2).map { relation =>
+              val withAlias = u.alias.map(CommonSubqueryAlias(_, relation.child))
+              withAlias.getOrElse(relation)
+            }
+          substituted.getOrElse(u)
+      }
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case With(child, relations) =>
+        val analyzedRelations = relations.foldLeft(Seq.empty[(String, CommonSubqueryAlias)]) {
+          case (analyzed, (name, relation)) =>
+            val newRelation = CommonSubqueryAlias(relation.alias,
+              execute(substitutePreviousCTE(relation.child, analyzed)))
+            analyzed :+ name -> newRelation
+        }
+        With(child, analyzedRelations.toMap)
+      case o => o
+    }
+  }
 
   /**
    * Substitute child plan with cte definitions

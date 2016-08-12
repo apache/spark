@@ -611,6 +611,14 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val df4WithoutCTE = sql("SELECT * FROM (SELECT * FROM (SELECT * FROM l JOIN l)) j1, " +
       "(SELECT * FROM (SELECT * FROM l JOIN l)) j2")
     assert(df4.collect() === df4WithoutCTE.collect())
+
+    // CTE subquery refers to previous CTE subquery.
+    val df5 = sql("WITH cte AS (SELECT * FROM l a, l b), cte2 AS (SELECT * FROM cte j1, cte) " +
+      "SELECT * FROM cte2 j3, cte j4")
+    val commonSubqueries5 = df5.queryExecution.sparkPlan.collect {
+      case c: CommonSubqueryExec => c.subquery.child
+    }.distinct
+    assert(commonSubqueries5.length == 1)
   }
 
   test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {

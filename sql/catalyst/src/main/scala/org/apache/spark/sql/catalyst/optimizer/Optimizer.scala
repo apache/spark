@@ -2065,7 +2065,7 @@ object EliminateOneTimeSubqueryAliases extends Rule[LogicalPlan] {
     val noRecursiveSubqueryPlan = plan.transformDown {
       // Eliminate the recursive subqueries which have the same output.
       case s @ CommonSubqueryAlias(_, child)
-          if child.find(p => p.isInstanceOf[SubqueryAlias] && p.sameResult(s)).isDefined =>
+          if child.find(p => p.isInstanceOf[CommonSubqueryAlias] && p.sameResult(s)).isDefined =>
         child
     }
 

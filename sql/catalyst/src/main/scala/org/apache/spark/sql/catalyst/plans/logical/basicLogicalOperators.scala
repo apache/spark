@@ -698,6 +698,22 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class CommonSubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
+
+  override def sameResult(plan: LogicalPlan): Boolean = plan match {
+    case c: CommonSubqueryAlias =>
+      val thisChild = child.collectFirst {
+        case p: LogicalPlan if !p.isInstanceOf[CommonSubqueryAlias] => p
+      }
+      val otherChild = c.child.collectFirst {
+        case p: LogicalPlan if !p.isInstanceOf[CommonSubqueryAlias] => p
+      }
+      if (thisChild.isDefined && otherChild.isDefined) {
+        thisChild.get.sameResult(otherChild.get)
+      } else {
+        false
+      }
+    case o => child.sameResult(o)
+  }
 }
 
 case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
