@@ -380,7 +380,7 @@ object ConvertMetastoreTablesUtils extends Logging {
    * @param tableBasePath The default base path of the Hive metastore table
    * @param partitionSpec The partition specifications from Hive metastore
    */
-  private[hive] class MetaStorePartitionedTableFileCatalog(
+  private class MetaStorePartitionedTableFileCatalog(
       sparkSession: SparkSession,
       tableBasePath: Path,
       override val partitionSpec: PartitionSpec)
@@ -391,7 +391,7 @@ object ConvertMetastoreTablesUtils extends Logging {
       Some(partitionSpec.partitionColumns)) {
   }
 
-  private[hive] object MetaStorePartitionedTableFileCatalog {
+  private object MetaStorePartitionedTableFileCatalog {
     /** Get the list of paths to list files in the for a metastore table */
     def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
       // If there are no partitions currently specified then use base path,
