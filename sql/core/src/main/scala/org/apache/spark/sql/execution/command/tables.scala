@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -57,11 +57,10 @@ case class CreateHiveTableAsSelectLogicalPlan(
 
 /**
  * A command to create a MANAGED table with the same definition of the given existing table.
- * The source table cannot be temporary table or Index table. In the target table definition,
- * the table comment is always empty but the column comments are identical to the ones defined
- * in the source table.
+ * The source table cannot be an Index table. In the target table definition, the table comment is
+ * always empty but the column comments are identical to the ones defined in the source table.
  *
- * The CatalogTable attributes copied from the source table include storage(inputFormat,
+ * The CatalogTable attributes copied from the source table are storage(inputFormat,
  * outputFormat, serde, compressed, properties), schema, provider, partitionColumnNames,
  * bucketSpec, properties, unsupportedFeatures.
  *
@@ -82,12 +81,9 @@ case class CreateTableLikeCommand(
       throw new AnalysisException(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
-    if (catalog.isTemporaryTable(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
-    }
 
     val sourceTableDesc = catalog.getTableMetadata(sourceTable)
+    val sourceStorageFormat = sourceTableDesc.storage
 
     sourceTableDesc.tableType match {
       case CatalogTableType.MANAGED | CatalogTableType.EXTERNAL | CatalogTableType.VIEW => // OK
@@ -100,9 +96,7 @@ case class CreateTableLikeCommand(
     // even if we set the tableType to MANAGED
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     // Table comment is stored as a table property. To clean it, we also should remove them.
-    val newTableProp =
-      sourceTableDesc.properties.filterKeys(key =>
-        key != "EXTERNAL" && key.toLowerCase != "comment")
+    val newTableProp = sourceTableDesc.properties.filterKeys(_ != "EXTERNAL")
     val newSerdeProp =
       if (DDLUtils.isDatasourceTable(sourceTableDesc)) {
         val newPath = catalog.defaultTablePath(targetTable)
@@ -111,19 +105,26 @@ case class CreateTableLikeCommand(
       } else {
         sourceTableDesc.storage.properties
       }
+    val newStorage =
+      CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = sourceStorageFormat.inputFormat,
+        outputFormat = sourceStorageFormat.outputFormat,
+        serde = sourceStorageFormat.serde,
+        compressed = sourceStorageFormat.compressed,
+        properties = newSerdeProp)
+
     val newTableDesc =
-      sourceTableDesc.copy(
+      CatalogTable(
         identifier = targetTable,
         tableType = CatalogTableType.MANAGED,
-        owner = "",
-        createTime = System.currentTimeMillis,
-        lastAccessTime = -1,
+        storage = newStorage,
+        schema = sourceTableDesc.schema,
+        provider = sourceTableDesc.provider,
+        partitionColumnNames = sourceTableDesc.partitionColumnNames,
+        bucketSpec = sourceTableDesc.bucketSpec,
         properties = newTableProp,
-        comment = None,
-        viewOriginalText = None,
-        viewText = None).withNewStorage(
-          locationUri = None,
-          serdeProperties = newSerdeProp)
+        unsupportedFeatures = sourceTableDesc.unsupportedFeatures)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]

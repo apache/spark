@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.config._
@@ -622,6 +623,26 @@ class HiveDDLSuite
     }
   }
 
+  test("CREATE TABLE LIKE a temporary table") {
+    val sourceTabName = "tab1"
+    val targetTabName = "tab2"
+    withTable(sourceTabName, targetTabName) {
+      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        .createTempView(sourceTabName)
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName")
+
+      val sourceTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(sourceTabName, None))
+      val targetTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
+
+      assert(targetTable.storage.serde ==
+        Option(classOf[LazySimpleSerDe].getCanonicalName))
+
+      checkCreateTableLike(sourceTable, targetTable)
+    }
+  }
+
   test("CREATE TABLE LIKE a data source table") {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
@@ -710,7 +731,7 @@ class HiveDDLSuite
 
         val sourceTable = catalog.getTableMetadata(TableIdentifier(sourceTabName, Some("default")))
         assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
-        assert(sourceTable.properties.get("comment") == Option("Apache Spark"))
+        assert(sourceTable.comment == Option("Apache Spark"))
         val targetTable = catalog.getTableMetadata(TableIdentifier(targetTabName, Some("default")))
 
         checkCreateTableLike(sourceTable, targetTable)
