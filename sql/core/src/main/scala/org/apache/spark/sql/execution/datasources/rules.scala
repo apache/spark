@@ -273,6 +273,21 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 }
 
 /**
+ * A rule to check whether the functions are supported only when Hive support is enabled
+ */
+object HiveOnlyCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case CreateTable(tableDesc, _, Some(_))
+          if tableDesc.provider.get == "hive" =>
+        throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
+
+      case _ => // OK
+    }
+  }
+}
+
+/**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
 case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)

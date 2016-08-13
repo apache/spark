@@ -461,15 +461,14 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.security.tokens.${service}.enabled</code></td>
+  <td><code>spark.yarn.security.credentials.${service}.enabled</code></td>
   <td><code>true</code></td>
   <td>
-  Controls whether to retrieve delegation tokens for non-HDFS services when security is enabled.
-  By default, delegation tokens for all supported services are retrieved when those services are
+  Controls whether to obtain credentials for services when security is enabled.
+  By default, credentials for all supported services are retrieved when those services are
   configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run.
-  <p/>
-  Currently supported services are: <code>hive</code>, <code>hbase</code>
+  application being run. For further details please see
+  [Running in a Secure Cluster](running-on-yarn.html#running-in-a-secure-cluster)
   </td>
 </tr>
 <tr>
@@ -525,11 +524,11 @@ token for the cluster's HDFS filesystem, and potentially for HBase and Hive.
 
 An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
 the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
-and `spark.yarn.security.tokens.hbase.enabled` is not set to `false`.
+and `spark.yarn.security.credentials.hbase.enabled` is not set to `false`.
 
 Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
 includes a URI of the metadata store in `"hive.metastore.uris`, and
-`spark.yarn.security.tokens.hive.enabled` is not set to `false`.
+`spark.yarn.security.credentials.hive.enabled` is not set to `false`.
 
 If an application needs to interact with other secure HDFS clusters, then
 the tokens needed to access these clusters must be explicitly requested at
@@ -538,6 +537,13 @@ launch time. This is done by listing them in the `spark.yarn.access.namenodes` p
 ```
 spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
 ```
+
+Spark supports integrating with other security-aware services through Java Services mechanism (see
+`java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
+should be available to Spark by listing their names in the corresponding file in the jar's
+`META-INF/services` directory. These plug-ins can be disabled by setting
+`spark.yarn.security.tokens.{service}.enabled` to `false`, where `{service}` is the name of
+credential provider.
 
 ## Configuring the External Shuffle Service
 
