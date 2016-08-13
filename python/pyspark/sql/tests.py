@@ -182,11 +182,13 @@ class DataTypeTests(unittest.TestCase):
         row = Row()
         self.assertEqual(len(row), 0)
 
+
 class TimestampTypeTests(unittest.TestCase):
     # regression test for SPARK-17035
     def test_timestamp_microsecond(self):
         tst = TimestampType()
         self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
