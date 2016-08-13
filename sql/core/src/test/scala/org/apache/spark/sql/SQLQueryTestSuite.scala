@@ -256,6 +256,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       .createOrReplaceTempView("src")
   }
 
+  test("test") {
+    val srcSchema = new StructType().add("key", IntegerType).add("value", StringType)
+    spark.read.schema(srcSchema).json(getFilePath("test-data/kv1.json"))
+      .createOrReplaceTempView("src")
+  }
+
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 
