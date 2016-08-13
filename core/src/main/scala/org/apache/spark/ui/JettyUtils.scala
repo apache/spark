@@ -194,41 +194,25 @@ private[spark] object JettyUtils extends Logging {
       target: String): ServletContextHandler = {
     val servlet = new ProxyServlet {
       override def rewriteTarget(request: HttpServletRequest): String = {
-        val path = request.getRequestURI();
-        if (!path.startsWith(prefix)) return null
-
-        val uri = new StringBuilder(target)
-        if (target.endsWith("/")) uri.setLength(uri.length() - 1)
-        val rest = path.substring(prefix.length())
-        if (!rest.isEmpty()) {
-          if (!rest.startsWith("/")) {
-            uri.append("/")
-          }
-          uri.append(rest)
+        val rewrittenURI = createProxyURI(
+                              prefix,
+                              target,
+                              request.getRequestURI(),
+                              request.getQueryString())
+        if (rewrittenURI == null) {
+          return null
         }
-
-        val query = request.getQueryString()
-        if (query != null) {
-          // Is there at least one path segment ?
-          val separator = "://"
-          if (uri.indexOf("/", uri.indexOf(separator) + separator.length()) < 0) {
-            uri.append("/")
-          }
-          uri.append("?").append(query)
-        }
-        val rewrittenURI = URI.create(uri.toString()).normalize()
-
         if (!validateDestination(rewrittenURI.getHost(), rewrittenURI.getPort())) {
           return null
         }
-
         rewrittenURI.toString();
       }
+
       override def filterServerResponseHeader(
-        clientRequest: HttpServletRequest,
-        serverResponse: Response,
-        headerName: String,
-        headerValue: String): String = {
+          clientRequest: HttpServletRequest,
+          serverResponse: Response,
+          headerName: String,
+          headerValue: String): String = {
         if (headerName.equalsIgnoreCase("location")) {
           val targetUri = serverResponse.getRequest().getURI();
           val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority();
@@ -392,6 +376,34 @@ private[spark] object JettyUtils extends Logging {
       }
     })
     redirectHandler
+  }
+
+  def createProxyURI (prefix: String, target: String, path: String, query: String): URI = {
+    if (!path.startsWith(prefix)) {
+      return null
+    }
+
+    val uri = new StringBuilder(target)
+    val rest = path.substring(prefix.length())
+
+    if (!rest.isEmpty()) {
+      if (!rest.startsWith("/")) {
+        uri.append("/")
+      }
+      uri.append(rest)
+    }
+
+    val rewrittenURI = URI.create(uri.toString())
+    if (query != null) {
+      return new URI(
+          rewrittenURI.getScheme(),
+          rewrittenURI.getAuthority(),
+          rewrittenURI.getPath(),
+          query,
+          rewrittenURI.getFragment()
+        ).normalize()
+    }
+    rewrittenURI.normalize()
   }
 
   // Create a new URI from the arguments, handling IPv6 host encoding and default ports.

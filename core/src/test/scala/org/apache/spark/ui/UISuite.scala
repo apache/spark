@@ -190,6 +190,20 @@ class UISuite extends SparkFunSuite {
     }
   }
 
+  test("verify proxy rewrittenURI") {
+    val prefix = "/proxy/worker-id"
+    val target = "http://localhost:8081"
+    val path = "/proxy/worker-id/json"
+    var rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, null)
+    assert(rewrittenURI.toString().equals("http://localhost:8081/json"))
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, "test=done")
+    assert(rewrittenURI.toString().equals("http://localhost:8081/json?test=done"))
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id", null)
+    assert(rewrittenURI.toString().equals("http://localhost:8081"))
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-noid/json", null)
+    assert(rewrittenURI == null)
+  }
+
   def stopServer(info: ServerInfo): Unit = {
     if (info != null && info.server != null) info.server.stop
   }
