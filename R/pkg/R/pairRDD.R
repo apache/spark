@@ -49,7 +49,7 @@ setMethod("lookup",
               lapply(filtered, function(i) { i[[2]] })
             }
             valsRDD <- lapplyPartition(x, partitionFunc)
-            collect(valsRDD)
+            collectRDD(valsRDD)
           })
 
 #' Count the number of elements for each key, and return the result to the
@@ -85,7 +85,7 @@ setMethod("countByKey",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
-#' collect(keys(rdd)) # list(1, 3)
+#' collectRDD(keys(rdd)) # list(1, 3)
 #'}
 # nolint end
 #' @rdname keys
@@ -108,7 +108,7 @@ setMethod("keys",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, 2), list(3, 4)))
-#' collect(values(rdd)) # list(2, 4)
+#' collectRDD(values(rdd)) # list(2, 4)
 #'}
 # nolint end
 #' @rdname values
@@ -135,7 +135,7 @@ setMethod("values",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
 #' makePairs <- lapply(rdd, function(x) { list(x, x) })
-#' collect(mapValues(makePairs, function(x) { x * 2) })
+#' collectRDD(mapValues(makePairs, function(x) { x * 2) })
 #' Output: list(list(1,2), list(2,4), list(3,6), ...)
 #'}
 #' @rdname mapValues
@@ -162,7 +162,7 @@ setMethod("mapValues",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(1, c(1,2)), list(2, c(3,4))))
-#' collect(flatMapValues(rdd, function(x) { x }))
+#' collectRDD(flatMapValues(rdd, function(x) { x }))
 #' Output: list(list(1,1), list(1,2), list(2,3), list(2,4))
 #'}
 #' @rdname flatMapValues
@@ -261,7 +261,7 @@ setMethod("partitionByRDD",
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
 #' rdd <- parallelize(sc, pairs)
 #' parts <- groupByKey(rdd, 2L)
-#' grouped <- collect(parts)
+#' grouped <- collectRDD(parts)
 #' grouped[[1]] # Should be a list(1, list(2, 4))
 #'}
 #' @rdname groupByKey
@@ -321,7 +321,7 @@ setMethod("groupByKey",
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
 #' rdd <- parallelize(sc, pairs)
 #' parts <- reduceByKey(rdd, "+", 2L)
-#' reduced <- collect(parts)
+#' reduced <- collectRDD(parts)
 #' reduced[[1]] # Should be a list(1, 6)
 #'}
 #' @rdname reduceByKey
@@ -430,7 +430,7 @@ setMethod("reduceByKeyLocally",
 #' pairs <- list(list(1, 2), list(1.1, 3), list(1, 4))
 #' rdd <- parallelize(sc, pairs)
 #' parts <- combineByKey(rdd, function(x) { x }, "+", "+", 2L)
-#' combined <- collect(parts)
+#' combined <- collectRDD(parts)
 #' combined[[1]] # Should be a list(1, 6)
 #'}
 # nolint end
@@ -772,7 +772,7 @@ setMethod("cogroup",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(list(3, 1), list(2, 2), list(1, 3)))
-#' collect(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
+#' collectRDD(sortByKey(rdd)) # list (list(1, 3), list(2, 2), list(3, 1))
 #'}
 # nolint end
 #' @rdname sortByKey
@@ -789,7 +789,7 @@ setMethod("sortByKey",
               maxSampleSize <- numPartitions * 20
               fraction <- min(maxSampleSize / max(rddSize, 1), 1.0)
 
-              samples <- collect(keys(sampleRDD(x, FALSE, fraction, 1L)))
+              samples <- collectRDD(keys(sampleRDD(x, FALSE, fraction, 1L)))
 
               # Note: the built-in R sort() function only works on atomic vectors
               samples <- sort(unlist(samples, recursive = FALSE), decreasing = !ascending)
@@ -841,7 +841,7 @@ setMethod("sortByKey",
 #' rdd1 <- parallelize(sc, list(list("a", 1), list("b", 4),
 #'                              list("b", 5), list("a", 2)))
 #' rdd2 <- parallelize(sc, list(list("a", 3), list("c", 1)))
-#' collect(subtractByKey(rdd1, rdd2))
+#' collectRDD(subtractByKey(rdd1, rdd2))
 #' # list(list("b", 4), list("b", 5))
 #'}
 # nolint end

@@ -345,7 +345,7 @@ setMethod("numPartitions",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 2L)
-#' collect(rdd) # list from 1 to 10
+#' collectRDD(rdd) # list from 1 to 10
 #' collectPartition(rdd, 0L) # list from 1 to 5
 #'}
 #' @rdname collect-methods
@@ -397,7 +397,7 @@ setMethod("collectPartition",
 setMethod("collectAsMap",
           signature(x = "RDD"),
           function(x) {
-            pairList <- collect(x)
+            pairList <- collectRDD(x)
             map <- new.env()
             lapply(pairList, function(i) { assign(as.character(i[[1]]), i[[2]], envir = map) })
             as.list(map)
@@ -424,7 +424,7 @@ setMethod("countRDD",
               as.integer(length(part))
             }
             valsRDD <- lapplyPartition(x, countPartition)
-            vals <- collect(valsRDD)
+            vals <- collectRDD(valsRDD)
             sum(as.integer(vals))
           })
 
@@ -460,7 +460,7 @@ setMethod("countByValue",
           signature(x = "RDD"),
           function(x) {
             ones <- lapply(x, function(item) { list(item, 1L) })
-            collect(reduceByKey(ones, `+`, getNumPartitions(x)))
+            collectRDD(reduceByKey(ones, `+`, getNumPartitions(x)))
           })
 
 #' Apply a function to all elements
@@ -479,7 +479,7 @@ setMethod("countByValue",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
 #' multiplyByTwo <- lapply(rdd, function(x) { x * 2 })
-#' collect(multiplyByTwo) # 2,4,6...
+#' collectRDD(multiplyByTwo) # 2,4,6...
 #'}
 setMethod("lapply",
           signature(X = "RDD", FUN = "function"),
@@ -512,7 +512,7 @@ setMethod("map",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
 #' multiplyByTwo <- flatMap(rdd, function(x) { list(x*2, x*10) })
-#' collect(multiplyByTwo) # 2,20,4,40,6,60...
+#' collectRDD(multiplyByTwo) # 2,20,4,40,6,60...
 #'}
 #' @rdname flatMap
 #' @aliases flatMap,RDD,function-method
@@ -541,7 +541,7 @@ setMethod("flatMap",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
 #' partitionSum <- lapplyPartition(rdd, function(part) { Reduce("+", part) })
-#' collect(partitionSum) # 15, 40
+#' collectRDD(partitionSum) # 15, 40
 #'}
 #' @rdname lapplyPartition
 #' @aliases lapplyPartition,RDD,function-method
@@ -576,7 +576,7 @@ setMethod("mapPartitions",
 #' rdd <- parallelize(sc, 1:10, 5L)
 #' prod <- lapplyPartitionsWithIndex(rdd, function(partIndex, part) {
 #'                                          partIndex * Reduce("+", part) })
-#' collect(prod, flatten = FALSE) # 0, 7, 22, 45, 76
+#' collectRDD(prod, flatten = FALSE) # 0, 7, 22, 45, 76
 #'}
 #' @rdname lapplyPartitionsWithIndex
 #' @aliases lapplyPartitionsWithIndex,RDD,function-method
@@ -607,7 +607,7 @@ setMethod("mapPartitionsWithIndex",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' unlist(collect(filterRDD(rdd, function (x) { x < 3 }))) # c(1, 2)
+#' unlist(collectRDD(filterRDD(rdd, function (x) { x < 3 }))) # c(1, 2)
 #'}
 # nolint end
 #' @rdname filterRDD
@@ -656,7 +656,7 @@ setMethod("reduce",
               Reduce(func, part)
             }
 
-            partitionList <- collect(lapplyPartition(x, reducePartition),
+            partitionList <- collectRDD(lapplyPartition(x, reducePartition),
                                      flatten = FALSE)
             Reduce(func, partitionList)
           })
@@ -736,7 +736,7 @@ setMethod("foreach",
               lapply(x, func)
               NULL
             }
-            invisible(collect(mapPartitions(x, partition.func)))
+            invisible(collectRDD(mapPartitions(x, partition.func)))
           })
 
 #' Applies a function to each partition in an RDD, and forces evaluation.
@@ -753,7 +753,7 @@ setMethod("foreach",
 setMethod("foreachPartition",
           signature(x = "RDD", func = "function"),
           function(x, func) {
-            invisible(collect(mapPartitions(x, func)))
+            invisible(collectRDD(mapPartitions(x, func)))
           })
 
 #' Take elements from an RDD.
@@ -838,7 +838,7 @@ setMethod("firstRDD",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, c(1,2,2,3,3,3))
-#' sort(unlist(collect(distinctRDD(rdd)))) # c(1, 2, 3)
+#' sort(unlist(collectRDD(distinctRDD(rdd)))) # c(1, 2, 3)
 #'}
 # nolint end
 #' @rdname distinct
@@ -868,8 +868,8 @@ setMethod("distinctRDD",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' collect(sampleRDD(rdd, FALSE, 0.5, 1618L)) # ~5 distinct elements
-#' collect(sampleRDD(rdd, TRUE, 0.5, 9L)) # ~5 elements possibly with duplicates
+#' collectRDD(sampleRDD(rdd, FALSE, 0.5, 1618L)) # ~5 distinct elements
+#' collectRDD(sampleRDD(rdd, TRUE, 0.5, 9L)) # ~5 elements possibly with duplicates
 #'}
 #' @rdname sampleRDD
 #' @aliases sampleRDD,RDD
@@ -964,7 +964,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
             }
 
             set.seed(seed)
-            samples <- collect(sampleRDD(x, withReplacement, fraction,
+            samples <- collectRDD(sampleRDD(x, withReplacement, fraction,
                                          as.integer(ceiling(runif(1,
                                                                   -MAXINT,
                                                                   MAXINT)))))
@@ -972,7 +972,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
             # take samples; this shouldn't happen often because we use a big
             # multiplier for thei initial size
             while (length(samples) < total)
-              samples <- collect(sampleRDD(x, withReplacement, fraction,
+              samples <- collectRDD(sampleRDD(x, withReplacement, fraction,
                                            as.integer(ceiling(runif(1,
                                                                     -MAXINT,
                                                                     MAXINT)))))
@@ -990,7 +990,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(1, 2, 3))
-#' collect(keyBy(rdd, function(x) { x*x })) # list(list(1, 1), list(4, 2), list(9, 3))
+#' collectRDD(keyBy(rdd, function(x) { x*x })) # list(list(1, 1), list(4, 2), list(9, 3))
 #'}
 # nolint end
 #' @rdname keyBy
@@ -1135,7 +1135,7 @@ setMethod("saveAsTextFile",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list(3, 2, 1))
-#' collect(sortBy(rdd, function(x) { x })) # list (1, 2, 3)
+#' collectRDD(sortBy(rdd, function(x) { x })) # list (1, 2, 3)
 #'}
 # nolint end
 #' @rdname sortBy
@@ -1304,7 +1304,7 @@ setMethod("aggregateRDD",
               Reduce(seqOp, part, zeroValue)
             }
 
-            partitionList <- collect(lapplyPartition(x, partitionFunc),
+            partitionList <- collectRDD(lapplyPartition(x, partitionFunc),
                                      flatten = FALSE)
             Reduce(combOp, partitionList, zeroValue)
           })
@@ -1322,7 +1322,7 @@ setMethod("aggregateRDD",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' collect(pipeRDD(rdd, "more")
+#' pipeRDD(rdd, "more")
 #' Output: c("1", "2", ..., "10")
 #'}
 #' @aliases pipeRDD,RDD,character-method
@@ -1397,7 +1397,7 @@ setMethod("setName",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
-#' collect(zipWithUniqueId(rdd))
+#' collectRDD(zipWithUniqueId(rdd))
 #' # list(list("a", 0), list("b", 3), list("c", 1), list("d", 4), list("e", 2))
 #'}
 # nolint end
@@ -1440,7 +1440,7 @@ setMethod("zipWithUniqueId",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, list("a", "b", "c", "d", "e"), 3L)
-#' collect(zipWithIndex(rdd))
+#' collectRDD(zipWithIndex(rdd))
 #' # list(list("a", 0), list("b", 1), list("c", 2), list("d", 3), list("e", 4))
 #'}
 # nolint end
@@ -1452,7 +1452,7 @@ setMethod("zipWithIndex",
           function(x) {
             n <- getNumPartitions(x)
             if (n > 1) {
-              nums <- collect(lapplyPartition(x,
+              nums <- collectRDD(lapplyPartition(x,
                                               function(part) {
                                                 list(length(part))
                                               }))
@@ -1488,7 +1488,7 @@ setMethod("zipWithIndex",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, as.list(1:4), 2L)
-#' collect(glom(rdd))
+#' collectRDD(glom(rdd))
 #' # list(list(1, 2), list(3, 4))
 #'}
 # nolint end
@@ -1556,7 +1556,7 @@ setMethod("unionRDD",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, 0:4)
 #' rdd2 <- parallelize(sc, 1000:1004)
-#' collect(zipRDD(rdd1, rdd2))
+#' collectRDD(zipRDD(rdd1, rdd2))
 #' # list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004))
 #'}
 # nolint end
@@ -1628,7 +1628,7 @@ setMethod("cartesian",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(1, 1, 2, 2, 3, 4))
 #' rdd2 <- parallelize(sc, list(2, 4))
-#' collect(subtract(rdd1, rdd2))
+#' collectRDD(subtract(rdd1, rdd2))
 #' # list(1, 1, 3)
 #'}
 # nolint end
@@ -1662,7 +1662,7 @@ setMethod("subtract",
 #' sc <- sparkR.init()
 #' rdd1 <- parallelize(sc, list(1, 10, 2, 3, 4, 5))
 #' rdd2 <- parallelize(sc, list(1, 6, 2, 3, 7, 8))
-#' collect(sortBy(intersection(rdd1, rdd2), function(x) { x }))
+#' collectRDD(sortBy(intersection(rdd1, rdd2), function(x) { x }))
 #' # list(1, 2, 3)
 #'}
 # nolint end
@@ -1699,7 +1699,7 @@ setMethod("intersection",
 #' rdd1 <- parallelize(sc, 1:2, 2L)  # 1, 2
 #' rdd2 <- parallelize(sc, 1:4, 2L)  # 1:2, 3:4
 #' rdd3 <- parallelize(sc, 1:6, 2L)  # 1:3, 4:6
-#' collect(zipPartitions(rdd1, rdd2, rdd3,
+#' collectRDD(zipPartitions(rdd1, rdd2, rdd3,
 #'                       func = function(x, y, z) { list(list(x, y, z))} ))
 #' # list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6)))
 #'}
