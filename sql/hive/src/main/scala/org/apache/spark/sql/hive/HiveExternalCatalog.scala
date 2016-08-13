@@ -90,8 +90,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
    * If the given table properties contains datasource properties, throw an exception.
    */
   private def verifyTableProperties(table: CatalogTable): Unit = {
-    val datasourceKeys = (table.properties.keys ++ table.storage.properties.keys)
-      .filter(_.startsWith(DATASOURCE_PREFIX))
+    val datasourceKeys = table.properties.keys.filter(_.startsWith(DATASOURCE_PREFIX))
     if (datasourceKeys.nonEmpty) {
       throw new AnalysisException(s"Cannot persistent ${table.qualifiedName} into hive metastore " +
         s"as table/storage property keys may not start with '$DATASOURCE_PREFIX': " +
@@ -227,14 +226,53 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
           serde = serde.serde)
       }
 
+      val qualifiedTableName = tableDefinition.identifier.quotedString
       val maybePath = new CaseInsensitiveMap(tableDefinition.storage.properties).get("path")
       val skipHiveMetadata = tableDefinition.storage.properties
         .getOrElse("skipHiveMetadata", "false").toBoolean
 
-      (HiveSerDe.sourceToSerDe(provider), maybePath) match {
-        case (Some(serde), Some(path)) if !skipHiveMetadata =>
+      val (hiveCompatibleTable, logMessage) = (HiveSerDe.sourceToSerDe(provider), maybePath) match {
+        case _ if skipHiveMetadata =>
+          val message =
+            s"Persisting data source table $qualifiedTableName into Hive metastore in" +
+              "Spark SQL specific format, which is NOT compatible with Hive."
+          (None, message)
+
+        // our bucketing is un-compatible with hive(different hash function)
+        case _ if tableDefinition.bucketSpec.nonEmpty =>
+          val message =
+            s"Persisting bucketed data source table $qualifiedTableName into " +
+              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
+          (None, message)
+
+        case (Some(serde), Some(path)) =>
+          val message =
+            s"Persisting data source table $qualifiedTableName with a single input path " +
+              s"into Hive metastore in Hive compatible format."
+          (Some(newHiveCompatibleMetastoreTable(serde, path)), message)
+
+        case (Some(_), None) =>
+          val message =
+            s"Data source table $qualifiedTableName is not file based. Persisting it into " +
+              s"Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
+          (None, message)
+
+        case _ =>
+          val message =
+            s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
+              s"Persisting data source table $qualifiedTableName into Hive metastore in " +
+              s"Spark SQL specific format, which is NOT compatible with Hive."
+          (None, message)
+      }
+
+      (hiveCompatibleTable, logMessage) match {
+        case (Some(table), message) =>
+          // We first try to save the metadata of the table in a Hive compatible way.
+          // If Hive throws an error, we fall back to save its metadata in the Spark SQL
+          // specific way.
           try {
-            saveTableIntoHive(newHiveCompatibleMetastoreTable(serde, path), ignoreIfExists)
+            logInfo(message)
+            saveTableIntoHive(table, ignoreIfExists)
           } catch {
             case NonFatal(e) =>
               val warningMessage =
@@ -243,9 +281,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
               logWarning(warningMessage, e)
               saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
           }
-        case _ =>
-          saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
 
+        case (None, message) =>
+          logWarning(message)
+          saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
       }
     }
   }
@@ -303,15 +342,33 @@ private[spark] class HiveExternalCatalog(client: HiveClient, hadoopConf: Configu
    * Alter a table whose name that matches the one specified in `tableDefinition`,
    * assuming the table exists.
    *
-   * Note: As of now, this only supports altering table properties, serde properties,
-   * and num buckets!
+   * Note: As of now, this only supports altering table properties and serde properties.
    */
   override def alterTable(tableDefinition: CatalogTable): Unit = withClient {
     assert(tableDefinition.identifier.database.isDefined)
     val db = tableDefinition.identifier.database.get
-    requireTableExists(db, tableDefinition.identifier.table)
-    verifyTableProperties(tableDefinition)
-    client.alterTable(tableDefinition)
+    val oldDef = withClient(getTable(db, tableDefinition.identifier.table))
+
+    if (oldDef.tableType == VIEW && tableDefinition.tableType == VIEW) {
+      client.alterTable(tableDefinition)
+    } else {
+      verifyTableProperties(tableDefinition)
+
+      val normalizedOldDef = restoreTableMetadata(oldDef).copy(
+        storage = CatalogStorageFormat.empty,
+        properties = Map.empty
+      )
+      val normalizedNewDef = tableDefinition.copy(
+        storage = CatalogStorageFormat.empty,
+        properties = Map.empty
+      )
+      assert(normalizedOldDef == normalizedNewDef,
+        "Only storage and table properties can be altered.")
+
+      client.alterTable(oldDef.copy(
+        storage = tableDefinition.storage,
+        properties = tableDefinition.properties))
+    }
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {

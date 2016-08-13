@@ -130,7 +130,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     } else {
       val qualifiedTable =
         MetastoreRelation(
-          qualifiedTableName.database, qualifiedTableName.name)(table, client, sparkSession)
+          qualifiedTableName.database, qualifiedTableName.name)(
+          table.copy(provider = Some("hive")), client, sparkSession)
       alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
     }
   }
