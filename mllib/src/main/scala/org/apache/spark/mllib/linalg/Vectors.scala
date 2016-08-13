@@ -103,14 +103,14 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
   @Since("1.1.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -610,7 +610,7 @@ class DenseVector @Since("1.0.0") (
   @Since("1.0.0")
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   @Since("1.0.0")
   override def apply(i: Int): Double = values(i)
@@ -731,7 +731,7 @@ object DenseVector {
 }
 
 /**
- * A sparse vector represented by an index array and an value array.
+ * A sparse vector represented by an index array and a value array.
  *
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
@@ -770,7 +770,7 @@ class SparseVector @Since("1.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   @Since("1.6.0")
   override def foreachActive(f: (Int, Double) => Unit): Unit = {

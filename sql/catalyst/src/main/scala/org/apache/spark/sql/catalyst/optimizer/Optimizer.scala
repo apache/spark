@@ -21,6 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -52,7 +53,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReplaceExpressions,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
-      DistinctAggregationRewriter) ::
+      RewriteDistinctAggregates) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -74,10 +75,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
-      SetOperationPushDown,
-      SamplePushDown,
+      PushThroughSetOperations,
       ReorderJoin,
-      OuterJoinElimination,
+      EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
@@ -94,11 +94,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
+      ReorderAssociativeOperator,
       LikeSimplification,
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
-      BinaryComparisonSimplification,
+      SimplifyBinaryComparison,
       PruneFilters,
       EliminateSorts,
       SimplifyCasts,
@@ -109,10 +110,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
-      EmbedSerializerInFilter,
-      RemoveAliasOnlyProject) ::
+      CombineTypedFilters) ::
     Batch("LocalRelation", fixedPoint,
-      ConvertToLocalRelation) ::
+      ConvertToLocalRelation,
+      PropagateEmptyRelation) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
@@ -147,55 +148,54 @@ class SimpleTestOptimizer extends Optimizer(
   new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
- * Pushes operations down into a Sample.
- */
-object SamplePushDown extends Rule[LogicalPlan] {
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down projection into sample
-    case Project(projectList, Sample(lb, up, replace, seed, child)) =>
-      Sample(lb, up, replace, seed, Project(projectList, child))()
-  }
-}
-
-/**
  * Removes the Project only conducting Alias of its child node.
  * It is created mainly for removing extra Project added in EliminateSerialization rule,
  * but can also benefit other operators.
  */
 object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
-  // Check if projectList in the Project node has the same attribute names and ordering
-  // as its child node.
+  /**
+   * Returns true if the project list is semantically same as child output, after strip alias on
+   * attribute.
+   */
   private def isAliasOnly(
       projectList: Seq[NamedExpression],
       childOutput: Seq[Attribute]): Boolean = {
-    if (!projectList.forall(_.isInstanceOf[Alias]) || projectList.length != childOutput.length) {
-      return false
+    if (projectList.length != childOutput.length) {
+      false
     } else {
-      projectList.map(_.asInstanceOf[Alias]).zip(childOutput).forall { case (a, o) =>
-        a.child match {
-          case attr: Attribute if a.name == attr.name && attr.semanticEquals(o) => true
-          case _ => false
-        }
+      stripAliasOnAttribute(projectList).zip(childOutput).forall {
+        case (a: Attribute, o) if a semanticEquals o => true
+        case _ => false
       }
     }
   }
 
+  private def stripAliasOnAttribute(projectList: Seq[NamedExpression]) = {
+    projectList.map {
+      // Alias with metadata can not be stripped, or the metadata will be lost.
+      // If the alias name is different from attribute name, we can't strip it either, or we may
+      // accidentally change the output schema name of the root plan.
+      case a @ Alias(attr: Attribute, name) if a.metadata == Metadata.empty && name == attr.name =>
+        attr
+      case other => other
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val aliasOnlyProject = plan.find { p =>
-      p match {
-        case Project(pList, child) if isAliasOnly(pList, child.output) => true
-        case _ => false
-      }
+    val aliasOnlyProject = plan.collectFirst {
+      case p @ Project(pList, child) if isAliasOnly(pList, child.output) => p
     }
 
-    aliasOnlyProject.map { case p: Project =>
-      val aliases = p.projectList.map(_.asInstanceOf[Alias])
-      val attrMap = AttributeMap(aliases.map(a => (a.toAttribute, a.child)))
-      plan.transformAllExpressions {
-        case a: Attribute if attrMap.contains(a) => attrMap(a)
-      }.transform {
-        case op: Project if op.eq(p) => op.child
+    aliasOnlyProject.map { case proj =>
+      val attributesToReplace = proj.output.zip(proj.child.output).filterNot {
+        case (a1, a2) => a1 semanticEquals a2
+      }
+      val attrMap = AttributeMap(attributesToReplace)
+      plan transform {
+        case plan: Project if plan eq proj => plan.child
+        case plan => plan transformExpressions {
+          case a: Attribute if attrMap.contains(a) => attrMap(a)
+        }
       }
     }.getOrElse(plan)
   }
@@ -208,15 +208,33 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-        if d.outputObjectType == s.inputObjectType =>
+        if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       // We will remove it later in RemoveAliasOnlyProject rule.
-      val objAttr =
-        Alias(s.child.output.head, s.child.output.head.name)(exprId = d.output.head.exprId)
+      val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
       Project(objAttr :: Nil, s.child)
-    case a @ AppendColumns(_, _, _, s: SerializeFromObject)
-        if a.deserializer.dataType == s.inputObjectType =>
+
+    case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
+        if a.deserializer.dataType == s.inputObjAttr.dataType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
+
+    // If there is a `SerializeFromObject` under typed filter and its input object type is same with
+    // the typed filter's deserializer, we can convert typed filter to normal filter without
+    // deserialization in condition, and push it down through `SerializeFromObject`.
+    // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
+    // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
+    case f @ TypedFilter(_, _, _, _, s: SerializeFromObject)
+        if f.deserializer.dataType == s.inputObjAttr.dataType =>
+      s.copy(child = f.withObjectProducerChild(s.child))
+
+    // If there is a `DeserializeToObject` upon typed filter and its output object type is same with
+    // the typed filter's deserializer, we can convert typed filter to normal filter without
+    // deserialization in condition, and pull it up through `DeserializeToObject`.
+    // e.g. `ds.filter(...).map(...)` can be optimized by this rule to save extra deserialization,
+    // but `ds.filter(...).as[AnotherType].map(...)` can not be optimized.
+    case d @ DeserializeToObject(_, _, f: TypedFilter)
+        if d.outputObjAttr.dataType == f.deserializer.dataType =>
+      f.withObjectProducerChild(d.copy(child = f.child))
   }
 }
 
@@ -291,7 +309,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
  */
-object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -527,7 +545,8 @@ object CollapseProject extends Rule[LogicalPlan] {
     // Substitute any attributes that are produced by the lower projection, so that we safely
     // eliminate it.
     // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-    val rewrittenUpper = upper.map(_.transform {
+    // Use transformUp to prevent infinite recursion.
+    val rewrittenUpper = upper.map(_.transformUp {
       case a: Attribute => aliases.getOrElse(a, a)
     })
     // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
@@ -538,12 +557,27 @@ object CollapseProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines adjacent [[Repartition]] operators by keeping only the last one.
+ * Combines adjacent [[Repartition]] and [[RepartitionByExpression]] operator combinations
+ * by keeping only the one.
+ * 1. For adjacent [[Repartition]]s, collapse into the last [[Repartition]].
+ * 2. For adjacent [[RepartitionByExpression]]s, collapse into the last [[RepartitionByExpression]].
+ * 3. For a combination of [[Repartition]] and [[RepartitionByExpression]], collapse as a single
+ *    [[RepartitionByExpression]] with the expression and last number of partition.
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    // Case 1
     case Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
       Repartition(numPartitions, shuffle, child)
+    // Case 2
+    case RepartitionByExpression(exprs, RepartitionByExpression(_, child, _), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
+    // Case 3
+    case Repartition(numPartitions, _, r: RepartitionByExpression) =>
+      r.copy(numPartitions = Some(numPartitions))
+    // Case 3
+    case RepartitionByExpression(exprs, Repartition(_, _, child), numPartitions) =>
+      RepartitionByExpression(exprs, child, numPartitions)
   }
 }
 
@@ -616,7 +650,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
         val newChildren = children.filter(nonNullLiteral)
-        if (newChildren.length == 0) {
+        if (newChildren.isEmpty) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
           newChildren.head
@@ -627,10 +661,6 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ Substring(Literal(null, _), _, _) => Literal.create(null, e.dataType)
       case e @ Substring(_, Literal(null, _), _) => Literal.create(null, e.dataType)
       case e @ Substring(_, _, Literal(null, _)) => Literal.create(null, e.dataType)
-
-      // MaxOf and MinOf can't do null propagation
-      case e: MaxOf => e
-      case e: MinOf => e
 
       // Put exceptional cases above if any
       case e @ BinaryArithmetic(Literal(null, _), _) => Literal.create(null, e.dataType)
@@ -689,6 +719,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case c: Command =>
           stop = true
           c
+        // For outer join, although its output attributes are derived from its children, they are
+        // actually different attributes: the output of outer join is not always picked from its
+        // children, but can also be null.
+        // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
+        // of outer join.
+        case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
+          stop = true
+          j
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
             foldableMap(a)
@@ -738,6 +776,44 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
 }
 
 /**
+ * Reorder associative integral-type operators and fold all constants into one.
+ */
+object ReorderAssociativeOperator extends Rule[LogicalPlan] {
+  private def flattenAdd(e: Expression): Seq[Expression] = e match {
+    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
+    case other => other :: Nil
+  }
+
+  private def flattenMultiply(e: Expression): Seq[Expression] = e match {
+    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+    case other => other :: Nil
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenAdd(a).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
+          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+        } else {
+          a
+        }
+      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
+          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+        } else {
+          m
+        }
+    }
+  }
+}
+
+/**
  * Replaces [[Expression Expressions]] that can be statically evaluated with
  * equivalent [[Literal]] values.
  */
@@ -756,16 +832,24 @@ object ConstantFolding extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
- * which is much faster
+ * Optimize IN predicates:
+ * 1. Removes literal repetitions.
+ * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
-          list.size > conf.optimizerInSetConversionThreshold =>
-        val hSet = list.map(e => e.eval(EmptyRow))
-        InSet(v, HashSet() ++ hSet)
+      case expr @ In(v, list) if expr.inSetConvertible =>
+        val newList = ExpressionSet(list).toSeq
+        if (newList.size > conf.optimizerInSetConversionThreshold) {
+          val hSet = newList.map(e => e.eval(EmptyRow))
+          InSet(v, HashSet() ++ hSet)
+        } else if (newList.size < list.size) {
+          expr.copy(list = newList)
+        } else { // newList.length == list.length
+          expr
+        }
     }
   }
 }
@@ -878,7 +962,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
  * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  */
-object BinaryComparisonSimplification extends Rule[LogicalPlan] with PredicateHelper {
+object SimplifyBinaryComparison extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       // True with equality
@@ -937,8 +1021,12 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
  */
 case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e @ CaseWhen(branches, _) if branches.size < conf.maxCaseBranchesForCodegen =>
-      e.toCodegen()
+    case e: CaseWhen if canCodegen(e) => e.toCodegen()
+  }
+
+  private def canCodegen(e: CaseWhen): Boolean = {
+    val numBranches = e.branches.size + e.elseValue.size
+    numBranches <= conf.maxCaseBranchesForCodegen
   }
 }
 
@@ -961,7 +1049,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
       (ExpressionSet(splitConjunctivePredicates(fc)) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
-          Filter(And(ac, nc), grandChild)
+          Filter(And(nc, ac), grandChild)
         case None =>
           nf
       }
@@ -1037,19 +1125,23 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
-    // pushed beneath must satisfy the following two conditions:
+    // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
-    // 2. Deterministic
+    // 2. Deterministic.
+    // 3. Placed before any non-deterministic predicates.
     case filter @ Filter(condition, w: Window)
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references.subsetOf(partitionAttrs) && cond.deterministic &&
-          // This is for ensuring all the partitioning expressions have been converted to alias
-          // in Analyzer. Thus, we do not need to check if the expressions in conditions are
-          // the same as the expressions used in partitioning columns.
-          partitionAttrs.forall(_.isInstanceOf[Attribute])
+
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        cond.references.subsetOf(partitionAttrs)
       }
+
+      val stayUp = rest ++ containingNonDeterministic
+
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
         val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
@@ -1068,10 +1160,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).span(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        replaced.references.subsetOf(aggregate.child.outputSet) && replaced.deterministic
+        replaced.references.subsetOf(aggregate.child.outputSet)
       }
+
+      val stayUp = rest ++ containingNonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1086,9 +1183,8 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.deterministic
-      }
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
         val output = union.output
@@ -1128,9 +1224,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // come from grandchild.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
-    val (pushDown, stayUp) = splitConjunctivePredicates(filter.condition).partition { cond =>
-      cond.deterministic && cond.references.subsetOf(grandchild.outputSet)
+    val (candidates, containingNonDeterministic) =
+      splitConjunctivePredicates(filter.condition).span(_.deterministic)
+
+    val (pushDown, rest) = candidates.partition { cond =>
+      cond.references.subsetOf(grandchild.outputSet)
     }
+
+    val stayUp = rest ++ containingNonDeterministic
+
     if (pushDown.nonEmpty) {
       val newChild = insertFilter(pushDown.reduceLeft(And))
       if (stayUp.nonEmpty) {
@@ -1212,7 +1314,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This rule should be executed before pushing down the Filter
  */
-object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
+object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Returns whether the expression returns null or false when all inputs are nulls.
@@ -1468,9 +1570,14 @@ object DecimalAggregates extends Rule[LogicalPlan] {
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data)) =>
+    case Project(projectList, LocalRelation(output, data))
+        if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+  }
+
+  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
   }
 }
 
@@ -1591,36 +1698,36 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
 }
 
 /**
- * Typed [[Filter]] is by default surrounded by a [[DeserializeToObject]] beneath it and a
- * [[SerializeFromObject]] above it.  If these serializations can't be eliminated, we should embed
- * the deserializer in filter condition to save the extra serialization at last.
+ * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
+ * mering the filter functions into one conjunctive function.
  */
-object EmbedSerializerInFilter extends Rule[LogicalPlan] {
+object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject)) =>
-      val numObjects = condition.collect {
-        case a: Attribute if a == d.output.head => a
-      }.length
+    case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
+        if t1.deserializer.dataType == t2.deserializer.dataType =>
+      TypedFilter(
+        combineFilterFunction(t2.func, t1.func),
+        t1.argumentClass,
+        t1.argumentSchema,
+        t1.deserializer,
+        child)
+  }
 
-      if (numObjects > 1) {
-        // If the filter condition references the object more than one times, we should not embed
-        // deserializer in it as the deserialization will happen many times and slow down the
-        // execution.
-        // TODO: we can still embed it if we can make sure subexpression elimination works here.
-        s
-      } else {
-        val newCondition = condition transform {
-          case a: Attribute if a == d.output.head => d.deserializer
-        }
-        val filter = Filter(newCondition, d.child)
-
-        // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
-        // We will remove it later in RemoveAliasOnlyProject rule.
-        val objAttrs = filter.output.zip(s.output).map { case (fout, sout) =>
-          Alias(fout, fout.name)(exprId = sout.exprId)
-        }
-        Project(objAttrs, filter)
-      }
+  private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
+    (func1, func2) match {
+      case (f1: FilterFunction[_], f2: FilterFunction[_]) =>
+        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+          f2.asInstanceOf[FilterFunction[Any]].call(input)
+      case (f1: FilterFunction[_], f2) =>
+        input => f1.asInstanceOf[FilterFunction[Any]].call(input) &&
+          f2.asInstanceOf[Any => Boolean](input)
+      case (f1, f2: FilterFunction[_]) =>
+        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
+          f2.asInstanceOf[FilterFunction[Any]].call(input)
+      case (f1, f2) =>
+        input => f1.asInstanceOf[Any => Boolean].apply(input) &&
+          f2.asInstanceOf[Any => Boolean].apply(input)
+    }
   }
 }
 
@@ -1648,30 +1755,48 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
         case (p, PredicateSubquery(sub, conditions, _, _)) =>
-          Join(p, sub, LeftSemi, conditions.reduceOption(And))
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+          Join(outerPlan, sub, LeftSemi, joinCond)
         case (p, Not(PredicateSubquery(sub, conditions, false, _))) =>
-          Join(p, sub, LeftAnti, conditions.reduceOption(And))
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+          Join(outerPlan, sub, LeftAnti, joinCond)
         case (p, Not(PredicateSubquery(sub, conditions, true, _))) =>
-          // This is a NULL-aware (left) anti join (NAAJ).
+          // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
-          val anyNull = conditions.map(IsNull).reduceLeft(Or)
-          val condition = conditions.reduceLeft(And)
 
-          // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
-          // if performance matters to you.
-          Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
+          // Note that will almost certainly be planned as a Broadcast Nested Loop join.
+          // Use EXISTS if performance matters to you.
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
+          val anyNull = splitConjunctivePredicates(joinCond.get).map(IsNull).reduceLeft(Or)
+          Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond.get)))
         case (p, predicate) =>
-          var joined = p
-          val replaced = predicate transformUp {
-            case PredicateSubquery(sub, conditions, nullAware, _) =>
-              // TODO: support null-aware join
-              val exists = AttributeReference("exists", BooleanType, nullable = false)()
-              joined = Join(joined, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
-              exists
-          }
-          Project(p.output, Filter(replaced, joined))
+          val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
+          Project(p.output, Filter(newCond.get, inputPlan))
       }
+  }
+
+  /**
+   * Given a predicate expression and an input plan, it rewrites
+   * any embedded existential sub-query into an existential join.
+   * It returns the rewritten expression together with the updated plan.
+   * Currently, it does not support null-aware joins. Embedded NOT IN predicates
+   * are blocked in the Analyzer.
+   */
+  private def rewriteExistentialExpr(
+      exprs: Seq[Expression],
+      plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    var newPlan = plan
+    val newExprs = exprs.map { e =>
+      e transformUp {
+        case PredicateSubquery(sub, conditions, nullAware, _) =>
+          // TODO: support null-aware join
+          val exists = AttributeReference("exists", BooleanType, nullable = false)()
+          newPlan = Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
+          exists
+        }
+    }
+    (newExprs.reduceOption(And), newPlan)
   }
 }
 
@@ -1695,6 +1820,124 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   }
 
   /**
+   * Statically evaluate an expression containing zero or more placeholders, given a set
+   * of bindings for placeholder values.
+   */
+  private def evalExpr(expr: Expression, bindings: Map[ExprId, Option[Any]]) : Option[Any] = {
+    val rewrittenExpr = expr transform {
+      case r: AttributeReference =>
+        bindings(r.exprId) match {
+          case Some(v) => Literal.create(v, r.dataType)
+          case None => Literal.default(NullType)
+        }
+    }
+    Option(rewrittenExpr.eval())
+  }
+
+  /**
+   * Statically evaluate an expression containing one or more aggregates on an empty input.
+   */
+  private def evalAggOnZeroTups(expr: Expression) : Option[Any] = {
+    // AggregateExpressions are Unevaluable, so we need to replace all aggregates
+    // in the expression with the value they would return for zero input tuples.
+    // Also replace attribute refs (for example, for grouping columns) with NULL.
+    val rewrittenExpr = expr transform {
+      case a @ AggregateExpression(aggFunc, _, _, resultId) =>
+        aggFunc.defaultResult.getOrElse(Literal.default(NullType))
+
+      case _: AttributeReference => Literal.default(NullType)
+    }
+    Option(rewrittenExpr.eval())
+  }
+
+  /**
+   * Statically evaluate a scalar subquery on an empty input.
+   *
+   * <b>WARNING:</b> This method only covers subqueries that pass the checks under
+   * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
+   * CheckAnalysis become less restrictive, this method will need to change.
+   */
+  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Any] = {
+    // Inputs to this method will start with a chain of zero or more SubqueryAlias
+    // and Project operators, followed by an optional Filter, followed by an
+    // Aggregate. Traverse the operators recursively.
+    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
+      case SubqueryAlias(_, child) => evalPlan(child)
+      case Filter(condition, child) =>
+        val bindings = evalPlan(child)
+        if (bindings.isEmpty) bindings
+        else {
+          val exprResult = evalExpr(condition, bindings).getOrElse(false)
+            .asInstanceOf[Boolean]
+          if (exprResult) bindings else Map.empty
+        }
+
+      case Project(projectList, child) =>
+        val bindings = evalPlan(child)
+        if (bindings.isEmpty) {
+          bindings
+        } else {
+          projectList.map(ne => (ne.exprId, evalExpr(ne, bindings))).toMap
+        }
+
+      case Aggregate(_, aggExprs, _) =>
+        // Some of the expressions under the Aggregate node are the join columns
+        // for joining with the outer query block. Fill those expressions in with
+        // nulls and statically evaluate the remainder.
+        aggExprs.map {
+          case ref: AttributeReference => (ref.exprId, None)
+          case alias @ Alias(_: AttributeReference, _) => (alias.exprId, None)
+          case ne => (ne.exprId, evalAggOnZeroTups(ne))
+        }.toMap
+
+      case _ => sys.error(s"Unexpected operator in scalar subquery: $lp")
+    }
+
+    val resultMap = evalPlan(plan)
+
+    // By convention, the scalar subquery result is the leftmost field.
+    resultMap(plan.output.head.exprId)
+  }
+
+  /**
+   * Split the plan for a scalar subquery into the parts above the innermost query block
+   * (first part of returned value), the HAVING clause of the innermost query block
+   * (optional second part) and the parts below the HAVING CLAUSE (third part).
+   */
+  private def splitSubquery(plan: LogicalPlan) : (Seq[LogicalPlan], Option[Filter], Aggregate) = {
+    val topPart = ArrayBuffer.empty[LogicalPlan]
+    var bottomPart: LogicalPlan = plan
+    while (true) {
+      bottomPart match {
+        case havingPart @ Filter(_, aggPart: Aggregate) =>
+          return (topPart, Option(havingPart), aggPart)
+
+        case aggPart: Aggregate =>
+          // No HAVING clause
+          return (topPart, None, aggPart)
+
+        case p @ Project(_, child) =>
+          topPart += p
+          bottomPart = child
+
+        case s @ SubqueryAlias(_, child) =>
+          topPart += s
+          bottomPart = child
+
+        case Filter(_, op) =>
+          sys.error(s"Correlated subquery has unexpected operator $op below filter")
+
+        case op @ _ => sys.error(s"Unexpected operator $op in correlated subquery")
+      }
+    }
+
+    sys.error("This line should be unreachable")
+  }
+
+  // Name of generated column used in rewrite below
+  val ALWAYS_TRUE_COLNAME = "alwaysTrue"
+
+  /**
    * Construct a new child plan by left joining the given subqueries to a base plan.
    */
   private def constructLeftJoins(
@@ -1702,9 +1945,74 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       subqueries: ArrayBuffer[ScalarSubquery]): LogicalPlan = {
     subqueries.foldLeft(child) {
       case (currentChild, ScalarSubquery(query, conditions, _)) =>
-        Project(
-          currentChild.output :+ query.output.head,
-          Join(currentChild, query, LeftOuter, conditions.reduceOption(And)))
+        val origOutput = query.output.head
+
+        val resultWithZeroTups = evalSubqueryOnZeroTups(query)
+        if (resultWithZeroTups.isEmpty) {
+          // CASE 1: Subquery guaranteed not to have the COUNT bug
+          Project(
+            currentChild.output :+ origOutput,
+            Join(currentChild, query, LeftOuter, conditions.reduceOption(And)))
+        } else {
+          // Subquery might have the COUNT bug. Add appropriate corrections.
+          val (topPart, havingNode, aggNode) = splitSubquery(query)
+
+          // The next two cases add a leading column to the outer join input to make it
+          // possible to distinguish between the case when no tuples join and the case
+          // when the tuple that joins contains null values.
+          // The leading column always has the value TRUE.
+          val alwaysTrueExprId = NamedExpression.newExprId
+          val alwaysTrueExpr = Alias(Literal.TrueLiteral,
+            ALWAYS_TRUE_COLNAME)(exprId = alwaysTrueExprId)
+          val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
+            BooleanType)(exprId = alwaysTrueExprId)
+
+          val aggValRef = query.output.head
+
+          if (havingNode.isEmpty) {
+            // CASE 2: Subquery with no HAVING clause
+            Project(
+              currentChild.output :+
+                Alias(
+                  If(IsNull(alwaysTrueRef),
+                    Literal.create(resultWithZeroTups.get, origOutput.dataType),
+                    aggValRef), origOutput.name)(exprId = origOutput.exprId),
+              Join(currentChild,
+                Project(query.output :+ alwaysTrueExpr, query),
+                LeftOuter, conditions.reduceOption(And)))
+
+          } else {
+            // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
+            // Need to modify any operators below the join to pass through all columns
+            // referenced in the HAVING clause.
+            var subqueryRoot: UnaryNode = aggNode
+            val havingInputs: Seq[NamedExpression] = aggNode.output
+
+            topPart.reverse.foreach {
+              case Project(projList, _) =>
+                subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
+              case s @ SubqueryAlias(alias, _) =>
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+              case op => sys.error(s"Unexpected operator $op in corelated subquery")
+            }
+
+            // CASE WHEN alwayTrue IS NULL THEN resultOnZeroTups
+            //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
+            //      ELSE (aggregate value) END AS (original column name)
+            val caseExpr = Alias(CaseWhen(Seq(
+              (IsNull(alwaysTrueRef), Literal.create(resultWithZeroTups.get, origOutput.dataType)),
+              (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
+              aggValRef),
+              origOutput.name)(exprId = origOutput.exprId)
+
+            Project(
+              currentChild.output :+ caseExpr,
+              Join(currentChild,
+                Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
+                LeftOuter, conditions.reduceOption(And)))
+
+          }
+        }
     }
   }
 

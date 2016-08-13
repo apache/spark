@@ -140,7 +140,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If stages is too large, remove and garbage collect old stages */
   private def trimStagesIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > retainedStages) {
-      val toRemove = math.max(retainedStages / 10, 1)
+      val toRemove = (stages.size - retainedStages)
       stages.take(toRemove).foreach { s =>
         stageIdToData.remove((s.stageId, s.attemptId))
         stageIdToInfo.remove(s.stageId)
@@ -152,7 +152,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   /** If jobs is too large, remove and garbage collect old jobs */
   private def trimJobsIfNecessary(jobs: ListBuffer[JobUIData]) = synchronized {
     if (jobs.size > retainedJobs) {
-      val toRemove = math.max(retainedJobs / 10, 1)
+      val toRemove = (jobs.size - retainedJobs)
       jobs.take(toRemove).foreach { job =>
         // Remove the job's UI data, if it exists
         jobIdToData.remove(job.jobId).foreach { removedJob =>
@@ -369,6 +369,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskEnd.reason match {
         case Success =>
           execSummary.succeededTasks += 1
+        case TaskKilled =>
+          execSummary.killedTasks += 1
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -381,6 +383,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             None
+          case TaskKilled =>
+            stageData.numKilledTasks += 1
+            Some(TaskKilled.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
@@ -409,6 +414,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         taskEnd.reason match {
           case Success =>
             jobData.numCompletedTasks += 1
+          case TaskKilled =>
+            jobData.numKilledTasks += 1
           case _ =>
             jobData.numFailedTasks += 1
         }

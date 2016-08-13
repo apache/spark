@@ -92,8 +92,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("accumulators") {
     sc = new SparkContext(clusterUrl, "test")
-    val accum = sc.accumulator(0)
-    sc.parallelize(1 to 10, 10).foreach(x => accum += x)
+    val accum = sc.longAccumulator
+    sc.parallelize(1 to 10, 10).foreach(x => accum.add(x))
     assert(accum.value === 55)
   }
 
@@ -109,7 +109,6 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("repeatedly failing task") {
     sc = new SparkContext(clusterUrl, "test")
-    val accum = sc.accumulator(0)
     val thrown = intercept[SparkException] {
       // scalastyle:off println
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
@@ -133,6 +132,21 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       assert(thrown.getClass === classOf[SparkException])
       assert(thrown.getMessage.contains("failed 4 times"))
     }
+  }
+
+  test("repeatedly failing task that crashes JVM with a zero exit code (SPARK-16925)") {
+    // Ensures that if a task which causes the JVM to exit with a zero exit code will cause the
+    // Spark job to eventually fail.
+    sc = new SparkContext(clusterUrl, "test")
+    failAfter(Span(100000, Millis)) {
+      val thrown = intercept[SparkException] {
+        sc.parallelize(1 to 1, 1).foreachPartition { _ => System.exit(0) }
+      }
+      assert(thrown.getClass === classOf[SparkException])
+      assert(thrown.getMessage.contains("failed 4 times"))
+    }
+    // Check that the cluster is still usable:
+    sc.parallelize(1 to 10).count()
   }
 
   test("caching") {
@@ -224,7 +238,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   test("compute when only some partitions fit in memory") {
     val size = 10000
-    val numPartitions = 10
+    val numPartitions = 20
     val conf = new SparkConf()
       .set("spark.storage.unrollMemoryThreshold", "1024")
       .set("spark.testing.memory", size.toString)

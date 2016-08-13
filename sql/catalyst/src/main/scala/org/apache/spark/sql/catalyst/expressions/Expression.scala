@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the basic expression abstract classes in Catalyst.
@@ -185,14 +186,19 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = nodeName.toLowerCase
 
-  private def flatArguments = productIterator.flatMap {
+  protected def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
 
+  // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
+  // overridden by concrete classes.
+  final override def verboseString: String = simpleString
+
   override def simpleString: String = toString
 
-  override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
+  override def toString: String = prettyName + Utils.truncatedString(
+    flatArguments.toSeq, "(", ", ", ")")
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
@@ -371,6 +377,7 @@ abstract class UnaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${childGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $resultCode""", isNull = "false")
@@ -469,6 +476,7 @@ abstract class BinaryExpression extends Expression {
       """)
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -518,7 +526,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 }
 
 
-private[sql] object BinaryOperator {
+object BinaryOperator {
   def unapply(e: BinaryOperator): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
@@ -611,6 +619,7 @@ abstract class TernaryExpression extends Expression {
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
+        boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}

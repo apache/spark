@@ -33,9 +33,9 @@ private[columnar] class ColumnStatisticsSchema(a: Attribute) extends Serializabl
 }
 
 private[columnar] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
-  val (forAttribute, schema) = {
+  val (forAttribute: AttributeMap[ColumnStatisticsSchema], schema: Seq[AttributeReference]) = {
     val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a))
-    (AttributeMap(allStats), allStats.map(_._2.schema).foldLeft(Seq.empty[Attribute])(_ ++ _))
+    (AttributeMap(allStats), allStats.flatMap(_._2.schema))
   }
 }
 

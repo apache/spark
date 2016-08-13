@@ -65,9 +65,9 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
         catalog.CreateTables ::
-        catalog.PreInsertionCasts ::
-        PreInsertCastAndRename ::
-        DataSourceAnalysis ::
+        PreprocessDDL(conf) ::
+        PreprocessTableInsertion(conf) ::
+        DataSourceAnalysis(conf) ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
@@ -136,22 +136,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   def convertMetastoreOrc: Boolean = {
     conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
-  }
-
-  /**
-   * When true, a table created by a Hive CTAS statement (no USING clause) will be
-   * converted to a data source table, using the data source set by spark.sql.sources.default.
-   * The table in CTAS statement will be converted when it meets any of the following conditions:
-   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
-   *     a Storage Handler (STORED BY), and the value of hive.default.fileformat in hive-site.xml
-   *     is either TextFile or SequenceFile.
-   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
-   *     is specified (no ROW FORMAT SERDE clause).
-   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
-   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
-   */
-  def convertCTAS: Boolean = {
-    conf.getConf(HiveUtils.CONVERT_CTAS)
   }
 
   /**

@@ -29,4 +29,9 @@ class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
     spark.sql("drop table usrdb.test")
     spark.sql("drop schema usrdb")
   }
+
+  test("SPARK-15887: hive-site.xml should be loaded") {
+    val hiveClient = spark.sharedState.asInstanceOf[HiveSharedState].metadataHive
+    assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
 }

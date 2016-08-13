@@ -39,8 +39,8 @@ object ParserUtils {
     stream.getText(Interval.of(0, stream.size()))
   }
 
-  def operationNotAllowed(message: String, ctx: ParserRuleContext): ParseException = {
-    new ParseException(s"Operation not allowed: $message", ctx)
+  def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(s"Operation not allowed: $message", ctx)
   }
 
   /** Check if duplicate keys exist in a set of key-value pairs. */

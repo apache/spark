@@ -33,6 +33,7 @@ private[spark] object UIData {
     var taskTime : Long = 0
     var failedTasks : Int = 0
     var succeededTasks : Int = 0
+    var killedTasks : Int = 0
     var inputBytes : Long = 0
     var inputRecords : Long = 0
     var outputBytes : Long = 0
@@ -63,6 +64,7 @@ private[spark] object UIData {
     var numCompletedTasks: Int = 0,
     var numSkippedTasks: Int = 0,
     var numFailedTasks: Int = 0,
+    var numKilledTasks: Int = 0,
     /* Stages */
     var numActiveStages: Int = 0,
     // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
@@ -76,6 +78,7 @@ private[spark] object UIData {
     var numCompleteTasks: Int = _
     var completedIndices = new OpenHashSet[Int]()
     var numFailedTasks: Int = _
+    var numKilledTasks: Int = _
 
     var executorRunTime: Long = _
 

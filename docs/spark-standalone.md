@@ -94,8 +94,8 @@ You can optionally configure the cluster further by setting environment variable
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
-    <td><code>SPARK_MASTER_IP</code></td>
-    <td>Bind the master to a specific IP address, for example a public one.</td>
+    <td><code>SPARK_MASTER_HOST</code></td>
+    <td>Bind the master to a specific hostname or IP address, for example a public one.</td>
   </tr>
   <tr>
     <td><code>SPARK_MASTER_PORT</code></td>
@@ -132,15 +132,6 @@ You can optionally configure the cluster further by setting environment variable
   <tr>
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
     <td>Port for the worker web UI (default: 8081).</td>
-  </tr>
-  <tr>
-    <td><code>SPARK_WORKER_INSTANCES</code></td>
-    <td>
-      Number of worker instances to run on each machine (default: 1). You can make this more than 1 if
-      you have have very large machines and would like multiple Spark worker processes. If you do set
-      this, make sure to also set <code>SPARK_WORKER_CORES</code> explicitly to limit the cores per worker,
-      or else each worker will try to use all the cores.
-    </td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_DIR</code></td>
@@ -202,6 +193,21 @@ SPARK_MASTER_OPTS supports the following system properties:
     cores unless they configure <code>spark.cores.max</code> themselves.
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.maxExecutorRetries</code></td>
+  <td>10</td>
+  <td>
+    Limit on the maximum number of back-to-back executor failures that can occur before the
+    standalone cluster manager removes a faulty application. An application will never be removed
+    if it has any running executors. If an application experiences more than
+    <code>spark.deploy.maxExecutorRetries</code> failures in a row, no executors
+    successfully start running in between those failures, and the application has no running
+    executors then the standalone cluster manager will remove the application and mark it as failed.
+    To disable this automatic removal, set <code>spark.deploy.maxExecutorRetries</code> to
+    <code>-1</code>.
+    <br/>
   </td>
 </tr>
 <tr>
@@ -292,9 +298,9 @@ application at a time. You can cap the number of cores by setting `spark.cores.m
 
 {% highlight scala %}
 val conf = new SparkConf()
-             .setMaster(...)
-             .setAppName(...)
-             .set("spark.cores.max", "10")
+  .setMaster(...)
+  .setAppName(...)
+  .set("spark.cores.max", "10")
 val sc = new SparkContext(conf)
 {% endhighlight %}
 

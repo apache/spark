@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with an dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
@@ -113,6 +113,8 @@ class Analyzer(
       PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF),
+    Batch("FixNullability", Once,
+      FixNullability),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -123,22 +125,22 @@ class Analyzer(
   object CTESubstitution extends Rule[LogicalPlan] {
     // TODO allow subquery to define CTE
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators  {
-      case With(child, relations) => substituteCTE(child, relations)
+      case With(child, relations) =>
+        substituteCTE(child, relations.foldLeft(Seq.empty[(String, LogicalPlan)]) {
+          case (resolved, (name, relation)) =>
+            resolved :+ name -> ResolveRelations(substituteCTE(relation, resolved))
+        })
       case other => other
     }
 
-    def substituteCTE(plan: LogicalPlan, cteRelations: Map[String, LogicalPlan]): LogicalPlan = {
-      plan transform {
-        // In hive, if there is same table name in database and CTE definition,
-        // hive will use the table in database, not the CTE one.
-        // Taking into account the reasonableness and the implementation complexity,
-        // here use the CTE definition first, check table name only and ignore database name
-        // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
+    def substituteCTE(plan: LogicalPlan, cteRelations: Seq[(String, LogicalPlan)]): LogicalPlan = {
+      plan transformDown {
         case u : UnresolvedRelation =>
-          val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(SubqueryAlias(_, relation))
-            withAlias.getOrElse(relation)
-          }
+          val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
+            .map(_._2).map { relation =>
+              val withAlias = u.alias.map(SubqueryAlias(_, relation))
+              withAlias.getOrElse(relation)
+            }
           substituted.getOrElse(u)
         case other =>
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
@@ -244,7 +246,7 @@ class Analyzer(
       }.isDefined
     }
 
-    private def hasGroupingFunction(e: Expression): Boolean = {
+    private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
         case g: Grouping => g
         case g: GroupingID => g
@@ -450,42 +452,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        val table = lookupTableFromCatalog(u)
-        // adding the table's partitions or validate the query's partition info
-        table match {
-          case relation: CatalogRelation if relation.catalogTable.partitionColumns.nonEmpty =>
-            val tablePartitionNames = relation.catalogTable.partitionColumns.map(_.name)
-            if (parts.keys.nonEmpty) {
-              // the query's partitioning must match the table's partitioning
-              // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
-              // TODO: add better checking to pre-inserts to avoid needing this here
-              if (tablePartitionNames.size != parts.keySet.size) {
-                throw new AnalysisException(
-                  s"""Requested partitioning does not match the ${u.tableIdentifier} table:
-                     |Requested partitions: ${parts.keys.mkString(",")}
-                     |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
-              }
-              // Assume partition columns are correctly placed at the end of the child's output
-              i.copy(table = EliminateSubqueryAliases(table))
-            } else {
-              // Set up the table's partition scheme with all dynamic partitions by moving partition
-              // columns to the end of the column list, in partition order.
-              val (inputPartCols, columns) = child.output.partition { attr =>
-                tablePartitionNames.contains(attr.name)
-              }
-              // All partition columns are dynamic because this InsertIntoTable had no partitioning
-              val partColumns = tablePartitionNames.map { name =>
-                inputPartCols.find(_.name == name).getOrElse(
-                  throw new AnalysisException(s"Cannot find partition column $name"))
-              }
-              i.copy(
-                table = EliminateSubqueryAliases(table),
-                partition = tablePartitionNames.map(_ -> None).toMap,
-                child = Project(columns ++ partColumns, child))
-            }
-          case _ =>
-            i.copy(table = EliminateSubqueryAliases(table))
-        }
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&
@@ -523,6 +490,10 @@ class Analyzer(
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
           (oldVersion, newVersion)
+
+        case oldVersion: SerializeFromObject
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
 
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
@@ -576,8 +547,7 @@ class Analyzer(
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
           failAnalysis(
-            "Group by position: star is not allowed to use in the select list " +
-              "when using ordinals in group by")
+            "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
@@ -716,6 +686,7 @@ class Analyzer(
     // Else, throw exception.
     try {
       expr transformUp {
+        case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
           withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
@@ -751,9 +722,9 @@ class Analyzer(
             if (index > 0 && index <= child.output.size) {
               SortOrder(child.output(index - 1), direction)
             } else {
-              throw new UnresolvedException(s,
-                s"Order/sort By position: $index does not exist " +
-                s"The Select List is indexed from 1 to ${child.output.size}")
+              s.failAnalysis(
+                s"ORDER BY position $index is not in select list " +
+                  s"(valid range is [1, ${child.output.size}])")
             }
           case o => o
         }
@@ -765,17 +736,18 @@ class Analyzer(
           if conf.groupByOrdinal && aggs.forall(_.resolved) &&
             groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
         val newGroups = groups.map {
-          case IntegerIndex(index) if index > 0 && index <= aggs.size =>
+          case ordinal @ IntegerIndex(index) if index > 0 && index <= aggs.size =>
             aggs(index - 1) match {
               case e if ResolveAggregateFunctions.containsAggregate(e) =>
-                throw new UnresolvedException(a,
-                  s"Group by position: the '$index'th column in the select contains an " +
-                  s"aggregate function: ${e.sql}. Aggregate functions are not allowed in GROUP BY")
+                ordinal.failAnalysis(
+                  s"GROUP BY position $index is an aggregate function, and " +
+                    "aggregate functions are not allowed in GROUP BY")
               case o => o
             }
-          case IntegerIndex(index) =>
-            throw new UnresolvedException(a,
-              s"Group by position: '$index' exceeds the size of the select list '${aggs.size}'.")
+          case ordinal @ IntegerIndex(index) =>
+            ordinal.failAnalysis(
+              s"GROUP BY position $index is not in select list " +
+                s"(valid range is [1, ${aggs.size}])")
           case o => o
         }
         Aggregate(newGroups, aggs, child)
@@ -1049,6 +1021,19 @@ class Analyzer(
         case e: Expand =>
           failOnOuterReferenceInSubTree(e, "an EXPAND")
           e
+        case l : LocalLimit =>
+          failOnOuterReferenceInSubTree(l, "a LIMIT")
+          l
+        // Since LIMIT <n> is represented as GlobalLimit(<n>, (LocalLimit (<n>, child))
+        // and we are walking bottom up, we will fail on LocalLimit before
+        // reaching GlobalLimit.
+        // The code below is just a safety net.
+        case g : GlobalLimit =>
+          failOnOuterReferenceInSubTree(g, "a LIMIT")
+          g
+        case s : Sample =>
+          failOnOuterReferenceInSubTree(s, "a TABLESAMPLE")
+          s
         case p =>
           failOnOuterReference(p)
           p
@@ -1235,6 +1220,19 @@ class Analyzer(
                 val alias = Alias(ae, ae.toString)()
                 aggregateExpressions += alias
                 alias.toAttribute
+              // Grouping functions are handled in the rule [[ResolveGroupingAnalytics]].
+              case e: Expression if grouping.exists(_.semanticEquals(e)) &&
+                  !ResolveGroupingAnalytics.hasGroupingFunction(e) &&
+                  !aggregate.output.exists(_.semanticEquals(e)) =>
+                e match {
+                  case ne: NamedExpression =>
+                    aggregateExpressions += ne
+                    ne.toAttribute
+                  case _ =>
+                    val alias = Alias(e, e.toString)()
+                    aggregateExpressions += alias
+                    alias.toAttribute
+                }
             }
 
             // Push the aggregate expressions into the aggregate (if any).
@@ -1427,7 +1425,7 @@ class Analyzer(
      * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
      * names is empty names are assigned from field names in generator.
      */
-    private[sql] def makeGeneratorOutput(
+    private[analysis] def makeGeneratorOutput(
         generator: Generator,
         names: Seq[String]): Seq[Attribute] = {
       val elementAttrs = generator.elementSchema.toAttributes
@@ -1448,6 +1446,40 @@ class Analyzer(
   }
 
   /**
+   * Fixes nullability of Attributes in a resolved LogicalPlan by using the nullability of
+   * corresponding Attributes of its children output Attributes. This step is needed because
+   * users can use a resolved AttributeReference in the Dataset API and outer joins
+   * can change the nullability of an AttribtueReference. Without the fix, a nullable column's
+   * nullable field can be actually set as non-nullable, which cause illegal optimization
+   * (e.g., NULL propagation) and wrong answers.
+   * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
+   */
+  object FixNullability extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case p if !p.resolved => p // Skip unresolved nodes.
+      case p: LogicalPlan if p.resolved =>
+        val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
+          case (exprId, attributes) =>
+            // If there are multiple Attributes having the same ExprId, we need to resolve
+            // the conflict of nullable field. We do not really expect this happen.
+            val nullable = attributes.exists(_.nullable)
+            attributes.map(attr => attr.withNullability(nullable))
+        }.toSeq
+        // At here, we create an AttributeMap that only compare the exprId for the lookup
+        // operation. So, we can find the corresponding input attribute's nullability.
+        val attributeMap = AttributeMap[Attribute](childrenOutput.map(attr => attr -> attr))
+        // For an Attribute used by the current LogicalPlan, if it is from its children,
+        // we fix the nullable field by using the nullability setting of the corresponding
+        // output Attribute from the children.
+        p.transformExpressions {
+          case attr: Attribute if attributeMap.contains(attr) =>
+            attr.withNullability(attributeMap(attr).nullable)
+        }
+    }
+  }
+
+  /**
    * Extracts [[WindowExpression]]s from the projectList of a [[Project]] operator and
    * aggregateExpressions of an [[Aggregate]] operator and creates individual [[Window]]
    * operators for every distinct [[WindowSpecDefinition]].
@@ -1455,7 +1487,7 @@ class Analyzer(
    * This rule handles three cases:
    *  - A [[Project]] having [[WindowExpression]]s in its projectList;
    *  - An [[Aggregate]] having [[WindowExpression]]s in its aggregateExpressions.
-   *  - An [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
+   *  - A [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
    *    clause and the [[Aggregate]] has [[WindowExpression]]s in its aggregateExpressions.
    * Note: If there is a GROUP BY clause in the query, aggregations and corresponding
    * filters (expressions in the HAVING clause) should be evaluated before any
@@ -1615,7 +1647,7 @@ class Analyzer(
 
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
-        if (distinctWindowSpec.length == 0 ) {
+        if (distinctWindowSpec.isEmpty) {
           failAnalysis(s"$expr does not have any WindowExpression.")
         } else if (distinctWindowSpec.length > 1) {
           // newExpressionsWithWindowFunctions only have expressions with a single
@@ -1781,7 +1813,8 @@ class Analyzer(
         s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if wf.frame != UnspecifiedFrame =>
           WindowExpression(wf, s.copy(frameSpecification = wf.frame))
-        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame)) =>
+        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
+          if e.resolved =>
           val frame = SpecifiedWindowFrame.defaultWindowFrame(o.nonEmpty, acceptWindowFrame = true)
           we.copy(windowSpec = s.copy(frameSpecification = frame))
       }
@@ -1830,13 +1863,25 @@ class Analyzer(
   }
 
   private def commonNaturalJoinProcessing(
-     left: LogicalPlan,
-     right: LogicalPlan,
-     joinType: JoinType,
-     joinNames: Seq[String],
-     condition: Option[Expression]) = {
-    val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
-    val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      joinNames: Seq[String],
+      condition: Option[Expression]) = {
+    val leftKeys = joinNames.map { keyName =>
+      val joinColumn = left.output.find(attr => resolver(attr.name, keyName))
+      assert(
+        joinColumn.isDefined,
+        s"$keyName should exist in ${left.output.map(_.name).mkString(",")}")
+      joinColumn.get
+    }
+    val rightKeys = joinNames.map { keyName =>
+      val joinColumn = right.output.find(attr => resolver(attr.name, keyName))
+      assert(
+        joinColumn.isDefined,
+        s"$keyName should exist in ${right.output.map(_.name).mkString(",")}")
+      joinColumn.get
+    }
     val joinPairs = leftKeys.zip(rightKeys)
 
     val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
@@ -1884,10 +1929,59 @@ class Analyzer(
           } else {
             inputAttributes
           }
-          val unbound = deserializer transform {
-            case b: BoundReference => inputs(b.ordinal)
-          }
-          resolveExpression(unbound, LocalRelation(inputs), throws = true)
+
+          validateTopLevelTupleFields(deserializer, inputs)
+          val resolved = resolveExpression(
+            deserializer, LocalRelation(inputs), throws = true)
+          validateNestedTupleFields(resolved)
+          resolved
+      }
+    }
+
+    private def fail(schema: StructType, maxOrdinal: Int): Unit = {
+      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
+        "but failed as the number of fields does not line up.")
+    }
+
+    /**
+     * For each top-level Tuple field, we use [[GetColumnByOrdinal]] to get its corresponding column
+     * by position.  However, the actual number of columns may be different from the number of Tuple
+     * fields.  This method is used to check the number of columns and fields, and throw an
+     * exception if they do not match.
+     */
+    private def validateTopLevelTupleFields(
+        deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+      val ordinals = deserializer.collect {
+        case GetColumnByOrdinal(ordinal, _) => ordinal
+      }.distinct.sorted
+
+      if (ordinals.nonEmpty && ordinals != inputs.indices) {
+        fail(inputs.toStructType, ordinals.last)
+      }
+    }
+
+    /**
+     * For each nested Tuple field, we use [[GetStructField]] to get its corresponding struct field
+     * by position.  However, the actual number of struct fields may be different from the number
+     * of nested Tuple fields.  This method is used to check the number of struct fields and nested
+     * Tuple fields, and throw an exception if they do not match.
+     */
+    private def validateNestedTupleFields(deserializer: Expression): Unit = {
+      val structChildToOrdinals = deserializer
+        // There are 2 kinds of `GetStructField`:
+        //   1. resolved from `UnresolvedExtractValue`, and it will have a `name` property.
+        //   2. created when we build deserializer expression for nested tuple, no `name` property.
+        // Here we want to validate the ordinals of nested tuple, so we should only catch
+        // `GetStructField` without the name property.
+        .collect { case g: GetStructField if g.name.isEmpty => g }
+        .groupBy(_.child)
+        .mapValues(_.map(_.ordinal).distinct.sorted)
+
+      structChildToOrdinals.foreach { case (expr, ordinals) =>
+        val schema = expr.dataType.asInstanceOf[StructType]
+        if (ordinals != schema.indices) {
+          fail(schema, ordinals.last)
+        }
       }
     }
   }
@@ -2129,4 +2223,3 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-

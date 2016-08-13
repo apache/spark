@@ -29,7 +29,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.receiver.Receiver
 
 /**
- * Custom Receiver that receives data over a socket. Received bytes is interpreted as
+ * Custom Receiver that receives data over a socket. Received bytes are interpreted as
  * text and \n delimited lines are considered as records. They are then counted and printed.
  *
  * To run this on your local machine, you need to first run a Netcat server

@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
 
-private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
+private[csv] class CSVOptions(@transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -112,6 +112,10 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
   val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
 
   val escapeQuotes = getBool("escapeQuotes", true)
+
+  val maxMalformedLogPerPartition = getInt("maxMalformedLogPerPartition", 10)
+
+  val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
 

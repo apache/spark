@@ -31,7 +31,9 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
@@ -417,6 +419,8 @@ class SparkSubmitSuite
   // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
   ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
+    // Check if the SparkR package is installed
+    assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val rScriptDir =
@@ -433,6 +437,41 @@ class SparkSubmitSuite
         rScriptDir)
       runSparkSubmit(args)
     }
+  }
+
+  test("include an external JAR in SparkR") {
+    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    // Check if the SparkR package is installed
+    assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
+    val rScriptDir =
+      Seq(sparkHome, "R", "pkg", "inst", "tests", "testthat", "jarTest.R").mkString(File.separator)
+    assert(new File(rScriptDir).exists)
+
+    // compile a small jar containing a class that will be called from R code.
+    val tempDir = Utils.createTempDir()
+    val srcDir = new File(tempDir, "sparkrtest")
+    srcDir.mkdirs()
+    val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").getAbsolutePath,
+      """package sparkrtest;
+        |
+        |public class DummyClass implements java.io.Serializable {
+        |  public static String helloWorld(String arg) { return "Hello " + arg; }
+        |  public static int addStuff(int arg1, int arg2) { return arg1 + arg2; }
+        |}
+      """.stripMargin)
+    val excFile = TestUtils.createCompiledClass("DummyClass", srcDir, excSource, Seq.empty)
+    val jarFile = new File(tempDir, "sparkRTestJar-%s.jar".format(System.currentTimeMillis()))
+    val jarURL = TestUtils.createJar(Seq(excFile), jarFile, directoryPrefix = Some("sparkrtest"))
+
+    val args = Seq(
+      "--name", "testApp",
+      "--master", "local",
+      "--jars", jarURL.toString,
+      "--verbose",
+      "--conf", "spark.ui.enabled=false",
+      rScriptDir)
+    runSparkSubmit(args)
   }
 
   test("resolves command line argument paths correctly") {
@@ -474,6 +513,8 @@ class SparkSubmitSuite
     val clArgs3 = Seq(
       "--master", "local",
       "--py-files", pyFiles,
+      "--conf", "spark.pyspark.driver.python=python3.4",
+      "--conf", "spark.pyspark.python=python3.5",
       "mister.py"
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
@@ -481,6 +522,8 @@ class SparkSubmitSuite
     appArgs3.pyFiles should be (Utils.resolveURIs(pyFiles))
     sysProps3("spark.submit.pyFiles") should be (
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
+    sysProps3(PYSPARK_DRIVER_PYTHON.key) should be ("python3.4")
+    sysProps3(PYSPARK_PYTHON.key) should be ("python3.5")
   }
 
   test("resolves config paths correctly") {
@@ -569,6 +612,18 @@ class SparkSubmitSuite
       assert(appArgs.propertiesFile.startsWith(path))
       appArgs.executorMemory should be ("2.3g")
     }
+  }
+
+  test("comma separated list of files are unioned correctly") {
+    val left = Option("/tmp/a.jar,/tmp/b.jar")
+    val right = Option("/tmp/c.jar,/tmp/a.jar")
+    val emptyString = Option("")
+    Utils.unionFileLists(left, right) should be (Set("/tmp/a.jar", "/tmp/b.jar", "/tmp/c.jar"))
+    Utils.unionFileLists(emptyString, emptyString) should be (Set.empty)
+    Utils.unionFileLists(Option("/tmp/a.jar"), emptyString) should be (Set("/tmp/a.jar"))
+    Utils.unionFileLists(emptyString, Option("/tmp/a.jar")) should be (Set("/tmp/a.jar"))
+    Utils.unionFileLists(None, Option("/tmp/a.jar")) should be (Set("/tmp/a.jar"))
+    Utils.unionFileLists(Option("/tmp/a.jar"), None) should be (Set("/tmp/a.jar"))
   }
   // scalastyle:on println
 

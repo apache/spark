@@ -29,7 +29,7 @@ object UDTSerializationBenchmark {
     val iters = 1e2.toInt
     val numRows = 1e3.toInt
 
-    val encoder = ExpressionEncoder[Vector].defaultBinding
+    val encoder = ExpressionEncoder[Vector].resolveAndBind()
 
     val vectors = (1 to numRows).map { i =>
       Vectors.dense(Array.fill(1e5.toInt)(1.0 * i))

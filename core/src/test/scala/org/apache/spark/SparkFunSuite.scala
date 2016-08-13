@@ -26,7 +26,7 @@ import org.apache.spark.util.AccumulatorContext
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
-private[spark] abstract class SparkFunSuite
+abstract class SparkFunSuite
   extends FunSuite
   with BeforeAndAfterAll
   with Logging {

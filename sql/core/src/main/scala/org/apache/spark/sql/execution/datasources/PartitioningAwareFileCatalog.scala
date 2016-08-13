@@ -50,14 +50,14 @@ abstract class PartitioningAwareFileCatalog(
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
+      Partition(InternalRow.empty, allFiles().filter(f => isDataPath(f.getPath))) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
           val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
             case Some(existingDir) =>
               // Directory has children files in it, return them
-              existingDir.filterNot(_.getPath.getName.startsWith("_"))
+              existingDir.filter(f => isDataPath(f.getPath))
 
             case None =>
               // Directory does not exist, or has no children files
@@ -96,7 +96,11 @@ abstract class PartitioningAwareFileCatalog(
 
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = leafDirToChildrenFiles.keys.toSeq
+    val leafDirs = leafDirToChildrenFiles.filter { case (_, files) =>
+      // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
+      // counted as data files, so that they shouldn't participate partition discovery.
+      files.exists(f => isDataPath(f.getPath))
+    }.keys.toSeq
     partitionSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
@@ -196,5 +200,10 @@ abstract class PartitioningAwareFileCatalog(
           val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
           if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
+  }
+
+  private def isDataPath(path: Path): Boolean = {
+    val name = path.getName
+    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }
 }

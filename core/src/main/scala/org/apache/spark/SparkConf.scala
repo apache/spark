@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  *
  * @param loadDefaults whether to also load values from Java system properties
  */
-class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
+class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
 
   import SparkConf._
 
@@ -248,7 +248,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * - This will throw an exception is the config is not optional and the value is not set.
    */
   private[spark] def get[T](entry: ConfigEntry[T]): T = {
-    entry.readFrom(this)
+    entry.readFrom(settings, getenv)
   }
 
   /**
@@ -370,6 +370,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
+  /** Get all parameters that start with `prefix` */
+  def getAllWithPrefix(prefix: String): Array[(String, String)] = {
+    getAll.filter { case (k, v) => k.startsWith(prefix) }
+      .map { case (k, v) => (k.substring(prefix.length), v) }
+  }
+
+
   /** Get a parameter as an integer, falling back to a default if not set */
   def getInt(key: String, defaultValue: Int): Int = {
     getOption(key).map(_.toInt).getOrElse(defaultValue)
@@ -392,9 +399,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
-    val prefix = "spark.executorEnv."
-    getAll.filter{case (k, v) => k.startsWith(prefix)}
-          .map{case (k, v) => (k.substring(prefix.length), v)}
+    getAllWithPrefix("spark.executorEnv.")
   }
 
   /**

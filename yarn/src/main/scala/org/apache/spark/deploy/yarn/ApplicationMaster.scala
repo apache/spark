@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
@@ -49,14 +50,6 @@ private[spark] class ApplicationMaster(
     args: ApplicationMasterArguments,
     client: YarnRMClient)
   extends Logging {
-
-  // Load the properties file with the Spark configuration and set entries as system properties,
-  // so that user code run inside the AM also has access to them.
-  if (args.propertiesFile != null) {
-    Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
-      sys.props(k) = v
-    }
-  }
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
@@ -120,7 +113,7 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+  private var credentialRenewer: AMCredentialRenewer = _
 
   // Load the list of localized files set by the client. This is used when launching executors,
   // and is loaded here so that these configs don't pollute the Web UI's environment page in
@@ -160,11 +153,17 @@ private[spark] class ApplicationMaster(
     }
 
     // Distribute the conf archive to executors.
-    sparkConf.get(CACHED_CONF_ARCHIVE).foreach { uri =>
-      val fs = FileSystem.get(new URI(uri), yarnConf)
+    sparkConf.get(CACHED_CONF_ARCHIVE).foreach { path =>
+      val uri = new URI(path)
+      val fs = FileSystem.get(uri, yarnConf)
       val status = fs.getFileStatus(new Path(uri))
-      setupDistributedCache(uri, LocalResourceType.ARCHIVE, status.getModificationTime().toString,
-        status.getLen.toString, LocalResourceVisibility.PRIVATE.name())
+      // SPARK-16080: Make sure to use the correct name for the destination when distributing the
+      // conf archive to executors.
+      val destUri = new URI(uri.getScheme(), uri.getRawSchemeSpecificPart(),
+        Client.LOCALIZED_CONF_DIR)
+      setupDistributedCache(destUri.toString(), LocalResourceType.ARCHIVE,
+        status.getModificationTime().toString, status.getLen.toString,
+        LocalResourceVisibility.PRIVATE.name())
     }
 
     // Clean up the configuration so it doesn't show up in the Web UI (since it's really noisy).
@@ -237,10 +236,11 @@ private[spark] class ApplicationMaster(
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
       if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
-        delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
-        delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
+        credentialRenewer =
+          new ConfigurableCredentialManager(sparkConf, yarnConf).credentialRenewer()
+        credentialRenewer.scheduleLoginFromKeytab()
       }
 
       if (isClusterMode) {
@@ -307,7 +307,10 @@ private[spark] class ApplicationMaster(
           logDebug("shutting down user thread")
           userClassThread.interrupt()
         }
-        if (!inShutdown) delegationTokenRenewerOption.foreach(_.stop())
+        if (!inShutdown && credentialRenewer != null) {
+          credentialRenewer.stop()
+          credentialRenewer = null
+        }
       }
     }
   }
@@ -451,8 +454,10 @@ private[spark] class ApplicationMaster(
           }
           try {
             val numPendingAllocate = allocator.getPendingAllocate.size
+            var sleepStart = 0L
+            var sleepInterval = 200L // ms
             allocatorLock.synchronized {
-              val sleepInterval =
+              sleepInterval =
                 if (numPendingAllocate > 0 || allocator.getNumPendingLossReasonRequests > 0) {
                   val currentAllocationInterval =
                     math.min(heartbeatInterval, nextAllocationInterval)
@@ -462,9 +467,26 @@ private[spark] class ApplicationMaster(
                   nextAllocationInterval = initialAllocationInterval
                   heartbeatInterval
                 }
-              logDebug(s"Number of pending allocations is $numPendingAllocate. " +
-                       s"Sleeping for $sleepInterval.")
+              sleepStart = System.currentTimeMillis()
               allocatorLock.wait(sleepInterval)
+            }
+            val sleepDuration = System.currentTimeMillis() - sleepStart
+            if (sleepDuration < sleepInterval) {
+              // log when sleep is interrupted
+              logDebug(s"Number of pending allocations is $numPendingAllocate. " +
+                  s"Slept for $sleepDuration/$sleepInterval ms.")
+              // if sleep was less than the minimum interval, sleep for the rest of it
+              val toSleep = math.max(0, initialAllocationInterval - sleepDuration)
+              if (toSleep > 0) {
+                logDebug(s"Going back to sleep for $toSleep ms")
+                // use Thread.sleep instead of allocatorLock.wait. there is no need to be woken up
+                // by the methods that signal allocatorLock because this is just finishing the min
+                // sleep interval, which should happen even if this is signalled again.
+                Thread.sleep(toSleep)
+              }
+            } else {
+              logDebug(s"Number of pending allocations is $numPendingAllocate. " +
+                  s"Slept for $sleepDuration/$sleepInterval.")
             }
           } catch {
             case e: InterruptedException =>
@@ -718,6 +740,15 @@ object ApplicationMaster extends Logging {
   def main(args: Array[String]): Unit = {
     SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
+
+    // Load the properties file with the Spark configuration and set entries as system properties,
+    // so that user code run inside the AM also has access to them.
+    // Note: we must do this before SparkHadoopUtil instantiated
+    if (amArgs.propertiesFile != null) {
+      Utils.getPropertiesFromFile(amArgs.propertiesFile).foreach { case (k, v) =>
+        sys.props(k) = v
+      }
+    }
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient)
       System.exit(master.run())

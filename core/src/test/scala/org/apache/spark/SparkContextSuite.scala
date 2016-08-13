@@ -216,6 +216,57 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("cannot call addFile with different paths that have the same filename") {
+    val dir = Utils.createTempDir()
+    try {
+      val subdir1 = new File(dir, "subdir1")
+      val subdir2 = new File(dir, "subdir2")
+      assert(subdir1.mkdir())
+      assert(subdir2.mkdir())
+      val file1 = new File(subdir1, "file")
+      val file2 = new File(subdir2, "file")
+      Files.write("old", file1, StandardCharsets.UTF_8)
+      Files.write("new", file2, StandardCharsets.UTF_8)
+      sc = new SparkContext("local-cluster[1,1,1024]", "test")
+      sc.addFile(file1.getAbsolutePath)
+      def getAddedFileContents(): String = {
+        sc.parallelize(Seq(0)).map { _ =>
+          scala.io.Source.fromFile(SparkFiles.get("file")).mkString
+        }.first()
+      }
+      assert(getAddedFileContents() === "old")
+      intercept[IllegalArgumentException] {
+        sc.addFile(file2.getAbsolutePath)
+      }
+      assert(getAddedFileContents() === "old")
+    } finally {
+      Utils.deleteRecursively(dir)
+    }
+  }
+
+  // Regression tests for SPARK-16787
+  for (
+    schedulingMode <- Seq("local-mode", "non-local-mode");
+    method <- Seq("addJar", "addFile")
+  ) {
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar").toString
+    val master = schedulingMode match {
+      case "local-mode" => "local"
+      case "non-local-mode" => "local-cluster[1,1,1024]"
+    }
+    test(s"$method can be called twice with same file in $schedulingMode (SPARK-16787)") {
+      sc = new SparkContext(master, "test")
+      method match {
+        case "addJar" =>
+          sc.addJar(jarPath)
+          sc.addJar(jarPath)
+        case "addFile" =>
+          sc.addFile(jarPath)
+          sc.addFile(jarPath)
+      }
+    }
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -362,5 +413,20 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     thread2.join()
     sc.stop()
     assert(result == null)
+  }
+
+  test("log level case-insensitive and reset log level") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
+    try {
+      sc.setLogLevel("debug")
+      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.DEBUG)
+      sc.setLogLevel("INfo")
+      assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.INFO)
+    } finally {
+      sc.setLogLevel(originalLevel.toString)
+      assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
+      sc.stop()
+    }
   }
 }

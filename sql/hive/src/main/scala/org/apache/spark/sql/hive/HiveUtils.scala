@@ -96,17 +96,12 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(false)
 
-  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
-    .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
-      "converted to a data source table, using the data source set by spark.sql.sources.default.")
-    .booleanConf
-    .createWithDefault(false)
-
   val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .internal()
     .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
       "the built in support.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
