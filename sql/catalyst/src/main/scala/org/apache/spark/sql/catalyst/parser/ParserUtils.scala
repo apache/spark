@@ -31,11 +31,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 object ParserUtils {
   /** Get the command which created the token. */
   def command(ctx: ParserRuleContext): String = {
-    command(ctx.getStart.getInputStream)
-  }
-
-  /** Get the command which created the token. */
-  def command(stream: CharStream): String = {
+    val stream = ctx.getStart.getInputStream
     stream.getText(Interval.of(0, stream.size()))
   }
 

@@ -42,6 +42,16 @@ class ParserUtilsSuite extends SparkFunSuite {
     parser.statement().asInstanceOf[ShowDatabasesContext]
   }
 
+  val createDbContext = buildContext(
+    """
+      |CREATE DATABASE IF NOT EXISTS database_name
+      |COMMENT 'database_comment' LOCATION '/home/user/db'
+      |WITH DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')
+    """.stripMargin
+  ) { parser =>
+    parser.statement().asInstanceOf[CreateDatabaseContext]
+  }
+
   private def buildContext[T](command: String)(toResult: SqlBaseParser => T): T = {
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
     val tokenStream = new CommonTokenStream(lexer)
@@ -116,6 +126,9 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("string") {
     assert(string(showDbsContext.pattern) == "identifier_with_wildcards")
+    assert(string(createDbContext.comment) == "database_comment")
+
+    assert(string(createDbContext.locationSpec.STRING) == "/home/user/db")
   }
 
   test("position") {
