@@ -254,6 +254,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     val srcSchema = new StructType().add("key", IntegerType).add("value", StringType)
     session.read.schema(srcSchema).json(getFilePath("test-data/kv1.json"))
       .createOrReplaceTempView("src")
+
+    val srcpartSchema = new StructType().add("key", IntegerType).add("value", StringType)
+      .add("ds", StringType).add("hr", StringType)
+    session.read.schema(srcpartSchema).json(getFilePath("test-data/srcpart.json"))
+      .createOrReplaceTempView("srcpart")
   }
 
   test("test") {

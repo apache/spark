@@ -103,5 +103,7 @@ FROM (
 ) c
 where c.c3 IS NULL AND c.c1 IS NOT NULL;
 
-
-
+-- join (auto_join9.q)
+SELECT src1.key, src2.value
+FROM srcpart src1 JOIN src src2 ON (src1.key = src2.key)
+WHERE src1.ds = '2008-04-08' and src1.hr = '12'
