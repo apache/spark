@@ -110,13 +110,13 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     writer.write(Long.box(20), Long.box(30))
     val firstSegment = writer.commitAndGet()
     assert(firstSegment.length === file.length())
-    assert(writeMetrics.shuffleBytesWritten === file.length())
+    assert(writeMetrics.bytesWritten === file.length())
 
     writer.write(Long.box(40), Long.box(50))
 
     writer.revertPartialWritesAndClose()
     assert(firstSegment.length === file.length())
-    assert(writeMetrics.shuffleBytesWritten === file.length())
+    assert(writeMetrics.bytesWritten === file.length())
   }
 
   test("calling revertPartialWritesAndClose() after commit() should have no effect") {
@@ -128,11 +128,11 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     writer.write(Long.box(20), Long.box(30))
     val firstSegment = writer.commitAndGet()
     assert(firstSegment.length === file.length())
-    assert(writeMetrics.shuffleBytesWritten === file.length())
+    assert(writeMetrics.bytesWritten === file.length())
 
     writer.revertPartialWritesAndClose()
     assert(firstSegment.length === file.length())
-    assert(writeMetrics.shuffleBytesWritten === file.length())
+    assert(writeMetrics.bytesWritten === file.length())
   }
 
   test("calling revertPartialWritesAndClose() on a closed block writer should have no effect") {
