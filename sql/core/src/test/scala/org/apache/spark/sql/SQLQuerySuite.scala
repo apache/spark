@@ -1757,7 +1757,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("invalid_file does not exist"))
+    assert(
+      e3.message.contains("invalid_file does not exist") ||
+      e3.message.contains("No input paths specified in job"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
