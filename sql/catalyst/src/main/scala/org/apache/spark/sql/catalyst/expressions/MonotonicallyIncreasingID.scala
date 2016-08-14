@@ -78,7 +78,7 @@ case class MonotonicallyIncreasingID(offset: Long = 0) extends LeafExpression
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
+    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = ${offset}L;")
     ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
       s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
 
