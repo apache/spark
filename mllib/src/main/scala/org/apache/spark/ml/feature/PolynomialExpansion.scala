@@ -19,8 +19,6 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.commons.math3.util.CombinatoricsUtils
-
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
@@ -82,11 +80,11 @@ class PolynomialExpansion(override val uid: String)
 @Since("1.6.0")
 object PolynomialExpansion extends DefaultParamsReadable[PolynomialExpansion] {
 
-  private def getPolySize(numFeatures: Int, degree: Int): Int = {
-    val n = CombinatoricsUtils.binomialCoefficient(numFeatures + degree, degree)
-    require(n <= Integer.MAX_VALUE)
-    n.toInt
+  private def choose(n: Int, k: Int): Int = {
+    Range(n, n - k, -1).product / Range(k, 1, -1).product
   }
+
+  private def getPolySize(numFeatures: Int, degree: Int): Int = choose(numFeatures + degree, degree)
 
   private def expandDense(
       values: Array[Double],
