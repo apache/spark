@@ -935,14 +935,14 @@ class BinaryLogisticRegressionSummary private[classification] (
  * Two LogisticAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
- * @param bcCoeffs The broadcast coefficients corresponding to the features.
+ * @param bcCoefficients The broadcast coefficients corresponding to the features.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
  */
 private class LogisticAggregator(
-    val bcCoeffs: Broadcast[Vector],
+    val bcCoefficients: Broadcast[Vector],
     val bcFeaturesStd: Broadcast[Array[Double]],
     private val numFeatures: Int,
     numClasses: Int,
@@ -969,11 +969,12 @@ private class LogisticAggregator(
 
       if (weight == 0.0) return this
 
-      val coefficientsArray = bcCoeffs.value match {
+      val coefficientsArray = bcCoefficients.value match {
         case dv: DenseVector => dv.values
         case _ =>
           throw new IllegalArgumentException(
-            s"coefficients only supports dense vector but got type ${bcCoeffs.value.getClass}.")
+            "coefficients only supports dense vector" +
+              s"but got type ${bcCoefficients.value.getClass}.")
       }
       val localGradientSumArray = gradientSumArray
 
@@ -1077,7 +1078,7 @@ private class LogisticCostFun(
     bcFeaturesStd: Broadcast[Array[Double]],
     regParamL2: Double) extends DiffFunction[BDV[Double]] {
 
-  @transient lazy val featuresStd = bcFeaturesStd.value
+  val featuresStd = bcFeaturesStd.value
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val numFeatures = featuresStd.length
