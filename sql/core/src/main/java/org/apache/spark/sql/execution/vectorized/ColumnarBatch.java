@@ -82,9 +82,7 @@ public final class ColumnarBatch {
    * calling this. This must be called at the end to clean up memory allocations.
    */
   public void close() {
-    for (ColumnVector c: columns) {
-      c.close();
-    }
+    Arrays.stream(columns).forEach(ColumnVector::close);
   }
 
   /**
