@@ -653,6 +653,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a table-valued-function call with arguments, e.g. range(1000)
+   */
+  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
+      : LogicalPlan = withOrigin(ctx) {
+    val expressions = ctx.expression.asScala.map { ec =>
+      val e = expression(ec)
+      assert(e.foldable, "All params of a table-valued-function call must be constants.", ec)
+      e
+    }
+    UnresolvedTableValuedFunction(ctx.identifier.getText, expressions)
+  }
+
+  /**
    * Create an inline table (a virtual table in Hive parlance).
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {

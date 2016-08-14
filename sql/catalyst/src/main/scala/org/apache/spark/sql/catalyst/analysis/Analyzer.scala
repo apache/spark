@@ -86,6 +86,7 @@ class Analyzer(
       WindowsSubstitution,
       EliminateUnions),
     Batch("Resolution", fixedPoint,
+      ResolveTableValuedFunctions ::
       ResolveRelations ::
       ResolveReferences ::
       ResolveDeserializer ::
