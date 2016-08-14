@@ -2011,6 +2011,37 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-11374 Support skip.header.line.count option in Hive external table") {
+    withTable("skip_table_0", "skip_table_1", "skip_table_2") {
+      withTempDir { dir =>
+        dir.delete()
+        val path = dir.getCanonicalPath
+        spark.range(0, 3).map(x => (x, s"c$x")).repartition(1).write.csv(path)
+        spark.range(3, 6).map(x => (x, s"c$x")).repartition(1).write.mode(SaveMode.Append).csv(path)
+        for (i <- 0 to 4) {
+          sql(
+            s"""
+              |CREATE EXTERNAL TABLE skip_table_$i (id INT, b VARCHAR(10))
+              |ROW FORMAT DELIMITED
+              |FIELDS TERMINATED BY ','
+              |STORED AS TEXTFILE LOCATION '$path'
+              |${if (i == 0) "" else s"TBLPROPERTIES('skip.header.line.count'='$i')"}
+            """.stripMargin)
+          val result = if (i == 0) {
+            Seq(Row(0, "c0"), Row(1, "c1"), Row(2, "c2"), Row(3, "c3"), Row(4, "c4"), Row(5, "c5"))
+          } else if (i == 1) {
+            Seq(Row(1, "c1"), Row(2, "c2"), Row(4, "c4"), Row(5, "c5"))
+          } else if (i == 2) {
+            Seq(Row(2, "c2"), Row(5, "c5"))
+          } else {
+            Seq.empty[Row]
+          }
+          checkAnswer(sql(s"SELECT * FROM skip_table_$i"), result)
+        }
+      }
+    }
+  }
+
   def testCommandAvailable(command: String): Boolean = {
     val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
     attempt.isSuccess && attempt.get == 0
