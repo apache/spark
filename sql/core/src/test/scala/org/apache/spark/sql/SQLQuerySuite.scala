@@ -126,19 +126,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("self join with aliases") {
-    Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str").createOrReplaceTempView("df")
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT x.str, COUNT(*)
-          |FROM df x JOIN df y ON x.str = y.str
-          |GROUP BY x.str
-        """.stripMargin),
-      Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
-  }
-
   test("support table.star") {
     checkAnswer(
       sql(
@@ -451,27 +438,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       arrayData.map(d => Row(d.data, d.data(0), d.data(0) + d.data(1), d.data(1))).collect())
   }
 
-  test("left semi greater than predicate") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-        Seq(Row(3, 1), Row(3, 2))
-      )
-    }
-  }
-
-  test("left semi greater than predicate and equal operator") {
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2"),
-      Seq(Row(3, 1), Row(3, 2))
-    )
-
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1"),
-      Seq(Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
-    )
-  }
-
   test("index into array of arrays") {
     checkAnswer(
       sql(
@@ -670,57 +636,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("inner join where, one match per row") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata JOIN lowercasedata WHERE n = N"),
-        Seq(
-          Row(1, "A", 1, "a"),
-          Row(2, "B", 2, "b"),
-          Row(3, "C", 3, "c"),
-          Row(4, "D", 4, "d")))
-    }
-  }
-
-  test("inner join ON, one match per row") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata JOIN lowercasedata ON n = N"),
-        Seq(
-          Row(1, "A", 1, "a"),
-          Row(2, "B", 2, "b"),
-          Row(3, "C", 3, "c"),
-          Row(4, "D", 4, "d")))
-    }
-  }
-
-  test("inner join, where, multiple matches") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql(
-          """
-          |SELECT * FROM
-          |  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
-          |  (SELECT * FROM testdata2 WHERE a = 1) y
-          |WHERE x.a = y.a""".stripMargin),
-        Row(1, 1, 1, 1) ::
-        Row(1, 1, 1, 2) ::
-        Row(1, 2, 1, 1) ::
-        Row(1, 2, 1, 2) :: Nil)
-    }
-  }
-
-  test("inner join, no matches") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-          |  (SELECT * FROM testData2 WHERE a = 2) y
-          |WHERE x.a = y.a""".stripMargin),
-      Nil)
-  }
-
   test("big inner join, 4 matches per row") {
     checkAnswer(
       sql(
@@ -748,49 +663,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row(2, 2, 1, null) ::
           Row(2, 2, 2, 2) :: Nil)
     }
-  }
-
-  test("left outer join") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
-        Row(1, "A", 1, "a") ::
-          Row(2, "B", 2, "b") ::
-          Row(3, "C", 3, "c") ::
-          Row(4, "D", 4, "d") ::
-          Row(5, "E", null, null) ::
-          Row(6, "F", null, null) :: Nil)
-    }
-  }
-
-  test("right outer join") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      checkAnswer(
-        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
-        Row(1, "a", 1, "A") ::
-          Row(2, "b", 2, "B") ::
-          Row(3, "c", 3, "C") ::
-          Row(4, "d", 4, "D") ::
-          Row(null, null, 5, "E") ::
-          Row(null, null, 6, "F") :: Nil)
-    }
-  }
-
-  test("full outer join") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
-          |  (SELECT * FROM upperCaseData WHERE N >= 3) rightTable
-          |    ON leftTable.N = rightTable.N
-        """.stripMargin),
-      Row(1, "A", null, null) ::
-      Row(2, "B", null, null) ::
-      Row(3, "C", 3, "C") ::
-      Row (4, "D", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
   }
 
   test("SPARK-11111 null-safe join should not use cartesian product") {
@@ -845,27 +717,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT testData.value FROM testData WHERE testData.key = 1"),
       Row("1"))
-  }
-
-  test("inner join ON with table name as qualifier") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON lowerCaseData.n = upperCaseData.N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
-  }
-
-  test("qualified select with inner join ON with table name as qualifier") {
-    checkAnswer(
-      sql("SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData " +
-        "ON lowerCaseData.n = upperCaseData.N"),
-      Seq(
-        Row(1, "A"),
-        Row(2, "B"),
-        Row(3, "C"),
-        Row(4, "D")))
   }
 
   test("system function upper()") {
@@ -1202,17 +1053,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("Multiple join") {
-    checkAnswer(
-      sql(
-        """SELECT a.key, b.key, c.key
-          |FROM testData a
-          |JOIN testData b ON a.key = b.key
-          |JOIN testData c ON a.key = c.key
-        """.stripMargin),
-      (1 to 100).map(i => Row(i, i, i)))
-  }
-
   test("SPARK-3483 Special chars in column names") {
     val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
@@ -1234,16 +1074,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-3814 Support Bitwise ~ operator") {
     checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), Row(-2))
-  }
-
-  test("SPARK-4120 Join of multiple tables does not work in SparkSQL") {
-    checkAnswer(
-      sql(
-        """SELECT a.key, b.key, c.key
-          |FROM testData a,testData b,testData c
-          |where a.key = b.key and a.key = c.key
-        """.stripMargin),
-      (1 to 100).map(i => Row(i, i, i)))
   }
 
   test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {

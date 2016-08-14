@@ -109,7 +109,7 @@ SELECT src1.key, src2.value
 FROM srcpart src1 JOIN src src2 ON (src1.key = src2.key)
 WHERE src1.ds = '2008-04-08' and src1.hr = '12';
 
--- equi inner join + star expansion in nested table expression (auto_join10.q)
+-- equi inner join + table.star expansion in nested table expression (auto_join10.q)
 FROM
 (SELECT src.* FROM src) x
 JOIN
@@ -402,3 +402,59 @@ JOIN
 (SELECT src.* FROM src sort by value) Z
 ON (x.key = Z.key)
 select Y.key,Y.value;
+
+-- self join with aliases
+SELECT x.key, COUNT(*)
+FROM src x JOIN src y ON x.key = y.key
+GROUP BY x.key;
+
+-- left semi greater than predicate
+SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2;
+
+-- left semi greater than predicate and equal operator #1
+SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.b and x.a >= y.a + 2;
+
+-- left semi greater than predicate and equal operator #2
+SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.b = y.a and x.a >= y.b + 1;
+
+-- inner join with one-match-per-row filtering predicates (where)
+SELECT * FROM uppercasedata u JOIN lowercasedata l WHERE u.n = l.N;
+
+-- inner join with one-match-per-row join conditions (on)
+SELECT * FROM uppercasedata u JOIN lowercasedata l ON u.n = l.N;
+
+-- inner join with multiple-match-per-row filtering predicates (where)
+SELECT * FROM
+  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
+  (SELECT * FROM testdata2 WHERE a = 1) y
+WHERE x.a = y.a;
+
+-- inner join with no-match-per-row filtering predicates (where)
+SELECT * FROM
+  (SELECT * FROM testData2 WHERE a = 1) x JOIN
+  (SELECT * FROM testData2 WHERE a = 2) y
+WHERE x.a = y.a;
+
+-- basic full outer join
+SELECT * FROM
+  (SELECT * FROM upperCaseData WHERE N <= 4) leftTable FULL OUTER JOIN
+  (SELECT * FROM upperCaseData WHERE N >= 3) rightTable
+    ON leftTable.N = rightTable.N;
+
+-- basic right outer join
+SELECT * FROM lowercasedata l RIGHT OUTER JOIN uppercasedata u ON l.n = u.N;
+
+-- basic left outer join
+SELECT * FROM uppercasedata u LEFT OUTER JOIN lowercasedata l ON l.n = u.N;
+
+-- inner join ON with table name as qualifier
+SELECT * FROM upperCaseData JOIN lowerCaseData ON lowerCaseData.n = upperCaseData.N;
+
+-- qualified select with inner join ON with table name as qualifier
+SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData
+  ON lowerCaseData.n = upperCaseData.N;
+
+-- SPARK-4120 Join of multiple tables does not work in SparkSQL
+SELECT a.key, b.key, c.key
+FROM testData a,testData b,testData c
+where a.key = b.key and a.key = c.key and a.key < 5;

@@ -239,6 +239,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value").createOrReplaceTempView("testdata")
 
+    Seq((1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2))
+      .toDF("a", "b")
+      .createOrReplaceTempView("testData2")
+
     ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
       .toDF("arraycol", "nestedarraycol")
       .createOrReplaceTempView("arraydata")
@@ -250,6 +254,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       Tuple1(Map(1 -> "a5")) :: Nil)
       .toDF("mapcol")
       .createOrReplaceTempView("mapdata")
+
+    Seq((1, "a"), (2, "b"), (3, "c"), (4, "d"))
+      .toDF("n", "l")
+      .createOrReplaceTempView("lowerCaseData")
+
+    Seq((1, "A"), (2, "B"), (3, "C"), (4, "D"), (5, "E"), (6, "F"))
+      .toDF("N", "L")
+      .createOrReplaceTempView("upperCaseData")
 
     val srcSchema = new StructType().add("key", IntegerType).add("value", StringType)
     session.read.schema(srcSchema).json(getFilePath("test-data/kv1.json"))
