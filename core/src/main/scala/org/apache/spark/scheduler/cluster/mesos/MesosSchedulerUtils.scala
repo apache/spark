@@ -385,13 +385,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   protected def checkPorts(conf: SparkConf, ports: List[(Long, Long)]): Boolean = {
 
     def checkIfInRange(port: Long, ps: List[(Long, Long)]): Boolean = {
-      ps.exists(r => r._1 <= port & r._2 >= port)
+      ps.exists{case (rangeStart, rangeEnd) => rangeStart <= port & rangeEnd >= port }
     }
 
     val portsToCheck = nonZeroPortValuesFromConfig(conf)
     val withinRange = portsToCheck.forall(p => checkIfInRange(p, ports))
     // make sure we have enough ports to allocate per offer
-    ports.map(r => r._2 - r._1 + 1).sum >= portsToCheck.size && withinRange
+    val enoughPorts =
+    ports.map{case (rangeStart, rangeEnd) => rangeEnd - rangeStart + 1}.sum >= portsToCheck.size
+    enoughPorts && withinRange
   }
 
   /**
@@ -405,8 +407,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     : (List[Resource], List[Resource]) = {
     if (requestedPorts.isEmpty) {
       (offeredResources, List[Resource]())
-    }
-    else {
+    } else {
       // partition port offers
       val (resourcesWithoutPorts, portResources) = filterPortResources(offeredResources)
 
@@ -434,22 +435,23 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
 
   /** Creates a mesos resource for a specific port number. */
   private def createResourcesFromPorts(portsAndRoles: List[(Long, String)]) : List[Resource] = {
-    portsAndRoles.flatMap{port => createMesosPortResource(List((port._1, port._1)), Some(port._2))}
+    portsAndRoles.flatMap{ case (port, role) =>
+      createMesosPortResource(List((port, port)), Some(role))}
   }
 
   /** Helper to create mesos resources for specific port ranges. */
   private def createMesosPortResource(
       ranges: List[(Long, Long)],
       role: Option[String] = None): List[Resource] = {
-    ranges.map { range =>
+    ranges.map { case (rangeStart, rangeEnd) =>
       val rangeValue = Value.Range.newBuilder()
-        .setBegin(range._1)
-        .setEnd(range._2)
+        .setBegin(rangeStart)
+        .setEnd(rangeEnd)
       val builder = Resource.newBuilder()
         .setName("ports")
         .setType(Value.Type.RANGES)
         .setRanges(Value.Ranges.newBuilder().addRange(rangeValue))
-      role.foreach { r => builder.setRole(r) }
+      role.foreach(r => builder.setRole(r))
       builder.build()
     }
   }
@@ -462,15 +464,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     : String = {
 
     val ranges = portResources.
-      map {resource =>
+      map(resource =>
         (resource.getRole, resource.getRanges.getRangeList.asScala
-          .map(r => (r.getBegin, r.getEnd)).toList)
-         }
+          .map(r => (r.getBegin, r.getEnd)).toList))
 
     val rangePortRole = ranges
-      .find {p => p._2.exists(r => r._1 <= port & r._2 >= port) }
+      .find { case (role, rangeList) => rangeList
+        .exists{ case (rangeStart, rangeEnd) => rangeStart <= port & rangeEnd >= port}}
     // this is safe since we have previously checked about the ranges (see checkPorts method)
-    rangePortRole.get._1
+    rangePortRole.map{ case (role, rangeList) => role}.get
   }
 
   /** Retrieves the port resources from a list of mesos offered resources */
