@@ -403,6 +403,24 @@ JOIN
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
+-- join over set operation (join34.q)
+SELECT x.key, x.value, subq1.value
+FROM
+( SELECT x.key as key, x.value as value from src x where x.key < 200
+     UNION ALL
+  SELECT x1.key as key, x1.value as value from src x1 where x1.key > 100
+) subq1
+JOIN src1 x ON (x.key = subq1.key);
+
+-- join over set operation over aggregate (join35.q)
+SELECT x.key, x.value, subq1.cnt
+FROM
+( SELECT x.key as key, count(1) as cnt from src x where x.key < 200 group by x.key
+     UNION ALL
+  SELECT x1.key as key, count(1) as cnt from src x1 where x1.key > 100 group by x1.key
+) subq1
+JOIN src1 x ON (x.key = subq1.key);
+
 -- self join with aliases
 SELECT x.key, COUNT(*)
 FROM src x JOIN src y ON x.key = y.key
