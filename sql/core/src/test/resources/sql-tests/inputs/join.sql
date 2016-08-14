@@ -392,7 +392,7 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select Y.key,Y.value;
 
--- right outer + inner with sorted by nested table expression (auto_join30.q)
+-- right outer + inner with sorted by nested table expression (auto_join31.q)
 FROM
 (SELECT src.* FROM src sort by key) x
 RIGHT OUTER JOIN
