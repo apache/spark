@@ -20,6 +20,7 @@ import sys
 if sys.version >= '3':
     basestring = unicode = str
 
+import logging
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since, keyword_only
@@ -370,7 +371,7 @@ class DataFrameReader(OptionUtils):
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
-        [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
+        [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
         return self._df(self._jreader.orc(path))
 
@@ -510,7 +511,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> (df.write.format('parquet')
         ...     .bucketBy(100, 'year', 'month')
-        ...     .saveAsTable(os.path.join(tempfile.mkdtemp(), 'bucketed_table')))
+        ...     .saveAsTable('bucketed_data'))
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
@@ -530,7 +531,7 @@ class DataFrameWriter(OptionUtils):
         >>> (df.write.format('parquet')
         ...     .bucketBy(100, 'year', 'month')
         ...     .sortBy('day')
-        ...     .saveAsTable(os.path.join(tempfile.mkdtemp(), 'sorted_bucketed_table')))
+        ...     .saveAsTable('sorted_data'))
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
@@ -602,6 +603,8 @@ class DataFrameWriter(OptionUtils):
         :param mode: one of `append`, `overwrite`, `error`, `ignore` (default: error)
         :param partitionBy: names of partitioning columns
         :param options: all other string options
+
+        >>> df.write.saveAsTable('my_table')
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:
@@ -733,8 +736,7 @@ class DataFrameWriter(OptionUtils):
                             This will override ``orc.compress``. If None is set, it uses the
                             default value, ``snappy``.
 
-        >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
-        >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
+        >>> df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         if partitionBy is not None:
@@ -774,11 +776,22 @@ def _test():
     import os
     import tempfile
     import py4j
+    import shutil
+    from random import Random
+    from time import time
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
 
-    os.chdir(os.environ["SPARK_HOME"])
+    spark_home = os.path.realpath(os.environ["SPARK_HOME"])
+
+    test_dir = tempfile.mkdtemp()
+    os.chdir(test_dir)
+
+    path = lambda x, y, z: os.path.join(x, y)
+
+    shutil.copytree(path(spark_home, 'python', 'test_support'),
+                    path(test_dir, 'python', 'test_support'))
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
@@ -787,16 +800,25 @@ def _test():
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
+    seed = int(time() * 1000)
+    rng = Random(seed)
+
+    base_df_format = rng.choice(('orc', 'parquet'))
+    loader = getattr(spark.read, base_df_format)
+    path = os.path.join(test_dir, 'python/test_support/sql/%s_partitioned' % base_df_format)
+    df = loader(path)
+
     globs['tempfile'] = tempfile
     globs['os'] = os
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['df'] = df
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     sc.stop()
     if failure_count:
+        logging.error('Random seed for test: %d', seed)
         exit(-1)
 
 
