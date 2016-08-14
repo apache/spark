@@ -482,7 +482,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction"
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame-method
+#' @aliases predict,MultilayerPerceptronClassificationModel-method
 #' @export
 #' @note predict(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel"),
@@ -497,7 +497,7 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 #'         \code{tables}, conditional probabilities given the target label
 #' @rdname spark.mlp
 #' @export
-#' @aliases spark.mlp,SparkDataFrame-method
+#' @aliases summary,MultilayerPerceptronClassificationModel-method
 #' @note summary(MultilayerPerceptronClassificationModel) since 2.1.0
 setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel"),
           function(object, ...) {
@@ -630,12 +630,13 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 
 # Saves the Multilayer Perceptron Classification Model to the input path.
 
+#' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.mlp
-#' @aliases spark.mlp,SparkDataFrame-method
+#' @aliases write.ml,MultilayerPerceptronClassificationModel,path-method
 #' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
