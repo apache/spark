@@ -366,9 +366,9 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
     inClassLoader() {
       val tid = status.getTaskId.getValue.toLong
-      val state = TaskState.fromMesos(status.getState)
+      val state = mesosToTaskState(status.getState)
       synchronized {
-        if (TaskState.isFailed(TaskState.fromMesos(status.getState))
+        if (TaskState.isFailed(mesosToTaskState(status.getState))
           && taskIdToSlaveId.contains(tid)) {
           // We lost the executor on this slave, so remember that it's gone
           removeExecutor(taskIdToSlaveId(tid), "Lost executor")
