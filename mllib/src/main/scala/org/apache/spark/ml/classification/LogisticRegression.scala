@@ -692,6 +692,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val data = sparkSession.read.format("parquet").load(dataPath)
 
       // We will need numClasses, numFeatures in the future for multinomial logreg support.
+      // TODO: remove numClasses and numFeatures fields?
       val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
         MLUtils.convertVectorColumnsToML(data, "coefficients")
           .select("numClasses", "numFeatures", "intercept", "coefficients")
@@ -964,7 +965,7 @@ private class LogisticAggregator(
     numClasses: Int,
     fitIntercept: Boolean,
     multinomial: Boolean,
-    standardize: Boolean) extends Serializable {
+    standardize: Boolean) extends Serializable with Logging {
 
   private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
   private val coefficientSize = bcCoefficients.value.size
@@ -988,6 +989,13 @@ private class LogisticAggregator(
   }
 
   private val gradientSumArray = Array.ofDim[Double](totalCoefficientLength)
+
+  if (multinomial && numClasses < 2) {
+    logInfo(s"Multinomial logistic regression for binary classification yields separate " +
+      s"coefficients for positive and negative classes. When no regularization is applied, the" +
+      s"result will be effectively the same as binary logistic regression. When regularization" +
+      s"is applied, multinomial loss will produce a result different from binary loss.")
+  }
 
   /** Update gradient and loss using binary loss function. */
   private def binaryUpdateInPlace(
@@ -1033,7 +1041,7 @@ private class LogisticAggregator(
     }
   }
 
-  /** Update gradient and loss using multinomial loss function. */
+  /** Update gradient and loss using multinomial (softmax) loss function. */
   private def multinomialUpdateInPlace(
       features: Vector,
       weight: Double,
@@ -1043,11 +1051,14 @@ private class LogisticAggregator(
       featuresStd: Array[Double],
       numFeaturesPlusIntercept: Int,
       standardize: Boolean): Unit = {
+    // TODO: use level 2 BLAS operations
     /*
       Note: this can still be used when numClasses = 2 for binary
       logistic regression without pivoting.
      */
-    var marginY = 0.0
+
+    // marginOfLabel is margins(label) in the formula
+    var marginOfLabel = 0.0
     var maxMargin = Double.NegativeInfinity
 
     val margins = Array.tabulate(numClasses) { i =>
@@ -1062,13 +1073,18 @@ private class LogisticAggregator(
       if (fitIntercept) {
         margin += coefficients(i * numFeaturesPlusIntercept + features.size)
       }
-      if (i == label.toInt) marginY = margin
+      if (i == label.toInt) marginOfLabel = margin
       if (margin > maxMargin) {
         maxMargin = margin
       }
       margin
     }
 
+    /**
+     * When maxMargin > 0, the original formula could cause overflow.
+     * We address this by subtracting maxMargin from all the margins, so it's guaranteed
+     * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
+     */
     val sum = {
       var temp = 0.0
       if (maxMargin > 0) {
@@ -1101,9 +1117,9 @@ private class LogisticAggregator(
     }
 
     val loss = if (maxMargin > 0) {
-      math.log(sum) - marginY + maxMargin
+      math.log(sum) - marginOfLabel + maxMargin
     } else {
-      math.log(sum) - marginY
+      math.log(sum) - marginOfLabel
     }
     lossSum += weight * loss
   }
@@ -1117,8 +1133,8 @@ private class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimension mismatch when adding new instance." +
-        s" Expecting $numFeatures but got ${features.size}")
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
@@ -1187,8 +1203,8 @@ private class LogisticAggregator(
 }
 
 /**
- * LogisticCostFun implements Breeze's DiffFunction[T] for a multinomial logistic loss function,
- * as used in multi-class classification (it is also used in binary logistic regression).
+ * LogisticCostFun implements Breeze's DiffFunction[T] for a multinomial (softmax) logistic loss
+ * function, as used in multi-class classification (it is also used in binary logistic regression).
  * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
  * It's used in Breeze's convex optimization routines.
  */
@@ -1232,6 +1248,8 @@ private class LogisticCostFun(
       (0 until K).foreach { k =>
         var j = 0
         while (j < numFeatures) {
+          // The following code will compute the loss of the regularization; also
+          // the gradient of the regularization, and add back to totalGradientArray.
           val value = coeffs(k * numFeaturesPlusIntercept + j)
           sum += {
             if (standardization) {
@@ -1239,6 +1257,11 @@ private class LogisticCostFun(
               value * value
             } else {
               if (featuresStd(j) != 0.0) {
+                // If `standardization` is false, we still standardize the data
+                // to improve the rate of convergence; as a result, we have to
+                // perform this reverse standardization by penalizing each component
+                // differently to get effectively the same objective function when
+                // the training dataset is not standardized.
                 val temp = value / (featuresStd(j) * featuresStd(j))
                 totalGradientArray(k * numFeaturesPlusIntercept + j) += regParamL2 * temp
                 value * temp

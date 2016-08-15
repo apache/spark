@@ -508,6 +508,7 @@ class MultinomialLogisticRegressionSuite
     assert(model2.coefficients ~== coefficientsR relTol 0.05)
     assert(model2.intercepts ~== interceptsR relTol 0.05)
   }
+
   test("multinomial logistic regression without intercept with L2 regularization") {
     val trainer1 = (new MultinomialLogisticRegression).setFitIntercept(false)
       .setElasticNetParam(0.0).setRegParam(0.1).setStandardization(true)
