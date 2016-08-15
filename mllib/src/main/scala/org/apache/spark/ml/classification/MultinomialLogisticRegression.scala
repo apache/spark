@@ -271,8 +271,9 @@ class MultinomialLogisticRegression @Since("2.1.0") (
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
+        val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(standardizedInstances, numClasses, $(fitIntercept),
-          $(standardization), featuresStd, regParamL2, multinomial = true, standardize = false)
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = true, standardize = false)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -362,6 +363,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
           logError(msg)
           throw new SparkException(msg)
         }
+        bcFeaturesStd.destroy(blocking = false)
 
         /*
            The coefficients are trained in the scaled space; we're converting them back to

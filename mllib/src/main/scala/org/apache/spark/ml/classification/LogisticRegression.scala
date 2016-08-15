@@ -359,7 +359,7 @@ class LogisticRegression @Since("1.2.0") (
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), featuresStd, regParamL2, multinomial = false, standardize = true)
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = false, standardize = true)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -966,6 +966,18 @@ private class LogisticAggregator(
     multinomial: Boolean,
     standardize: Boolean) extends Serializable {
 
+  private val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
+  private val coefficientSize = bcCoefficients.value.size
+  if (multinomial) {
+    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
+      s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
+  } else {
+    require(coefficientSize == numFeaturesPlusIntercept, s"Expected $numFeaturesPlusIntercept " +
+      s"coefficients but got $coefficientSize")
+    require(numClasses <= 2, s"Binary logistic aggregator requires numClasses in {1, 2}" +
+      s" but found $numClasses.")
+  }
+
   private var weightSum = 0.0
   private var lossSum = 0.0
 
@@ -1105,20 +1117,9 @@ private class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      val size = coefficients.size
       require(numFeatures == features.size, s"Dimension mismatch when adding new instance." +
         s" Expecting $numFeatures but got ${features.size}")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
-      if (multinomial) {
-        require(numClasses == size / numFeaturesPlusIntercept, s"The number" +
-          s" of coefficients should be ${numClasses * numFeaturesPlusIntercept} but " +
-          s"was $size")
-      } else {
-        require(size == numFeaturesPlusIntercept, s"Expected " +
-          s"$numFeaturesPlusIntercept coefficients but got $size")
-        require(numClasses <= 2, s"Binary logistic aggregator requires numClasses in {1, 2}" +
-          s" but found $numClasses.")
-      }
 
       if (weight == 0.0) return this
 
@@ -1129,14 +1130,13 @@ private class LogisticAggregator(
             "coefficients only supports dense vector" +
               s"but got type ${bcCoefficients.value.getClass}.")
       }
-      val localGradientSumArray = gradientSumArray
 
       if (multinomial) {
-        multinomialUpdateInPlace(features, weight, label, coefficientsArray, localGradientSumArray,
-          featuresStd, numFeaturesPlusIntercept, standardize)
+        multinomialUpdateInPlace(features, weight, label, coefficientsArray, gradientSumArray,
+          bcFeaturesStd.value, numFeaturesPlusIntercept, standardize)
       } else {
-        binaryUpdateInPlace(features, weight, label, coefficientsArray, localGradientSumArray,
-          featuresStd, numFeaturesPlusIntercept, standardize)
+        binaryUpdateInPlace(features, weight, label, coefficientsArray, gradientSumArray,
+          bcFeaturesStd.value, numFeaturesPlusIntercept, standardize)
       }
       weightSum += weight
       this
@@ -1213,11 +1213,12 @@ private class LogisticCostFun(
 
     val logisticAggregator = {
       val seqOp = (c: LogisticAggregator, instance: Instance) =>
-        c.add(instance, bcCoeffs.value, localFeaturesStd)
+        c.add(instance)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(numFeatures, numClasses, fitIntercept, multinomial, standardize)
+        new LogisticAggregator(bcCoeffs, bcFeaturesStd, numFeatures, numClasses, fitIntercept,
+          multinomial, standardize)
       )(seqOp, combOp)
     }
 
