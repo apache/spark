@@ -303,7 +303,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val (coefficients, intercept, objectiveHistory) = {
       if (numInvalid != 0) {
-        val msg = s"Classification labels should be in {0 to ${numClasses - 1} " +
+        val msg = s"Classification labels should be in [0 to ${numClasses - 1}]. " +
           s"Found $numInvalid invalid labels."
         logError(msg)
         throw new SparkException(msg)
