@@ -50,7 +50,7 @@ case class UnresolvedRelation(
 }
 
 /**
- * Holds a table-valued-function call that has yet to be resolved.
+ * Holds a table-valued function call that has yet to be resolved.
  */
 case class UnresolvedTableValuedFunction(
     functionName: String, functionArgs: Seq[Expression]) extends LeafNode {
