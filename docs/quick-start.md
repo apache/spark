@@ -40,7 +40,7 @@ RDDs have _[actions](programming-guide.html#actions)_, which return values, and 
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this RDD
-res0: Long = 99
+res0: Long = 126
 
 scala> textFile.first() // First item in this RDD
 res1: String = # Apache Spark
@@ -57,7 +57,7 @@ We can chain together transformations and actions:
 
 {% highlight scala %}
 scala> textFile.filter(line => line.contains("Spark")).count() // How many lines contain "Spark"?
-res3: Long = 19
+res3: Long = 15
 {% endhighlight %}
 
 </div>
@@ -75,7 +75,7 @@ RDDs have _[actions](programming-guide.html#actions)_, which return values, and 
 
 {% highlight python %}
 >>> textFile.count() # Number of items in this RDD
-99
+126
 
 >>> textFile.first() # First item in this RDD
 u'# Apache Spark'
@@ -91,7 +91,7 @@ We can chain together transformations and actions:
 
 {% highlight python %}
 >>> textFile.filter(lambda line: "Spark" in line).count() # How many lines contain "Spark"?
-19
+15
 {% endhighlight %}
 
 </div>
@@ -106,7 +106,7 @@ RDD actions and transformations can be used for more complex computations. Let's
 
 {% highlight scala %}
 scala> textFile.map(line => line.split(" ").size).reduce((a, b) => if (a > b) a else b)
-res4: Long = 22
+res4: Long = 15
 {% endhighlight %}
 
 This first maps a line to an integer value, creating a new RDD. `reduce` is called on that RDD to find the largest line count. The arguments to `map` and `reduce` are Scala function literals (closures), and can use any language feature or Scala/Java library. For example, we can easily call functions declared elsewhere. We'll use `Math.max()` function to make this code easier to understand:
@@ -116,7 +116,7 @@ scala> import java.lang.Math
 import java.lang.Math
 
 scala> textFile.map(line => line.split(" ").size).reduce((a, b) => Math.max(a, b))
-res5: Int = 22
+res5: Int = 15
 {% endhighlight %}
 
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
@@ -130,7 +130,7 @@ Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map
 
 {% highlight scala %}
 scala> wordCounts.collect()
-res6: Array[(String, Int)] = Array((package,1), (general,2), (this,1), (Because,1), (Python,2), (hive,2), (cluster.,1), ...)
+res6: Array[(String, Int)] = Array((means,1), (under,2), (this,3), (Because,1), (Python,2), (agree,1), (cluster.,1), ...)
 {% endhighlight %}
 
 </div>
@@ -138,7 +138,7 @@ res6: Array[(String, Int)] = Array((package,1), (general,2), (this,1), (Because,
 
 {% highlight python %}
 >>> textFile.map(lambda line: len(line.split())).reduce(lambda a, b: a if (a > b) else b)
-22
+15
 {% endhighlight %}
 
 This first maps a line to an integer value, creating a new RDD. `reduce` is called on that RDD to find the largest line count. The arguments to `map` and `reduce` are Python [anonymous functions (lambdas)](https://docs.python.org/2/reference/expressions.html#lambda),
@@ -154,7 +154,7 @@ For example, we'll define a `max` function to make this code easier to understan
 ...
 
 >>> textFile.map(lambda line: len(line.split())).reduce(max)
-22
+15
 {% endhighlight %}
 
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
@@ -167,7 +167,7 @@ Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map
 
 {% highlight python %}
 >>> wordCounts.collect()
-[(u'and', 11), (u'A', 1), (u'including', 3), (u'README', 1), (u'Note', 1), (u'guidance', 2), (u'variable', 1), ...]
+[(u'and', 9), (u'A', 1), (u'webpage', 1), (u'README', 1), (u'Note', 1), (u'"local"', 1), (u'variable', 1), ...]
 {% endhighlight %}
 
 </div>
@@ -297,7 +297,7 @@ $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   target/scala-{{site.SCALA_BINARY_VERSION}}/simple-project_{{site.SCALA_BINARY_VERSION}}-1.0.jar
 ...
-Lines with a: 61, Lines with b: 27
+Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 </div>
@@ -385,7 +385,7 @@ $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   target/simple-project-1.0.jar
 ...
-Lines with a: 61, Lines with b: 27
+Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 </div>
@@ -429,7 +429,7 @@ $ YOUR_SPARK_HOME/bin/spark-submit \
   --master local[4] \
   SimpleApp.py
 ...
-Lines with a: 61, Lines with b: 27
+Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 </div>
