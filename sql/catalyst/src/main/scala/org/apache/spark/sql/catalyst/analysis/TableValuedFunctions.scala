@@ -30,7 +30,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
     SparkContext.getOrCreate(new SparkConf(false)).defaultParallelism
 
   /**
-   * List of argument names and their types, used to declare a function call.
+   * List of argument names and their types, used to declare a function.
    */
   private case class ArgumentList(args: (String, Class[_])*) {
     /**
