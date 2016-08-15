@@ -30,12 +30,34 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
     SparkContext.getOrCreate(new SparkConf(false)).defaultParallelism
 
   /**
-   * Type aliases for a TVF declaration. A TVF maps a sequence of named arguments to a function
-   * resolving the TVF given a matching sequence of values from the user. Using a map allows for
-   * function overloading (e.g. range(100), range(0, 100)).
+   * List of argument names and their types, used to declare a function call.
    */
-  private type NamedArguments = Seq[Tuple2[String, Class[_]]]
-  private type TVF = Map[NamedArguments, Seq[Any] => LogicalPlan]
+  private case class ArgumentList(args: (String, Class[_])*) {
+    /**
+     * @return whether this list is assignable from the given sequence of values.
+     */
+    def assignableFrom(values: Seq[Any]): Boolean = {
+      if (args.length == values.length) {
+        args.zip(values).forall { case ((name, clazz), value) =>
+          clazz.isAssignableFrom(value.getClass)
+        }
+      } else {
+        false
+      }
+    }
+
+    override def toString: String = {
+      args.map { a =>
+        s"${a._1}: ${a._2.getSimpleName}"
+      }.mkString(", ")
+    }
+  }
+
+  /**
+   * A TVF maps argument lists to a resolving functions that accept those arguments. Using a map
+   * here allows for function overloading.
+   */
+  private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
 
   /**
    * Internal registry of table-valued-functions. TODO(ekl) we should have a proper registry
@@ -43,68 +65,48 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(
       /* range(end) */
-      Seq(("end", classOf[Number])) -> (
+      ArgumentList(("end", classOf[Number])) -> (
         (args: Seq[Any]) =>
           Range(0, args(0).asInstanceOf[Number].longValue, 1, defaultParallelism)),
 
       /* range(start, end) */
-      Seq(("start", classOf[Number]), ("end", classOf[Number])) -> (
+      ArgumentList(("start", classOf[Number]), ("end", classOf[Number])) -> (
         (args: Seq[Any]) =>
           Range(
             args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue, 1,
             defaultParallelism)),
 
       /* range(start, end, step) */
-      Seq(("start", classOf[Number]), ("end", classOf[Number]), ("steps", classOf[Number])) -> (
+      ArgumentList(("start", classOf[Number]), ("end", classOf[Number]),
+          ("steps", classOf[Number])) -> (
         (args: Seq[Any]) =>
           Range(
             args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
             args(2).asInstanceOf[Number].longValue, defaultParallelism)),
 
       /* range(start, end, step, numPartitions) */
-      Seq(("start", classOf[Number]), ("end", classOf[Number]), ("steps", classOf[Number]),
-          ("numPartitions", classOf[Integer])) -> (
+      ArgumentList(("start", classOf[Number]), ("end", classOf[Number]),
+          ("steps", classOf[Number]), ("numPartitions", classOf[Integer])) -> (
         (args: Seq[Any]) =>
           Range(
             args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
-            args(2).asInstanceOf[Number].longValue, args(3).asInstanceOf[Integer]))))
-
-  /**
-   * Returns whether a given sequence of values can be assigned to the specified arguments.
-   */
-  private def assignableFrom(args: NamedArguments, values: Seq[Any]): Boolean = {
-    if (args.length == values.length) {
-      args.zip(values).forall { case ((name, clazz), value) =>
-        clazz.isAssignableFrom(value.getClass)
-      }
-    } else {
-      false
-    }
-  }
-
-  /**
-   * Formats a list of named args, e.g. to "start: Number, end: Number, steps: Number".
-   */
-  private def formatArgs(args: NamedArguments): String = {
-    args.map { a =>
-      s"${a._1}: ${a._2.getSimpleName}"
-    }.mkString(", ")
-  }
+            args(2).asInstanceOf[Number].longValue, args(3).asInstanceOf[Integer])))
+  )
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction =>
       builtinFunctions.get(u.functionName) match {
         case Some(tvf) =>
           val evaluatedArgs = u.functionArgs.map(_.eval())
-          for ((argSpec, resolver) <- tvf) {
-            if (assignableFrom(argSpec, evaluatedArgs)) {
+          for ((argList, resolver) <- tvf) {
+            if (argList.assignableFrom(evaluatedArgs)) {
               return resolver(evaluatedArgs)
             }
           }
           val argTypes = evaluatedArgs.map(_.getClass.getSimpleName).mkString(", ")
           u.failAnalysis(
             s"""error: table-valued function ${u.functionName} with alternatives:
-              |${tvf.keys.map(formatArgs).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
+              |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
               |cannot be applied to: (${argTypes})""".stripMargin)
         case _ =>
           u.failAnalysis(s"could not resolve `${u.functionName}` to a table valued function")
