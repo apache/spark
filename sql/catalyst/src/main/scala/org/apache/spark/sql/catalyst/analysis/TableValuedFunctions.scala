@@ -60,7 +60,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
 
   /**
-   * Internal registry of table-valued-functions. TODO(ekl) we should have a proper registry
+   * Internal registry of table-valued functions. TODO(ekl) we should have a proper registry
    */
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(
@@ -109,7 +109,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
               |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
               |cannot be applied to: (${argTypes})""".stripMargin)
         case _ =>
-          u.failAnalysis(s"could not resolve `${u.functionName}` to a table valued function")
+          u.failAnalysis(s"could not resolve `${u.functionName}` to a table-valued function")
       }
   }
 }

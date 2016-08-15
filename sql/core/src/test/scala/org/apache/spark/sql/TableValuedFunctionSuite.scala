@@ -20,7 +20,13 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test.SharedSQLContext
 
 class TableValuedFunctionSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
+
+  test("unresolvable function") {
+    val error = intercept[AnalysisException] {
+      sql("select * from dummy(3)")
+    }
+    assert(error.getMessage.contains("could not resolve `dummy` to a table-valued function"))
+  }
 
   test("built-in range") {
     checkAnswer(
