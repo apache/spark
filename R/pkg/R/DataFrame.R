@@ -359,24 +359,6 @@ setMethod("colnames<-",
             dataFrame(sdf)
           })
 
-specialtypeshandle <- function(type) {
-  if (!is.null(PRIMITIVE_TYPES[[type]])) {
-    type
-  } else {
-      firstChar <- substr(type, 1, 1)
-      returntype <- NULL
-      switch (firstChar,
-              d = {
-                  m <- regexec("^decimal(.+)", type)
-                  matchedStrings <- regmatches(type, m)
-                  if (length(matchedStrings[[1]]) >= 2) {
-                    returntype <- "double"
-                  }
-              })
-      returntype
-  }
-}
-
 #' coltypes
 #'
 #' Get column types of a SparkDataFrame

@@ -67,3 +67,24 @@ rToSQLTypes <- as.environment(list(
   "double" = "double",
   "character" = "string",
   "logical" = "boolean"))
+
+# Helper function of coverting decimal type. When backend returns column type in the
+# format of decimal(,) (e.g., decimal(10, 0)), this function coverts the column type
+# as double type.
+specialtypeshandle <- function(type) {
+  if (!is.null(PRIMITIVE_TYPES[[type]])) {
+    type
+  } else {
+    firstChar <- substr(type, 1, 1)
+    returntype <- NULL
+    switch (firstChar,
+    d = {
+      m <- regexec("^decimal(.+)", type)
+      matchedStrings <- regmatches(type, m)
+      if (length(matchedStrings[[1]]) >= 2) {
+        returntype <- "double"
+      }
+    })
+    returntype
+  }
+}
