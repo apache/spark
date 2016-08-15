@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.mesos
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{IntParam, Utils}
@@ -31,10 +32,18 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
   var masterUrl: String = _
   var zookeeperUrl: Option[String] = None
   var propertiesFile: String = _
+  val cliSparkConfig = new mutable.ListBuffer[String]()
 
   parse(args.toList)
 
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+
+  updateSparkConfigFromcliConfig()
+
+  private def updateSparkConfigFromcliConfig() : Unit = {
+    val properties = Utils.loadPropertiesFromString(cliSparkConfig.mkString("\n"))
+    Utils.updateSparkConfigFromProperties(conf, properties)
+  }
 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
@@ -73,6 +82,10 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       propertiesFile = value
       parse(tail)
 
+    case ("--conf") :: value :: tail =>
+      cliSparkConfig += value
+      parse(tail)
+
     case ("--help") :: tail =>
       printUsageAndExit(0)
 
@@ -102,7 +115,9 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
         "  -z --zk ZOOKEEPER       Comma delimited URLs for connecting to \n" +
         "                          Zookeeper for persistence\n" +
         "  --properties-file FILE  Path to a custom Spark properties file.\n" +
-        "                          Default is conf/spark-defaults.conf.")
+        "                          Default is conf/spark-defaults.conf \n" +
+        "  --conf PROP=VALUE       Arbitrary Spark configuration property.\n" +
+        "                          Takes precedence over defined properties in properties-file.")
     // scalastyle:on println
     System.exit(exitCode)
   }
