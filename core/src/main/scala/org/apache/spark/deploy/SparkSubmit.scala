@@ -58,6 +58,18 @@ private[deploy] object SparkSubmitAction extends Enumeration {
 }
 
 /**
+ * Whether the application is launched from:
+ * SPARK_SHELL: ./bin/spark-shell
+ * SPARKR_SHELL: ./bin/sparkR
+ * PYSPARK_SHELL: ./bin/pyspark
+ * NON_SHELL: It is not launched through the above three shells
+ */
+private[spark] object SparkShellType extends Enumeration {
+  type SparkShellTYpe = Value
+  val SPARK_SHELL, SPARKR_SHELL, PYSPARK_SHELL, NON_SHELL = Value
+}
+
+/**
  * Main gateway of launching a Spark application.
  *
  * This program handles setting up the classpath with relevant Spark dependencies and provides
@@ -111,6 +123,7 @@ object SparkSubmit {
     printStream.println("Type --help for more information.")
     exitFn(0)
   }
+  private[spark] var shellType = SparkShellType.NON_SHELL
   // scalastyle:on println
 
   def main(args: Array[String]): Unit = {
@@ -227,6 +240,7 @@ object SparkSubmit {
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
     var childMainClass = ""
+    initShellType(args.primaryResource)
 
     // Set the cluster manager
     val clusterManager: Int = args.master match {
@@ -798,6 +812,24 @@ object SparkSubmit {
 
   private[deploy] def isInternal(res: String): Boolean = {
     res == SparkLauncher.NO_RESOURCE
+  }
+
+  /**
+   * Initialize the shellType when launching the application
+   * Default: NON_SHELL
+   */
+  private[deploy] def initShellType(res: String): Unit = {
+    require(res != null)
+    res match {
+      case SPARK_SHELL => shellType = SparkShellType.SPARK_SHELL
+      case SPARKR_SHELL => shellType = SparkShellType.SPARKR_SHELL
+      case PYSPARK_SHELL => shellType = SparkShellType.PYSPARK_SHELL
+      case _ =>
+    }
+  }
+
+  private[spark] def getShellType(): SparkShellType.Value = {
+    shellType
   }
 
   /**
