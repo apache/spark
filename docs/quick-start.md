@@ -40,7 +40,7 @@ RDDs have _[actions](programming-guide.html#actions)_, which return values, and 
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this RDD
-res0: Long = 126
+res0: Long = 126 // May be different from yours as README.md will change over time, similar to other outputs
 
 scala> textFile.first() // First item in this RDD
 res1: String = # Apache Spark
