@@ -1281,8 +1281,7 @@ setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spar
 
 #' @rdname spark.isoreg
 #' @export
-setGeneric("spark.isoreg", function(data, formula, ...)
-    { standardGeneric("spark.isoreg") })
+setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark.isoreg") })
 
 #' @rdname write.ml
 #' @export
