@@ -106,4 +106,12 @@ package object config {
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf
     .createOptional
+
+  private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
+    .stringConf
+    .createOptional
+
+  private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
+    .stringConf
+    .createOptional
 }

@@ -82,16 +82,18 @@ setMethod("partitionBy",
             }
           })
 
-#' orderBy
+#' Ordering Columns in a WindowSpec
 #'
 #' Defines the ordering columns in a WindowSpec.
-#'
 #' @param x a WindowSpec
-#' @return a WindowSpec
-#' @rdname arrange
+#' @param col a character or Column object indicating an ordering column
+#' @param ... additional sorting fields
+#' @return A WindowSpec.
 #' @name orderBy
+#' @rdname orderBy
 #' @aliases orderBy,WindowSpec,character-method
 #' @family windowspec_method
+#' @seealso See \link{arrange} for use in sorting a SparkDataFrame
 #' @export
 #' @examples
 #' \dontrun{
@@ -105,7 +107,7 @@ setMethod("orderBy",
             windowSpec(callJMethod(x@sws, "orderBy", col, list(...)))
           })
 
-#' @rdname arrange
+#' @rdname orderBy
 #' @name orderBy
 #' @aliases orderBy,WindowSpec,Column-method
 #' @export
@@ -122,7 +124,7 @@ setMethod("orderBy",
 #' rowsBetween
 #'
 #' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
+#'
 #' Both `start` and `end` are relative positions from the current row. For example, "0" means
 #' "current row", while "-1" means the row before the current row, and "5" means the fifth row
 #' after the current row.
@@ -154,7 +156,7 @@ setMethod("rowsBetween",
 #' rangeBetween
 #'
 #' Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
-#' 
+#'
 #' Both `start` and `end` are relative from the current row. For example, "0" means "current row",
 #' while "-1" means one off before the current row, and "5" means the five off after the
 #' current row.
@@ -188,7 +190,7 @@ setMethod("rangeBetween",
 
 #' over
 #'
-#' Define a windowing column. 
+#' Define a windowing column.
 #'
 #' @rdname over
 #' @name over

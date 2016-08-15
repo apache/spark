@@ -114,14 +114,15 @@ object StatFunctions extends Logging {
    *   See the G-K article for more details.
    * @param count the count of all the elements *inserted in the sampled buffer*
    *              (excluding the head buffer)
-   * @param headSampled a buffer of latest samples seen so far
    */
   class QuantileSummaries(
       val compressThreshold: Int,
       val relativeError: Double,
-      val sampled: ArrayBuffer[Stats] = ArrayBuffer.empty,
-      private[stat] var count: Long = 0L,
-      val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
+      val sampled: Array[Stats] = Array.empty,
+      val count: Long = 0L) extends Serializable {
+
+    // a buffer of latest samples seen so far
+    private val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty
 
     import QuantileSummaries._
 
@@ -186,7 +187,7 @@ object StatFunctions extends Logging {
         newSamples.append(sampled(sampleIdx))
         sampleIdx += 1
       }
-      new QuantileSummaries(compressThreshold, relativeError, newSamples, currentCount)
+      new QuantileSummaries(compressThreshold, relativeError, newSamples.toArray, currentCount)
     }
 
     /**
@@ -207,7 +208,7 @@ object StatFunctions extends Logging {
     }
 
     private def shallowCopy: QuantileSummaries = {
-      new QuantileSummaries(compressThreshold, relativeError, sampled, count, headSampled)
+      new QuantileSummaries(compressThreshold, relativeError, sampled, count)
     }
 
     /**
@@ -305,11 +306,11 @@ object StatFunctions extends Logging {
 
     private def compressImmut(
         currentSamples: IndexedSeq[Stats],
-        mergeThreshold: Double): ArrayBuffer[Stats] = {
-      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+        mergeThreshold: Double): Array[Stats] = {
       if (currentSamples.isEmpty) {
-        return res
+        return Array.empty[Stats]
       }
+      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
       // Start for the last element, which is always part of the set.
       // The head contains the current new head, that may be merged with the current element.
       var head = currentSamples.last
@@ -332,7 +333,7 @@ object StatFunctions extends Logging {
       res.prepend(head)
       // If necessary, add the minimum element:
       res.prepend(currentSamples.head)
-      res
+      res.toArray
     }
   }
 
