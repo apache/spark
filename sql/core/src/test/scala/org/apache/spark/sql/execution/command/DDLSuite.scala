@@ -871,13 +871,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: recover partitions (sequential)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
       testRecoverPartitions()
     }
   }
 
   test("alter table: recover partition (parallel)") {
-    withSQLConf("spark.rdd.parallelListingThreshold" -> "10") {
+    withSQLConf("spark.rdd.parallelListingThreshold" -> "1") {
       testRecoverPartitions()
     }
   }
@@ -921,10 +921,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql("ALTER TABLE tab1 RECOVER PARTITIONS")
       assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
         Set(part1, part2))
-      assert(catalog.getPartition(tableIdent, part1).parameters ==
-        Map("numFiles" -> "1", "totalSize" -> "0"))
-      assert(catalog.getPartition(tableIdent, part2).parameters ==
-        Map("numFiles" -> "2", "totalSize" -> "0"))
+      assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
+      assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
     } finally {
       fs.delete(root, true)
     }

@@ -829,7 +829,9 @@ private[hive] class HiveClientImpl(
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
-    tpart.setParameters(p.parameters.asJava)
+    if (p.parameters.nonEmpty) {
+      tpart.setParameters(p.parameters.asJava)
+    }
     new HivePartition(ht, tpart)
   }
 
@@ -845,6 +847,7 @@ private[hive] class HiveClientImpl(
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
-      parameters = hp.getParameters().asScala.toMap)
+        parameters =
+          if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
 }

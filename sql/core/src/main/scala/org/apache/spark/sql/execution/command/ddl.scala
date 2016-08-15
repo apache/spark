@@ -452,6 +452,7 @@ case class AlterTableRecoverPartitionsCommand(
   //   common/src/java/org/apache/hadoop/hive/common/StatsSetupConst.java#L88
   val NUM_FILES = "numFiles"
   val TOTAL_SIZE = "totalSize"
+  val DDL_TIME = "transient_lastDdlTime"
 
   private def getPathFilter(hadoopConf: Configuration): PathFilter = {
     // Dummy jobconf to get to the pathFilter defined in configuration
@@ -606,11 +607,16 @@ case class AlterTableRecoverPartitionsCommand(
     val parArray = partitionSpecsAndLocs.toArray.grouped(100).toArray.par
     parArray.tasksupport = evalTaskSupport
     parArray.foreach { batch =>
+      val now = System.currentTimeMillis() / 1000
       val parts = batch.map { case (spec, location) =>
         // inherit table storage format (possibly except for location)
         val (numFiles, totalSize) = partitionStats(location.toString)
         // This two fast stat could prevent Hive metastore to list the files again.
-        val params = Map(NUM_FILES -> numFiles.toString, TOTAL_SIZE -> totalSize.toString)
+        val params = Map(NUM_FILES -> numFiles.toString,
+          TOTAL_SIZE -> totalSize.toString,
+          // Workaround a bug in HiveMetastore that try to mutate a read-only parameters.
+          // see metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java:L2394
+          DDL_TIME -> now.toString)
         CatalogTablePartition(
           spec,
           table.storage.copy(locationUri = Some(location.toUri.toString)),
