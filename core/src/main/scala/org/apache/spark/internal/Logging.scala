@@ -18,9 +18,10 @@
 package org.apache.spark.internal
 
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
-import org.apache.spark.deploy.{SparkShellType, SparkSubmit}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
+
+import org.apache.spark.deploy.{SparkShellType, SparkSubmit}
 import org.apache.spark.util.Utils
 
 /**
