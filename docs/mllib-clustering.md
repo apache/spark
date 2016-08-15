@@ -379,7 +379,7 @@ The implementation in MLlib has the following parameters:
 * *k*: the desired number of leaf clusters (default: 4). The actual number could be smaller if there are no divisible leaf clusters.
 * *maxIterations*: the max number of k-means iterations to split clusters (default: 20)
 * *minDivisibleClusterSize*: the minimum number of points (if >= 1.0) or the minimum proportion of points (if < 1.0) of a divisible cluster (default: 1)
-* *seed*: a random seed (default: hash value of the class name)
+* *seed*: a random seed
 
 **Examples**
 
