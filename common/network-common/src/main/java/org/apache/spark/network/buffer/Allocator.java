@@ -15,28 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.server;
+package org.apache.spark.network.buffer;
 
 import java.nio.ByteBuffer;
 
-import org.apache.spark.network.buffer.ChunkedByteBuffer;
-import org.apache.spark.network.client.RpcResponseCallback;
-import org.apache.spark.network.client.TransportClient;
-
-/** An RpcHandler suitable for a client-only TransportContext, which cannot receive RPCs. */
-public class NoOpRpcHandler extends RpcHandler {
-  private final StreamManager streamManager;
-
-  public NoOpRpcHandler() {
-    streamManager = new OneForOneStreamManager();
-  }
-
-  @Override
-  public void receive(TransportClient client, ChunkedByteBuffer message,
-                      RpcResponseCallback callback) {
-    throw new UnsupportedOperationException("Cannot handle messages");
-  }
-
-  @Override
-  public StreamManager getStreamManager() { return streamManager; }
+public interface Allocator {
+  ByteBuffer allocate(int len);
 }

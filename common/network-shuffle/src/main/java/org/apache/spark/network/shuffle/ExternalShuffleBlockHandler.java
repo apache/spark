@@ -34,6 +34,7 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
@@ -78,7 +79,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+  public void receive(TransportClient client, ChunkedByteBuffer message, RpcResponseCallback callback) {
     BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(message);
     handleMessage(msgObj, client, callback);
   }
@@ -106,7 +107,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
                      msg.blockIds.length,
                      client.getClientId(),
                      NettyUtils.getRemoteAddress(client.getChannel()));
-        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
+        callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toChunkedByteBuffer());
         metrics.blockTransferRateBytes.mark(totalBlockSize);
       } finally {
         responseDelayContext.stop();
@@ -119,7 +120,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
-        callback.onSuccess(ByteBuffer.wrap(new byte[0]));
+        callback.onSuccess(ChunkedByteBuffer.wrap(ByteBuffer.wrap(new byte[0])));
       } finally {
         responseDelayContext.stop();
       }

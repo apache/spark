@@ -24,8 +24,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.network.buffer.{Allocator, ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 import org.apache.spark.storage._
-import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
  * Component which configures serialization and compression for various Spark components, including
@@ -128,7 +128,9 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
 
   /** Serializes into a chunked byte buffer. */
   def dataSerialize[T: ClassTag](blockId: BlockId, values: Iterator[T]): ChunkedByteBuffer = {
-    val bbos = new ChunkedByteBufferOutputStream(1024 * 1024 * 4, ByteBuffer.allocate)
+    val bbos = new ChunkedByteBufferOutputStream(32 * 1024, new Allocator {
+      override def allocate(len: Int) = ByteBuffer.allocate(len)
+    })
     dataSerializeStream(blockId, bbos, values)
     bbos.toChunkedByteBuffer
   }

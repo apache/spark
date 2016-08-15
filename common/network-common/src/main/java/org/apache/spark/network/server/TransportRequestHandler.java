@@ -26,6 +26,7 @@ import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -157,7 +158,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     try {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
         @Override
-        public void onSuccess(ByteBuffer response) {
+        public void onSuccess(ChunkedByteBuffer response) {
           respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
         }
 

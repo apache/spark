@@ -25,6 +25,7 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.network.client.{TransportClient, TransportResponseHandler}
 import org.apache.spark.network.server.StreamManager
 import org.apache.spark.rpc._
@@ -33,7 +34,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
 
   val env = mock(classOf[NettyRpcEnv])
   val sm = mock(classOf[StreamManager])
-  when(env.deserialize(any(classOf[TransportClient]), any(classOf[ByteBuffer]))(any()))
+  when(env.deserialize(any(classOf[TransportClient]), any(classOf[ChunkedByteBuffer]))(any()))
     .thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null))
 
   test("receive") {
