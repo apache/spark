@@ -168,14 +168,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
-      alias match {
-        case None =>
-          SubqueryAlias(table.identifier.table,
-            sparkSession.sessionState.sqlParser.parsePlan(viewText),
-            None)
-        case Some(aliasText) =>
-          SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText), None)
-      }
+      SubqueryAlias(
+        alias.getOrElse(table.identifier.table),
+        sparkSession.sessionState.sqlParser.parsePlan(viewText),
+        Option(table.identifier))
     } else {
       val qualifiedTable =
         MetastoreRelation(

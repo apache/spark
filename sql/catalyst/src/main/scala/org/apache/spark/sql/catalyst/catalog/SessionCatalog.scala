@@ -421,17 +421,16 @@ class SessionCatalog(
     synchronized {
       val db = formatDatabaseName(name.database.getOrElse(currentDb))
       val table = formatTableName(name.table)
-      val relation =
-        if (name.database.isDefined || !tempTables.contains(table)) {
-          val metadata = externalCatalog.getTable(db, table)
-          SimpleCatalogRelation(db, metadata)
-        } else {
-          tempTables(table)
+      val relationAlias = alias.getOrElse(table)
+      if (name.database.isDefined || !tempTables.contains(table)) {
+        val metadata = externalCatalog.getTable(db, table)
+        val view = Option(metadata.tableType).collect {
+          case CatalogTableType.VIEW => name
         }
-      val qualifiedTable = SubqueryAlias(table, relation, None)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
+        SubqueryAlias(relationAlias, SimpleCatalogRelation(db, metadata), view)
+      } else {
+        SubqueryAlias(relationAlias, tempTables(table), Option(name))
+      }
     }
   }
 
