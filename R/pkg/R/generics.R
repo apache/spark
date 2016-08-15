@@ -551,7 +551,7 @@ setGeneric("merge")
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
-#' @rdname arrange
+#' @rdname orderBy
 #' @export
 setGeneric("orderBy", function(x, col, ...) { standardGeneric("orderBy") })
 
