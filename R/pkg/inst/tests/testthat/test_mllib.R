@@ -476,6 +476,7 @@ test_that("spark.survreg", {
   }
 })
 
+<<<<<<< abe1aabdf9b9ce513f105482ed4c6d6143f2b0a4
 test_that("spark.isotonicRegression", {
   label <- c(7.0, 5.0, 3.0, 5.0, 1.0)
   feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)
@@ -508,7 +509,7 @@ test_that("spark.isotonicRegression", {
   unlink(modelPath)
 })
 
-test_that("spark.mvnormalmixEM", {
+test_that("spark.gaussianMixture", {
   # R code to reproduce the result.
   # nolint start
   #' library(mvtnorm)
@@ -544,7 +545,7 @@ test_that("spark.mvnormalmixEM", {
                list(2.79836605, 4.7398405), list(3.12337950, 3.9706833),
                list(2.61114575, 4.5108563), list(2.08618581, 6.3102968))
   df <- createDataFrame(data, c("x1", "x2"))
-  model <- spark.mvnormalmixEM(df, ~ x1 + x2, k = 2)
+  model <- spark.gaussianMixture(df, ~ x1 + x2, k = 2)
   stats <- summary(model)
   rLambda <- c(0.4, 0.6)
   rMu <- c(-0.2614822, 0.5128697, 2.647284, 4.544682)
@@ -557,7 +558,7 @@ test_that("spark.mvnormalmixEM", {
   expect_equal(p$prediction, c(0, 0, 0, 0, 1, 1, 1, 1, 1, 1))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "spark-mvnormalmixEM", fileext = ".tmp")
+  modelPath <- tempfile(pattern = "spark-gaussianMixture", fileext = ".tmp")
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)

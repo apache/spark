@@ -1308,11 +1308,11 @@ setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spar
 #' @export
 setGeneric("spark.isoreg", function(data, formula, ...) { standardGeneric("spark.isoreg") })
 
-#' @rdname spark.mvnormalmixEM
+#' @rdname spark.gaussianMixture
 #' @export
-setGeneric("spark.mvnormalmixEM",
+setGeneric("spark.gaussianMixture",
            function(data, formula, ...) {
-             standardGeneric("spark.mvnormalmixEM")
+             standardGeneric("spark.gaussianMixture")
            })
 
 #' @rdname write.ml

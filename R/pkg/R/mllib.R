@@ -74,7 +74,7 @@ setClass("GaussianMixtureModel", representation(jobj = "jobj"))
 #' @rdname write.ml
 #' @name write.ml
 #' @export
-#' @seealso \link{spark.glm}, \link{glm}, \link{spark.mvnormalmixEM}
+#' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
 #' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{spark.isoreg}
 #' @seealso \link{read.ml}
@@ -87,7 +87,7 @@ NULL
 #' @rdname predict
 #' @name predict
 #' @export
-#' @seealso \link{spark.glm}, \link{glm}, \link{spark.mvnormalmixEM}
+#' @seealso \link{spark.glm}, \link{glm}, \link{spark.gaussianMixture}
 #' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
 #' @seealso \link{spark.isoreg}
 NULL
@@ -643,6 +643,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
+<<<<<<< abe1aabdf9b9ce513f105482ed4c6d6143f2b0a4
 #' @rdname spark.isoreg
 #' @aliases write.ml,IsotonicRegressionModel,character-method
 #' @export
@@ -796,14 +797,14 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#'                Note that the response variable of formula is empty in spark.mvnormalmixEM.
+#'                Note that the response variable of formula is empty in spark.gaussianMixture.
 #' @param k Number of independent Gaussians in the mixture model.
 #' @param maxIter Maximum iteration number
 #' @param tol The convergence tolerance
-#' @aliases spark.mvnormalmixEM,SparkDataFrame,formula-method
-#' @return \code{spark.mvnormalmixEM} returns a fitted multivariate gaussian mixture model
-#' @rdname spark.mvnormalmixEM
-#' @name spark.mvnormalmixEM
+#' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
+#' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model
+#' @rdname spark.gaussianMixture
+#' @name spark.gaussianMixture
 #' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
 #' @export
 #' @examples
@@ -815,7 +816,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' b <- rmvnorm(6, c(3, 4))
 #' data <- rbind(a, b)
 #' df <- createDataFrame(as.data.frame(data))
-#' model <- spark.mvnormalmixEM(df, ~ V1 + V2, k = 2)
+#' model <- spark.gaussianMixture(df, ~ V1 + V2, k = 2)
 #' summary(model)
 #'
 #' # fitted values on training data
@@ -830,9 +831,9 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #' }
-#' @note spark.mvnormalmixEM since 2.1.0
+#' @note spark.gaussianMixture since 2.1.0
 #' @seealso \link{predict}, \link{read.ml}, \link{write.ml}
-setMethod("spark.mvnormalmixEM", signature(data = "SparkDataFrame", formula = "formula"),
+setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, k = 2, maxIter = 100, tol = 0.01) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.GaussianMixtureWrapper", "fit", data@sdf,
@@ -844,8 +845,8 @@ setMethod("spark.mvnormalmixEM", signature(data = "SparkDataFrame", formula = "f
 
 #' @param object A fitted gaussian mixture model
 #' @return \code{summary} returns the model's lambda, mu, sigma and posterior
-#' @aliases spark.mvnormalmixEM,SparkDataFrame,formula-method
-#' @rdname spark.mvnormalmixEM
+#' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
+#' @rdname spark.gaussianMixture
 #' @export
 #' @note summary(GaussianMixtureModel) since 2.1.0
 setMethod("summary", signature(object = "GaussianMixtureModel"),
@@ -884,8 +885,8 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
 #'         "prediction"
 #' @return \code{predict} returns the predicted values based on a gaussian mixture model
-#' @aliases spark.mvnormalmixEM,SparkDataFrame,formula-method
-#' @rdname spark.mvnormalmixEM
+#' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
+#' @rdname spark.gaussianMixture
 #' @export
 #' @note predict(GaussianMixtureModel) since 2.1.0
 setMethod("predict", signature(object = "GaussianMixtureModel"),
