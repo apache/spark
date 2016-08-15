@@ -31,7 +31,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
   /**
    * Type aliases for a TVF declaration. A TVF maps a sequence of named arguments to a function
-   * resolving the TVF given a matching list of arguments from the user. This allows for
+   * resolving the TVF given a matching sequence of values from the user. This allows for
    * function overloading (e.g. range(100), range(0, 100)).
    */
   private type NamedArguments = Seq[Tuple2[String, Class[_]]]
