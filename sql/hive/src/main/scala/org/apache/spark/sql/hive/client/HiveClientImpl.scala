@@ -829,9 +829,6 @@ private[hive] class HiveClientImpl(
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
-    if (p.parameters.nonEmpty) {
-      tpart.setParameters(p.parameters.asJava)
-    }
     new HivePartition(ht, tpart)
   }
 
