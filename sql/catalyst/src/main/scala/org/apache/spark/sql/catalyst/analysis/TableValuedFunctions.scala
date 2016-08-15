@@ -67,9 +67,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
         (args: Seq[Any]) =>
           Range(
             args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
-            args(2).asInstanceOf[Number].longValue, args(3).asInstanceOf[Integer]))
-    )
-  )
+            args(2).asInstanceOf[Number].longValue, args(3).asInstanceOf[Integer]))))
 
   /**
    * Returns whether a given sequence of values can be assigned to the specified arguments.
