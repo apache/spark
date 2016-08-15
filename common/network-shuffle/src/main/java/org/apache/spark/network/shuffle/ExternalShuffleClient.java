@@ -151,4 +151,13 @@ public class ExternalShuffleClient extends ShuffleClient {
   public void close() {
     clientFactory.close();
   }
+
+  @Override
+  public void prepareBlocks(
+      String host,
+      int port,
+      String execId,
+      String[] prepareBlockIds,
+      String[] releaseBlocks,
+      BlockPreparingListener listener) {}
 }

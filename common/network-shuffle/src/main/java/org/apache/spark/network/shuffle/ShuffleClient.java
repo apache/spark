@@ -46,10 +46,10 @@ public abstract class ShuffleClient implements Closeable {
    * Prepare a sequence of blocks from remote node asynchronously
    */
   public abstract void prepareBlocks(
-          String host,
-          int port,
-          String execId,
-          String[] prepareBlockIds,
-          String[] releaseBlocks,
-          BlockPreparingListener listener);
+      String host,
+      int port,
+      String execId,
+      String[] prepareBlockIds,
+      String[] releaseBlocks,
+      BlockPreparingListener listener);
 }
