@@ -256,7 +256,7 @@ class StreamExecution(
         // Compare the offsets we just read from the checkpoint against the
         // sources' own checkpoint data.
         val offsetChanges = mutable.Map[Source, Offset]()
-        committedOffsets.map {
+        committedOffsets.foreach {
           case (src, checkptOffset) =>
             val srcOffset = src.getMinOffset
             if (srcOffset.isDefined && srcOffset.get > checkptOffset) {
@@ -316,9 +316,15 @@ class StreamExecution(
       logInfo(s"Committed offsets for batch $currentBatchId.")
 
       // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
-      // sources to discard batches from the *previous* batch.
+      // sources to discard data from the *previous* batch.
       committedOffsets.foreach {
         case (src, off) => src.commit(off)
+      }
+
+      // The log can also discard old metadata. Trim one batch less than we could, just
+      // in case.
+      if (currentBatchId > 2) {
+        offsetLog.trim(currentBatchId - 2)
       }
     } else {
       awaitBatchLock.lock()

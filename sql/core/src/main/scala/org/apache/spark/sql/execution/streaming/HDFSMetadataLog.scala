@@ -227,6 +227,17 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
     None
   }
 
+  override def trim(batchId: Long) : Unit = {
+    val idsToDelete =
+    fileManager
+      .list(metadataPath, batchFilesFilter)
+      .map(f => pathToBatchId(f.getPath))
+      .filter( _ <= batchId )
+
+    // TODO: Log failed deletions (fileManager.delete currently fails silently)
+    idsToDelete.foreach(id => fileManager.delete(batchIdToPath(id)))
+  }
+
   private def createFileManager(): FileManager = {
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     try {

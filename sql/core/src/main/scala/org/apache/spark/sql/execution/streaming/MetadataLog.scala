@@ -24,6 +24,7 @@ package org.apache.spark.sql.execution.streaming
  *  - Allow the user to query the latest batch id.
  *  - Allow the user to query the metadata object of a specified batch id.
  *  - Allow the user to query metadata objects in a range of batch ids.
+ *  - Inform the log that it is safe to garbage-collect metadata from a batch
  */
 trait MetadataLog[T] {
 
@@ -48,4 +49,13 @@ trait MetadataLog[T] {
    * Return the latest batch Id and its metadata if exist.
    */
   def getLatest(): Option[(Long, T)]
+
+
+  /**
+   * Inform the log that it may discard metadata about all batches up to and including the
+   * batch with the indicate ID.
+   *
+   * @param batchId ID of the highest batch to discard
+   */
+  def trim(batchId: Long)
 }
