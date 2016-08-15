@@ -54,7 +54,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   }
 
   /**
-   * A TVF maps argument lists to a resolving functions that accept those arguments. Using a map
+   * A TVF maps argument lists to resolving functions that accept those arguments. Using a map
    * here allows for function overloading.
    */
   private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
