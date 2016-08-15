@@ -446,7 +446,7 @@ def monotonically_increasing_id_w_offset(offset):
     [Row(id=5), Row(id=6), Row(id=7), Row(id=8589934597), Row(id=8589934598), Row(id=8589934599)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.monotonically_increasing_id_w_offset(offset))
+    return Column(sc._jvm.functions.monotonically_increasing_id(offset))
 
 
 @since(1.6)
