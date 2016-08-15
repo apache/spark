@@ -75,8 +75,8 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
     checkSQL('a.int / 'b.int, "(`a` / `b`)")
     checkSQL('a.int % 'b.int, "(`a` % `b`)")
 
-    checkSQL(-'a.int, "(-`a`)")
-    checkSQL(-('a.int + 'b.int), "(-(`a` + `b`))")
+    checkSQL(-'a.int, "(- `a`)")
+    checkSQL(-('a.int + 'b.int), "(- (`a` + `b`))")
   }
 
   test("window specification") {
