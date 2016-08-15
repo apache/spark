@@ -78,7 +78,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
       /* range(start, end, step) */
       ArgumentList(("start", classOf[Number]), ("end", classOf[Number]),
-          ("steps", classOf[Number])) -> (
+          ("step", classOf[Number])) -> (
         (args: Seq[Any]) =>
           Range(
             args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
@@ -86,7 +86,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
 
       /* range(start, end, step, numPartitions) */
       ArgumentList(("start", classOf[Number]), ("end", classOf[Number]),
-          ("steps", classOf[Number]), ("numPartitions", classOf[Integer])) -> (
+          ("step", classOf[Number]), ("numPartitions", classOf[Integer])) -> (
         (args: Seq[Any]) =>
           Range(
             args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
