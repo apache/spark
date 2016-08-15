@@ -184,6 +184,8 @@ class MultinomialLogisticRegression @Since("2.1.0") (
           Instance(label, weight, features)
       }
 
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+
     val instr = Instrumentation.create(this, instances)
     instr.logParams(regParam, elasticNetParam, standardization, thresholds,
       maxIter, tol, fitIntercept)
@@ -238,42 +240,13 @@ class MultinomialLogisticRegression @Since("2.1.0") (
         }
 
         val featuresStd = summarizer.variance.toArray.map(math.sqrt)
-        val standardizedInstances = instances.map { case Instance(label, weight, features) =>
-          val f = features match {
-            case DenseVector(vs) =>
-              val values = vs.clone()
-              val size = values.length
-              var i = 0
-              while (i < size) {
-                values(i) *= (if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0)
-                i += 1
-              }
-              Vectors.dense(values)
-            case SparseVector(size, indices, vs) =>
-              val values = vs.clone()
-              val nnz = values.length
-              var i = 0
-              while (i < nnz) {
-                values(i) *= (if (featuresStd(indices(i)) != 0.0) {
-                  1.0 / featuresStd(indices(i))
-                } else {
-                  0.0
-                })
-                i += 1
-              }
-              Vectors.sparse(size, indices, values)
-            case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
-          }
-          Instance(label, weight, f)
-        }
-        if (handlePersistence) standardizedInstances.persist(StorageLevel.MEMORY_AND_DISK)
 
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
-        val costFun = new LogisticCostFun(standardizedInstances, numClasses, $(fitIntercept),
-          $(standardization), bcFeaturesStd, regParamL2, multinomial = true, standardize = false)
+        val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
+          $(standardization), bcFeaturesStd, regParamL2, multinomial = true)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -356,7 +329,6 @@ class MultinomialLogisticRegression @Since("2.1.0") (
           state = states.next()
           arrayBuilder += state.adjustedValue
         }
-        if (handlePersistence) standardizedInstances.unpersist()
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."
@@ -432,6 +404,7 @@ class MultinomialLogisticRegression @Since("2.1.0") (
         (_coefficients, _intercepts, arrayBuilder.result())
       }
     }
+    if (handlePersistence) instances.unpersist()
 
     val model = copyValues(
       new MultinomialLogisticRegressionModel(uid, coefficients, intercepts, numClasses))
