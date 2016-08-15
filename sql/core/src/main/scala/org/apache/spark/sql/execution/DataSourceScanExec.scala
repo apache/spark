@@ -187,13 +187,18 @@ case class FileSourceScanExec(
     "InputPaths" -> relation.location.paths.mkString(", "))
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val filteredPartitions = relation.fileFormat.filterPartitions(
-      dataFilters,
-      outputSchema,
-      relation.sparkSession.sparkContext.hadoopConfiguration,
-      relation.location.allFiles(),
-      relation.location.paths.head,
-      relation.location.listFiles(partitionFilters))
+    val originalPartitions = relation.location.listFiles(partitionFilters)
+    val filteredPartitions = if (relation.location.paths.isEmpty) {
+      originalPartitions
+    } else {
+      relation.fileFormat.filterPartitions(
+        dataFilters,
+        outputSchema,
+        relation.sparkSession.sparkContext.hadoopConfiguration,
+        relation.location.allFiles(),
+        relation.location.paths.head,
+        originalPartitions)
+    }
 
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
