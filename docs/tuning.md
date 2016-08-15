@@ -115,7 +115,7 @@ Although there are two relevant configurations, the typical user should not need
 as the default values are applicable to most workloads:
 
 * `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MB)
-(default 0.6). The rest of the space (25%) is reserved for user data structures, internal
+(default 0.6). The rest of the space (40%) is reserved for user data structures, internal
 metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
 large records.
 * `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).

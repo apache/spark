@@ -79,7 +79,7 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *  - post-shuffle partition 1: pre-shuffle partition 2
  *  - post-shuffle partition 2: pre-shuffle partition 3 and 4
  */
-private[sql] class ExchangeCoordinator(
+class ExchangeCoordinator(
     numExchanges: Int,
     advisoryTargetPostShuffleInputSize: Long,
     minNumPostShufflePartitions: Option[Int] = None)
@@ -112,7 +112,7 @@ private[sql] class ExchangeCoordinator(
    * Estimates partition start indices for post-shuffle partitions based on
    * mapOutputStatistics provided by all pre-shuffle stages.
    */
-  private[sql] def estimatePartitionStartIndices(
+  def estimatePartitionStartIndices(
       mapOutputStatistics: Array[MapOutputStatistics]): Array[Int] = {
     // If we have mapOutputStatistics.length < numExchange, it is because we do not submit
     // a stage when the number of partitions of this dependency is 0.
