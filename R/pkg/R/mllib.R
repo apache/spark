@@ -46,7 +46,6 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @note LDAModel since 2.1.0
 setClass("LDAModel", representation(jobj = "jobj"))
 
-
 #' S4 class that represents a AFTSurvivalRegressionModel
 #'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
@@ -325,17 +324,17 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 
 #' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
 #' @return \code{summary} returns a list containing
-#'         \code{docConcentration}, concentration parameter commonly named \code{alpha} for the
-#'         prior placed on documents distributions over topics \code{theta};
-#'         \code{topicConcentration}, concentration parameter commonly named \code{beta} or
-#'         \code{eta} for the prior placed on topic distributions over terms;
-#'         \code{logLikelihood}, log likelihood of the entire corpus;
-#'         \code{logPerplexity}, log perplexity;
-#'         \code{isDistributed}, TRUE for distribuetd model while FALSE for local model;
-#'         \code{vocabSize}, number of terms in the corpus;
-#'         \code{topics}, top 10 terms and their weights of all topics;
-#'         \code{vocabulary}, whole terms of the training corpus, NULL if libsvm format file used as
-#'         training set.
+#'         \item{\code{docConcentration}}{concentration parameter commonly named \code{alpha} for
+#'               the prior placed on documents distributions over topics \code{theta}}
+#'         \item{\code{topicConcentration}}{concentration parameter commonly named \code{beta} or
+#'               \code{eta} for the prior placed on topic distributions over terms}
+#'         \item{\code{logLikelihood}}{log likelihood of the entire corpus}
+#'         \item{\code{logPerplexity}}{log perplexity}
+#'         \item{\code{isDistributed}}{TRUE for distributed model while FALSE for local model}
+#'         \item{\code{vocabSize}}{number of terms in the corpus}
+#'         \item{\code{topics}}{top 10 terms and their weights of all topics}
+#'         \item{\code{vocabulary}}{whole terms of the training corpus, NULL if libsvm format file
+#'               used as training set}
 #' @rdname spark.lda
 #' @aliases summary,LDAModel-method
 #' @export
@@ -709,8 +708,8 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' data and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data A SparkDataFrame for training
-#' @param features Features column name, default "features". Either Vector format column or String
-#'        format column are accepted.
+#' @param features Features column name, default "features". Either libSVM-format column or
+#'        character-format column are valid.
 #' @param k Number of topics, default 10
 #' @param maxIter Maximum iterations, default 20
 #' @param optimizer Optimizer to train an LDA model, "online" or "em", default "online"
@@ -723,8 +722,8 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #'        prior placed on documents distributions over topics (\code{theta}), default -1 to set
 #'        automatically on the Spark side. Use \code{summary} to retrieve the effective
 #'        docConcentration.
-#' @param customizedStopWords stopwords that need to be removed from the given corpus. Only effected
-#'        given training data with string format column.
+#' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
+#'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model
 #' @rdname spark.lda
@@ -759,7 +758,7 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
                    customizedStopWords = "", maxVocabSize = bitwShiftL(1, 18)) {
             optimizer <- match.arg(optimizer)
             jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features,
-                                as.integer(k), as.integer(maxIter), optimizer, subsamplingRate,
+                                as.numeric(k), as.integer(maxIter), optimizer, subsamplingRate,
                                 topicConcentration, as.array(docConcentration),
                                 as.array(customizedStopWords), maxVocabSize)
             return(new("LDAModel", jobj = jobj))
