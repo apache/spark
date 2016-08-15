@@ -306,9 +306,6 @@ case class AlterTableSerDePropertiesCommand(
     "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    DDLUtils.verifyTableProperties(
-      serdeProperties.toSeq.flatMap(_.keys.toSeq),
-      "ALTER TABLE SERDEPROPERTIES")
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // For datasource tables, disallow setting serde or specifying partition
