@@ -428,10 +428,10 @@ class SessionCatalog(
         } else {
           tempTables(table)
         }
-      val qualifiedTable = SubqueryAlias(table, relation)
+      val qualifiedTable = SubqueryAlias(table, relation, None)
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+      alias.map(a => SubqueryAlias(a, qualifiedTable, None)).getOrElse(qualifiedTable)
     }
   }
 
