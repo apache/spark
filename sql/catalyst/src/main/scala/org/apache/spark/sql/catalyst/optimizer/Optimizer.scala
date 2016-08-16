@@ -730,9 +730,15 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 
         // Operators that operate on objects should only have expressions from encoders, which
         // should never have foldable expressions.
-        case o: ObjectConsumer => o
-        case o: ObjectProducer => o
-        case a: AppendColumns => a
+        case o: ObjectConsumer =>
+          stop = true
+          o
+        case o: ObjectProducer =>
+          stop = true
+          o
+        case a: AppendColumns =>
+          stop = true
+          a
 
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
