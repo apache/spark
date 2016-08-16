@@ -18,15 +18,12 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 import scala.xml.Node
 
-import com.codahale.metrics.{Counter, Counting, Gauge, Metric, MetricFilter, MetricRegistry, Timer}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -67,10 +64,10 @@ class HistoryServer(
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
-  private val initialized = new AtomicBoolean(false)
 
   private[history] val metricsSystem = MetricsSystem.createMetricsSystem("history",
     conf, securityManager)
+
   private[history] var metricsRegistry = metricsSystem.getMetricRegistry
 
   // and its metrics, for testing as well as monitoring
@@ -121,8 +118,11 @@ class HistoryServer(
   }
 
   val historyMetrics = new HistoryMetrics(this, "history.server")
-  // provider metrics are None until the provider is started, and only after that
-  // point if the provider returns any.
+
+  /**
+   * Provider metrics are None until the provider is started, and only after that
+   * point if the provider returns any.
+   */
   var providerMetrics: Option[Source] = None
 
   initialize()
@@ -134,34 +134,52 @@ class HistoryServer(
    * this UI with the event logs in the provided base directory.
    */
   def initialize() {
-    if (!initialized.getAndSet(true)) {
-      attachPage(new HistoryPage(this))
+    attachPage(new HistoryPage(this))
 
-      attachHandler(ApiRootResource.getServletHandler(this))
+    attachHandler(ApiRootResource.getServletHandler(this))
 
-      attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+    attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
-      val contextHandler = new ServletContextHandler
-      contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
-      contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
-      attachHandler(contextHandler)
-
-      // hook up metrics
-      metricsSystem.registerSource(historyMetrics)
-      metricsSystem.registerSource(appCache.metrics)
-      providerMetrics = provider.start()
-      providerMetrics.foreach(metricsSystem.registerSource)
-      metricsSystem.start()
-      metricsSystem.getServletHandlers.foreach(attachHandler)
-    }
+    val contextHandler = new ServletContextHandler
+    contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
+    contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
+    attachHandler(contextHandler)
   }
 
-  /** Bind to the HTTP server behind this web interface. */
+  /**
+   * Startup Actions.
+   * 1. Call `start()` on the provider (and maybe get some metrics back).
+   * 2. Start the metrics.
+   * 3. Bind to the HTTP server behind this web interface.
+   */
   override def bind() {
+    providerMetrics = provider.start()
+    startMetrics()
     super.bind()
   }
 
-  /** Stop the server and close the history provider. */
+  /**
+   * Start up the metrics.
+   * This includes registering any metrics defined in `providerMetrics`; the provider
+   * needs its `start()` method to be invoked to get these metric *prior to this method
+   * being invoked*.
+   */
+  private def startMetrics(): Unit = {
+    // hook up metrics
+    metricsSystem.registerSource(historyMetrics)
+    metricsSystem.registerSource(appCache.metrics)
+    providerMetrics.foreach(metricsSystem.registerSource)
+    metricsSystem.start()
+    metricsSystem.getServletHandlers.foreach(attachHandler)
+  }
+
+  /**
+   * Stop the server.
+   * And:
+   * 1. Stop the application cache.
+   * 2. Stop the history provider.
+   * 3. Stop the metrics system.
+   */
   override def stop() {
     try {
       super.stop()
@@ -170,9 +188,7 @@ class HistoryServer(
       if (provider != null) {
         provider.stop()
       }
-      if (metricsSystem != null) {
-        metricsSystem.stop()
-      }
+      metricsSystem.stop()
     }
   }
 
@@ -282,94 +298,7 @@ class HistoryServer(
   }
 }
 
-/**
- * An abstract implementation of the metrics [[Source]] trait with some common operations.
- */
-private[history] abstract class HistoryMetricSource(val prefix: String) extends Source {
-  override val metricRegistry = new MetricRegistry()
 
-  /**
-   * Register a sequence of metrics
-   * @param metrics sequence of metrics to register
-   */
-  def register(metrics: Seq[(String, Metric)]): Unit = {
-    metrics.foreach { case (name, metric) =>
-      metricRegistry.register(fullname(name), metric)
-    }
-  }
-
-  /**
-   * Create the full name of a metric by prepending the prefix to the name
-   * @param name short name
-   * @return the full name to use in registration
-   */
-  def fullname(name: String): String = {
-    MetricRegistry.name(prefix, name)
-  }
-
-  /**
-   * Dump the counters and gauges.
-   * @return a string for logging and diagnostics -not for parsing by machines.
-   */
-  override def toString: String = {
-    val sb = new StringBuilder(s"Metrics for $sourceName:\n")
-    sb.append("  Counters\n")
-    metricRegistry.getCounters.asScala.foreach { entry =>
-        sb.append("    ").append(entry._1).append(" = ").append(entry._2.getCount).append('\n')
-    }
-    sb.append("  Gauges\n")
-    metricRegistry.getGauges.asScala.foreach { entry =>
-      sb.append("    ").append(entry._1).append(" = ").append(entry._2.getValue).append('\n')
-    }
-    sb.toString()
-  }
-
-  /**
-   * Get a named counter.
-   * @param counterName name of the counter
-   * @return the counter, if found
-   */
-  def getCounter(counterName: String): Option[Counter] = {
-    Option(metricRegistry.getCounters(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name == counterName
-    }).get(counterName))
-  }
-
-  /**
-   * Get a gauge of an unknown numeric type.
-   * @param gaugeName name of the gauge
-   * @return gauge, if found
-   */
-  def getGauge(gaugeName: String): Option[Gauge[_]] = {
-    Option(metricRegistry.getGauges(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name == gaugeName
-    }).get(gaugeName))
-  }
-
-  /**
-   * Get a Long gauge.
-   * @param gaugeName name of the gauge
-   * @return gauge, if found
-   * @throws ClassCastException if the gauge is found but of the wrong type
-   */
-  def getLongGauge(gaugeName: String): Option[Gauge[Long]] = {
-    Option(metricRegistry.getGauges(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name == gaugeName
-    }).get(gaugeName)).asInstanceOf[Option[Gauge[Long]]]
-  }
-
-  /**
-   * Get a timer.
-   * @param timerName name of the timer
-   * @return the timer, if found.
-   */
-  def getTimer(timerName: String): Option[Timer] = {
-    Option(metricRegistry.getTimers(new MetricFilter {
-      def matches(name: String, metric: Metric): Boolean = name == timerName
-    }).get(timerName))
-  }
-
-}
 
 /**
  * History system metrics independent of providers go in here.
@@ -382,43 +311,13 @@ private[history] class HistoryMetrics(val owner: HistoryServer, prefix: String)
 }
 
 /**
- * A timestamp is a gauge which is set to a point in time
- * as measured in millseconds since the epoch began.
- */
-private[history] class Timestamp extends Gauge[Long] {
-  var time = 0L
-
-  /** Current value. */
-  override def getValue: Long = time
-
-  /** Set a new value. */
-  def setValue(t: Long): Unit = {
-    time = t
-  }
-
-  /** Set to the current system time. */
-  def touch(): Unit = {
-    setValue(System.currentTimeMillis())
-  }
-}
-
-/**
- * A Long gauge from a lambda expression; the expression is evaluated
- * whenever the metrics are queried
- * @param expression expression which generates the value.
- */
-private[history] class LambdaLongGauge(expression: (() => Long)) extends Gauge[Long] {
-  override def getValue: Long = expression()
-}
-
-/**
  * The recommended way of starting and stopping a HistoryServer is through the scripts
- * start-history-server.sh and stop-history-server.sh. The path to a base log directory,
+ * `start-history-server.sh` and `stop-history-server.sh`. The path to a base log directory,
  * as well as any other relevant history server configuration, should be specified via
- * the $SPARK_HISTORY_OPTS environment variable. For example:
+ * the `SPARK_HISTORY_OPTS` environment variable. For example:
  *
- *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
- *   ./sbin/start-history-server.sh
+ *     export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
+ *     ./sbin/start-history-server.sh
  *
  * This launches the HistoryServer as a Spark daemon.
  */

@@ -846,7 +846,7 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider, prefix
   /** Total time to merge all histories. */
   val historyTotalMergeTime = new Counter()
 
-  /** Average time to load a single event in the App UI */
+  /** Average time to process an event in the history merge operation. */
   val historyEventMergeTime = new LambdaLongGauge(() =>
     average(historyTotalMergeTime.getCount, historyEventCount.getCount))
 
@@ -856,11 +856,13 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider, prefix
   /** Update duration timer. */
   val updateTimer = new Timer()
 
+  private val clock = new SystemClock
+
   /** Time the last update was attempted. */
-  val updateLastAttempted = new Timestamp()
+  val updateLastAttempted = new TimestampGauge(clock)
 
   /** Time the last update succeded. */
-  val updateLastSucceeded = new Timestamp()
+  val updateLastSucceeded = new TimestampGauge(clock)
 
   /** Number of App UI load operations. */
   val appUILoadCount = new Counter()
@@ -881,7 +883,7 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider, prefix
   val appUIEventReplayTime = new LambdaLongGauge(() =>
     average(appUITotalLoadTime.getCount, appUIEventCount.getCount))
 
-  private val countersAndGauges = Seq(
+  register(Seq(
     ("history.merge.event.count", historyEventCount),
     ("history.merge.event.time", historyEventMergeTime),
     ("history.merge.duration", historyTotalMergeTime),
@@ -894,17 +896,10 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider, prefix
     ("appui.load.failure.count", appUILoadFailureCount),
     ("appui.load.not-found.count", appUILoadNotFoundCount),
     ("appui.event.count", appUIEventCount),
-    ("appui.event.replay.time", appUIEventReplayTime)
-  )
-
-  private val timers = Seq (
+    ("appui.event.replay.time", appUIEventReplayTime),
     ("update.timer", updateTimer),
     ("history.merge.timer", historyMergeTimer),
-    ("appui.load.timer", appUiLoadTimer))
-
-  val allMetrics = countersAndGauges ++ timers
-
-  register(allMetrics)
+    ("appui.load.timer", appUiLoadTimer)))
 
 }
 

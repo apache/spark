@@ -460,7 +460,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
 
     // check that a dynamically calculated average returns 0 and not a division by zero error.
-    val replayTime = providerMetrics.fullname("appui.event.replay.time")
+    val replayTime = "appui.event.replay.time"
     assertGaugeEvaluates(providerMetrics, replayTime,
       providerMetrics.getLongGauge(replayTime).get, _ == 0)
 
@@ -591,7 +591,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val metricsDump = s"$historyMetrics\n$providerMetrics\n$cacheMetrics"
     logInfo(s"Metrics:\n$metricsDump")
     // make some assertions about internal state of providers via the metrics
-    val loadcount = providerMetrics.fullname("appui.load.count")
+    val loadcount = "appui.load.count"
     assert(metricsDump.contains(loadcount), s"No $loadcount in metrics dump <$metricsDump>")
     assertCounterEvaluates(providerMetrics, loadcount,
       providerMetrics.getCounter(loadcount).get, _ > 0)
