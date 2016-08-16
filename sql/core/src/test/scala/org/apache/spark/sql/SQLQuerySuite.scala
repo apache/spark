@@ -2602,6 +2602,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(s"$expected") :: Nil)
   }
 
+  test("SPARK-16991: Full outer join followed by inner join produces wrong results") {
+    val a = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val b = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val c = Seq((3, 1)).toDF("a", "d")
+    val ab = a.join(b, Seq("a"), "fullouter")
+    checkAnswer(ab.join(c, "a"), Row(3, null, 4, 1) :: Nil)
+  }
+
   test("SPARK-15752 optimize metadata only query for datasource table") {
     withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> "true") {
       withTable("srcpart_15752") {

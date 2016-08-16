@@ -1334,12 +1334,15 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val rightConditions = splitConjunctiveConditions
       .filter(_.references.subsetOf(join.right.outputSet))
 
+    val joinAttributeSet = join.condition.map(_.references).getOrElse(AttributeSet.empty)
+    val leftOuterAttributeSet = join.left.outputSet -- joinAttributeSet
+    val rightOuterAttributeSet = join.right.outputSet -- joinAttributeSet
     val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull) ||
       filter.constraints.filter(_.isInstanceOf[IsNotNull])
-        .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
+        .exists(expr => leftOuterAttributeSet.intersect(expr.references).nonEmpty)
     val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull) ||
       filter.constraints.filter(_.isInstanceOf[IsNotNull])
-        .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
+        .exists(expr => rightOuterAttributeSet.intersect(expr.references).nonEmpty)
 
     join.joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner
