@@ -27,22 +27,21 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 /**
  * Replaces ordinal in 'order by' or 'group by' with UnresolvedOrdinal expression.
  */
-class UnresolvedOrdinalSubstitution(conf: CatalystConf) extends Rule[LogicalPlan] {
-  private def isIntegerLiteral(sorter: Expression) = IntegerIndex.unapply(sorter).nonEmpty
+class SubstituteUnresolvedOrdinals(conf: CatalystConf) extends Rule[LogicalPlan] {
+  private def isIntLiteral(sorter: Expression) = IntegerIndex.unapply(sorter).nonEmpty
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case s @ Sort(orders, global, child) if conf.orderByOrdinal &&
-      orders.exists(o => isIntegerLiteral(o.child)) =>
-      val newOrders = orders.map {
+    case s: Sort if conf.orderByOrdinal && s.order.exists(o => isIntLiteral(o.child)) =>
+      val newOrders = s.order.map {
         case order @ SortOrder(ordinal @ IntegerIndex(index: Int), _) =>
           val newOrdinal = withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
           withOrigin(order.origin)(order.copy(child = newOrdinal))
         case other => other
       }
       withOrigin(s.origin)(s.copy(order = newOrders))
-    case a @ Aggregate(groups, aggs, child) if conf.groupByOrdinal &&
-      groups.exists(isIntegerLiteral(_)) =>
-      val newGroups = groups.map {
+
+    case a: Aggregate if conf.groupByOrdinal && a.groupingExpressions.exists(isIntLiteral) =>
+      val newGroups = a.groupingExpressions.map {
         case ordinal @ IntegerIndex(index) =>
           withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
         case other => other
