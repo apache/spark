@@ -25,7 +25,7 @@ import scala.collection.mutable.LinkedHashSet
 import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.internal.config._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -55,6 +55,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   def this() = this(true)
 
   private val settings = new ConcurrentHashMap[String, String]()
+
+  private val reader = new ConfigReader(new SparkConfigProvider(settings))
+  reader.bindEnv(new ConfigProvider {
+    override def get(key: String): Option[String] = Option(getenv(key))
+  })
 
   if (loadDefaults) {
     loadFromSystemProperties(false)
@@ -248,7 +253,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * - This will throw an exception is the config is not optional and the value is not set.
    */
   private[spark] def get[T](entry: ConfigEntry[T]): T = {
-    entry.readFrom(settings, getenv)
+    entry.readFrom(reader)
   }
 
   /**

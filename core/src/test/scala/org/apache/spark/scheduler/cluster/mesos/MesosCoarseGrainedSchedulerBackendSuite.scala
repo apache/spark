@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.util.Collections
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -210,6 +208,46 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.statusUpdate(driver, status2)
     verify(externalShuffleClient, times(1))
       .registerDriverWithShuffleService(anyString, anyInt, anyLong, anyLong)
+  }
+
+  test("Port offer decline when there is no appropriate range") {
+    setBackend(Map("spark.blockManager.port" -> "30100"))
+    val offeredPorts = (31100L, 31200L)
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    verify(driver, times(1)).declineOffer(offer1.getId)
+  }
+
+  test("Port offer accepted when ephemeral ports are used") {
+    setBackend()
+    val offeredPorts = (31100L, 31200L)
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    verifyTaskLaunched(driver, "o1")
+  }
+
+  test("Port offer accepted with user defined port numbers") {
+    val port = 30100
+    setBackend(Map("spark.blockManager.port" -> s"$port"))
+    val offeredPorts = (30000L, 31000L)
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu, Some(offeredPorts))
+    backend.resourceOffers(driver, List(offer1).asJava)
+    val taskInfo = verifyTaskLaunched(driver, "o1")
+
+    val taskPortResources = taskInfo.head.getResourcesList.asScala.
+    find(r => r.getType == Value.Type.RANGES && r.getName == "ports")
+
+    val isPortInOffer = (r: Resource) => {
+      r.getRanges().getRangeList
+        .asScala.exists(range => range.getBegin == port && range.getEnd == port)
+    }
+    assert(taskPortResources.exists(isPortInOffer))
   }
 
   test("mesos kills an executor when told") {

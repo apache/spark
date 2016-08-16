@@ -496,7 +496,8 @@ object SQLConf {
 
   val VARIABLE_SUBSTITUTE_DEPTH =
     SQLConfigBuilder("spark.sql.variable.substitute.depth")
-      .doc("The maximum replacements the substitution engine will do.")
+      .internal()
+      .doc("Deprecated: The maximum replacements the substitution engine will do.")
       .intConf
       .createWithDefault(40)
 
@@ -564,6 +565,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, String]())
+
+  @transient private val reader = new ConfigReader(settings)
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
@@ -739,7 +742,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    */
   def getConf[T](entry: ConfigEntry[T]): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    entry.readFrom(settings, System.getenv)
+    entry.readFrom(reader)
   }
 
   /**
@@ -748,7 +751,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    */
   def getConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    entry.readFrom(settings, System.getenv)
+    entry.readFrom(reader)
   }
 
   /**

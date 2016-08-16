@@ -355,7 +355,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
   def setLogLevel(logLevel: String) {
-    // let's allow lowcase or mixed case too
+    // let's allow lowercase or mixed case too
     val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
