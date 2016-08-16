@@ -28,7 +28,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage}
 import org.apache.spark.ml.clustering.{LDA, LDAModel}
 import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.param.ParamPair
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
@@ -48,7 +49,13 @@ private[r] class LDAWrapper private (
     new PipelineModel(s"${Identifiable.randomUID(pipeline.uid)}", pipeline.stages.dropRight(1))
 
   def transform(data: Dataset[_]): DataFrame = {
-    pipeline.transform(data).drop(TOKENIZER_COL, STOPWORDS_REMOVER_COL, COUNT_VECTOR_COL)
+    val vec2ary = udf { vec: Vector => vec.toArray }
+    val outputCol = lda.getTopicDistributionCol
+    val tempCol = s"${Identifiable.randomUID(outputCol)}"
+    val preprocessed = preprocessor.transform(data)
+    lda.transform(preprocessed, ParamPair(lda.topicDistributionCol, tempCol))
+      .withColumn(outputCol, vec2ary(col(tempCol)))
+      .drop(TOKENIZER_COL, STOPWORDS_REMOVER_COL, COUNT_VECTOR_COL, tempCol)
   }
 
   def computeLogPerplexity(data: Dataset[_]): Double = {
