@@ -385,7 +385,7 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 #' @param ... Other optional arguments to summary of an IsotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
-#' @aliases summary,SparkDataFrame,SparkDataFrame-method
+#' @aliases summary,IsotonicRegressionModel-method
 #' @export
 #' @note summary(IsotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
@@ -637,7 +637,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.isoreg
-#' @aliases write.ml,SparkDataFrame,SparkDataFrame-method
+#' @aliases write.ml,IsotonicRegressionModel-method
 #' @export
 #' @note write.ml(IsotonicRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
