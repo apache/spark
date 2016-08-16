@@ -25,9 +25,7 @@ dependencies {
   compile group: 'org.apache.xbean', name: 'xbean-asm5-shaded', version: '4.4'
   compile group: 'org.scala-lang', name: 'scala-compiler', version: scalaVersion
   compile group: 'org.slf4j', name: 'jul-to-slf4j', version: slf4jVersion
-  if (scalaBinaryVersion == '2.10') {
-    compile group: 'org.scala-lang', name: 'jline', version:scalaVersion
-  }
+  compile group: 'jline', name: 'jline', version: jlineVersion
 
   runtime project(subprojectBase + 'snappy-spark-mllib_' + scalaBinaryVersion)
 

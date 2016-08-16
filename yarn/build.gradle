@@ -91,6 +91,7 @@ dependencies {
     exclude(group: 'log4j', module: 'log4j')
     exclude(group: 'commons-logging', module: 'commons-logging')
     exclude(group: 'org.codehaus.groovy', module: 'groovy-all')
+    exclude(group: 'jline', module: 'jline')
   }
   compile(group: 'org.spark-project.hive', name: 'hive-metastore', version: hiveVersion) {
     exclude(group: 'org.spark-project.hive', module: 'hive-serde')

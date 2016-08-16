@@ -80,6 +80,7 @@ allprojects {
     commonsCodecVersion = '1.10'
     avroVersion = '1.7.7'
     jsr305Version = '3.0.1'
+    jlineVersion = '2.14.2'
     scalatestVersion = '2.2.6'
     pegdownVersion = '1.6.0'
 
@@ -326,19 +327,19 @@ subprojects {
           def eol = System.getProperty('line.separator')
           beforeTest { desc ->
             def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
-            def progress = new File(workingDir, "progress.txt")
-            def output = new File(workingDir, "output.txt")
+            def progress = new File(workingDir, 'progress.txt')
+            def output = new File(workingDir, 'output.txt')
             progress << "$now Starting test $desc.className $desc.name$eol"
             output << "${now} STARTING TEST ${desc.className} ${desc.name}${eol}${eol}"
           }
           onOutput { desc, event ->
-            def output = new File(workingDir, "output.txt")
+            def output = new File(workingDir, 'output.txt')
             output  << event.message
           }
           afterTest { desc, result ->
             def now = new Date().format('yyyy-MM-dd HH:mm:ss.SSS Z')
-            def progress = new File(workingDir, "progress.txt")
-            def output = new File(workingDir, "output.txt")
+            def progress = new File(workingDir, 'progress.txt')
+            def output = new File(workingDir, 'output.txt')
             progress << "${now} Completed test ${desc.className} ${desc.name} with result: ${result.resultType}${eol}"
             output << "${eol}${now} COMPLETED TEST ${desc.className} ${desc.name} with result: ${result.resultType}${eol}${eol}"
             result.exceptions.each { t ->

@@ -75,19 +75,19 @@ shadowJar {
   relocate 'com.fasterxml.jackson', "${shadePackageName}.com.fasterxml.jackson"
   relocate 'com.google.common', "${shadePackageName}.guava"
 
-  String createdBy = ""
+  String createdBy = ''
   if (rootProject.hasProperty('enablePublish')) {
-    createdBy = "SnappyData Build Team"
+    createdBy = 'SnappyData Build Team'
   } else {
-    createdBy = System.getProperty("user.name")
+    createdBy = System.getProperty('user.name')
   }
   manifest {
     attributes(
-      "Manifest-Version"  : "1.0",
-      "Created-By"        : createdBy,
-      "Title"             : project.name,
-      "Version"           : version,
-      "Vendor"            : "SnappyData, Inc."
+      'Manifest-Version'  : '1.0',
+      'Created-By'        : createdBy,
+      'Title'             : project.name,
+      'Version'           : version,
+      'Vendor'            : 'SnappyData, Inc.'
     )
   }
 

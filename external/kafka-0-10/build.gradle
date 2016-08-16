@@ -21,7 +21,7 @@ dependencies {
   compile project(subprojectBase + 'snappy-spark-tags_' + scalaBinaryVersion)
   compile project(subprojectBase + 'snappy-spark-streaming_' + scalaBinaryVersion)
 
-  compile(group: 'org.apache.kafka', name: 'kafka_' + scalaBinaryVersion, version: '0.10.0.0') {
+  compile(group: 'org.apache.kafka', name: 'kafka_' + scalaBinaryVersion, version: '0.10.0.1') {
     exclude(group: 'com.sun.jmx', module: 'jmxri')
     exclude(group: 'com.sun.jdmk ', module: 'jmxtools')
     exclude(group: 'net.sf.jopt-simple', module: 'jopt-simple')

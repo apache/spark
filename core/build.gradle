@@ -57,6 +57,7 @@ dependencies {
     exclude(group: 'org.ow2.asm', module: 'asm')
     exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
     exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'jline', module: 'jline')
     exclude(group: 'commons-logging', module: 'commons-logging')
     exclude(group: 'org.mockito', module: 'mockito-all')
     exclude(group: 'org.mortbay.jetty', module: 'servlet-api-2.5')
@@ -142,6 +143,7 @@ dependencies {
   testCompile(group: 'org.apache.curator', name: 'curator-test', version: curatorVersion) {
     exclude(group: 'org.apache.zookeeper', module: 'zookeeper')
     exclude(group: 'org.jboss.netty', module: 'netty')
+    exclude(group: 'jline', module: 'jline')
     exclude(group: 'com.google.guava', module: 'guava')
   }
 }
@@ -155,12 +157,17 @@ sourceSets.test.java.srcDirs = []
 // generate properties using spark-build-info and add to project resources
 String extraResourceDir = "${buildDir}/extra-resources"
 
-task generateBuildInfo << {
-  file(extraResourceDir).mkdirs()
-  exec {
-    executable 'bash'
-    workingDir = buildDir
-    args "${projectDir}/../build/spark-build-info", extraResourceDir, version
+task generateBuildInfo {
+  outputs.file "${extraResourceDir}/spark-version-info.properties"
+  inputs.dir compileScala.destinationDir
+
+  doLast {
+    file(extraResourceDir).mkdirs()
+    exec {
+      executable 'bash'
+      workingDir = buildDir
+      args "${projectDir}/../build/spark-build-info", extraResourceDir, version
+    }
   }
 }
 sourceSets {

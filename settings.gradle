@@ -15,7 +15,7 @@
  * LICENSE file.
  */
 
-def scalaBinaryVersion = "2.11"
+def scalaBinaryVersion = '2.11'
 rootProject.name = 'snappy-spark'
 
 include ':snappy-spark-tags_' + scalaBinaryVersion

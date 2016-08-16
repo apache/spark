@@ -40,5 +40,5 @@ dependencies {
 }
 
 // fix scala+java mix to use scala first for tests
-sourceSets.test.scala.srcDir "src/test/java"
+sourceSets.test.scala.srcDir 'src/test/java'
 sourceSets.test.java.srcDirs = []

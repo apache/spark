@@ -113,7 +113,7 @@ task product(type: Zip) {
         into snappyProductDir
       }
       def releaseFile = file("${snappyProductDir}/RELEASE")
-      String buildFlags = ""
+      String buildFlags = ''
       if (rootProject.hasProperty('docker')) {
         buildFlags += ' -Pdocker'
       }

@@ -268,9 +268,8 @@ case class OrderlessHashPartitioning(expressions: Seq[Expression], numPartitions
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) => {
+    case ClusteredDistribution(requiredClustering) =>
       matchExpressions(requiredClustering)
-    }
     case _ => false
   }
 

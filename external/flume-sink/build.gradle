@@ -41,9 +41,9 @@ dependencies {
   compile group: 'io.netty', name: 'netty', version: nettyVersion
 }
 
-// for compatibility with maven generated code, though default "string" seems
+// for compatibility with maven generated code, though default 'string' seems
 // more efficient requiring no conversions
-avro.stringType = "charSequence"
+avro.stringType = 'charSequence'
 
 tasks.withType(JavaCompile) {
   options.compilerArgs << '-Xlint:all,-serial,-path,-deprecation,-unchecked'

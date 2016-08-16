@@ -188,6 +188,7 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
+
         case a: ArrayData => a
       }
     }
