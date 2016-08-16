@@ -718,7 +718,7 @@ getRemoteMasterInfo <- function(master) {
       }
     }
   } else {
-    port = NULL
+    port <- NULL
   }
   list(host = host, port = port)
 }

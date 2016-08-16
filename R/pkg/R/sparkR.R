@@ -201,7 +201,7 @@ sparkR.sparkContext <- function(
         assign(".libPath", rLibPath, envir = .sparkREnv)
         .libPaths(c(rLibPath, .libPaths()))
       }
-      host = "localhost"
+      host <- "localhost"
     } else {
       backendPort <- if (!is.null(sparkEnvirMap[["backend.port"]])) {
         sparkEnvirMap[["backend.port"]]
