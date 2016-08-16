@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.Matchers._

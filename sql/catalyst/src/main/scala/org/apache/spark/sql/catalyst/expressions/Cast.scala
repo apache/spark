@@ -416,7 +416,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   }
 
   private[this] def cast(from: DataType, to: DataType): Any => Any = to match {
-    case dt if dt == child.dataType => identity[Any]
+    case dt if dt == from => identity[Any]
     case StringType => castToString(from)
     case BinaryType => castToBinary(from)
     case DateType => castToDate(from)

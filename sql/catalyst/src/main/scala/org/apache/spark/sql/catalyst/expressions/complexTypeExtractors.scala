@@ -106,7 +106,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
 
-  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable

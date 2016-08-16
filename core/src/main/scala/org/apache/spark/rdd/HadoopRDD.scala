@@ -155,7 +155,7 @@ class HadoopRDD[K, V](
         logDebug("Cloning Hadoop Configuration")
         val newJobConf = new JobConf(conf)
         if (!conf.isInstanceOf[JobConf]) {
-          initLocalJobConfFuncOpt.map(f => f(newJobConf))
+          initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
         }
         newJobConf
       }
@@ -174,7 +174,7 @@ class HadoopRDD[K, V](
         HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
           logDebug("Creating new JobConf and caching it for later re-use")
           val newJobConf = new JobConf(conf)
-          initLocalJobConfFuncOpt.map(f => f(newJobConf))
+          initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
           HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
           newJobConf
         }
@@ -241,7 +241,7 @@ class HadoopRDD[K, V](
 
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
-      HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
+      HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmmss").format(createTime),
         context.stageId, theSplit.index, context.attemptNumber, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 

@@ -21,10 +21,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLBuilder, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -161,17 +162,16 @@ case class CreateViewCommand(
    * SQL based on the analyzed plan, and also creates the proper schema for the view.
    */
   private def prepareTable(sparkSession: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
-    val viewSQL: String = {
-      val logicalPlan = if (userSpecifiedColumns.isEmpty) {
-        analyzedPlan
-      } else {
-        val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
-          case (attr, (colName, _)) => Alias(attr, colName)()
-        }
-        sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
+    val aliasedPlan = if (userSpecifiedColumns.isEmpty) {
+      analyzedPlan
+    } else {
+      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
+        case (attr, (colName, _)) => Alias(attr, colName)()
       }
-      new SQLBuilder(logicalPlan).toSQL
+      sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
     }
+
+    val viewSQL: String = new SQLBuilder(aliasedPlan).toSQL
 
     // Validate the view SQL - make sure we can parse it and analyze it.
     // If we cannot analyze the generated query, there is probably a bug in SQL generation.
@@ -184,14 +184,11 @@ case class CreateViewCommand(
     }
 
     val viewSchema = if (userSpecifiedColumns.isEmpty) {
-      analyzedPlan.output.map { a =>
-        CatalogColumn(a.name, a.dataType.catalogString)
-      }
+      aliasedPlan.schema
     } else {
-      analyzedPlan.output.zip(userSpecifiedColumns).map {
-        case (a, (name, comment)) =>
-          CatalogColumn(name, a.dataType.catalogString, comment = comment)
-      }
+      StructType(aliasedPlan.schema.zip(userSpecifiedColumns).map {
+        case (field, (_, comment)) => comment.map(field.withComment).getOrElse(field)
+      })
     }
 
     CatalogTable(

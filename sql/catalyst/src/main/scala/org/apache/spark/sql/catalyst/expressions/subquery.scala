@@ -102,6 +102,13 @@ case class PredicateSubquery(
   override def nullable: Boolean = nullAware
   override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): PredicateSubquery = copy(query = plan)
+  override def semanticEquals(o: Expression): Boolean = o match {
+    case p: PredicateSubquery =>
+      query.sameResult(p.query) && nullAware == p.nullAware &&
+        children.length == p.children.length &&
+        children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
+    case _ => false
+  }
   override def toString: String = s"predicate-subquery#${exprId.id} $conditionString"
 }
 
