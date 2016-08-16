@@ -638,14 +638,14 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.reverseProxy</code></td>
   <td>false</td>
   <td>
-    To enable running Spark Master, worker and application UI behined a reverse proxy. In this mode, Spark master will reverse proxy the worker and application UIs to enable access.
+    Enable running Spark Master as reverse proxy for worker and application UIs. In this mode, Spark master will reverse proxy the worker and application UIs to enable access without requiring direct access to their hosts. Use it with caution, as worker and application UI will not be accessible directly, you will only be able to access them through spark master/proxy public URL. This setting affects all the workers and application UIs running in the cluster and must be set on all the workers, drivers and masters.
   </td>
 </tr>
 <tr>
   <td><code>spark.ui.reverseProxyUrl</code></td>
-  <td>http://localhost:8080</td>
+  <td></td>
   <td>
-    This is the URL where your proxy is running. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
+    This is the URL where your proxy is running. This URL is for proxy which is running in front of Spark Master. This is useful when running proxy for authentication e.g. OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to reach your proxy.
   </td>
 </tr>
 <tr>
