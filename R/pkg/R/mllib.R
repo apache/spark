@@ -53,10 +53,34 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @note KMeansModel since 2.0.0
 setClass("KMeansModel", representation(jobj = "jobj"))
 
+#' Saves the MLlib model to the input path
+#'
+#' Saves the MLlib model to the input path. For more information, see the specific
+#' MLlib model below.
+#' @rdname write.ml
+#' @name write.ml
+#' @export
+#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{read.ml}
+NULL
+
+#' Makes predictions from a MLlib model
+#'
+#' Makes predictions from a MLlib model. For more information, see the specific
+#' MLlib model below.
+#' @rdname predict
+#' @name predict
+#' @export
+#' @seealso \link{spark.glm}, \link{glm}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+NULL
+
 #' Generalized Linear Models
 #'
-#' Fits generalized linear model against a Spark DataFrame. Users can print, make predictions on the
-#' produced model and save the model to the input path.
+#' Fits generalized linear model against a Spark DataFrame.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -67,6 +91,9 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param tol Positive convergence tolerance of iterations.
 #' @param maxIter Integer giving the maximal number of IRLS iterations.
+#' @param weightCol The weight column name. If this is not set or NULL, we treat all instance
+#'                  weights as 1.0.
+#' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model
 #' @rdname spark.glm
 #' @name spark.glm
@@ -94,7 +121,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @note spark.glm since 2.0.0
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25) {
+          function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
             }
@@ -107,10 +134,13 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             }
 
             formula <- paste(deparse(formula), collapse = "")
+            if (is.null(weightCol)) {
+              weightCol <- ""
+            }
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter))
+                                tol, as.integer(maxIter), weightCol)
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
@@ -126,6 +156,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
+#' @param weightCol The weight column name. If this is not set or NULL, we treat all instance
+#'                  weights as 1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -140,12 +172,12 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @note glm since 1.5.0
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
-          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25) {
-            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit)
+          function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL) {
+            spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
-#'
+
 #' @param object A fitted generalized linear model
 #' @return \code{summary} returns a summary object of the fitted model, a list of components
 #'         including at least the coefficients, null/residual deviance, null/residual degrees
@@ -185,7 +217,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           })
 
 #  Prints the summary of GeneralizedLinearRegressionModel
-#'
+
 #' @rdname spark.glm
 #' @param x Summary object of fitted generalized linear model returned by \code{summary} function
 #' @export
@@ -270,7 +302,8 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' K-Means Clustering Model
 #'
 #' Fits a k-means clustering model against a Spark DataFrame, similarly to R's kmeans().
-#' Users can print, make predictions on the produced model and save the model to the input path.
+#' Users can call \code{summary} to print a summary of the fitted model, \code{predict} to make
+#' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #'
 #' @param data SparkDataFrame for training
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -281,6 +314,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @param initMode The initialization algorithm choosen to fit the model
 #' @return \code{spark.kmeans} returns a fitted k-means model
 #' @rdname spark.kmeans
+#' @aliases spark.kmeans,SparkDataFrame,formula-method
 #' @name spark.kmeans
 #' @export
 #' @examples
@@ -343,7 +377,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
           })
 
 #  Get the summary of a k-means model
-#'
+
 #' @param object A fitted k-means model
 #' @return \code{summary} returns the model's coefficients, size and cluster
 #' @rdname spark.kmeans
@@ -370,7 +404,7 @@ setMethod("summary", signature(object = "KMeansModel"),
           })
 
 #  Predicted values based on a k-means model
-#'
+
 #' @return \code{predict} returns the predicted values based on a k-means model
 #' @rdname spark.kmeans
 #' @export
@@ -393,6 +427,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @param smoothing Smoothing parameter
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model
 #' @rdname spark.naiveBayes
+#' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
 #' @export
@@ -463,7 +498,7 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
           })
 
 #  Saves the generalized linear model to the input path.
-#'
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
@@ -481,13 +516,12 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
           })
 
 #  Save fitted MLlib model to the input path
-#'
+
 #' @param path The directory where the model is saved
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.kmeans
-#' @name write.ml
 #' @export
 #' @note write.ml(KMeansModel, character) since 2.0.0
 setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
@@ -506,6 +540,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @rdname read.ml
 #' @name read.ml
 #' @export
+#' @seealso \link{write.ml}
 #' @examples
 #' \dontrun{
 #' path <- "path/to/model"

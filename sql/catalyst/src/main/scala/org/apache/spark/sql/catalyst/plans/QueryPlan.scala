@@ -300,7 +300,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
 
-  private def cleanExpression(e: Expression): Expression = e match {
+  protected def cleanExpression(e: Expression): Expression = e match {
     case a: Alias =>
       // As the root of the expression, Alias will always take an arbitrary exprId, we need
       // to erase that for equality testing.

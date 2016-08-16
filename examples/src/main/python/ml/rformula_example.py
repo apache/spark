@@ -34,10 +34,12 @@ if __name__ == "__main__":
          (8, "CA", 12, 0.0),
          (9, "NZ", 15, 0.0)],
         ["id", "country", "hour", "clicked"])
+
     formula = RFormula(
         formula="clicked ~ country + hour",
         featuresCol="features",
         labelCol="label")
+
     output = formula.fit(dataset).transform(dataset)
     output.select("features", "label").show()
     # $example off$

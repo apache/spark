@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
@@ -52,6 +51,76 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE TEMPORARY VIEW temp_jtv3 AS SELECT * FROM jt WHERE id > 3")
       sql("CREATE VIEW jtv3 AS SELECT * FROM temp_jtv3 WHERE id < 6")
       checkAnswer(sql("select count(*) FROM jtv3"), Row(2))
+    }
+  }
+
+  test("error handling: existing a table with the duplicate name when creating/altering a view") {
+    withTable("tab1") {
+      sql("CREATE TABLE tab1 (id int)")
+      var e = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE VIEW tab1 AS SELECT * FROM jt")
+      }.getMessage
+      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+      e = intercept[AnalysisException] {
+        sql("CREATE VIEW tab1 AS SELECT * FROM jt")
+      }.getMessage
+      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+      e = intercept[AnalysisException] {
+        sql("ALTER VIEW tab1 AS SELECT * FROM jt")
+      }.getMessage
+      assert(e.contains("The following is an existing table, not a view: `default`.`tab1`"))
+    }
+  }
+
+  test("existing a table with the duplicate name when CREATE VIEW IF NOT EXISTS") {
+    withTable("tab1") {
+      sql("CREATE TABLE tab1 (id int)")
+      sql("CREATE VIEW IF NOT EXISTS tab1 AS SELECT * FROM jt")
+      checkAnswer(sql("select count(*) FROM tab1"), Row(0))
+    }
+  }
+
+  test("error handling: insert/load/truncate table commands against a temp view") {
+    val viewName = "testView"
+    withTempView(viewName) {
+      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT id FROM jt")
+      var e = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $viewName SELECT 1")
+      }.getMessage
+      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+      e = intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
+      }.getMessage
+      assert(e.contains(s"Target table in LOAD DATA cannot be temporary: `$viewName`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $viewName")
+      }.getMessage
+      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on temporary tables: `$viewName`"))
+    }
+  }
+
+  test("error handling: insert/load/truncate table commands against a view") {
+    val viewName = "testView"
+    withView(viewName) {
+      sql(s"CREATE VIEW $viewName AS SELECT id FROM jt")
+      var e = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $viewName SELECT 1")
+      }.getMessage
+      assert(e.contains("Inserting into an RDD-based table is not allowed"))
+
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+      e = intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE $viewName""")
+      }.getMessage
+      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `$viewName`"))
+
+      e = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $viewName")
+      }.getMessage
+      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on views: `$viewName`"))
     }
   }
 

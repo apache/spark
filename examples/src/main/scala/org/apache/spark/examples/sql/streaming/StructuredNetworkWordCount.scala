@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 
 /**
- * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
+ * Counts words in UTF8 encoded, '\n' delimited text received from the network.
  *
  * Usage: StructuredNetworkWordCount <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
@@ -56,10 +56,10 @@ object StructuredNetworkWordCount {
       .format("socket")
       .option("host", host)
       .option("port", port)
-      .load().as[String]
+      .load()
 
     // Split the lines into words
-    val words = lines.flatMap(_.split(" "))
+    val words = lines.as[String].flatMap(_.split(" "))
 
     // Generate running word count
     val wordCounts = words.groupBy("value").count()
