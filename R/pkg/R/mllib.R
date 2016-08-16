@@ -68,7 +68,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @name write.ml
 #' @export
 #' @seealso \link{spark.glm}, \link{glm}
-#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}
+#' @seealso \link{spark.kmeans}, \link{spark.naiveBayes}, \link{spark.survreg}, \link{spark.lda}
 #' @seealso \link{read.ml}
 NULL
 
@@ -365,7 +365,7 @@ setMethod("summary", signature(object = "LDAModel"),
 #' @rdname spark.lda
 #' @aliases spark.perplexity,LDAModel-method
 #' @export
-#' @note summary(LDAModel) since 2.1.0
+#' @note spark.perplexity(LDAModel) since 2.1.0
 setMethod("spark.perplexity", signature(object = "LDAModel"),
           function(object, newData) {
             return(ifelse(missing(newData), callJMethod(object@jobj, "logPerplexity"),
