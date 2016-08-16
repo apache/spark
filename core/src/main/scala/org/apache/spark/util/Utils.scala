@@ -2418,6 +2418,18 @@ private[spark] object Utils extends Logging {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
     }
   }
+
+  def setCallerContext(context: String): Unit = {
+    try {
+      val Builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+      val builderInst = Builder.getConstructor(classOf[String]).newInstance(context)
+      val ret = Builder.getMethod("build").invoke(builderInst)
+      val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+      callerContext.getMethod("setCurrent", callerContext).invoke(null, ret)
+    } catch {
+      case NonFatal(e) => logDebug(s"${e.getMessage}")
+    }
+  }
 }
 
 /**
