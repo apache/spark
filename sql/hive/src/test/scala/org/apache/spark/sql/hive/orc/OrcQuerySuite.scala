@@ -473,6 +473,40 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("No ORC conversion when metastore schema does not match schema stored in ORC files") {
+    withTempTable("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+        withTable("dummy_orc") {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            singleRowDF.write.partitionBy("key").orc(path)
+
+            // Create a Metastore ORC table with different schema.
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc(value STRING, value2 STRING)
+                 |PARTITIONED BY (key INT)
+                 |STORED AS ORC
+                 |LOCATION '$path'
+               """.stripMargin)
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc WHERE key=0")
+            val queryExecution = df.queryExecution
+            queryExecution.analyzed.collectFirst {
+              case _: MetastoreRelation => ()
+            }.getOrElse {
+              fail(s"Expecting no conversion from orc to data sources, " +
+                s"but got:\n$queryExecution")
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-14962 Produce correct results on array type with isnotnull") {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(i => Tuple1(Array(i)))
