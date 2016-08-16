@@ -2,7 +2,7 @@
 select * from dummy(3);
 
 -- range call with end
-select * from range(5);
+select * from range(6 + cos(3));
 
 -- range call with start and end
 select * from range(5, 10);

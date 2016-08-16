@@ -662,12 +662,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
       : LogicalPlan = withOrigin(ctx) {
-    val expressions = ctx.expression.asScala.map { ec =>
-      val e = expression(ec)
-      assert(e.foldable, "All arguments of a table-valued-function must be constants.", ec)
-      e
-    }
-    UnresolvedTableValuedFunction(ctx.identifier.getText, expressions)
+    UnresolvedTableValuedFunction(ctx.identifier.getText, ctx.expression.asScala.map(expression))
   }
 
   /**
