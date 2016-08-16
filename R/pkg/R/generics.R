@@ -146,8 +146,6 @@ setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions")
 # @export
 setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
 
-setGeneric("partitionByRDD", function(x, ...) { standardGeneric("partitionByRDD") })
-
 setGeneric("persistRDD", function(x, newLevel) { standardGeneric("persistRDD") })
 
 # @rdname pipeRDD
@@ -332,9 +330,7 @@ setGeneric("join", function(x, y, ...) { standardGeneric("join") })
 # @export
 setGeneric("leftOuterJoin", function(x, y, numPartitions) { standardGeneric("leftOuterJoin") })
 
-#' @rdname partitionBy
-#' @export
-setGeneric("partitionBy", function(x, ...) { standardGeneric("partitionBy") })
+setGeneric("partitionByRDD", function(x, ...) { standardGeneric("partitionByRDD") })
 
 # @rdname reduceByKey
 # @seealso groupByKey
@@ -795,6 +791,10 @@ setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 setGeneric("over", function(x, window) { standardGeneric("over") })
 
 ###################### WindowSpec Methods ##########################
+
+#' @rdname partitionBy
+#' @export
+setGeneric("partitionBy", function(x, ...) { standardGeneric("partitionBy") })
 
 #' @rdname rowsBetween
 #' @export
