@@ -181,20 +181,10 @@ class FileStreamSource(
 
       minBatchId = lastCommittedBatch
 
-      val offsetDiff = (newOffset.offset - lastCommittedOffset.offset).toInt
-
-      if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastCommittedOffset followed by $end")
-      }
-
-      batches.trimStart(offsetDiff)
-      lastCommittedOffset = newOffset
     } else {
       sys.error(s"FileStreamSource.commit() received an offset ($end) that did not " +
         s"originate with an instance of this class")
     }
-
-
   }
 
   override def stop() {}
@@ -252,7 +242,6 @@ class FileStreamSource(
     new LongOffset(maxBatchId)
   }
 
-
   private def fetchAllFiles(): Seq[String] = {
     val startTime = System.nanoTime
     val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
@@ -275,7 +264,7 @@ class FileStreamSource(
     try {
       str.toBoolean
     } catch {
-      case _ => throw new IllegalArgumentException(
+      case _ : Throwable => throw new IllegalArgumentException(
         s"Invalid value '$str' for option 'deleteCommittedFiles', must be true or false")
     }
   }
@@ -290,7 +279,4 @@ class FileStreamSource(
         }
       }
   }
-
-
-
 }
