@@ -19,6 +19,7 @@ package org.apache.spark.graphx
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -30,6 +31,26 @@ class EdgeRDDSuite extends SparkFunSuite with LocalSparkContext {
       assert(edges.getStorageLevel == StorageLevel.NONE)
       edges.cache()
       assert(edges.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    }
+  }
+
+  test("checkpointed transformations") {
+    withSpark { sc =>
+      val tempDir = Utils.createTempDir()
+      val path = tempDir.toURI.toString
+
+      sc.setCheckpointDir(path)
+
+      val edges = Array(Edge(1L, 2L, 1), Edge(2L, 1L, 2), Edge(3L, 4L, 3), Edge(4L, 3L, 4))
+
+      val edgeEDD = EdgeRDD.fromEdges(sc.parallelize(edges))
+
+      edgeEDD.checkpoint()
+      edgeEDD.count()
+
+      assert(edgeEDD.collect().toSet == edges.toSet)
+
+      Utils.deleteRecursively(tempDir)
     }
   }
 

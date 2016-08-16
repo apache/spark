@@ -69,6 +69,11 @@ abstract class VertexRDD[VD](
     firstParent[ShippableVertexPartition[VD]].iterator(part, context).next().iterator
   }
 
+  override def computeOrReadCheckpoint(part: Partition, context: TaskContext)
+      : Iterator[(VertexId, VD)] = {
+    compute(part, context)
+  }
+
   /**
    * Construct a new VertexRDD that is indexed by only the visible vertices. The resulting
    * VertexRDD will be based on a different index and can no longer be quickly joined with this

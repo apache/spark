@@ -55,6 +55,11 @@ abstract class EdgeRDD[ED](
     }
   }
 
+  override def computeOrReadCheckpoint(part: Partition, context: TaskContext)
+      : Iterator[Edge[ED]] = {
+    compute(part, context)
+  }
+
   /**
    * Map the values in an edge partitioning preserving the structure but changing the values.
    *
