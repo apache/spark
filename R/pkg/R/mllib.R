@@ -643,6 +643,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
+<<<<<<< 6a43d795dc073263b7b8880f744cbd895c257019
 <<<<<<< abe1aabdf9b9ce513f105482ed4c6d6143f2b0a4
 #' @rdname spark.isoreg
 #' @aliases write.ml,IsotonicRegressionModel,character-method
@@ -837,7 +838,7 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
           function(data, formula, k = 2, maxIter = 100, tol = 0.01) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.GaussianMixtureWrapper", "fit", data@sdf,
-                                formula, as.integer(k), as.integer(maxIter), tol)
+                                formula, as.integer(k), as.integer(maxIter), as.numeric(tol))
             return(new("GaussianMixtureModel", jobj = jobj))
           })
 
@@ -884,7 +885,6 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 #' @param newData SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
 #'         "prediction"
-#' @return \code{predict} returns the predicted values based on a gaussian mixture model
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
