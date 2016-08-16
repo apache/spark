@@ -377,43 +377,4 @@ class AnalysisSuite extends AnalysisTest {
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }
-
-  test("test rule UnresolvedOrdinalSubstitution, replaces ordinal in order by or group by") {
-    val a = testRelation2.output(0)
-    val b = testRelation2.output(1)
-    val conf = new SimpleCatalystConf(caseSensitiveAnalysis = true)
-
-    // Expression OrderByOrdinal is unresolved.
-    assert(!UnresolvedOrdinal(0).resolved)
-
-    // Tests order by ordinal, apply single rule.
-    val plan = testRelation2.orderBy(Literal(1).asc, Literal(2).asc)
-    comparePlans(
-      new UnresolvedOrdinalSubstitution(conf).apply(plan),
-      testRelation2.orderBy(UnresolvedOrdinal(1).asc, UnresolvedOrdinal(2).asc))
-
-    // Tests order by ordinal, do full analysis
-    checkAnalysis(plan, testRelation2.orderBy(a.asc, b.asc))
-
-    // order by ordinal can be turned off by config
-    comparePlans(
-      new UnresolvedOrdinalSubstitution(conf.copy(orderByOrdinal = false)).apply(plan),
-      testRelation2.orderBy(Literal(1).asc, Literal(2).asc))
-
-
-    // Tests group by ordinal, apply single rule.
-    val plan2 = testRelation2.groupBy(Literal(1), Literal(2))('a, 'b)
-    comparePlans(
-      new UnresolvedOrdinalSubstitution(conf).apply(plan2),
-      testRelation2.groupBy(UnresolvedOrdinal(1), UnresolvedOrdinal(2))('a, 'b))
-
-    // Tests group by ordinal, do full analysis
-    checkAnalysis(plan2, testRelation2.groupBy(a, b)(a, b))
-
-    // group by ordinal can be turned off by config
-    comparePlans(
-      new UnresolvedOrdinalSubstitution(conf.copy(groupByOrdinal = false)).apply(plan2),
-      testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
-
-  }
 }
