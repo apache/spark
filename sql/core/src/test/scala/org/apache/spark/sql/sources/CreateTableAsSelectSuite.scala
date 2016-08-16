@@ -32,7 +32,6 @@ class CreateTableAsSelectSuite
   with BeforeAndAfterEach {
 
   protected override lazy val sql = caseInsensitiveContext.sql _
-
   private var path: File = null
 
   override def beforeAll(): Unit = {
