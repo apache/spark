@@ -25,7 +25,7 @@ import com.google.common.io.Closeables
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.ChunkedByteBuffer
+import org.apache.spark.network.buffer.{ChunkedByteBuffer, FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.util.Utils
 
 /**
@@ -83,28 +83,9 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
     }
   }
 
-  def getBytes(blockId: BlockId): ChunkedByteBuffer = {
+  def getBlockData(blockId: BlockId): ManagedBuffer = {
     val file = diskManager.getFile(blockId.name)
-    val channel = new RandomAccessFile(file, "r").getChannel
-    Utils.tryWithSafeFinally {
-      // For small files, directly read rather than memory map
-      if (file.length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(file.length.toInt)
-        channel.position(0)
-        while (buf.remaining() != 0) {
-          if (channel.read(buf) == -1) {
-            throw new IOException("Reached EOF before filling buffer\n" +
-              s"offset=0\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
-          }
-        }
-        buf.flip()
-        new ChunkedByteBuffer(buf)
-      } else {
-        new ChunkedByteBuffer(channel.map(MapMode.READ_ONLY, 0, file.length))
-      }
-    } {
-      channel.close()
-    }
+    new FileSegmentManagedBuffer(minMemoryMapBytes, true, file, 0L, file.length())
   }
 
   def remove(blockId: BlockId): Boolean = {

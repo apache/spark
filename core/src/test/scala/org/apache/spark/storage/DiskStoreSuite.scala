@@ -30,19 +30,19 @@ class DiskStoreSuite extends SparkFunSuite {
 
     // Create a non-trivial (not all zeros) byte array
     val bytes = Array.tabulate[Byte](1000)(_.toByte)
-    val byteBuffer = new ChunkedByteBuffer(ByteBuffer.wrap(bytes))
+    val byteBuffer = ChunkedByteBuffer.wrap(bytes)
 
     val blockId = BlockId("rdd_1_2")
     val diskBlockManager = new DiskBlockManager(new SparkConf(), deleteFilesOnStop = true)
 
     val diskStoreMapped = new DiskStore(new SparkConf().set(confKey, "0"), diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer)
-    val mapped = diskStoreMapped.getBytes(blockId)
+    val mapped = diskStoreMapped.getBlockData(blockId).nioByteBuffer()
     assert(diskStoreMapped.remove(blockId))
 
     val diskStoreNotMapped = new DiskStore(new SparkConf().set(confKey, "1m"), diskBlockManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer)
-    val notMapped = diskStoreNotMapped.getBytes(blockId)
+    val notMapped = diskStoreNotMapped.getBlockData(blockId).nioByteBuffer
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
     assert(notMapped.getChunks().forall(_.getClass.getName.endsWith("HeapByteBuffer")),
