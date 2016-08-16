@@ -982,16 +982,15 @@ class BinaryLogisticRegressionSummary private[classification] (
  * <p><blockquote>
  *    $$
  *    P(y_i=0|\vec{x}_i, \beta) = \frac{e^{\vec{x}_i^T \vec{\beta}_0}}{\sum_{k=0}^{K-1}
- *    e^{\vec{x}_i^T \vec{\beta}_k}} \\
+ *       e^{\vec{x}_i^T \vec{\beta}_k}} \\
  *    P(y_i=1|\vec{x}_i, \beta) = \frac{e^{\vec{x}_i^T \vec{\beta}_1}}{\sum_{k=0}^{K-1}
- *    e^{\vec{x}_i^T \vec{\beta}_k}}\\
- *    ... \\
- *    P(y_i=K-1|\vec{x}_i, \beta) = \frac{e^{\vec{x}_i^T \vec{\beta}_{K-1}}}{\sum_{k=0}^{K-1}
- *    e^{\vec{x}_i^T \vec{\beta}_k}}\\
+ *       e^{\vec{x}_i^T \vec{\beta}_k}}\\
+ *    P(y_i=K-1|\vec{x}_i, \beta) = \frac{e^{\vec{x}_i^T \vec{\beta}_{K-1}}\,}{\sum_{k=0}^{K-1}
+ *       e^{\vec{x}_i^T \vec{\beta}_k}}
  *    $$
  * </blockquote></p>
  *
- * The model coefficients $\beta = (\beta_1, \beta_2, ..., \beta_{K-1})^T$ become a matrix
+ * The model coefficients $\beta = (\beta_1, \beta_2, ..., \beta_{K-1})$ become a matrix
  * which has dimension of $K \times (N+1)$ if the intercepts are added. If the intercepts are not
  * added, the dimension will be $K \times N$.
  *
@@ -1003,7 +1002,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *    \begin{align}
  *    \frac{e^{\vec{x}_i^T \left(\vec{\beta}_0 + \vec{c}\right)}}{\sum_{k=0}^{K-1}
  *       e^{\vec{x}_i^T \left(\vec{\beta}_k + \vec{c}\right)}}
- *    = \frac{e^{\vec{x}_i^T \vec{\beta}_0}e^{\vec{x}_i^T \vec{c}}}{e^{\vec{x}_i^T \vec{c}}
+ *    = \frac{e^{\vec{x}_i^T \vec{\beta}_0}e^{\vec{x}_i^T \vec{c}}\,}{e^{\vec{x}_i^T \vec{c}}
  *       \sum_{k=0}^{K-1} e^{\vec{x}_i^T \vec{\beta}_k}}
  *    = \frac{e^{\vec{x}_i^T \vec{\beta}_0}}{\sum_{k=0}^{K-1} e^{\vec{x}_i^T \vec{\beta}_k}}
  *    \end{align}
@@ -1038,9 +1037,9 @@ class BinaryLogisticRegressionSummary private[classification] (
  * <p><blockquote>
  *    $$
  *    \begin{align}
- *    \frac{\partial \ell(\beta, \vec{x}_i, w_i)}{\partial \beta_{j, k}} &=
- *    x_{i,j} \cdot w_i \cdot \left(\frac{e^{\vec{x}_i \cdot \vec{\beta}_k}}{\sum_{k'=0}^{K-1}
- *    e^{\vec{x}_i \cdot \vec{\beta}_{k'}}} - I_{y=k}\right) \\
+ *    \frac{\partial \ell(\beta, \vec{x}_i, w_i)}{\partial \beta_{j, k}}
+ *    &= x_{i,j} \cdot w_i \cdot \left(\frac{e^{\vec{x}_i \cdot \vec{\beta}_k}}{\sum_{k'=0}^{K-1}
+ *      e^{\vec{x}_i \cdot \vec{\beta}_{k'}}\,} - I_{y=k}\right) \\
  *    &= x_{i, j} \cdot w_i \cdot multiplier_k
  *    \end{align}
  *    $$
@@ -1061,7 +1060,7 @@ class BinaryLogisticRegressionSummary private[classification] (
  *
  * <p><blockquote>
  *    $$
- *    multiplier_k = \left(\frac{e^{\vec{x}_i \cdot \vec{\beta}_y}}{\sum_{k=0}^{K-1}
+ *    multiplier_k = \left(\frac{e^{\vec{x}_i \cdot \vec{\beta}_k}}{\sum_{k=0}^{K-1}
  *       e^{\vec{x}_i \cdot \vec{\beta}_k}} - I_{y=k}\right)
  *    $$
  * </blockquote></p>
