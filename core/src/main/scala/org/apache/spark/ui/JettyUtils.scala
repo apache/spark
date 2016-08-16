@@ -195,17 +195,14 @@ private[spark] object JettyUtils extends Logging {
     val servlet = new ProxyServlet {
       override def rewriteTarget(request: HttpServletRequest): String = {
         val rewrittenURI = createProxyURI(
-                              prefix,
-                              target,
-                              request.getRequestURI(),
-                              request.getQueryString())
+          prefix, target, request.getRequestURI(), request.getQueryString())
         if (rewrittenURI == null) {
           return null
         }
         if (!validateDestination(rewrittenURI.getHost(), rewrittenURI.getPort())) {
           return null
         }
-        rewrittenURI.toString();
+        rewrittenURI.toString()
       }
 
       override def filterServerResponseHeader(
@@ -214,14 +211,14 @@ private[spark] object JettyUtils extends Logging {
           headerName: String,
           headerValue: String): String = {
         if (headerName.equalsIgnoreCase("location")) {
-          val targetUri = serverResponse.getRequest().getURI();
-          val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority();
-          if (headerValue.startsWith(toReplace)) {
-            return clientRequest.getScheme() + "://" + clientRequest.getHeader("host") +
-                prefix + headerValue.substring(toReplace.length())
+          val newHeader = createProxyLocationHeader(
+            prefix, headerValue, clientRequest, serverResponse.getRequest().getURI())
+          if (newHeader != null) {
+            return newHeader
           }
         }
-        super.filterServerResponseHeader(clientRequest, serverResponse, headerName, headerValue);
+        super.filterServerResponseHeader(
+          clientRequest, serverResponse, headerName, headerValue)
       }
     }
 
@@ -378,7 +375,7 @@ private[spark] object JettyUtils extends Logging {
     redirectHandler
   }
 
-  def createProxyURI (prefix: String, target: String, path: String, query: String): URI = {
+  def createProxyURI(prefix: String, target: String, path: String, query: String): URI = {
     if (!path.startsWith(prefix)) {
       return null
     }
@@ -404,6 +401,20 @@ private[spark] object JettyUtils extends Logging {
         ).normalize()
     }
     rewrittenURI.normalize()
+  }
+
+  def createProxyLocationHeader(
+      prefix: String,
+      headerValue: String,
+      clientRequest: HttpServletRequest,
+      targetUri: URI): String = {
+    val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority()
+    if (headerValue.startsWith(toReplace)) {
+      clientRequest.getScheme() + "://" + clientRequest.getHeader("host") +
+          prefix + headerValue.substring(toReplace.length())
+    } else {
+      null
+    }
   }
 
   // Create a new URI from the arguments, handling IPv6 host encoding and default ports.

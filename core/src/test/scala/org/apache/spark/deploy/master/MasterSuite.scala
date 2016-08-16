@@ -174,8 +174,7 @@ class MasterSuite extends SparkFunSuite
         workers.foreach { workerSummaryJson =>
           val JString(workerId) = workerSummaryJson \ "id"
           val url = s"http://localhost:${localCluster.masterWebUIPort}/proxy/${workerId}/json"
-          val workerResponse = parse(Source.fromURL(url)
-            .getLines().mkString("\n"))
+          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
           (workerResponse \ "cores").extract[Int] should be (2)
           (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl)
         }

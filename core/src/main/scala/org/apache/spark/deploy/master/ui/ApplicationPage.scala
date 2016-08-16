@@ -78,13 +78,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             {
               if (!app.isFinished) {
                 <li><strong>
-                  {
-                    if (parent.master.reverseProxy) {
-                      <a href={"/proxy/" + app.id + "/"}>Application Detail UI</a>
-                    } else {
-                      <a href={app.desc.appUiUrl}>Application Detail UI</a>
-                    }
-                  }
+                    <a href={UIUtils.makeHref(parent.master.reverseProxy,
+                      app.id, app.desc.appUiUrl)}>Application Detail UI</a>
                 </strong></li>
               }
             }
@@ -108,8 +103,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
   }
 
   private def executorRow(executor: ExecutorDesc): Seq[Node] = {
-    var workerUrlRef = executor.worker.webUiAddress
-    if (parent.master.reverseProxy) workerUrlRef = "/proxy/" + executor.worker.id + "/"
+    val workerUrlRef = UIUtils.makeHref(parent.master.reverseProxy,
+      executor.worker.id, executor.worker.webUiAddress)
     <tr>
       <td>{executor.id}</td>
       <td>

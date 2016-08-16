@@ -55,18 +55,14 @@ class MasterWebUI(
   }
 
   def addProxyTargets(id: String, target: String): Unit = {
-    var endTarget: String = target
-    if (endTarget.endsWith("/")) {
-      endTarget = endTarget.substring(0, endTarget.length()-1)
-    }
+    var endTarget = target.stripSuffix("/")
     val handler = createProxyHandler("/proxy/" + id, endTarget)
     attachHandler(handler)
     proxyHandlers(id) = handler
   }
 
   def removeProxyTargets(id: String): Unit = {
-    detachHandler(proxyHandlers.get(id).get)
-    proxyHandlers -= id
+    proxyHandlers.remove(id).foreach(detachHandler)
   }
 }
 
