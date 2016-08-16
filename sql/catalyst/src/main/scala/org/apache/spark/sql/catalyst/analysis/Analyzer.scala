@@ -22,17 +22,16 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogRelation, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
-import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.trees.{TreeNodeRef}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
@@ -84,7 +83,8 @@ class Analyzer(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
-      EliminateUnions),
+      EliminateUnions,
+      new UnresolvedOrdinalSubstitution(conf)),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -545,7 +545,7 @@ class Analyzer(
         p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        if (conf.groupByOrdinal && a.groupingExpressions.exists(IntegerIndex.unapply(_).nonEmpty)) {
+        if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
           failAnalysis(
             "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
         } else {
@@ -716,9 +716,9 @@ class Analyzer(
       // Replace the index with the related attribute for ORDER BY,
       // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
-          if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        if orders.exists(_.child.isInstanceOf[UnresolvedOrdinal]) =>
         val newOrders = orders map {
-          case s @ SortOrder(IntegerIndex(index), direction) =>
+          case s @ SortOrder(UnresolvedOrdinal(index), direction) =>
             if (index > 0 && index <= child.output.size) {
               SortOrder(child.output(index - 1), direction)
             } else {
@@ -732,11 +732,10 @@ class Analyzer(
 
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
-      case a @ Aggregate(groups, aggs, child)
-          if conf.groupByOrdinal && aggs.forall(_.resolved) &&
-            groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+      case a @ Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
+        groups.exists(_.isInstanceOf[UnresolvedOrdinal]) =>
         val newGroups = groups.map {
-          case ordinal @ IntegerIndex(index) if index > 0 && index <= aggs.size =>
+          case ordinal @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
             aggs(index - 1) match {
               case e if ResolveAggregateFunctions.containsAggregate(e) =>
                 ordinal.failAnalysis(
@@ -744,7 +743,7 @@ class Analyzer(
                     "aggregate functions are not allowed in GROUP BY")
               case o => o
             }
-          case ordinal @ IntegerIndex(index) =>
+          case ordinal @ UnresolvedOrdinal(index) =>
             ordinal.failAnalysis(
               s"GROUP BY position $index is not in select list " +
                 s"(valid range is [1, ${aggs.size}])")
