@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
  * @param params Parameters object
  * @param headers headers for the columns
  */
-private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) {
+private[csv] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) {
 
   protected lazy val parser: CsvParser = {
     val settings = new CsvParserSettings()
@@ -60,7 +60,7 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
  * @param params Parameters object for configuration
  * @param headers headers for columns
  */
-private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
+private[csv] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
 
