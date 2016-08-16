@@ -65,35 +65,38 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
 
   /**
-   * Internal registry of table-valued functions. TODO(ekl) we should have a proper registry
+   * TVF builder.
+   */
+  private def tvf(args: (String, DataType)*)(pf: PartialFunction[Seq[Any], LogicalPlan])
+    : (ArgumentList, Seq[Any] => LogicalPlan) = (ArgumentList(args: _*), pf)
+
+  /**
+   * Internal registry of table-valued functions.
    */
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(
       /* range(end) */
-      ArgumentList(("end", LongType)) -> (
-        (args: Seq[Any]) =>
-          Range(0, args(0).asInstanceOf[Long], 1, defaultParallelism)),
+      tvf("end" -> LongType) { case Seq(end: Long) =>
+        Range(0, end, 1, defaultParallelism)
+      },
 
       /* range(start, end) */
-      ArgumentList(("start", LongType), ("end", LongType)) -> (
-        (args: Seq[Any]) =>
-          Range(
-            args(0).asInstanceOf[Long], args(1).asInstanceOf[Long], 1, defaultParallelism)),
+      tvf("start" -> LongType, "end" -> LongType) { case Seq(start: Long, end: Long) =>
+        Range(start, end, 1, defaultParallelism)
+      },
 
       /* range(start, end, step) */
-      ArgumentList(("start", LongType), ("end", LongType), ("step", LongType)) -> (
-        (args: Seq[Any]) =>
-          Range(
-            args(0).asInstanceOf[Long], args(1).asInstanceOf[Long], args(2).asInstanceOf[Long],
-            defaultParallelism)),
+      tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
+          case Seq(start: Long, end: Long, step: Long) =>
+        Range(start, end, step, defaultParallelism)
+      },
 
       /* range(start, end, step, numPartitions) */
-      ArgumentList(("start", LongType), ("end", LongType), ("step", LongType),
-          ("numPartitions", IntegerType)) -> (
-        (args: Seq[Any]) =>
-          Range(
-            args(0).asInstanceOf[Long], args(1).asInstanceOf[Long], args(2).asInstanceOf[Long],
-            args(3).asInstanceOf[Integer])))
+      tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
+          "numPartitions" -> IntegerType) {
+          case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
+        Range(start, end, step, numPartitions)
+      })
   )
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
