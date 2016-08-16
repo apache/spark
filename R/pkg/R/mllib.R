@@ -322,7 +322,8 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 
 # Returns the summary of a Latent Dirichlet Allocation model produced by \code{spark.lda}
 
-#' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}
+#' @param object A Latent Dirichlet Allocation model fitted by \code{spark.lda}.
+#' @param maxTermsPerTopic Maximum number of terms to collect for each topic. Default value of 10.
 #' @return \code{summary} returns a list containing
 #'         \item{\code{docConcentration}}{concentration parameter commonly named \code{alpha} for
 #'               the prior placed on documents distributions over topics \code{theta}}
@@ -340,7 +341,8 @@ setMethod("spark.posterior", signature(object = "LDAModel", newData = "SparkData
 #' @export
 #' @note summary(LDAModel) since 2.1.0
 setMethod("summary", signature(object = "LDAModel"),
-          function(object, ...) {
+          function(object, maxTermsPerTopic, ...) {
+            maxTermsPerTopic <- as.integer(ifelse(missing(maxTermsPerTopic), 10, maxTermsPerTopic))
             jobj <- object@jobj
             docConcentration <- callJMethod(jobj, "docConcentration")
             topicConcentration <- callJMethod(jobj, "topicConcentration")
@@ -348,7 +350,7 @@ setMethod("summary", signature(object = "LDAModel"),
             logPerplexity <- callJMethod(jobj, "logPerplexity")
             isDistributed <- callJMethod(jobj, "isDistributed")
             vocabSize <- callJMethod(jobj, "vocabSize")
-            topics <- dataFrame(callJMethod(jobj, "topics"))
+            topics <- dataFrame(callJMethod(jobj, "topics", maxTermsPerTopic))
             vocabulary <- callJMethod(jobj, "vocabulary")
             return(list(docConcentration = unlist(docConcentration),
                         topicConcentration = topicConcentration,
@@ -366,10 +368,10 @@ setMethod("summary", signature(object = "LDAModel"),
 #' @aliases spark.perplexity,LDAModel-method
 #' @export
 #' @note spark.perplexity(LDAModel) since 2.1.0
-setMethod("spark.perplexity", signature(object = "LDAModel"),
-          function(object, newData) {
-            return(ifelse(missing(newData), callJMethod(object@jobj, "logPerplexity"),
-                   callJMethod(object@jobj, "computeLogPerplexity", newData@sdf)))
+setMethod("spark.perplexity", signature(object = "LDAModel", data = "SparkDataFrame"),
+          function(object, data) {
+            return(ifelse(missing(data), callJMethod(object@jobj, "logPerplexity"),
+                   callJMethod(object@jobj, "computeLogPerplexity", data@sdf)))
          })
 
 # Saves the Latent Dirichlet Allocation model to the input path.
@@ -758,9 +760,10 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
                    customizedStopWords = "", maxVocabSize = bitwShiftL(1, 18)) {
             optimizer <- match.arg(optimizer)
             jobj <- callJStatic("org.apache.spark.ml.r.LDAWrapper", "fit", data@sdf, features,
-                                as.numeric(k), as.integer(maxIter), optimizer, subsamplingRate,
-                                topicConcentration, as.array(docConcentration),
-                                as.array(customizedStopWords), maxVocabSize)
+                                as.integer(k), as.integer(maxIter), optimizer,
+                                as.numeric(subsamplingRate), topicConcentration,
+                                as.array(docConcentration), as.array(customizedStopWords),
+                                maxVocabSize)
             return(new("LDAModel", jobj = jobj))
           })
 

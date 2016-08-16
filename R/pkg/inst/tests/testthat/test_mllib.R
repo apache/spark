@@ -480,7 +480,7 @@ test_that("spark.lda with libsvm", {
   text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
   model <- spark.lda(text, optimizer = "em")
 
-  stats <- summary(model)
+  stats <- summary(model, 10)
   isDistributed <- stats$isDistributed
   logLikelihood <- stats$logLikelihood
   logPerplexity <- stats$logPerplexity

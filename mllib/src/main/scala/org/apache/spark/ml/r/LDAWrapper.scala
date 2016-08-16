@@ -55,13 +55,15 @@ private[r] class LDAWrapper private (
     lda.logPerplexity(preprocessor.transform(data))
   }
 
-  lazy val topicIndices: DataFrame = lda.describeTopics(10)
-
-  lazy val topics = if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
-    topicIndices
-  } else {
-    val index2term = udf { indices: mutable.WrappedArray[Int] => indices.map(i => vocabulary(i)) }
-    topicIndices.select(col("topic"), index2term(col("termIndices")).as("term"), col("termWeights"))
+  def topics(maxTermsPerTopic: Int): DataFrame = {
+    val topicIndices: DataFrame = lda.describeTopics(maxTermsPerTopic)
+    if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
+      topicIndices
+    } else {
+      val index2term = udf { indices: mutable.WrappedArray[Int] => indices.map(i => vocabulary(i)) }
+      topicIndices
+        .select(col("topic"), index2term(col("termIndices")).as("term"), col("termWeights"))
+    }
   }
 
   lazy val isDistributed: Boolean = lda.isDistributed
