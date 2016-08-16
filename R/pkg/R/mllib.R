@@ -639,8 +639,8 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 
 #  Save fitted IsotonicRegressionModel to the input path
 
-#' @param path The directory where the model is saved
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#' @param path the directory where the model is saved.
+#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
 <<<<<<< 6a43d795dc073263b7b8880f744cbd895c257019
@@ -795,15 +795,15 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
 #' \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml}
 #' to save/load fitted models.
 #'
-#' @param data SparkDataFrame for training
-#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#' @param data a SparkDataFrame for training.
+#' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #'                Note that the response variable of formula is empty in spark.gaussianMixture.
-#' @param k Number of independent Gaussians in the mixture model.
-#' @param maxIter Maximum iteration number
-#' @param tol The convergence tolerance
+#' @param k number of independent Gaussians in the mixture model.
+#' @param maxIter maximum iteration number.
+#' @param tol the convergence tolerance.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
-#' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model
+#' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
 #' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/}
@@ -844,8 +844,9 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 
 #  Get the summary of a multivariate gaussian mixture model
 
-#' @param object A fitted gaussian mixture model
-#' @return \code{summary} returns the model's lambda, mu, sigma and posterior
+#' @param object a fitted gaussian mixture model.
+#' @param ... additional argument(s) passed to the method.
+#' @return \code{summary} returns the model's lambda, mu, sigma and posterior.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
@@ -882,9 +883,9 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 
 #  Predicted values based on a gaussian mixture model
 
-#' @param newData SparkDataFrame for testing
+#' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
-#'         "prediction"
+#'         "prediction".
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
 #' @export
