@@ -139,7 +139,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val totalTasksNumStr = if (totalTasks == tasks.size) {
         s"$totalTasks"
       } else {
-        s"$totalTasks, only showing ${tasks.size}"
+        s"$totalTasks, showing ${tasks.size}"
       }
 
       val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
