@@ -34,6 +34,7 @@ import org.apache.spark.sql.hive.MetastoreRelation
  * @param ignoreIfExists allow continue working if it's already exists, otherwise
  *                      raise exception
  */
+private[hive]
 case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
