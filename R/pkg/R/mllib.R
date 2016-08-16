@@ -468,7 +468,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @note spark.mlp since 2.1.0
 setMethod("spark.mlp", signature(data = "SparkDataFrame"),
           function(data, blockSize = 128, layers = c(3, 5, 2), solver = "l-bfgs", maxIter = 100,
-                   tol = 0.5, stepSize = 1, seed = 1, ...) {
+                   tol = 0.5, stepSize = 1, seed = 1) {
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
@@ -478,6 +478,7 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame"),
 
 # Makes predictions from a model produced by spark.mlp().
 
+#' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
 #' @param newData A SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted labeled in a column named
 #' "prediction"
@@ -493,6 +494,7 @@ setMethod("predict", signature(object = "MultilayerPerceptronClassificationModel
 # Returns the summary of a Multilayer Perceptron Classification Model produced by \code{spark.mlp}
 
 #' @param object A Multilayer Perceptron Classification Model fitted by \code{spark.mlp}
+#' @param ... Currently not used
 #' @return \code{summary} returns a list containing \code{layers}, the label distribution, and
 #'         \code{tables}, conditional probabilities given the target label
 #' @rdname spark.mlp
@@ -547,7 +549,7 @@ setMethod("summary", signature(object = "MultilayerPerceptronClassificationModel
 #' }
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, smoothing = 1.0, ...) {
+          function(data, formula, smoothing = 1.0) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
             formula, data@sdf, smoothing)
@@ -717,7 +719,7 @@ read.ml <- function(path) {
 #' }
 #' @note spark.survreg since 2.0.0
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, ...) {
+          function(data, formula) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
                                 "fit", formula, data@sdf)
