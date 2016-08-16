@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
 import org.apache.spark.network.shuffle.protocol.mesos.ShuffleServiceHeartbeat;
@@ -57,8 +58,8 @@ public abstract class BlockTransferMessage implements Encodable {
   // NB: Java does not support static methods in interfaces, so we must put this in a static class.
   public static class Decoder {
     /** Deserializes the 'type' byte followed by the message itself. */
-    public static BlockTransferMessage fromByteBuffer(ByteBuffer msg) {
-      ByteBuf buf = Unpooled.wrappedBuffer(msg);
+    public static BlockTransferMessage fromByteBuffer(ChunkedByteBuffer msg) {
+      ByteBuf buf = msg.toNetty();
       byte type = buf.readByte();
       switch (type) {
         case 0: return OpenBlocks.decode(buf);
@@ -80,5 +81,9 @@ public abstract class BlockTransferMessage implements Encodable {
     encode(buf);
     assert buf.writableBytes() == 0 : "Writable bytes remain: " + buf.writableBytes();
     return buf.nioBuffer();
+  }
+  /** Serializes the 'type' byte followed by the message itself. */
+  public ChunkedByteBuffer toChunkedByteBuffer() {
+    return ChunkedByteBuffer.wrap(toByteBuffer());
   }
 }

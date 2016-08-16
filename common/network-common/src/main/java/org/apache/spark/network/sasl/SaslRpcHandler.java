@@ -27,6 +27,7 @@ import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
@@ -74,14 +75,14 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+  public void receive(TransportClient client, ChunkedByteBuffer message, RpcResponseCallback callback) {
     if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
     }
 
-    ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
+    ByteBuf nettyBuf = message.toNetty();
     SaslMessage saslMessage;
     try {
       saslMessage = SaslMessage.decode(nettyBuf);
@@ -98,12 +99,11 @@ class SaslRpcHandler extends RpcHandler {
 
     byte[] response;
     try {
-      response = saslServer.response(JavaUtils.bufferToArray(
-        saslMessage.body().nioByteBuffer()));
+      response = saslServer.response(saslMessage.body().nioByteBuffer().toArray());
     } catch (IOException ioe) {
       throw new RuntimeException(ioe);
     }
-    callback.onSuccess(ByteBuffer.wrap(response));
+    callback.onSuccess(ChunkedByteBuffer.wrap(response));
 
     // Setup encryption after the SASL response is sent, otherwise the client can't parse the
     // response. It's ok to change the channel pipeline here since we are processing an incoming
@@ -125,7 +125,7 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
-  public void receive(TransportClient client, ByteBuffer message) {
+  public void receive(TransportClient client, ChunkedByteBuffer message) {
     delegate.receive(client, message);
   }
 

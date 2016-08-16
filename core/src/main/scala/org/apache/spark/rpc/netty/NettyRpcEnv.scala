@@ -32,6 +32,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
+import org.apache.spark.network.buffer.ChunkedByteBuffer
 import org.apache.spark.network.client._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
@@ -249,11 +250,12 @@ private[netty] class NettyRpcEnv(
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
-  private[netty] def serialize(content: Any): ByteBuffer = {
+  private[netty] def serialize(content: Any): ChunkedByteBuffer = {
     javaSerializerInstance.serialize(content)
   }
 
-  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
+  private[netty] def deserialize[T: ClassTag](client: TransportClient,
+    bytes: ChunkedByteBuffer): T = {
     NettyRpcEnv.currentClient.withValue(client) {
       deserialize { () =>
         javaSerializerInstance.deserialize[T](bytes)
@@ -558,7 +560,7 @@ private[netty] class NettyRpcHandler(
 
   override def receive(
       client: TransportClient,
-      message: ByteBuffer,
+      message: ChunkedByteBuffer,
       callback: RpcResponseCallback): Unit = {
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postRemoteMessage(messageToDispatch, callback)
@@ -566,12 +568,13 @@ private[netty] class NettyRpcHandler(
 
   override def receive(
       client: TransportClient,
-      message: ByteBuffer): Unit = {
+      message: ChunkedByteBuffer): Unit = {
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
-  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
+  private def internalReceive(client: TransportClient,
+    message: ChunkedByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)

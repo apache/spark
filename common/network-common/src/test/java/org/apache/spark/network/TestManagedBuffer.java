@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.Unpooled;
 
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 
@@ -54,7 +55,7 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public ByteBuffer nioByteBuffer() throws IOException {
+  public ChunkedByteBuffer nioByteBuffer() throws IOException {
     return underlying.nioByteBuffer();
   }
 
@@ -89,7 +90,7 @@ public class TestManagedBuffer extends ManagedBuffer {
   public boolean equals(Object other) {
     if (other instanceof ManagedBuffer) {
       try {
-        ByteBuffer nioBuf = ((ManagedBuffer) other).nioByteBuffer();
+        ByteBuffer nioBuf = ((ManagedBuffer) other).nioByteBuffer().toByteBuffer();
         if (nioBuf.remaining() != len) {
           return false;
         } else {

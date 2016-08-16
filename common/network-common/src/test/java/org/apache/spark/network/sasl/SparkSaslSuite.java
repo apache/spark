@@ -41,6 +41,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
+import org.apache.spark.network.buffer.ChunkedByteBuffer;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -142,18 +143,18 @@ public class SparkSaslSuite {
           ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
           RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
           assertEquals("Ping", JavaUtils.bytesToString(message));
-          cb.onSuccess(JavaUtils.stringToBytes("Pong"));
+          cb.onSuccess(ChunkedByteBuffer.wrap(JavaUtils.stringToBytes("Pong")));
           return null;
         }
       })
       .when(rpcHandler)
-      .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
+      .receive(any(TransportClient.class), any(ChunkedByteBuffer.class), any(RpcResponseCallback.class));
 
     SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {
-      ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
-        TimeUnit.SECONDS.toMillis(10));
-      assertEquals("Pong", JavaUtils.bytesToString(response));
+      ChunkedByteBuffer response = ctx.client.sendRpcSync(ChunkedByteBuffer.wrap(JavaUtils.stringToBytes("Ping")),
+          TimeUnit.SECONDS.toMillis(10));
+      assertEquals("Pong", JavaUtils.bytesToString(response.toByteBuffer()));
     } finally {
       ctx.close();
       // There should be 2 terminated events; one for the client, one for the server.
@@ -337,7 +338,7 @@ public class SparkSaslSuite {
     SaslTestCtx ctx = null;
     try {
       ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
-      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
+      ctx.client.sendRpcSync(ChunkedByteBuffer.wrap(JavaUtils.stringToBytes("Ping")),
         TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
     } catch (Exception e) {
