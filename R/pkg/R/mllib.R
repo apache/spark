@@ -1074,33 +1074,25 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' For more details, see
 #' \href{http://spark.apache.org/docs/latest/ml-collaborative-filtering.html}{MLlib:
 #' Collaborative Filtering}.
-#' Additional arguments can be passed to the methods.
-#' \describe{
-#'    \item{nonnegative}{logical value indicating whether to apply nonnegativity constraints.
-#'                       Default: FALSE}
-#'    \item{implicitPrefs}{logical value indicating whether to use implicit preference.
-#'                         Default: FALSE}
-#'    \item{alpha}{alpha parameter in the implicit preference formulation (>= 0). Default: 1.0}
-#'    \item{seed}{integer seed for random number generation. Default: 0}
-#'    \item{numUserBlocks}{number of user blocks used to parallelize computation (> 0).
-#'                         Default: 10}
-#'    \item{numItemBlocks}{number of item blocks used to parallelize computation (> 0).
-#'                         Default: 10}
-#'    \item{checkpointInterval}{number of checkpoint intervals (>= 1) or disable checkpoint (-1).
-#'                              Default: 10}
-#'    }
 #'
-#' @param data A SparkDataFrame for training
-#' @param ratingCol column name for ratings
-#' @param userCol column name for user ids. Ids must be (or can be coerced into) integers
-#' @param itemCol column name for item ids. Ids must be (or can be coerced into) integers
-#' @param rank rank of the matrix factorization (> 0)
-#' @param reg regularization parameter (>= 0)
-#' @param maxIter maximum number of iterations (>= 0)
-#' @param ... additional named argument(s) such as \code{nonnegative}.
+#' @param data a SparkDataFrame for training.
+#' @param ratingCol column name for ratings.
+#' @param userCol column name for user ids. Ids must be (or can be coerced into) integers.
+#' @param itemCol column name for item ids. Ids must be (or can be coerced into) integers.
+#' @param rank rank of the matrix factorization (> 0).
+#' @param reg regularization parameter (>= 0).
+#' @param maxIter maximum number of iterations (>= 0).
+#' @param nonnegative logical value indicating whether to apply nonnegativity constraints.
+#' @param implicitPrefs logical value indicating whether to use implicit preference.
+#' @param alpha alpha parameter in the implicit preference formulation (>= 0).
+#' @param seed integer seed for random number generation.
+#' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
+#' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
+#' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
+#'
 #' @return \code{spark.als} returns a fitted ALS model
 #' @rdname spark.als
-#' @aliases spark.als,SparkDataFrame
+#' @aliases spark.als,SparkDataFrame-method
 #' @name spark.als
 #' @export
 #' @examples
@@ -1133,7 +1125,9 @@ setMethod("predict", signature(object = "GaussianMixtureModel"),
 #' @note spark.als since 2.1.0
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
-                   rank = 10, reg = 1.0, maxIter = 10, ...) {
+                   rank = 10, reg = 1.0, maxIter = 10, nonnegative = FALSE,
+                   implicitPrefs = FALSE, alpha = 1, numUserBlocks = 10, numItemBlocks = 10,
+                   checkpointInterval = 10, seed = 0) {
 
             if (!is.numeric(rank) || rank <= 0) {
               stop("rank should be a positive number.")
@@ -1144,17 +1138,6 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
             if (!is.numeric(maxIter) || maxIter <= 0) {
               stop("maxIter should be a positive number.")
             }
-
-            `%||%` <- function(a, b) if (!is.null(a)) a else b
-
-            args <- list(...)
-            numUserBlocks <- args$numUserBlocks %||% 10
-            numItemBlocks <- args$numItemBlocks %||% 10
-            implicitPrefs <- args$implicitPrefs %||% FALSE
-            alpha <- args$alpha %||% 1.0
-            nonnegative <- args$nonnegative %||% FALSE
-            checkpointInterval <- args$checkpointInterval %||% 10
-            seed <- args$seed %||% 0
 
             features <- array(c(ratingCol, userCol, itemCol))
             distParams <- array(as.integer(c(numUserBlocks, numItemBlocks,
@@ -1169,10 +1152,11 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 
 # Returns a summary of the ALS model produced by spark.als.
 
-#' @param object A fitted ALS model
+#' @param object a fitted ALS model.
 #' @return \code{summary} returns a list containing the estimated user and item factors,
-#'         rank, regularization parameter and maximum number of iterations used in training
+#'         rank, regularization parameter and maximum number of iterations used in training.
 #' @rdname spark.als
+#' @aliases summary,ALSModel-method
 #' @export
 #' @note summary(ALSModel) since 2.1.0
 setMethod("summary", signature(object = "ALSModel"),
@@ -1190,9 +1174,10 @@ function(object, ...) {
 
 # Makes predictions from an ALS model or a model produced by spark.als.
 
-#' @param newData A SparkDataFrame for testing
-#' @return \code{predict} returns a SparkDataFrame containing predicted values
+#' @param newData a SparkDataFrame for testing.
+#' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.als
+#' @aliases predict,ALSModel-method
 #' @export
 #' @note predict(ALSModel) since 2.1.0
 setMethod("predict", signature(object = "ALSModel"),
@@ -1203,11 +1188,13 @@ function(object, newData) {
 
 # Saves the ALS model to the input path.
 
-#' @param path The directory where the model is saved
-#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
-#'                  which means throw exception if the output path exists.
+#' @param path the directory where the model is saved.
+#' @param overwrite logical value indicating whether to overwrite if the output path
+#'                  already exists. Default is FALSE which means throw exception
+#'                  if the output path exists.
 #'
 #' @rdname spark.als
+#' @aliases write.ml,ALSModel,character-method
 #' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(ALSModel, character) since 2.1.0
