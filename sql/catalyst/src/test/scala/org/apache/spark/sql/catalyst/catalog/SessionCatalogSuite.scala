@@ -419,6 +419,14 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl1", Some("db2")), alias = Some(alias)) == relationWithAlias)
   }
 
+  test("lookup view with view name in alias") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val tmpView = Range(1, 10, 2, 10)
+    catalog.createTempView("vw1", tmpView, overrideIfExists = false)
+    val plan = catalog.lookupRelation(TableIdentifier("vw1"), Option("range"))
+    assert(plan == SubqueryAlias("range", tmpView, Option(TableIdentifier("vw1"))))
+  }
+
   test("table exists") {
     val catalog = new SessionCatalog(newBasicCatalog())
     assert(catalog.tableExists(TableIdentifier("tbl1", Some("db2"))))
