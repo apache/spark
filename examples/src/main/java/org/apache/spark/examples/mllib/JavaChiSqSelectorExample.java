@@ -56,7 +56,8 @@ public class JavaChiSqSelectorExample {
     );
 
     // Create ChiSqSelector that will select top 50 of 692 features
-    ChiSqSelector selector = new ChiSqSelector(50);
+    ChiSqSelector selector = new ChiSqSelector();
+    selector.setNumTopFeatures(50);
     // Create ChiSqSelector model (selecting features)
     final ChiSqSelectorModel transformer = selector.fit(discretizedData.rdd());
     // Filter the top 50 features from each feature vector

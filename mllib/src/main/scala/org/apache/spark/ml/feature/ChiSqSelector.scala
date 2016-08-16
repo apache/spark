@@ -27,6 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.feature.SelectorType
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.rdd.RDD
@@ -51,10 +52,28 @@ private[feature] trait ChiSqSelectorParams extends Params
       " number of features is < numTopFeatures, then this will select all features.",
     ParamValidators.gtEq(1))
   setDefault(numTopFeatures -> 50)
+  final val percentile = new IntParam(this, "percentile",
+    "Percentile of features that selector will select, ordered by statistics value descending.",
+    ParamValidators.gtEq(0))
+  setDefault(percentile -> 10)
+
+  final val alpha = new DoubleParam(this, "alpha",
+    "The highest p-value for features to be kept.",
+    ParamValidators.gtEq(0))
+  setDefault(alpha -> 0.05)
+
+  final val selectorType = SelectorType.KBest
 
   /** @group getParam */
   def getNumTopFeatures: Int = $(numTopFeatures)
+
+  def getPercentile: Int = $(percentile)
+
+  def getAlpha: Double = $(alpha)
+
+  def getSelectorType: SelectorType.Value = selectorType
 }
+
 
 /**
  * Chi-Squared feature selection, which selects categorical features to use for predicting a
@@ -66,10 +85,26 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("chiSqSelector"))
-
+  val chiSqSelector = new feature.ChiSqSelector()
   /** @group setParam */
   @Since("1.6.0")
-  def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
+  def setNumTopFeatures(value: Int): this.type = {
+    chiSqSelector.setNumTopFeatures(value)
+    chiSqSelector.setSelectorType(SelectorType.KBest)
+    set(numTopFeatures, value)
+  }
+
+  def setPercentile(value: Int): this.type = {
+    chiSqSelector.setPercentile(value)
+    chiSqSelector.setSelectorType(SelectorType.Percentile)
+    set(percentile, value)
+  }
+
+  def setAlpha(value: Double): this.type = {
+    chiSqSelector.setAlpha(value)
+    chiSqSelector.setSelectorType(SelectorType.Fpr)
+    set(alpha, value)
+  }
 
   /** @group setParam */
   @Since("1.6.0")
@@ -89,10 +124,25 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
     val input: RDD[OldLabeledPoint] =
       dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
-          OldLabeledPoint(label, OldVectors.fromML(features))
+        OldLabeledPoint(label, OldVectors.fromML(features))
       }
-    val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
-    copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
+    val model = chiSqSelector.fit(input)
+    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
+  }
+
+  def selectKBest(value: Int): ChiSqSelectorModel = {
+    val model = chiSqSelector.selectKBest(value)
+    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
+  }
+
+  def selectPercentile(value: Int): ChiSqSelectorModel = {
+    val model = chiSqSelector.selectPercentile(value)
+    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
+  }
+
+  def selectFpr(value: Double): ChiSqSelectorModel = {
+    val model = chiSqSelector.selectFpr(value)
+    copyValues(new ChiSqSelectorModel(uid, model).setParent(this))
   }
 
   @Since("1.6.0")
