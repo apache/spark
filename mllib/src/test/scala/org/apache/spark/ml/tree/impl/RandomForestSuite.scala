@@ -22,7 +22,7 @@ import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.tree.impl.RandomForest.NodeQueue
+import org.apache.spark.ml.tree.impl.RandomForest.NodeStack
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy,
@@ -239,12 +239,12 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (topNode.id, new RandomForest.NodeIndexInfo(0, None))
     )))
-    val nodeQueue = new NodeQueue
+    val nodeStack = new NodeStack
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, nodeQueue)
+      nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
     // don't enqueue leaf nodes into node queue
-    assert(nodeQueue.isEmpty)
+    assert(nodeStack.isEmpty)
 
     // set impurity and predict for topNode
     assert(topNode.stats !== null)
@@ -281,12 +281,12 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (topNode.id, new RandomForest.NodeIndexInfo(0, None))
     )))
-    val nodeQueue = new NodeQueue
+    val nodeStack = new NodeStack
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
-      nodesForGroup, treeToNodeToIndexInfo, splits, nodeQueue)
+      nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
     // don't enqueue a node into node queue if its impurity is 0.0
-    assert(nodeQueue.isEmpty)
+    assert(nodeStack.isEmpty)
 
     // set impurity and predict for topNode
     assert(topNode.stats !== null)
@@ -393,16 +393,16 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
           s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
-        val nodeQueue = new NodeQueue
+        val nodeStack = new NodeStack
         val topNodes: Array[LearningNode] = new Array[LearningNode](numTrees)
         Range(0, numTrees).foreach { treeIndex =>
           topNodes(treeIndex) = LearningNode.emptyNode(nodeIndex = 1)
-          nodeQueue.put(treeIndex, topNodes(treeIndex))
+          nodeStack.put(treeIndex, topNodes(treeIndex))
         }
         val rng = new scala.util.Random(seed = seed)
         val (nodesForGroup: Map[Int, Array[LearningNode]],
         treeToNodeToIndexInfo: Map[Int, Map[Int, RandomForest.NodeIndexInfo]]) =
-          RandomForest.selectNodesToSplit(nodeQueue, maxMemoryUsage, metadata, rng)
+          RandomForest.selectNodesToSplit(nodeStack, maxMemoryUsage, metadata, rng)
 
         assert(nodesForGroup.size === numTrees, failString)
         assert(nodesForGroup.values.forall(_.length == 1), failString) // 1 node per tree
@@ -547,8 +547,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
   }
 
-  test("NodeQueue should be FILO") {
-    val q = new NodeQueue
+  test("NodeStack should be FILO") {
+    val q = new NodeStack
     Range(0, 5).foreach { idx =>
       val node = LearningNode.emptyNode(idx)
       q.put(treeIndex = idx, node = node)
