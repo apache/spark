@@ -102,8 +102,8 @@ class SparkHadoopUtil extends Logging {
         hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
         hadoopConf.set("fs.s3a.secret.key", accessKey)
       }
-      // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>
+        // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
         if (key.startsWith("spark.hadoop.")) {
           hadoopConf.set(key.substring("spark.hadoop.".length), value)
         }
