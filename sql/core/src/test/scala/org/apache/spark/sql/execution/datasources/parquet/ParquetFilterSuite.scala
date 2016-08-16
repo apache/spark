@@ -49,11 +49,11 @@ import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   private def checkFilterPredicate(
-                                    df: DataFrame,
-                                    predicate: Predicate,
-                                    filterClass: Class[_ <: FilterPredicate],
-                                    checker: (DataFrame, Seq[Row]) => Unit,
-                                    expected: Seq[Row]): Unit = {
+      df: DataFrame,
+      predicate: Predicate,
+      filterClass: Class[_ <: FilterPredicate],
+      checker: (DataFrame, Seq[Row]) => Unit,
+      expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
@@ -86,20 +86,20 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   private def checkFilterPredicate
-  (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
-  (implicit df: DataFrame): Unit = {
+      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
+      (implicit df: DataFrame): Unit = {
     checkFilterPredicate(df, predicate, filterClass, checkAnswer(_, _: Seq[Row]), expected)
   }
 
   private def checkFilterPredicate[T]
-  (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: T)
-  (implicit df: DataFrame): Unit = {
+      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: T)
+      (implicit df: DataFrame): Unit = {
     checkFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
   private def checkBinaryFilterPredicate
-  (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
-  (implicit df: DataFrame): Unit = {
+      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Seq[Row])
+      (implicit df: DataFrame): Unit = {
     def checkBinaryAnswer(df: DataFrame, expected: Seq[Row]) = {
       assertResult(expected.map(_.getAs[Array[Byte]](0).mkString(",")).sorted) {
         df.rdd.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
@@ -110,8 +110,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
   private def checkBinaryFilterPredicate
-  (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
-  (implicit df: DataFrame): Unit = {
+      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
+      (implicit df: DataFrame): Unit = {
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
