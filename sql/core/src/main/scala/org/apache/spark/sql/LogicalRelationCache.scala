@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -30,13 +29,13 @@ import org.apache.spark.sql.types._
 
 
 /**
- * Metadata cache is a key-value cache built on Google Guava Cache to speed up building logical plan
- * nodes (LogicalRelation) for data source tables. The cache key is a unique identifier of a table.
- * Here, the identifier is the fully qualified table name, including the database in which it
- * resides. The value is the corresponding LogicalRelation that represents a specific data source
- * table.
+ * LogicalRelationCache is a key-value cache built on Google Guava Cache to speed up building
+ * logical plan nodes (LogicalRelation) for data source tables. The cache key is a unique
+ * identifier of a table. Here, the identifier is the fully qualified table name, including the
+ * database in which it resides. The value is the corresponding LogicalRelation that represents
+ * a specific data source table.
  */
-private[hive] class MetadataCache(spark: SparkSession) extends Logging {
+class LogicalRelationCache(spark: SparkSession) extends Logging {
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
