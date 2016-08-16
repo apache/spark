@@ -14,4 +14,4 @@ select * from range(0, 10, 2);
 select * from range(0, 10, 1, 200);
 
 -- range call error
-select * from range(2, 'x');
+select * from range(1, 1, 1, 1, 1);

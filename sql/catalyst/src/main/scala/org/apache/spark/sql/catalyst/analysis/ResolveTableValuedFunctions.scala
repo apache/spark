@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
 
 /**
  * Rule that resolves table-valued function references.
@@ -32,23 +34,26 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   /**
    * List of argument names and their types, used to declare a function.
    */
-  private case class ArgumentList(args: (String, Class[_])*) {
+  private case class ArgumentList(args: (String, DataType)*) {
     /**
-     * @return whether this list is assignable from the given sequence of values.
+     * Try to cast the expressions to satisfy the expected types of this argument list. If there
+     * are any types that cannot be casted, then None is returned.
      */
-    def assignableFrom(values: Seq[Any]): Boolean = {
+    def implicitCast(values: Seq[Expression]): Option[Seq[Expression]] = {
       if (args.length == values.length) {
-        args.zip(values).forall { case ((name, clazz), value) =>
-          clazz.isAssignableFrom(value.getClass)
+        val casted = values.zip(args).map { case (value, (_, expectedType)) =>
+          TypeCoercion.ImplicitTypeCasts.implicitCast(value, expectedType)
         }
-      } else {
-        false
+        if (casted.forall(_.isDefined)) {
+          return Some(casted.map(_.get))
+        }
       }
+      None
     }
 
     override def toString: String = {
       args.map { a =>
-        s"${a._1}: ${a._2.getSimpleName}"
+        s"${a._1}: ${a._2.typeName}"
       }.mkString(", ")
     }
   }
@@ -65,45 +70,43 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
   private val builtinFunctions: Map[String, TVF] = Map(
     "range" -> Map(
       /* range(end) */
-      ArgumentList(("end", classOf[Number])) -> (
+      ArgumentList(("end", LongType)) -> (
         (args: Seq[Any]) =>
-          Range(0, args(0).asInstanceOf[Number].longValue, 1, defaultParallelism)),
+          Range(0, args(0).asInstanceOf[Long], 1, defaultParallelism)),
 
       /* range(start, end) */
-      ArgumentList(("start", classOf[Number]), ("end", classOf[Number])) -> (
+      ArgumentList(("start", LongType), ("end", LongType)) -> (
         (args: Seq[Any]) =>
           Range(
-            args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue, 1,
-            defaultParallelism)),
+            args(0).asInstanceOf[Long], args(1).asInstanceOf[Long], 1, defaultParallelism)),
 
       /* range(start, end, step) */
-      ArgumentList(("start", classOf[Number]), ("end", classOf[Number]),
-          ("step", classOf[Number])) -> (
+      ArgumentList(("start", LongType), ("end", LongType), ("step", LongType)) -> (
         (args: Seq[Any]) =>
           Range(
-            args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
-            args(2).asInstanceOf[Number].longValue, defaultParallelism)),
+            args(0).asInstanceOf[Long], args(1).asInstanceOf[Long], args(2).asInstanceOf[Long],
+            defaultParallelism)),
 
       /* range(start, end, step, numPartitions) */
-      ArgumentList(("start", classOf[Number]), ("end", classOf[Number]),
-          ("step", classOf[Number]), ("numPartitions", classOf[Integer])) -> (
+      ArgumentList(("start", LongType), ("end", LongType), ("step", LongType),
+          ("numPartitions", IntegerType)) -> (
         (args: Seq[Any]) =>
           Range(
-            args(0).asInstanceOf[Number].longValue, args(1).asInstanceOf[Number].longValue,
-            args(2).asInstanceOf[Number].longValue, args(3).asInstanceOf[Integer])))
+            args(0).asInstanceOf[Long], args(1).asInstanceOf[Long], args(2).asInstanceOf[Long],
+            args(3).asInstanceOf[Integer])))
   )
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedTableValuedFunction =>
       builtinFunctions.get(u.functionName) match {
         case Some(tvf) =>
-          val evaluatedArgs = u.functionArgs.map(_.eval())
           for ((argList, resolver) <- tvf) {
-            if (argList.assignableFrom(evaluatedArgs)) {
-              return resolver(evaluatedArgs)
+            val casted = argList.implicitCast(u.functionArgs)
+            if (casted.isDefined) {
+              return resolver(casted.get.map(_.eval()))
             }
           }
-          val argTypes = evaluatedArgs.map(_.getClass.getSimpleName).mkString(", ")
+          val argTypes = u.functionArgs.map(_.dataType.typeName).mkString(", ")
           u.failAnalysis(
             s"""error: table-valued function ${u.functionName} with alternatives:
               |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}

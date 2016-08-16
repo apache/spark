@@ -65,14 +65,14 @@ struct<id:bigint>
 
 
 -- !query 5
-select * from range(2, 'x')
+select * from range(1, 1, 1, 1, 1)
 -- !query 5 schema
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
 error: table-valued function range with alternatives:
- (end: Number)
- (start: Number, end: Number)
- (start: Number, end: Number, step: Number)
- (start: Number, end: Number, step: Number, numPartitions: Integer)
-cannot be applied to: (Integer, UTF8String); line 1 pos 14
+ (end: long)
+ (start: long, end: long)
+ (start: long, end: long, step: long)
+ (start: long, end: long, step: long, numPartitions: integer)
+cannot be applied to: (integer, integer, integer, integer, integer); line 1 pos 14
