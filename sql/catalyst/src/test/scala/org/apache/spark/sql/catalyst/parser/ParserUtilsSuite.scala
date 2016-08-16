@@ -20,7 +20,7 @@ import org.antlr.v4.runtime.{CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
 class ParserUtilsSuite extends SparkFunSuite {
 
@@ -159,6 +159,7 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(position(setConfContext.start) == Origin(Some(1), Some(0)))
     assert(position(showFuncContext.stop) == Origin(Some(1), Some(19)))
     assert(position(descFuncContext.describeFuncName.start) == Origin(Some(1), Some(27)))
+    assert(position(createDbContext.locationSpec.start) == Origin(Some(3), Some(27)))
     assert(position(emptyContext.stop) == Origin(None, None))
   }
 
@@ -177,9 +178,11 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   test("withOrigin") {
     val ctx = createDbContext.locationSpec
+    val current = CurrentOrigin.get
     val location = withOrigin(ctx) {
       string(ctx.STRING)
     }
     assert(location == "/home/user/db")
+    assert(CurrentOrigin.get == current)
   }
 }
