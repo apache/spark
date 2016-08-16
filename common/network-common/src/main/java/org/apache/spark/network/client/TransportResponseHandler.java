@@ -147,12 +147,26 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} since it is not outstanding",
-          resp.streamChunkId, remoteAddress);
-        resp.body().release();
+            resp.streamChunkId, remoteAddress);
+        if (resp.isBodyInFrame()) resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body());
-        resp.body().release();
+        if (resp.isBodyInFrame()) {
+          listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body());
+          resp.body().release();
+        } else {
+          ChunkFetchInputStream inputStream = new ChunkFetchInputStream(this, channel,
+              resp.streamChunkId, resp.byteCount, listener);
+          try {
+            TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
+                channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
+            frameDecoder.setInterceptor(inputStream.interceptor);
+            streamActive = true;
+          } catch (Exception e) {
+            logger.error("Error installing stream handler.", e);
+            deactivateStream();
+          }
+        }
       }
     } else if (message instanceof ChunkFetchFailure) {
       ChunkFetchFailure resp = (ChunkFetchFailure) message;
@@ -194,8 +208,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       StreamCallback callback = streamCallbacks.poll();
       if (callback != null) {
         if (resp.byteCount > 0) {
-          StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
-            callback);
+          StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId,
+              resp.byteCount, callback);
           try {
             TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
               channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);

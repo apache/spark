@@ -32,10 +32,18 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  */
 public final class ChunkFetchSuccess extends AbstractResponseMessage {
   public final StreamChunkId streamChunkId;
-
+  public final long byteCount;
+  public final static int MAX_FRAME_SIZE = 128 * 1024 * 1024;
   public ChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer) {
-    super(buffer, true);
+    super(buffer, buffer.size() <= MAX_FRAME_SIZE);
     this.streamChunkId = streamChunkId;
+    this.byteCount = buffer.size();
+  }
+
+  public ChunkFetchSuccess(StreamChunkId streamChunkId, long byteCount, ManagedBuffer buffer) {
+    super(buffer, byteCount <= MAX_FRAME_SIZE);
+    this.streamChunkId = streamChunkId;
+    this.byteCount = byteCount;
   }
 
   @Override
@@ -43,13 +51,14 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
 
   @Override
   public int encodedLength() {
-    return streamChunkId.encodedLength();
+    return streamChunkId.encodedLength() + 8;
   }
 
   /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
+    buf.writeLong(byteCount);
   }
 
   @Override
@@ -60,9 +69,13 @@ public final class ChunkFetchSuccess extends AbstractResponseMessage {
   /** Decoding uses the given ByteBuf as our data, and will retain() it. */
   public static ChunkFetchSuccess decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
-    buf.retain();
-    NettyManagedBuffer managedBuf = new NettyManagedBuffer(buf.duplicate());
-    return new ChunkFetchSuccess(streamChunkId, managedBuf);
+    long byteCount = buf.readLong();
+    ManagedBuffer managedBuf = null;
+    if (byteCount <= MAX_FRAME_SIZE) {
+      buf.retain();
+      managedBuf = new NettyManagedBuffer(buf.duplicate());
+    }
+    return new ChunkFetchSuccess(streamChunkId, byteCount, managedBuf);
   }
 
   @Override
