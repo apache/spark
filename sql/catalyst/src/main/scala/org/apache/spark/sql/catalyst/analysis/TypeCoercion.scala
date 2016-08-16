@@ -243,6 +243,14 @@ object TypeCoercion {
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
         s.makeCopy(Array(newChildren))
+
+      case s @ InlineTable(rows) if !s.resolved && s.expressionsResolved && s.validDimensions =>
+        val targetTypes = getWidestTypes(rows.map(_.map(_.dataType)))
+        if (targetTypes.nonEmpty) {
+          s.copy(rows = rows.map(widenTypes(_, targetTypes)))
+        } else {
+          s
+        }
     }
 
     /** Build new children with the widest types for each attribute among all the children */
@@ -251,12 +259,11 @@ object TypeCoercion {
 
       // Get a sequence of data types, each of which is the widest type of this specific attribute
       // in all the children
-      val targetTypes: Seq[DataType] =
-        getWidestTypes(children, attrIndex = 0, mutable.Queue[DataType]())
+      val targetTypes: Seq[DataType] = getWidestTypes(children.map(_.output.map(_.dataType)))
 
       if (targetTypes.nonEmpty) {
         // Add an extra Project if the targetTypes are different from the original types.
-        children.map(widenTypes(_, targetTypes))
+        children.map(child => Project(widenTypes(child.output, targetTypes), child))
       } else {
         // Unable to find a target type to widen, then just return the original set.
         children
@@ -265,30 +272,31 @@ object TypeCoercion {
 
     /** Get the widest type for each attribute in all the children */
     @tailrec private def getWidestTypes(
-        children: Seq[LogicalPlan],
-        attrIndex: Int,
-        castedTypes: mutable.Queue[DataType]): Seq[DataType] = {
+        dataTypes: Seq[Seq[DataType]],
+        attrIndex: Int = 0,
+        castedTypes: mutable.Queue[DataType] = mutable.Queue.empty): Seq[DataType] = {
       // Return the result after the widen data types have been found for all the children
-      if (attrIndex >= children.head.output.length) return castedTypes.toSeq
+      if (attrIndex >= dataTypes.head.length) return castedTypes
 
       // For the attrIndex-th attribute, find the widest type
-      findWiderCommonType(children.map(_.output(attrIndex).dataType)) match {
+      findWiderCommonType(dataTypes.map(_(attrIndex))) match {
         // If unable to find an appropriate widen type for this column, return an empty Seq
         case None => Seq.empty[DataType]
         // Otherwise, record the result in the queue and find the type for the next column
         case Some(widenType) =>
           castedTypes.enqueue(widenType)
-          getWidestTypes(children, attrIndex + 1, castedTypes)
+          getWidestTypes(dataTypes, attrIndex + 1, castedTypes)
       }
     }
 
-    /** Given a plan, add an extra project on top to widen some columns' data types. */
-    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
-      val casted = plan.output.zip(targetTypes).map {
-        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+    /** Cast the expressions to the given dataTypes (if we need to). */
+    private def widenTypes(
+        expressions: Seq[NamedExpression],
+        targetTypes: Seq[DataType]): Seq[NamedExpression] = {
+      expressions.zip(targetTypes).map {
+        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.toString)()
         case (e, _) => e
       }
-      Project(casted, plan)
     }
   }
 

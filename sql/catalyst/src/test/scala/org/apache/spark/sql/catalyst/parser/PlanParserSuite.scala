@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
@@ -427,19 +426,25 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("inline table") {
-    assertEqual("values 1, 2, 3, 4", LocalRelation.fromExternalRows(
-      Seq('col1.int),
-      Seq(1, 2, 3, 4).map(x => Row(x))))
+    def rows(names: String*)(values: Any*): Seq[Seq[NamedExpression]] = {
+      def row(values: Seq[Any]): Seq[NamedExpression] = values.zip(names).map {
+        case (value, name) => Alias(Literal(value), name)()
+      }
+      values.map {
+        case elements: Seq[Any] => row(elements)
+        case element => row(Seq(element))
+      }
+    }
+    assertEqual(
+      "values 1, 2, 3, 4",
+      InlineTable(rows("col1")(1, 2, 3, 4)))
     assertEqual(
       "values (1, 'a'), (2, 'b'), (3, 'c') as tbl(a, b)",
-      LocalRelation.fromExternalRows(
-        Seq('a.int, 'b.string),
-        Seq((1, "a"), (2, "b"), (3, "c")).map(x => Row(x._1, x._2))).as("tbl"))
-    intercept("values (a, 'a'), (b, 'b')",
-      "All expressions in an inline table must be constants.")
+      InlineTable(rows("a", "b")(Seq(1, "a"), Seq(2, "b"), Seq(3, "c"))).as("tbl"))
     intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
-      "Number of aliases must match the number of fields in an inline table.")
-    intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+      "Number of aliases", "must match the number of fields", "in an inline table")
+    intercept("values (1, 'a'), (2, 'b', 5Y)",
+      "Number of values", "in row", "does not match the expected number of values", "in a row")
   }
 
   test("simple select query with !> and !<") {

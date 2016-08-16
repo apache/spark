@@ -298,6 +298,26 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
+          case InlineTable(rows) if rows.length > 1 =>
+            val expectedDataTypes = rows.head.map(_.dataType)
+            rows.zipWithIndex.tail.foreach { case (row, ri) =>
+              // Check the number of columns.
+              if (row.length != expectedDataTypes.length) {
+                failAnalysis(
+                  s"An inline table must have the same number of columns on every row. " +
+                  s"Row '${ri + 1}' has '${row.length}' columns while " +
+                  s"'${expectedDataTypes.length}' columns were expected.")
+              }
+              // Check the data
+              row.map(_.dataType).zip(expectedDataTypes).zipWithIndex.collect {
+                case ((dt1, dt2), ci) if dt1 != dt2 =>
+                  failAnalysis(
+                    s"Data type '$dt1' of column '${rows.head(ci).name}' at row '${ri + 1}' " +
+                    s"does not match the expected data type '$dt2' for that column. " +
+                    s"Expressions for an inline table's column must have the same data type.")
+              }
+            }
+
           case _ => // Fallbacks to the following checks
         }
 

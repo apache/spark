@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -767,4 +767,42 @@ case object OneRowRelation extends LeafNode {
    * [[LeafNode]]s must override this.
    */
   override lazy val statistics: Statistics = Statistics(sizeInBytes = 1)
+}
+
+/**
+ * An inline table that holds a number of foldable expressions, which can be materialized into
+ * rows. This is semantically the same as a Union of one row relations.
+ */
+case class InlineTable(rows: Seq[Seq[NamedExpression]]) extends LeafNode {
+  lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
+
+  lazy val validDimensions: Boolean = {
+    val size = rows.headOption.map(_.size).getOrElse(0)
+    rows.tail.forall(_.size == size)
+  }
+
+  override lazy val resolved: Boolean = {
+    def allRowsCompatible: Boolean = {
+      val expectedDataTypes = rows.headOption.toSeq.flatMap(_.map(_.dataType))
+      rows.tail.forall { row =>
+        row.map(_.dataType).zip(expectedDataTypes).forall {
+          case (dt1, dt2) => dt1 == dt2
+        }
+      }
+    }
+    expressionsResolved && validDimensions && allRowsCompatible
+  }
+
+  override def maxRows: Option[Long] = Some(rows.size)
+
+  override def output: Seq[Attribute] = rows.transpose.map {
+    case column if column.forall(_.resolved) =>
+      column.head.toAttribute.withNullability(column.exists(_.nullable))
+    case column =>
+      UnresolvedAttribute(column.head.name)
+  }
+
+  override lazy val statistics: Statistics = {
+    Statistics(output.map(_.dataType.defaultSize).sum * rows.size)
+  }
 }

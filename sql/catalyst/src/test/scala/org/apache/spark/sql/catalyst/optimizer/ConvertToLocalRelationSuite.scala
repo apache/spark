@@ -21,8 +21,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
@@ -52,4 +53,15 @@ class ConvertToLocalRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("InlineTable should be turned into a single LocalRelation") {
+    val testRelation = InlineTable(
+      Seq(Literal(1).as("a")) ::
+      Seq(Literal(2).as("a")) ::
+      Seq(Literal(3).as("a")) :: Nil)
+    val correctAnswer = LocalRelation(
+      LocalRelation('a.int.withNullability(false)).output,
+      InternalRow(1) :: InternalRow(2) :: InternalRow(3) :: Nil)
+    val optimized = Optimize.execute(testRelation.analyze)
+    comparePlans(optimized, correctAnswer)
+  }
 }
