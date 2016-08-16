@@ -265,6 +265,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_READ_SCHEMA_LOCAL_THRESHOLD =
+    buildConf("spark.sql.parquet.readSchemaLocalThreshold")
+      .doc("Configures the maximum number of files to allow reading schema in driver-side. " +
+        "If the number of files exceeds this value, then schemas will be read then in parallel " +
+        "via another Spark distributed job.")
+      .intConf
+      .createWithDefault(32)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
@@ -847,6 +855,8 @@ class SQLConf extends Serializable with Logging {
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
+  def parquetReadSchemaLocalThreshold: Int = getConf(PARQUET_READ_SCHEMA_LOCAL_THRESHOLD)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
