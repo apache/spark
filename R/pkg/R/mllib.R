@@ -371,6 +371,7 @@ setMethod("spark.isoreg", signature(data = "SparkDataFrame", formula = "formula"
 #' @param newData SparkDataFrame for testing
 #' @return \code{predict} returns a SparkDataFrame containing predicted values
 #' @rdname spark.isoreg
+#' @aliases predict,SparkDataFrame,SparkDataFrame-method
 #' @export
 #' @note predict(IsotonicRegressionModel) since 2.1.0
 setMethod("predict", signature(object = "IsotonicRegressionModel"),
@@ -384,6 +385,7 @@ setMethod("predict", signature(object = "IsotonicRegressionModel"),
 #' @param ... Other optional arguments to summary of an IsotonicRegressionModel
 #' @return \code{summary} returns the model's boundaries and prediction as lists
 #' @rdname spark.isoreg
+#' @aliases summary,SparkDataFrame,SparkDataFrame-method
 #' @export
 #' @note summary(IsotonicRegressionModel) since 2.1.0
 setMethod("summary", signature(object = "IsotonicRegressionModel"),
@@ -635,8 +637,9 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.isoreg
+#' @aliases write.ml,SparkDataFrame,SparkDataFrame-method
 #' @export
-#' @note write.ml(IsotonicRegression, character) since 2.0.0
+#' @note write.ml(IsotonicRegression, character) since 2.1.0
 setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
