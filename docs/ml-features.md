@@ -768,7 +768,7 @@ for more details on the API.
 `StandardScaler` transforms a dataset of `Vector` rows, normalizing each feature to have unit standard deviation and/or zero mean.  It takes parameters:
 
 * `withStd`: True by default. Scales the data to unit standard deviation.
-* `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so this does not work on sparse input and will raise an exception.
+* `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so take care when applying to sparse input.
 
 `StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
