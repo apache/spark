@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.CommonTokenStream
+import org.antlr.v4.runtime.{CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -50,6 +50,10 @@ class ParserUtilsSuite extends SparkFunSuite {
     """.stripMargin
   ) { parser =>
     parser.statement().asInstanceOf[CreateDatabaseContext]
+  }
+
+  val emptyContext = buildContext("") { parser =>
+    parser.statement
   }
 
   private def buildContext[T](command: String)(toResult: SqlBaseParser => T): T = {
@@ -105,6 +109,26 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(command(showDbsContext) == "show databases like 'identifier_with_wildcards'")
   }
 
+  test("operationNotAllowed") {
+    val errorMessage = "parse.fail.operation.not.allowed.error.message"
+    val e = intercept[ParseException] {
+      operationNotAllowed(errorMessage, showFuncContext)
+    }.getMessage
+    assert(e.contains("Operation not allowed"))
+    assert(e.contains(errorMessage))
+  }
+
+  test("checkDuplicateKeys") {
+    val properties = Seq(("a", "a"), ("b", "b"), ("c", "c"))
+    checkDuplicateKeys[String](properties, createDbContext)
+
+    val properties2 = Seq(("a", "a"), ("b", "b"), ("a", "c"))
+    val e = intercept[ParseException] {
+      checkDuplicateKeys(properties2, createDbContext)
+    }.getMessage
+    assert(e.contains("Found duplicate keys"))
+  }
+
   test("source") {
     assert(source(setConfContext) == "set example.setting.name=setting.value")
     assert(source(showFuncContext) == "show functions foo.bar")
@@ -135,5 +159,27 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(position(setConfContext.start) == Origin(Some(1), Some(0)))
     assert(position(showFuncContext.stop) == Origin(Some(1), Some(19)))
     assert(position(descFuncContext.describeFuncName.start) == Origin(Some(1), Some(27)))
+    assert(position(emptyContext.stop) == Origin(None, None))
+  }
+
+  test("assert") {
+    val f1 = { ctx: ParserRuleContext =>
+      ctx.children != null && !ctx.children.isEmpty
+    }
+    val message = "ParserRuleContext should not be empty."
+    ParserUtils.assert(f1(showFuncContext), message, showFuncContext)
+
+    val e = intercept[ParseException] {
+      ParserUtils.assert(f1(emptyContext), message, emptyContext)
+    }.getMessage
+    assert(e.contains(message))
+  }
+
+  test("withOrigin") {
+    val ctx = createDbContext.locationSpec
+    val location = withOrigin(ctx) {
+      string(ctx.STRING)
+    }
+    assert(location == "/home/user/db")
   }
 }
