@@ -845,7 +845,7 @@ setMethod("spark.gaussianMixture", signature(data = "SparkDataFrame", formula = 
 #  Get the summary of a multivariate gaussian mixture model
 
 #' @param object a fitted gaussian mixture model.
-#' @param ... additional argument(s) passed to the method.
+#' @param ... currently not used argument(s) passed to the method.
 #' @return \code{summary} returns the model's lambda, mu, sigma and posterior.
 #' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
 #' @rdname spark.gaussianMixture
@@ -886,7 +886,7 @@ setMethod("summary", signature(object = "GaussianMixtureModel"),
 #' @param newData a SparkDataFrame for testing.
 #' @return \code{predict} returns a SparkDataFrame containing predicted labels in a column named
 #'         "prediction".
-#' @aliases spark.gaussianMixture,SparkDataFrame,formula-method
+#' @aliases predict,GaussianMixtureModel,SparkDataFrame-method
 #' @rdname spark.gaussianMixture
 #' @export
 #' @note predict(GaussianMixtureModel) since 2.1.0
