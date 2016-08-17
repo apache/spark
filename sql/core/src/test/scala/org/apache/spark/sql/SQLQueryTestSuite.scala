@@ -27,8 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.test.SQLTestData.NullKeyValuePairs
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * End-to-end test cases for SQL queries.
@@ -268,16 +267,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       .toDF("key", "value")
       .createOrReplaceTempView("src")
 
-    spark.sparkContext.parallelize(
-      Seq(NullKeyValuePairs(201, null),
-        NullKeyValuePairs(86, "val_86"),
-        NullKeyValuePairs(null, "val_null"),
-        NullKeyValuePairs(165, "val_165"),
-        NullKeyValuePairs(null, null),
-        NullKeyValuePairs(330, "val_330"),
-        NullKeyValuePairs(165, null)), 2)
-      .toDF("key", "value")
-      .createOrReplaceTempView("src1")
+    session.sql(
+      """
+        |CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES
+        |(201, CAST(null as String)),
+        |(86, "val_86"),
+        |(CAST(null as int), "val_null"),
+        |(165, "val_165"),
+        |(CAST(null as int), CAST(null as String)),
+        |(330, "val_330"),
+        |(165, CAST(null as String))
+        |as src1(key, value)
+      """.stripMargin)
+
+    session.sql("select * from src1").show(false)
 
     Seq((251, "val_251", "2008-04-08", "11"),
       (251, "val_251", "2008-04-09", "11"),

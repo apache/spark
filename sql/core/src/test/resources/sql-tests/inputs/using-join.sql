@@ -11,7 +11,7 @@ create temporary view ut2 as select * from values
   as ut2(c1, c2, c3);
 
 create temporary view ut3 as select * from values
-  (null, "r1c2", "t3r1c3"),
+  (CAST(null as String), "r1c2", "t3r1c3"),
   ("r2c1", "r2c2", "t3r2c3"),
   ("r3c1y", "r3c2", "t3r3c3")
   as ut3(c1, c2, c3);
