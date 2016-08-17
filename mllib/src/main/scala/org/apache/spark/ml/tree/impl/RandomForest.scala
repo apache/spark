@@ -170,14 +170,14 @@ private[spark] object RandomForest extends Logging {
       training the same tree in the next iteration.  This focus allows us to send fewer trees to
       workers on each iteration; see topNodesForGroup below.
      */
-    val nodeStack = new NodeStack
+    val nodeStack = new mutable.Stack[(Int, LearningNode)]
 
     val rng = new Random()
     rng.setSeed(seed)
 
     // Allocate and queue root nodes.
     val topNodes = Array.fill[LearningNode](numTrees)(LearningNode.emptyNode(nodeIndex = 1))
-    Range(0, numTrees).foreach(treeIndex => nodeStack.put(treeIndex, topNodes(treeIndex)))
+    Range(0, numTrees).foreach(treeIndex => nodeStack.push((treeIndex, topNodes(treeIndex))))
 
     timer.stop("init")
 
@@ -368,7 +368,7 @@ private[spark] object RandomForest extends Logging {
       nodesForGroup: Map[Int, Array[LearningNode]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       splits: Array[Array[Split]],
-      nodeStack: NodeStack,
+      nodeStack: mutable.Stack[(Int, LearningNode)],
       timer: TimeTracker = new TimeTracker,
       nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
@@ -607,10 +607,10 @@ private[spark] object RandomForest extends Logging {
 
           // enqueue left child and right child if they are not leaves
           if (!leftChildIsLeaf) {
-            nodeStack.put(treeIndex, node.leftChild.get)
+            nodeStack.push((treeIndex, node.leftChild.get))
           }
           if (!rightChildIsLeaf) {
-            nodeStack.put(treeIndex, node.rightChild.get)
+            nodeStack.push((treeIndex, node.rightChild.get))
           }
 
           logDebug("leftChildIndex = " + node.leftChild.get.id +
@@ -1055,7 +1055,7 @@ private[spark] object RandomForest extends Logging {
    *          The feature indices are None if not subsampling features.
    */
   private[tree] def selectNodesToSplit(
-      nodeStack: NodeStack,
+      nodeStack: mutable.Stack[(Int, LearningNode)],
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
       rng: Random): (Map[Int, Array[LearningNode]], Map[Int, Map[Int, NodeIndexInfo]]) = {
@@ -1069,7 +1069,7 @@ private[spark] object RandomForest extends Logging {
     // If maxMemoryInMB is set very small, we want to still try to split 1 node,
     // so we allow one iteration if memUsage == 0.
     while (nodeStack.nonEmpty && (memUsage < maxMemoryUsage || memUsage == 0)) {
-      val (treeIndex, node) = nodeStack.peek()
+      val (treeIndex, node) = nodeStack.top
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
         Some(SamplingUtils.reservoirSampleAndCount(Range(0,
@@ -1123,41 +1123,4 @@ private[spark] object RandomForest extends Logging {
       3 * totalBins
     }
   }
-
-  /**
-   * Class for queueing nodes to split on each iteration.
-   * This must be a stack (FILO); see developer note where it is used above.
-   */
-  private[impl] class NodeStack {
-    private var q: List[(Int, LearningNode)] =
-      List.empty[(Int, LearningNode)]
-
-    /** Put (treeIndex, node) into queue. Constant time. */
-    def put(treeIndex: Int, node: LearningNode): Unit = {
-      q = (treeIndex, node) +: q
-    }
-
-    /** Remove and return last inserted element. Constant time. */
-    def pop(): (Int, LearningNode) = {
-      val (treeIndex: Int, node: LearningNode) = peek()
-      q = q.tail
-      (treeIndex, node)
-    }
-
-    /** Peek at last inserted element.  Constant time. */
-    def peek(): (Int, LearningNode) = {
-      if (q.isEmpty) {
-        throw new NoSuchElementException(
-          s"Attempted to get node from tree node queue, but queue is empty.")
-      }
-      q.head
-    }
-
-    def size: Int = q.size
-
-    def nonEmpty: Boolean = q.nonEmpty
-
-    def isEmpty: Boolean = q.isEmpty
-  }
-
 }
