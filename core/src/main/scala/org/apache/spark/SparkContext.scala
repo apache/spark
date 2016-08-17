@@ -79,6 +79,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  private val randomAppName = UUID.randomUUID().toString
+
   // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
   private val allowMultipleContexts: Boolean =
     config.getBoolean("spark.driver.allowMultipleContexts", false)
@@ -371,7 +373,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       throw new SparkException("A master URL must be set in your configuration")
     }
     if (!_conf.contains("spark.app.name")) {
-      throw new SparkException("An application name must be set in your configuration")
+      _conf.setAppName(randomAppName)
     }
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
