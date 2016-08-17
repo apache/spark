@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.debug.codegenString
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -25,6 +26,40 @@ import org.apache.spark.sql.test.SharedSQLContext
  */
 class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  def validate(df: DataFrame): Unit = {
+    val logicalPlan = df.logicalPlan
+    val queryExecution = sqlContext.sessionState.executePlan(logicalPlan)
+    val cg = codegenString(queryExecution.executedPlan)
+
+    if (cg.contains("Found 0 WholeStageCodegen subtrees")) {
+      return
+    }
+
+    if ("zeroOutNullBytes".r.findFirstIn(cg).isDefined) {
+      fail(
+        s"""
+       |=== FAIL: generated code must not include: zeroOutNullBytes ===
+       |$cg
+       """.stripMargin
+      )
+    }
+  }
+
+  test ("check elimination of zeroOutNullBytes on array") {
+    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    validate(df.selectExpr("Array(v + 3, v + 4)"))
+  }
+
+  test ("check elimination of zeroOutNullBytes on map") {
+    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    validate(df.selectExpr("struct(v + 3, v + 4)"))
+  }
+
+  test ("check elimination of zeroOutNullBytes on struct") {
+    val df = sparkContext.parallelize(Seq(1, 2), 1).toDF("v")
+    validate(df.selectExpr("Array(v + 3, v + 4)"))
+  }
 
   test("UDF on struct") {
     val f = udf((a: String) => a)
