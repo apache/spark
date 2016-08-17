@@ -249,9 +249,10 @@ abstract class QueryTest extends PlanTest {
         }
         p
     }.transformAllExpressions {
-      case a: ImperativeAggregate => return
+      case _: ImperativeAggregate => return
       case _: TypedAggregateExpression => return
       case Literal(_, _: ObjectType) => return
+      case _: UserDefinedGenerator => return
     }
 
     // bypass hive tests before we fix all corner cases in hive module.
