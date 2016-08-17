@@ -93,11 +93,11 @@ class FileStreamSinkLog(sparkSession: SparkSession, path: String)
    * a live lock may happen if the compaction happens too frequently: one processing keeps deleting
    * old files while another one keeps retrying. Setting a reasonable cleanup delay could avoid it.
    */
-  private val fileCleanupDelayMs = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
+  private val fileCleanupDelayMs = sparkSession.sessionState.conf.fileSinkLogCleanupDelay
 
-  private val isDeletingExpiredLog = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_DELETION)
+  private val isDeletingExpiredLog = sparkSession.sessionState.conf.fileSinkLogDeletion
 
-  private val compactInterval = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL)
+  private val compactInterval = sparkSession.sessionState.conf.fileSinkLogCompatInterval
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")
