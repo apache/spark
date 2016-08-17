@@ -132,7 +132,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Build the insert clauses.
     val inserts = ctx.multiInsertQueryBody.asScala.map {
       body =>
-        assert(body.querySpecification.fromClause == null,
+        validate(body.querySpecification.fromClause == null,
           "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
           body)
 
@@ -596,7 +596,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
       val eps = RandomSampler.roundingEpsilon
-      assert(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
+      validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
       Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, query)(true)
@@ -1076,7 +1076,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // We currently only allow foldable integers.
     def value: Int = {
       val e = expression(ctx.expression)
-      assert(e.resolved && e.foldable && e.dataType == IntegerType,
+      validate(e.resolved && e.foldable && e.dataType == IntegerType,
         "Frame bound value must be a constant integer.",
         ctx)
       e.eval().asInstanceOf[Int]
@@ -1329,7 +1329,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val intervals = ctx.intervalField.asScala.map(visitIntervalField)
-    assert(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
+    validate(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
     Literal(intervals.reduce(_.add(_)))
   }
 
@@ -1356,7 +1356,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
-      assert(interval != null, "No interval can be constructed", ctx)
+      validate(interval != null, "No interval can be constructed", ctx)
       interval
     } catch {
       // Handle Exceptions thrown by CalendarInterval
