@@ -138,7 +138,7 @@ class Analyzer(
         case u : UnresolvedRelation =>
           val substituted = cteRelations.find(x => resolver(x._1, u.tableIdentifier.table))
             .map(_._2).map { relation =>
-              val withAlias = u.alias.map(SubqueryAlias(_, relation))
+              val withAlias = u.alias.map(SubqueryAlias(_, relation, None))
               withAlias.getOrElse(relation)
             }
           substituted.getOrElse(u)
@@ -2057,7 +2057,7 @@ class Analyzer(
  */
 object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case SubqueryAlias(_, child) => child
+    case SubqueryAlias(_, child, _) => child
   }
 }
 
