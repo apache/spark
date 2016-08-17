@@ -18,20 +18,22 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
 class ReduceAggregatorSuite extends SparkFunSuite {
+
   test("zero value") {
     val encoder: ExpressionEncoder[Int] = ExpressionEncoder()
     val func = (v1: Int, v2: Int) => v1 + v2
-    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func, encoder)
+    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func)(Encoders.scalaInt)
     assert(aggregator.zero == (false, null))
   }
 
   test("reduce, merge and finish") {
     val encoder: ExpressionEncoder[Int] = ExpressionEncoder()
     val func = (v1: Int, v2: Int) => v1 + v2
-    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func, encoder)
+    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func)(Encoders.scalaInt)
 
     val firstReduce = aggregator.reduce(aggregator.zero, 1)
     assert(firstReduce == (true, 1))

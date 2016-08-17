@@ -17,43 +17,27 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 
 /**
- * :: Experimental ::
  * An aggregator that uses a single associative and commutative reduce function. This reduce
  * function can be used to go through all input values and reduces them to a single value.
  * If there is no input, a null value is returned.
  *
  * @since 2.1.0
  */
-@Experimental
-abstract class ReduceAggregator[T] extends Aggregator[T, (Boolean, T), T] {
+private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
+  extends Aggregator[T, (Boolean, T), T] {
 
-  // Question 1: Should func and encoder be parameters rather than abstract methods?
-  //  rxin: abstract method has better java compatibility and forces naming the concrete impl,
-  //  whereas parameter has better type inference (infer encoders via context bounds).
-  // Question 2: Should finish throw an exception or return null if there is no input?
-  //  rxin: null might be more "SQL" like, whereas exception is more Scala like.
-
-  /**
-   * A associative and commutative reduce function.
-   * @since 2.1.0
-   */
-  def func(a: T, b: T): T
-
-  /**
-   * Encoder for type T.
-   * @since 2.1.0
-   */
-  def encoder: ExpressionEncoder[T]
+  private val encoder = implicitly[Encoder[T]]
 
   override def zero: (Boolean, T) = (false, null.asInstanceOf[T])
 
   override def bufferEncoder: Encoder[(Boolean, T)] =
-    ExpressionEncoder.tuple(ExpressionEncoder[Boolean](), encoder)
+    ExpressionEncoder.tuple(
+      ExpressionEncoder[Boolean](),
+      encoder.asInstanceOf[ExpressionEncoder[T]])
 
   override def outputEncoder: Encoder[T] = encoder
 

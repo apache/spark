@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
@@ -179,11 +179,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
     val vEncoder = encoderFor[V]
-    val aggregator: TypedColumn[V, V] = new ReduceAggregator[V] {
-      override def func(a: V, b: V) = f(a, b)
-      override def encoder = vEncoder
-    }.toColumn
-
+    val aggregator: TypedColumn[V, V] = new ReduceAggregator[V](f)(vEncoder).toColumn
     agg(aggregator)
   }
 
