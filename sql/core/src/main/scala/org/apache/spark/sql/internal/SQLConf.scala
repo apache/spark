@@ -577,7 +577,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
-  def isUnSupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+  def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
 

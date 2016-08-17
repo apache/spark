@@ -55,7 +55,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   def assertSupported(): Unit = {
-    if (sparkSession.sessionState.conf.isUnSupportedOperationCheckEnabled) {
+    if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }

@@ -232,7 +232,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
-      if (sparkSession.sessionState.conf.isUnSupportedOperationCheckEnabled) {
+      if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 
