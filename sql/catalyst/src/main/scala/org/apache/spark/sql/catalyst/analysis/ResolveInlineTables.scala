@@ -34,7 +34,11 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
       convert(table)
   }
 
-  /** Validates that all inline table data are foldable expressions. */
+  /**
+   * Validates that all inline table data are foldable expressions.
+   *
+   * This is publicly visible for unit testing.
+   */
   def validateInputFoldable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
@@ -49,6 +53,8 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    * Validates the input data dimension:
    * 1. All rows have the same cardinality.
    * 2. The number of column aliases defined is consistent with the number of columns in data.
+   *
+   * This is publicly visible for unit testing.
    */
   def validateInputDimension(table: UnresolvedInlineTable): Unit = {
     if (table.rows.nonEmpty) {
@@ -70,6 +76,8 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    * into a [[LocalRelation]].
    *
    * This function attempts to coerce inputs into consistent types.
+   *
+   * This is publicly visible for unit testing.
    */
   def convert(table: UnresolvedInlineTable): LocalRelation = {
     val numCols = table.rows.head.size
