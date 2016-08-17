@@ -711,19 +711,20 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #'
 #' @param data A SparkDataFrame for training
 #' @param features Features column name, default "features". Either libSVM-format column or
-#'        character-format column are valid.
+#'        character-format column is valid.
 #' @param k Number of topics, default 10
 #' @param maxIter Maximum iterations, default 20
 #' @param optimizer Optimizer to train an LDA model, "online" or "em", default "online"
 #' @param subsamplingRate (For online optimizer) Fraction of the corpus to be sampled and used in
-#         each iteration of mini-batch gradient descent, in range (0, 1], default 0.05
+#'        each iteration of mini-batch gradient descent, in range (0, 1], default 0.05
 #' @param topicConcentration concentration parameter (commonly named \code{beta} or \code{eta}) for
 #'        the prior placed on topic distributions over terms, default -1 to set automatically on the
-#'        Spark side. Use \code{summary} to retrieve the effective topicConcentration.
+#'        Spark side. Use \code{summary} to retrieve the effective topicConcentration. Only 1-size
+#'        numeric is accepted.
 #' @param docConcentration concentration parameter (commonly named \code{alpha}) for the
 #'        prior placed on documents distributions over topics (\code{theta}), default -1 to set
 #'        automatically on the Spark side. Use \code{summary} to retrieve the effective
-#'        docConcentration.
+#'        docConcentration. Only 1-size or \code{k}-size numeric is accepted.
 #' @param customizedStopWords stopwords that need to be removed from the given corpus. Ignore the
 #'        parameter if libSVM-format column is used as the features column.
 #' @param maxVocabSize maximum vocabulary size, default 1 << 18
