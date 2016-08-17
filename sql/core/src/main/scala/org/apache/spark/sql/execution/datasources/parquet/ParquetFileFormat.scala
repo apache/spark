@@ -60,7 +60,7 @@ class ParquetFileFormat
 
   override def shortName(): String = "parquet"
 
-  override def toString: String = "ParquetFormat"
+  override def toString: String = shortName.toUpperCase
 
   override def hashCode(): Int = getClass.hashCode()
 
