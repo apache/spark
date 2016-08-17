@@ -127,7 +127,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.query))
+        s.withNewPlan(Optimizer.this.execute(s.plan))
     }
   }
 }
@@ -1814,7 +1814,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val newExpression = expression transform {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.query.output.head
+        s.plan.output.head
     }
     newExpression.asInstanceOf[E]
   }
@@ -2029,7 +2029,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // grouping expressions. As a result we need to replace all the scalar subqueries in the
         // grouping expressions by their result.
         val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.query.output.head).getOrElse(e)
+          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
         }
         Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
       } else {

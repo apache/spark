@@ -292,7 +292,7 @@ abstract class QueryTest extends PlanTest {
         p.expressions.foreach {
           _.foreach {
             case s: SubqueryExpression =>
-              s.query.foreach(collectData)
+              s.plan.foreach(collectData)
             case _ =>
           }
         }
@@ -334,7 +334,7 @@ abstract class QueryTest extends PlanTest {
       case p =>
         p.transformExpressions {
           case s: SubqueryExpression =>
-            s.withNewPlan(s.query.transformDown(renormalize))
+            s.withNewPlan(s.plan.transformDown(renormalize))
         }
     }
     val normalized2 = jsonBackPlan.transformDown(renormalize)
