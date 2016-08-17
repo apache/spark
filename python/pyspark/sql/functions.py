@@ -406,7 +406,7 @@ def last(col, ignorenulls=False):
 
 
 @since(1.6)
-def monotonically_increasing_id_w_offset(offset=0):
+def monotonically_increasing_id(offset=0):
     """A column that generates monotonically increasing 64-bit integers.
 
     The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
@@ -417,11 +417,11 @@ def monotonically_increasing_id_w_offset(offset=0):
     You can specify the offset where the Id starts
 
     As an example, consider a :class:`DataFrame` with two partitions, each with 3 records.
-    This expression, monotonically_increasing_id_w_offset(5), would return the following IDs:
+    This expression, monotonically_increasing_id(5), would return the following IDs:
     5, 6, 7, 8589934597 (1L << 33), 8589934598, 8589934599.
 
     >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
-    >>> df0.select(monotonically_increasing_id_w_offset(5).alias('id')).collect()
+    >>> df0.select(monotonically_increasing_id(5).alias('id')).collect()
     [Row(id=5), Row(id=6), Row(id=7), Row(id=8589934597), Row(id=8589934598), Row(id=8589934599)]
     """
     sc = SparkContext._active_spark_context
