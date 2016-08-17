@@ -282,9 +282,12 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       }: TrustManager
     })
 
-    require(fileServerSSLOptions.protocol != None,
-      "spark.ssl.protocol is required when enabling SSL connections.")
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
+    if (!fileServerSSLOptions.protocol.isDefined) {
+      throw new IllegalArgumentException(
+        "Error: spark.ssl.protocol is required when enabling SSL connections. ")
+    }
+
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
     sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
 
     val hostVerifier = new HostnameVerifier {
