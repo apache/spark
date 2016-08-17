@@ -322,11 +322,6 @@ object SQLConf {
       .intConf
       .createWithDefault(4000)
 
-  val PARTITION_DISCOVERY_ENABLED = SQLConfigBuilder("spark.sql.sources.partitionDiscovery.enabled")
-    .doc("When true, automatically discover data partitions.")
-    .booleanConf
-    .createWithDefault(true)
-
   val PARTITION_COLUMN_TYPE_INFERENCE =
     SQLConfigBuilder("spark.sql.sources.partitionColumnTypeInference.enabled")
       .doc("When true, automatically infer the data types for partitioned columns.")
@@ -669,8 +664,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
   def convertCTAS: Boolean = getConf(CONVERT_CTAS)
-
-  def partitionDiscoveryEnabled: Boolean = getConf(SQLConf.PARTITION_DISCOVERY_ENABLED)
 
   def partitionColumnTypeInferenceEnabled: Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
