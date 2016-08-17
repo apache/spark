@@ -141,7 +141,7 @@ object functions {
    * @since 1.3.0
    */
   def approxCountDistinct(e: Column): Column = withAggregateFunction {
-    HyperLogLogPlusPlus(e.expr)
+    ImperativeAggregate(HyperLogLogPlusPlus(e.expr))
   }
 
   /**
@@ -161,7 +161,7 @@ object functions {
    * @since 1.3.0
    */
   def approxCountDistinct(e: Column, rsd: Double): Column = withAggregateFunction {
-    HyperLogLogPlusPlus(e.expr, rsd)
+    ImperativeAggregate(HyperLogLogPlusPlus(e.expr, rsd))
   }
 
   /**
@@ -198,7 +198,9 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_list(e: Column): Column = withAggregateFunction { CollectList(e.expr) }
+  def collect_list(e: Column): Column = withAggregateFunction {
+    ImperativeAggregate(CollectList(e.expr))
+  }
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
@@ -214,7 +216,9 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_set(e: Column): Column = withAggregateFunction { CollectSet(e.expr) }
+  def collect_set(e: Column): Column = withAggregateFunction {
+    ImperativeAggregate(CollectSet(e.expr))
+  }
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.

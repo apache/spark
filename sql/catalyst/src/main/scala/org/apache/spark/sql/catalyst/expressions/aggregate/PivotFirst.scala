@@ -71,7 +71,7 @@ object PivotFirst {
 case class PivotFirst(
   pivotColumn: Expression,
   valueColumn: Expression,
-  pivotColumnValues: Seq[Any]) extends ImperativeAggregate {
+  pivotColumnValues: Seq[Any]) extends ImperativeAggregateImpl {
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
@@ -89,7 +89,7 @@ case class PivotFirst(
 
   private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 
-  override def doUpdate(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
+  override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     if (pivotColValue != null) {
       // We ignore rows whose pivot column value is not in the list of pivot column values.
@@ -103,7 +103,7 @@ case class PivotFirst(
     }
   }
 
-  override def doMerge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
+  override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
     for (i <- 0 until indexSize) {
       if (!inputAggBuffer.isNullAt(i)) {
         val value = inputAggBuffer.get(i, valueDataType)
@@ -112,7 +112,7 @@ case class PivotFirst(
     }
   }
 
-  override def doInitialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
+  override def initialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
     case d: DecimalType =>
       // Per doc of setDecimal we need to do this instead of setNullAt for DecimalType.
       for (i <- 0 until indexSize) {
@@ -124,7 +124,7 @@ case class PivotFirst(
       }
   }
 
-  override def doEval(input: InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val result = new Array[Any](indexSize)
     for (i <- 0 until indexSize) {
       result(i) = input.get(i, valueDataType)
@@ -132,12 +132,8 @@ case class PivotFirst(
     new GenericArrayData(result)
   }
 
-  override val aggBufferAttributes: Seq[AttributeReference] =
-    pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
-
-  override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
+  override val aggBufferSchema: StructType = StructType(pivotIndex.toList.sortBy(_._2).map { kv =>
+    StructField(kv._1.toString, valueDataType)
+  })
 }
 

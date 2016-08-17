@@ -155,7 +155,7 @@ case class AggregateExpression(
  * Code which accepts [[AggregateFunction]] instances should be prepared to handle both types of
  * aggregate functions.
  */
-sealed abstract class AggregateFunction extends Expression with ImplicitCastInputTypes {
+sealed abstract class AggregateFunction extends Expression {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
@@ -219,35 +219,44 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
 }
 
 /**
- * API for aggregation functions that are expressed in terms of imperative doInitialize(),
- * doUpdate(), doMerge() and doComplete() functions which operate on Row-based aggregation buffers.
+ * An implementation of [[AggregateFunction]] that are expressed in terms of imperative
+ * initialize(), update(), merge() and complete() functions which operate on Row-based aggregation
+ * buffers.
+ *
+ * The actual functionality is delegated to the underlying [[ImperativeAggregateImpl]], this class
+ * is mostly used to hold the buffer offsets.
  */
-abstract class ImperativeAggregate extends AggregateFunction with CodegenFallback {
-
-  // Although `mutableBufferRow` and `inputBufferRow` are 2 mutable fields in `ImperativeAggregate`,
-  // they can only be set once, thus make `ImperativeAggregate` kind of immutable and stateless.
+case class ImperativeAggregate(
+    impl: ImperativeAggregateImpl,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends AggregateFunction with CodegenFallback {
 
   /**
    * The aggregation operator keeps a large shared mutable buffer row for all aggregate functions,
    * each aggregate function should only access a slice of this shared buffer.
    */
-  private var mutableBufferRow: SlicedMutableRow = _
+  private lazy val mutableBufferRow: SlicedMutableRow =
+    new SlicedMutableRow(mutableAggBufferOffset, aggBufferSchema.length)
 
   /**
    * During partial aggregation, the input buffer row to be merged is shared among all aggregate
    * functions, each aggregate function should only access a slice of this input buffer.
    */
-  private var inputBufferRow: SlicedInternalRow = _
+  private lazy val inputBufferRow: SlicedInternalRow =
+    new SlicedInternalRow(inputAggBufferOffset, aggBufferSchema.length)
 
   /**
-   * Set the offset of this function's start buffer value in the underlying shared mutable
-   * aggregation buffer.
+   * Returns a copy of this ImperativeAggregate with an updated mutableAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
+   *
+   * The offset of this function's first buffer value in the underlying shared mutable aggregation
+   * buffer.
    *
    * For example, we have two aggregate functions `avg(x)` and `avg(y)`, which share the same
-   * aggregation buffer. In this shared buffer, the position of the start buffer value of `avg(x)`
-   * will be 0 and the position of the start buffer value of `avg(y)` will be 2:
+   * aggregation buffer. In this shared buffer, the position of the first buffer value of `avg(x)`
+   * will be 0 and the position of the first buffer value of `avg(y)` will be 2:
    * {{{
-   *          avg(x) mutable buffer offset is 0
+   *          avg(x) mutableAggBufferOffset = 0
    *                  |
    *                  v
    *                  +--------+--------+--------+--------+
@@ -255,29 +264,31 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *                  +--------+--------+--------+--------+
    *                                    ^
    *                                    |
-   *                     avg(y) mutable buffer offset is 2
+   *                     avg(y) mutableAggBufferOffset = 2
    * }}}
    */
-  final def setMutableBufferOffset(offset: Int): Unit = {
-    assert(mutableBufferRow == null)
-    mutableBufferRow = new SlicedMutableRow(offset, aggBufferAttributes.length)
+  def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate = {
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
   }
 
   /**
-   * Set the offset of this function's start buffer value in the underlying shared input aggregation
+   * Returns a copy of this ImperativeAggregate with an updated inputAggBufferOffset.
+   * This new copy's attributes may have different ids than the original.
+   *
+   * The offset of this function's start buffer value in the underlying shared input aggregation
    * buffer. An input aggregation buffer is used when we merge two aggregation buffers together in
-   * the `merge()` function and is immutable (we merge an input aggregation buffer and a mutable
+   * the `update()` function and is immutable (we merge an input aggregation buffer and a mutable
    * aggregation buffer and then store the new buffer values to the mutable aggregation buffer).
    *
    * An input aggregation buffer may contain extra fields, such as grouping keys, at its start, so
-   * mutable buffer offset and input buffer offset are often different.
+   * mutableAggBufferOffset and inputAggBufferOffset are often different.
    *
    * For example, say we have a grouping expression, `key`, and two aggregate functions,
-   * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the start
-   * buffer value of `avg(x)` will be 1 and the position of the start buffer value of `avg(y)`
+   * `avg(x)` and `avg(y)`. In the shared input aggregation buffer, the position of the first
+   * buffer value of `avg(x)` will be 1 and the position of the first buffer value of `avg(y)`
    * will be 3 (position 0 is used for the value of `key`):
    * {{{
-   *          avg(x) input buffer offset is 1
+   *          avg(x) inputAggBufferOffset = 1
    *                   |
    *                   v
    *          +--------+--------+--------+--------+--------+
@@ -285,59 +296,98 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
    *          +--------+--------+--------+--------+--------+
    *                                     ^
    *                                     |
-   *                       avg(y) input buffer offset is 3
+   *                       avg(y) inputAggBufferOffset = 3
    * }}}
    */
-  final def setInputBufferOffset(offset: Int): Unit = {
-    assert(inputBufferRow == null)
-    inputBufferRow = new SlicedInternalRow(offset, aggBufferAttributes.length)
+  def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate = {
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
   }
 
-  final def initialize(mutableAggBuffer: MutableRow): Unit = {
-    doInitialize(mutableBufferRow.target(mutableAggBuffer))
+  def initialize(mutableAggBuffer: MutableRow): Unit = {
+    impl.initialize(mutableBufferRow.target(mutableAggBuffer))
   }
 
-  final def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
-    doUpdate(mutableBufferRow.target(mutableAggBuffer), inputRow)
+  def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
+    impl.update(mutableBufferRow.target(mutableAggBuffer), inputRow)
   }
 
-  final def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
-    doMerge(mutableBufferRow.target(mutableAggBuffer), inputBufferRow.target(inputAggBuffer))
+  def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
+    impl.merge(mutableBufferRow.target(mutableAggBuffer), inputBufferRow.target(inputAggBuffer))
   }
 
-  final override def eval(aggBuffer: InternalRow): Any = {
+  override def eval(aggBuffer: InternalRow): Any = {
     assert(aggBuffer.isInstanceOf[MutableRow])
-    doEval(mutableBufferRow.target(aggBuffer.asInstanceOf[MutableRow]))
+    impl.eval(mutableBufferRow.target(aggBuffer.asInstanceOf[MutableRow]))
   }
 
-  final def newInstance(): ImperativeAggregate = {
-    makeCopy(mapProductIterator(_.asInstanceOf[AnyRef])).asInstanceOf[ImperativeAggregate]
-  }
+  override def aggBufferSchema: StructType = impl.aggBufferSchema
 
-  // Note: although all subclasses implement inputAggBufferAttributes by simply cloning
-  // aggBufferAttributes, that common clone code cannot be placed here in the abstract
-  // ImperativeAggregate class, since that will lead to initialization ordering issues.
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
+
+  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
+  override def supportsPartial: Boolean = impl.supportsPartial
+
+  override def nullable: Boolean = impl.nullable
+
+  override def dataType: DataType = impl.dataType
+
+  override def children: Seq[Expression] = Seq(impl)
+
+  override def sql(isDistinct: Boolean): String = impl.sql(isDistinct)
+
+  override def toAggString(isDistinct: Boolean): String = impl.toAggString(isDistinct)
+}
+
+/**
+ * API for aggregation functions that are expressed in terms of imperative initialize(),
+ * update(), merge() and complete() functions which operate on Row-based aggregation buffers.
+ */
+abstract class ImperativeAggregateImpl extends Expression
+  with ImplicitCastInputTypes with CodegenFallback {
+
+  final override def foldable: Boolean = false
 
   /**
    * Initializes the mutable aggregation buffer.
    */
-  protected def doInitialize(mutableAggBuffer: MutableRow): Unit
+  def initialize(mutableAggBuffer: MutableRow): Unit
 
   /**
    * Updates its aggregation buffer, based on the given `inputRow`.
    */
-  protected def doUpdate(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit
+  def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit
 
   /**
    * Combines new intermediate results from the `inputAggBuffer` with the existing intermediate
    * results in the `mutableAggBuffer.`
    */
-  protected def doMerge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
+  def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit
 
   /**
-   * Evaluates the final result of this aggregate function, based on the mutable aggregation buffer.
+   * The schema of the aggregation buffer.
    */
-  protected def doEval(aggBuffer: InternalRow): Any
+  def aggBufferSchema: StructType
+
+  /**
+   * Indicates if this function supports partial aggregation.
+   */
+  def supportsPartial: Boolean = true
+
+  def toAggregateExpression(isDistinct: Boolean = false): AggregateExpression = {
+    AggregateExpression(ImperativeAggregate(this), mode = Complete, isDistinct = isDistinct)
+  }
+
+  def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
+  }
+
+  def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    prettyName + flatArguments.mkString(start, ", ", ")")
+  }
 }
 
 /**
@@ -353,10 +403,8 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
  * the implemented class that need to access fields of its children, please make
  * those fields `lazy val`s.
  */
-abstract class DeclarativeAggregate
-  extends AggregateFunction
-  with Serializable
-  with Unevaluable {
+abstract class DeclarativeAggregate extends AggregateFunction
+  with Serializable with Unevaluable with ImplicitCastInputTypes {
 
   /**
    * Expressions for initializing empty aggregation buffers.

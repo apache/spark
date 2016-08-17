@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, MutableRow, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregateImpl
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
@@ -322,7 +322,7 @@ private[aggregate] class InputAggregationBuffer(
 case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction)
-  extends ImperativeAggregate with NonSQLExpression with Logging {
+  extends ImperativeAggregateImpl with NonSQLExpression with Logging {
 
   override def nullable: Boolean = true
 
@@ -333,13 +333,6 @@ case class ScalaUDAF(
   override val inputTypes: Seq[DataType] = udaf.inputSchema.map(_.dataType)
 
   override val aggBufferSchema: StructType = udaf.bufferSchema
-
-  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
-
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
 
   private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
@@ -405,13 +398,13 @@ case class ScalaUDAF(
       null)
   }
 
-  override def doInitialize(buffer: MutableRow): Unit = {
+  override def initialize(buffer: MutableRow): Unit = {
     mutableAggregateBuffer.underlyingBuffer = buffer
 
     udaf.initialize(mutableAggregateBuffer)
   }
 
-  override def doUpdate(buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
     mutableAggregateBuffer.underlyingBuffer = buffer
 
     udaf.update(
@@ -419,14 +412,14 @@ case class ScalaUDAF(
       inputToScalaConverters(inputProjection(input)).asInstanceOf[Row])
   }
 
-  override def doMerge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     mutableAggregateBuffer.underlyingBuffer = buffer1
     inputAggregateBuffer.underlyingInputBuffer = buffer2
 
     udaf.merge(mutableAggregateBuffer, inputAggregateBuffer)
   }
 
-  override def doEval(buffer: InternalRow): Any = {
+  override def eval(buffer: InternalRow): Any = {
     evalAggregateBuffer.underlyingInputBuffer = buffer
 
     outputToCatalystConverter(udaf.evaluate(evalAggregateBuffer))

@@ -264,7 +264,7 @@ private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
     isUDAFBridgeRequired: Boolean = false)
-  extends ImperativeAggregate with HiveInspectors {
+  extends ImperativeAggregateImpl with HiveInspectors {
 
   @transient
   private lazy val resolver =
@@ -296,7 +296,7 @@ private[hive] case class HiveUDAFFunction(
   @transient
   private[this] var buffer: GenericUDAFEvaluator.AggregationBuffer = _
 
-  override def doEval(input: InternalRow): Any = unwrapper(function.evaluate(buffer))
+  override def eval(input: InternalRow): Any = unwrapper(function.evaluate(buffer))
 
   @transient
   private lazy val inputProjection = new InterpretedProjection(children)
@@ -311,25 +311,19 @@ private[hive] case class HiveUDAFFunction(
   // buffer for it.
   override def aggBufferSchema: StructType = StructType(Nil)
 
-  override def doUpdate(_buffer: MutableRow, input: InternalRow): Unit = {
+  override def update(_buffer: MutableRow, input: InternalRow): Unit = {
     val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached, inputDataTypes))
   }
 
-  override def doMerge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
     throw new UnsupportedOperationException(
       "Hive UDAF doesn't support partial aggregate")
   }
 
-  override def doInitialize(_buffer: MutableRow): Unit = {
+  override def initialize(_buffer: MutableRow): Unit = {
     buffer = function.getNewAggregationBuffer
   }
-
-  override val aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.

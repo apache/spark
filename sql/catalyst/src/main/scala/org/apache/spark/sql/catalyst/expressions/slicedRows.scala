@@ -30,33 +30,62 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
  * instance of this class while processing many rows.
  */
 trait BaseSlicedInternalRow extends InternalRow {
-  protected def baseRow: InternalRow
+  protected def underlyingRow: InternalRow
   protected def offset: Int
 
-  protected def toBaseIndex(index: Int): Int = {
+  protected def underlyingIndexOf(index: Int): Int = {
     assert(index >= 0, "index (" + index + ") should >= 0")
     assert(index < numFields, "index (" + index + ") should < " + numFields)
     index + offset
   }
 
-  override def isNullAt(i: Int): Boolean = baseRow.isNullAt(toBaseIndex(i))
-  override def getBoolean(i: Int): Boolean = baseRow.getBoolean(toBaseIndex(i))
-  override def getByte(i: Int): Byte = baseRow.getByte(toBaseIndex(i))
-  override def getShort(i: Int): Short = baseRow.getShort(toBaseIndex(i))
-  override def getInt(i: Int): Int = baseRow.getInt(toBaseIndex(i))
-  override def getLong(i: Int): Long = baseRow.getLong(toBaseIndex(i))
-  override def getFloat(i: Int): Float = baseRow.getFloat(toBaseIndex(i))
-  override def getDouble(i: Int): Double = baseRow.getDouble(toBaseIndex((i)))
+  override def isNullAt(i: Int): Boolean =
+    underlyingRow.isNullAt(underlyingIndexOf(i))
+
+  override def getBoolean(i: Int): Boolean =
+    underlyingRow.getBoolean(underlyingIndexOf(i))
+
+  override def getByte(i: Int): Byte =
+    underlyingRow.getByte(underlyingIndexOf(i))
+
+  override def getShort(i: Int): Short =
+    underlyingRow.getShort(underlyingIndexOf(i))
+
+  override def getInt(i: Int): Int =
+    underlyingRow.getInt(underlyingIndexOf(i))
+
+  override def getLong(i: Int): Long =
+    underlyingRow.getLong(underlyingIndexOf(i))
+
+  override def getFloat(i: Int): Float =
+    underlyingRow.getFloat(underlyingIndexOf(i))
+
+  override def getDouble(i: Int): Double =
+    underlyingRow.getDouble(underlyingIndexOf((i)))
+
   override def getDecimal(i: Int, precision: Int, scale: Int): Decimal =
-    baseRow.getDecimal(toBaseIndex(i), precision, scale)
-  override def getUTF8String(i: Int): UTF8String = baseRow.getUTF8String(toBaseIndex(i))
-  override def getBinary(i: Int): Array[Byte] = baseRow.getBinary(toBaseIndex(i))
-  override def getInterval(i: Int): CalendarInterval = baseRow.getInterval(toBaseIndex(i))
+    underlyingRow.getDecimal(underlyingIndexOf(i), precision, scale)
+
+  override def getUTF8String(i: Int): UTF8String =
+    underlyingRow.getUTF8String(underlyingIndexOf(i))
+
+  override def getBinary(i: Int): Array[Byte] =
+    underlyingRow.getBinary(underlyingIndexOf(i))
+
+  override def getInterval(i: Int): CalendarInterval =
+    underlyingRow.getInterval(underlyingIndexOf(i))
+
   override def getStruct(i: Int, numFields: Int): InternalRow =
-    baseRow.getStruct(toBaseIndex(i), numFields)
-  override def getArray(i: Int): ArrayData = baseRow.getArray(toBaseIndex(i))
-  override def getMap(i: Int): MapData = baseRow.getMap(toBaseIndex(i))
-  override def get(i: Int, dataType: DataType): AnyRef = baseRow.get(toBaseIndex(i), dataType)
+    underlyingRow.getStruct(underlyingIndexOf(i), numFields)
+
+  override def getArray(i: Int): ArrayData =
+    underlyingRow.getArray(underlyingIndexOf(i))
+
+  override def getMap(i: Int): MapData =
+    underlyingRow.getMap(underlyingIndexOf(i))
+
+  override def get(i: Int, dataType: DataType): AnyRef =
+    underlyingRow.get(underlyingIndexOf(i), dataType)
 
   override def anyNull: Boolean = {
     val len = offset + numFields
@@ -69,7 +98,7 @@ trait BaseSlicedInternalRow extends InternalRow {
   }
 
   override def copy(): InternalRow = {
-    throw new UnsupportedOperationException("Cannot copy a SlicedMutableRow")
+    throw new UnsupportedOperationException("Cannot copy a SlicedInternalRow")
   }
 }
 
@@ -82,7 +111,7 @@ class SlicedInternalRow(protected val offset: Int, val numFields: Int)
     this
   }
 
-  def baseRow: InternalRow = _baseRow
+  def underlyingRow: InternalRow = _baseRow
 }
 
 class SlicedMutableRow(protected val offset: Int, val numFields: Int)
@@ -94,17 +123,35 @@ class SlicedMutableRow(protected val offset: Int, val numFields: Int)
     this
   }
 
-  def baseRow: InternalRow = _baseRow
+  def underlyingRow: InternalRow = _baseRow
 
-  override def setNullAt(i: Int): Unit = _baseRow.setNullAt(toBaseIndex(i))
-  override def update(i: Int, value: Any): Unit = _baseRow.update(toBaseIndex(i), value)
-  override def setBoolean(i: Int, value: Boolean): Unit = _baseRow.setBoolean(toBaseIndex(i), value)
-  override def setByte(i: Int, value: Byte): Unit = _baseRow.setByte(toBaseIndex(i), value)
-  override def setShort(i: Int, value: Short): Unit = _baseRow.setShort(toBaseIndex(i), value)
-  override def setInt(i: Int, value: Int): Unit = _baseRow.setInt(toBaseIndex(i), value)
-  override def setLong(i: Int, value: Long): Unit = _baseRow.setLong(toBaseIndex(i), value)
-  override def setFloat(i: Int, value: Float): Unit = _baseRow.setFloat(toBaseIndex(i), value)
-  override def setDouble(i: Int, value: Double): Unit = _baseRow.setDouble(toBaseIndex(i), value)
+  override def setNullAt(i: Int): Unit =
+    _baseRow.setNullAt(underlyingIndexOf(i))
+
+  override def update(i: Int, value: Any): Unit =
+    _baseRow.update(underlyingIndexOf(i), value)
+
+  override def setBoolean(i: Int, value: Boolean): Unit =
+    _baseRow.setBoolean(underlyingIndexOf(i), value)
+
+  override def setByte(i: Int, value: Byte): Unit =
+    _baseRow.setByte(underlyingIndexOf(i), value)
+
+  override def setShort(i: Int, value: Short): Unit =
+    _baseRow.setShort(underlyingIndexOf(i), value)
+
+  override def setInt(i: Int, value: Int): Unit =
+    _baseRow.setInt(underlyingIndexOf(i), value)
+
+  override def setLong(i: Int, value: Long): Unit =
+    _baseRow.setLong(underlyingIndexOf(i), value)
+
+  override def setFloat(i: Int, value: Float): Unit =
+    _baseRow.setFloat(underlyingIndexOf(i), value)
+
+  override def setDouble(i: Int, value: Double): Unit =
+    _baseRow.setDouble(underlyingIndexOf(i), value)
+
   override def setDecimal(i: Int, value: Decimal, precision: Int): Unit =
-    _baseRow.setDecimal(toBaseIndex(i), value, precision)
+    _baseRow.setDecimal(underlyingIndexOf(i), value, precision)
 }

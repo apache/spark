@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
  * collected elements are stored on heap, and that too many elements can cause GC pauses and
  * eventually Out of Memory Errors.
  */
-abstract class Collect extends ImperativeAggregate {
+abstract class Collect extends ImperativeAggregateImpl {
 
   val child: Expression
 
@@ -48,27 +48,23 @@ abstract class Collect extends ImperativeAggregate {
 
   override def supportsPartial: Boolean = false
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
-
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
+  override def aggBufferSchema: StructType = new StructType
 
   protected[this] val buffer: Growable[Any] with Iterable[Any]
 
-  override def doInitialize(b: MutableRow): Unit = {
+  override def initialize(b: MutableRow): Unit = {
     buffer.clear()
   }
 
-  override def doUpdate(b: MutableRow, input: InternalRow): Unit = {
+  override def update(b: MutableRow, input: InternalRow): Unit = {
     buffer += child.eval(input)
   }
 
-  override def doMerge(buffer: MutableRow, input: InternalRow): Unit = {
+  override def merge(buffer: MutableRow, input: InternalRow): Unit = {
     sys.error("Collect cannot be used in partial aggregations.")
   }
 
-  override def doEval(input: InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     new GenericArrayData(buffer.toArray)
   }
 }

@@ -926,10 +926,11 @@ private[execution] object AggregateProcessor {
         updateExpressions ++= agg.updateExpressions
         evaluateExpressions += agg.evaluateExpression
       case agg: ImperativeAggregate =>
-        val imperative = BindReferences.bindReference(agg, inputAttributes)
         val offset = aggBufferAttributes.size
-        imperative.setInputBufferOffset(offset)
-        imperative.setMutableBufferOffset(offset)
+        val imperative = BindReferences.bindReference(agg
+          .withNewInputAggBufferOffset(offset)
+          .withNewMutableAggBufferOffset(offset),
+          inputAttributes)
         imperatives += imperative
         aggBufferAttributes ++= imperative.aggBufferAttributes
         val noOps = Seq.fill(imperative.aggBufferAttributes.size)(NoOp)
