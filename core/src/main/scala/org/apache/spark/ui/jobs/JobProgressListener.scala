@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import java.util.concurrent.TimeoutException
 
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -94,7 +94,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val retainedStages = conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
   val retainedTasks = conf.getInt("spark.ui.retainedTasks", SparkUI.DEFAULT_RETAINED_TASKS)
-  val trimTasks = conf.getBoolean("spark.ui.trimTasks", false)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -140,13 +139,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   }
 
   /** If Tasks is too large, remove and garbage collect old tasks */
-  private def trimTasksIfNecessary(taskData: HashMap[Long, TaskUIData]) = synchronized {
+  private def trimTasksIfNecessary(taskData: LinkedHashMap[Long, TaskUIData]) = synchronized {
     if (taskData.size > retainedTasks) {
       val toRemove = (taskData.size - retainedTasks)
-      val oldIds = taskData.map(_._2.taskInfo.taskId).toList.sorted.take(toRemove)
-      for (id <- oldIds) {
-        taskData.remove(id)
-      }
+      taskData.drop(toRemove)
     }
   }
 
@@ -417,9 +413,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskData.updateTaskInfo(info)
       taskData.updateTaskMetrics(taskMetrics)
       taskData.errorMessage = errorMessage
-      if (trimTasks) {
-        trimTasksIfNecessary(stageData.taskData)
-      }
+      trimTasksIfNecessary(stageData.taskData)
 
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
