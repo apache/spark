@@ -345,63 +345,59 @@ class MultinomialLogisticRegression @Since("2.1.0") (
          */
         var interceptSum = 0.0
         var coefSum = 0.0
-        val rawCoefficients = state.x.toArray.clone()
-        val coefArray = Array.ofDim[Double](numFeatures * numClasses)
-        val interceptArray = Array.ofDim[Double](if (getFitIntercept) numClasses else 0)
-        (0 until numClasses).foreach { k =>
-          var i = 0
-          while (i < numFeatures) {
-            val rawValue = rawCoefficients(k * numFeaturesPlusIntercept + i)
-            val unscaledCoef =
-              rawValue * { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
-            coefArray(k * numFeatures + i) = unscaledCoef
-            coefSum += unscaledCoef
-            i += 1
-          }
-          if (getFitIntercept) {
-            val intercept = rawCoefficients(k * numFeaturesPlusIntercept + numFeatures)
-            interceptArray(k) = intercept
-            interceptSum += intercept
-          }
-        }
-
-        val _coefficients = {
-          /*
-            When no regularization is applied, the coefficients lack identifiability because
-            we do not use a pivot class. We can add any constant value to the coefficients and
-            get the same likelihood. So here, we choose the mean centered coefficients for
-            reproducibility. This method follows the approach in glmnet, described here:
-
-            Friedman, et al. "Regularization Paths for Generalized Linear Models via
-              Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
-           */
-          if ($(regParam) == 0) {
-            val coefficientMean = coefSum / (numClasses * numFeatures)
-            var i = 0
-            while (i < coefArray.length) {
-              coefArray(i) -= coefficientMean
-              i += 1
+        val rawCoefficients = Vectors.fromBreeze(state.x)
+        val (coefMatrix, interceptVector) = rawCoefficients match {
+          case dv: DenseVector =>
+            val coefArray = Array.tabulate(numClasses * numFeatures) { i =>
+              val flatIndex = if ($(fitIntercept)) i + i / numFeatures else i
+              val featureIndex = i % numFeatures
+              val unscaledCoef = if (featuresStd(featureIndex) != 0.0) {
+                dv(flatIndex) / featuresStd(featureIndex)
+              } else {
+                0.0
+              }
+              coefSum += unscaledCoef
+              unscaledCoef
             }
-          }
-          new DenseMatrix(numClasses, numFeatures, coefArray, isTransposed = true)
+            val interceptVector = if ($(fitIntercept)) {
+              Vectors.dense(Array.tabulate(numClasses) { i =>
+                val coefIndex = (i + 1) * numFeaturesPlusIntercept - 1
+                val intercept = dv(coefIndex)
+                interceptSum += intercept
+                intercept
+              })
+            } else {
+              Vectors.sparse(numClasses, Seq())
+            }
+            (new DenseMatrix(numClasses, numFeatures, coefArray, isTransposed = true),
+              interceptVector)
+          case sv: SparseVector =>
+            throw new IllegalArgumentException("SparseVector is not supported for coefficients")
         }
 
-        val _intercepts = if (getFitIntercept) {
-          /*
-            The intercepts are never regularized, so we always center the mean.
-          */
-          val interceptMean = interceptSum / numClasses
-          var k = 0
-          while (k < interceptArray.length) {
-            interceptArray(k) -= interceptMean
-            k += 1
-          }
-          Vectors.dense(interceptArray)
-        } else {
-          Vectors.sparse(numClasses, Seq())
-        }
+        /*
+          When no regularization is applied, the coefficients lack identifiability because
+          we do not use a pivot class. We can add any constant value to the coefficients and
+          get the same likelihood. So here, we choose the mean centered coefficients for
+          reproducibility. This method follows the approach in glmnet, described here:
 
-        (_coefficients, _intercepts, arrayBuilder.result())
+          Friedman, et al. "Regularization Paths for Generalized Linear Models via
+            Coordinate Descent," https://core.ac.uk/download/files/153/6287975.pdf
+         */
+        if ($(regParam) == 0.0) {
+          val coefficientMean = coefSum / (numClasses * numFeatures)
+          coefMatrix.update(_ - coefficientMean)
+        }
+        /*
+          The intercepts are never regularized, so we always center the mean.
+         */
+        val interceptMean = interceptSum / numClasses
+        interceptVector match {
+          case dv: DenseVector => (0 until dv.size).foreach { i => dv.toArray(i) -= interceptMean }
+          case sv: SparseVector =>
+            (0 until sv.numNonzeros).foreach { i => sv.values(i) -= interceptMean }
+        }
+        (coefMatrix, interceptVector, arrayBuilder.result())
       }
     }
     if (handlePersistence) instances.unpersist()

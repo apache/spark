@@ -1101,8 +1101,8 @@ class BinaryLogisticRegressionSummary private[classification] (
  * @param multinomial Whether to use multinomial or binary loss
  */
 private class LogisticAggregator(
-    val bcCoefficients: Broadcast[Vector],
-    val bcFeaturesStd: Broadcast[Array[Double]],
+    bcCoefficients: Broadcast[Vector],
+    bcFeaturesStd: Broadcast[Array[Double]],
     private val numFeatures: Int,
     numClasses: Int,
     fitIntercept: Boolean,
@@ -1346,18 +1346,15 @@ private class LogisticCostFun(
     regParamL2: Double,
     multinomial: Boolean) extends DiffFunction[BDV[Double]] {
 
-  val featuresStd = bcFeaturesStd.value
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
     val coeffs = Vectors.fromBreeze(coefficients)
     val bcCoeffs = instances.context.broadcast(coeffs)
-    val localFeaturesStd = featuresStd
-    val numFeatures = localFeaturesStd.length
-    val numFeaturesPlusIntercept = if (fitIntercept) numFeatures + 1 else numFeatures
+    val featuresStd = bcFeaturesStd.value
+    val numFeatures = featuresStd.length
 
     val logisticAggregator = {
-      val seqOp = (c: LogisticAggregator, instance: Instance) =>
-        c.add(instance)
+      val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
@@ -1371,34 +1368,37 @@ private class LogisticCostFun(
     val regVal = if (regParamL2 == 0.0) {
       0.0
     } else {
-      val K = if (multinomial) numClasses else numClasses - 1
       var sum = 0.0
-      (0 until K).foreach { k =>
-        var j = 0
-        while (j < numFeatures) {
+      coeffs.foreachActive { case (index, value) =>
+        // We do not apply regularization to the intercepts
+        val isIntercept = fitIntercept && ((index + 1) % (numFeatures + 1) == 0)
+        if (!isIntercept) {
           // The following code will compute the loss of the regularization; also
           // the gradient of the regularization, and add back to totalGradientArray.
-          val value = coeffs(k * numFeaturesPlusIntercept + j)
           sum += {
             if (standardization) {
-              totalGradientArray(k * numFeaturesPlusIntercept + j) += regParamL2 * value
+              totalGradientArray(index) += regParamL2 * value
               value * value
             } else {
-              if (featuresStd(j) != 0.0) {
+              val featureIndex = if (fitIntercept) {
+                index % (numFeatures + 1)
+              } else {
+                index % numFeatures
+              }
+              if (featuresStd(featureIndex) != 0.0) {
                 // If `standardization` is false, we still standardize the data
                 // to improve the rate of convergence; as a result, we have to
                 // perform this reverse standardization by penalizing each component
                 // differently to get effectively the same objective function when
                 // the training dataset is not standardized.
-                val temp = value / (featuresStd(j) * featuresStd(j))
-                totalGradientArray(k * numFeaturesPlusIntercept + j) += regParamL2 * temp
+                val temp = value / (featuresStd(featureIndex) * featuresStd(featureIndex))
+                totalGradientArray(index) += regParamL2 * temp
                 value * temp
               } else {
                 0.0
               }
             }
           }
-          j += 1
         }
       }
       0.5 * regParamL2 * sum
