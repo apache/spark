@@ -70,11 +70,8 @@ object ParserUtils {
 
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
-    if (token != null) {
-      Origin(Option(token.getLine), Option(token.getCharPositionInLine))
-    } else {
-      Origin(None, None)
-    }
+    val opt = Option(token)
+    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
   }
 
   /** Validate the condition. If it doesn't throw a parse exception. */

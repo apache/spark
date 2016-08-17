@@ -179,10 +179,11 @@ class ParserUtilsSuite extends SparkFunSuite {
   test("withOrigin") {
     val ctx = createDbContext.locationSpec
     val current = CurrentOrigin.get
-    val location = withOrigin(ctx) {
-      string(ctx.STRING)
+    val (location, origin) = withOrigin(ctx) {
+      (string(ctx.STRING), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
+    assert(origin == Origin(Some(3), Some(27)))
     assert(CurrentOrigin.get == current)
   }
 }
