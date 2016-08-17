@@ -1516,8 +1516,8 @@ data.map(x -> { accum.add(x); return f(x); });
 {% highlight python %}
 accum = sc.accumulator(0)
 def g(x):
-  accum.add(x)
-  return f(x)
+    accum.add(x)
+    return f(x)
 data.map(g)
 # Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}

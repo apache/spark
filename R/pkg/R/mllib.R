@@ -140,7 +140,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, family$family, family$link,
-                                tol, as.integer(maxIter), weightCol)
+                                tol, as.integer(maxIter), as.character(weightCol))
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
