@@ -280,8 +280,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         |as src1(key, value)
       """.stripMargin)
 
-    session.sql("select * from src1").show(false)
-
     Seq((251, "val_251", "2008-04-08", "11"),
       (251, "val_251", "2008-04-09", "11"),
       (251, "val_251", "2008-04-08", "12"),
