@@ -34,3 +34,6 @@ select * from values ("one"), ("two") as data(a, b);
 
 -- error reporting: unresolved expression
 select * from values ("one", random_not_exist_func(1)), ("two", 2) as data(a, b);
+
+-- error reporting: aggregate expression
+select * from values ("one", count(1)), ("two", 2) as data(a, b);
