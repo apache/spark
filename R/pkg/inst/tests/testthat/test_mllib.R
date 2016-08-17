@@ -560,7 +560,7 @@ test_that("spark.posterior and spark.perplexity", {
   # Assert the sum of every topic distribution is equal to 1
   posterior <- spark.posterior(model, text)
   local.posterior <- collect(posterior)$topicDistribution
-  expect_equal(length(local.posterior), sum(local.posterior))
+  expect_equal(length(local.posterior), sum(unlist(local.posterior)))
 })
 
 sparkR.session.stop()
