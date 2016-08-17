@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
   SparkListenerSQLExecutionStart}
 
-private[sql] object SQLExecution {
+object SQLExecution {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
 

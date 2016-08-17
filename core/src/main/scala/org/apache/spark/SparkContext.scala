@@ -355,7 +355,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
   def setLogLevel(logLevel: String) {
-    // let's allow lowcase or mixed case too
+    // let's allow lowercase or mixed case too
     val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
     require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
       s"Supplied level $logLevel did not match one of:" +
@@ -2262,9 +2262,10 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
         setActiveContext(new SparkContext(config), allowMultipleContexts = false)
-      }
-      if (config.getAll.nonEmpty) {
-        logWarning("Use an existing SparkContext, some configuration may not take effect.")
+      } else {
+        if (config.getAll.nonEmpty) {
+          logWarning("Using an existing SparkContext; some configuration may not take effect.")
+        }
       }
       activeContext.get()
     }
@@ -2281,7 +2282,12 @@ object SparkContext extends Logging {
    * even if multiple contexts are allowed.
    */
   def getOrCreate(): SparkContext = {
-    getOrCreate(new SparkConf())
+    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
+      if (activeContext.get() == null) {
+        setActiveContext(new SparkContext(), allowMultipleContexts = false)
+      }
+      activeContext.get()
+    }
   }
 
   /**
