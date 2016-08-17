@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.expressions.{Cast, InterpretedProjection}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -30,16 +30,16 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
-      validateInputFoldable(table)
+      // validateInputFoldable(table)
       convert(table)
   }
 
   /**
    * Validates that all inline table data are foldable expressions.
    *
-   * This is publicly visible for unit testing.
+   * This is package visible for unit testing.
    */
-  def validateInputFoldable(table: UnresolvedInlineTable): Unit = {
+  private[analysis] def validateInputFoldable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
         if (!e.resolved || !e.foldable) {
@@ -54,9 +54,9 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    * 1. All rows have the same cardinality.
    * 2. The number of column aliases defined is consistent with the number of columns in data.
    *
-   * This is publicly visible for unit testing.
+   * This is package visible for unit testing.
    */
-  def validateInputDimension(table: UnresolvedInlineTable): Unit = {
+  private[analysis] def validateInputDimension(table: UnresolvedInlineTable): Unit = {
     if (table.rows.nonEmpty) {
       val numCols = table.rows.head.size
       table.rows.zipWithIndex.foreach { case (row, ri) =>
@@ -77,29 +77,25 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    *
    * This function attempts to coerce inputs into consistent types.
    *
-   * This is publicly visible for unit testing.
+   * This is package visible for unit testing.
    */
-  def convert(table: UnresolvedInlineTable): LocalRelation = {
+  private[analysis] def convert(table: UnresolvedInlineTable): LocalRelation = {
     val numCols = table.rows.head.size
 
     // For each column, traverse all the values and find a common data type.
-    val targetTypes = Seq.tabulate(numCols) { ci =>
-      val inputTypes = table.rows.map(_(ci).dataType)
+    val targetTypes = table.rows.transpose.zip(table.names).map { case (column, name) =>
+      val inputTypes = column.map(_.dataType)
       TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
-        table.failAnalysis(s"incompatible types found in column $ci for inline table")
+        table.failAnalysis(s"incompatible types found in column $name for inline table")
       }
     }
     assert(targetTypes.size == table.names.size)
 
     val newRows: Seq[InternalRow] = table.rows.map { row =>
-      InternalRow.fromSeq(row.zipWithIndex.map { case (e, ci) =>
+      new InterpretedProjection(row.zipWithIndex.map { case (e, ci) =>
         val targetType = targetTypes(ci)
-        if (e.dataType.sameType(targetType)) {
-          e.eval()
-        } else {
-          Cast(e, targetType).eval()
-        }
-      })
+        if (e.dataType.sameType(targetType)) e else Cast(e, targetType)
+      }).apply(null)
     }
 
     val attributes = StructType(targetTypes.zip(table.names)

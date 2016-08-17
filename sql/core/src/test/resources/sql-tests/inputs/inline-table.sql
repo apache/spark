@@ -26,6 +26,9 @@ select * from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b);
 -- decimal and double coercion
 select * from values ("one", 2.0), ("two", 3.0D) as data(a, b);
 
+-- nondeterministic function rand
+select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b);
+
 -- error reporting: different number of columns
 select * from values ("one", 2.0), ("two") as data(a, b);
 
