@@ -139,7 +139,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * :: Experimental ::
    * Specifies the underlying output data source using a StreamSinkProvider. This is useful for
-   * sinks which are constructed with user specified functions (such as  user version foreachSink).
+   * sinks which are constructed with user specified functions (such as a user specified version of
+   * ForeachSink).
    *
    * @since 2.1.0
    */
