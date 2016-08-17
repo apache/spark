@@ -44,6 +44,8 @@ private[r] object RWrappers extends MLReader[Object] {
         GeneralizedLinearRegressionWrapper.load(path)
       case "org.apache.spark.ml.r.KMeansWrapper" =>
         KMeansWrapper.load(path)
+      case "org.apache.spark.ml.r.IsotonicRegressionWrapper" =>
+        IsotonicRegressionWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR read.ml does not support load $className")
     }
