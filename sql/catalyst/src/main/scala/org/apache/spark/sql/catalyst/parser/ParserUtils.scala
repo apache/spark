@@ -77,8 +77,8 @@ object ParserUtils {
     Origin(Option(token.getLine), Option(token.getCharPositionInLine))
   }
 
-  /** Assert if a condition holds. If it doesn't throw a parse exception. */
-  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
+  /** Validate the condition. If it doesn't throw a parse exception. */
+  def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
       throw new ParseException(message, ctx)
     }

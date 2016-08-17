@@ -47,6 +47,6 @@ $FWDIR/create-docs.sh
 
 VERSION=`grep Version $FWDIR/pkg/DESCRIPTION | awk '{print $NF}'`
 
-"$R_SCRIPT_PATH/"R CMD check --as-cran --no-tests SparkR_"$VERSION".tar.gz 
+"$R_SCRIPT_PATH/"R CMD check --as-cran SparkR_"$VERSION".tar.gz
 
 popd > /dev/null

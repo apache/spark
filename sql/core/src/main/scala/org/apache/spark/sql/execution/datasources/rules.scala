@@ -55,7 +55,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
             s"${u.tableIdentifier.database.get}")
         }
         val plan = LogicalRelation(dataSource.resolveRelation())
-        u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
+        u.alias.map(a => SubqueryAlias(u.alias.get, plan, None)).getOrElse(plan)
       } catch {
         case e: ClassNotFoundException => u
         case e: Exception =>
@@ -269,6 +269,21 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           preprocess(i, tblName, Nil)
         case other => i
       }
+  }
+}
+
+/**
+ * A rule to check whether the functions are supported only when Hive support is enabled
+ */
+object HiveOnlyCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case CreateTable(tableDesc, _, Some(_))
+          if tableDesc.provider.get == "hive" =>
+        throw new AnalysisException("Hive support is required to use CREATE Hive TABLE AS SELECT")
+
+      case _ => // OK
+    }
   }
 }
 
