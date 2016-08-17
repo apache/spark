@@ -476,7 +476,6 @@ test_that("spark.survreg", {
   }
 })
 
-<<<<<<< abe1aabdf9b9ce513f105482ed4c6d6143f2b0a4
 test_that("spark.isotonicRegression", {
   label <- c(7.0, 5.0, 3.0, 5.0, 1.0)
   feature <- c(0.0, 1.0, 2.0, 3.0, 4.0)

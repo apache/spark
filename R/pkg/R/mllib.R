@@ -639,12 +639,10 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 
 #  Save fitted IsotonicRegressionModel to the input path
 
-#' @param path the directory where the model is saved.
-#' @param overwrite overwrites or not if the output path already exists. Default is FALSE
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-<<<<<<< 6a43d795dc073263b7b8880f744cbd895c257019
-<<<<<<< abe1aabdf9b9ce513f105482ed4c6d6143f2b0a4
 #' @rdname spark.isoreg
 #' @aliases write.ml,IsotonicRegressionModel,character-method
 #' @export
