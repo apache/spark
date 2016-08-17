@@ -26,11 +26,13 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils.getCallSite
 
 private[sql] object Column {
 
@@ -46,6 +48,16 @@ private[sql] object Column {
         a.aggregateFunction.toString
       case expr => usePrettyExpression(expr).sql
     }
+  }
+
+  @scala.annotation.varargs
+  def updateExpressionsOrigin(cols: Column*): Unit = {
+    // Update Expression.origin using the callSite of an operation
+    val callSite = org.apache.spark.util.Utils.getCallSite().shortForm
+    cols.map(col => col.expr.foreach(e => e.origin.callSite = Some(callSite)))
+    // Update CurrentOrigin for setting origin for LogicalPlan node
+    CurrentOrigin.set(
+      Origin(Some(callSite), CurrentOrigin.get.line, CurrentOrigin.get.startPosition))
   }
 }
 

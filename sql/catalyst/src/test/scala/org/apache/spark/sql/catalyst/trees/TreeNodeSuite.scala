@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.trees
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkContext
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -117,7 +119,7 @@ class TreeNodeSuite extends SparkFunSuite {
   }
 
   test("preserves origin") {
-    CurrentOrigin.setPosition(1, 1)
+    CurrentOrigin.setPosition("TreeNodeSuite.scala:120", 1, 1)
     val add = Add(Literal(1), Literal(1))
     CurrentOrigin.reset()
 
@@ -125,8 +127,29 @@ class TreeNodeSuite extends SparkFunSuite {
       case Literal(1, _) => Literal(2)
     }
 
+    assert(transformed.origin.callSite.isDefined)
     assert(transformed.origin.line.isDefined)
     assert(transformed.origin.startPosition.isDefined)
+  }
+
+  test("preserves origin thru SerDe") {
+    val sc = new SparkContext("local", "test")
+    val callSite = "TreeNodeSuite.scala:137"
+    val line = 1
+    val startPosition = 2
+    CurrentOrigin.setPosition(callSite, line, startPosition)
+    val add = Add(Literal(1), Literal(2))
+
+    val ser = sc.env.closureSerializer.newInstance()
+    val serBinary = ser.serialize(add)
+    val deadd = ser.deserialize[Expression](serBinary, Thread.currentThread.getContextClassLoader)
+
+    assert(deadd.origin.callSite.isDefined &&
+           deadd.origin.callSite.get == callSite)
+    assert(deadd.origin.line.isDefined &&
+           deadd.origin.line.get == line)
+    assert(deadd.origin.startPosition.isDefined &&
+           deadd.origin.startPosition.get == startPosition)
   }
 
   test("foreach up") {

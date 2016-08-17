@@ -74,7 +74,7 @@ object ParserUtils {
 
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
-    Origin(Option(token.getLine), Option(token.getCharPositionInLine))
+    Origin(None, Option(token.getLine), Option(token.getCharPositionInLine))
   }
 
   /** Validate the condition. If it doesn't throw a parse exception. */

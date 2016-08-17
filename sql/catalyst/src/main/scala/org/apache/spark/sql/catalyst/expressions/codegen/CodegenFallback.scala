@@ -35,7 +35,7 @@ trait CodegenFallback extends Expression {
     val idx = ctx.references.length
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
-    val placeHolder = ctx.registerComment(this.toString)
+    val placeHolder = ctx.registerComment(this.toOriginString)
     if (nullable) {
       ev.copy(code = s"""
         $placeHolder
