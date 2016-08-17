@@ -344,6 +344,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @note sparkR.session since 2.0.0
 sparkR.session <- function(
   master = "",
+  deployMode = "",
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),
   sparkConfig = list(),
@@ -360,6 +361,9 @@ sparkR.session <- function(
     if (exists("spark.master", envir = paramMap)) {
       master <- paramMap[["spark.master"]]
     }
+    if (exists("spark.submit.deployMode", envir = paramMap)) {
+      deployMode <- paramMap[["spark.submit.deployMode"]]
+    }
     if (exists("spark.app.name", envir = paramMap)) {
       appName <- paramMap[["spark.app.name"]]
     }
@@ -367,7 +371,7 @@ sparkR.session <- function(
   }
   # do not download if it is run in the sparkR shell
   if (!nzchar(master) || is_master_local(master)) {
-    if (!is_sparkR_shell()) {
+    if (!is_sparkR_shell() && deployMode != "cluster") {
       if (is.na(file.info(sparkHome)$isdir)) {
         msg <- paste0("Spark not found in SPARK_HOME: ",
                       sparkHome,
