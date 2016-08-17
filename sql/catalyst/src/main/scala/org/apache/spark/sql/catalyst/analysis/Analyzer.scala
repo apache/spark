@@ -146,7 +146,7 @@ class Analyzer(
           // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.query, cteRelations))
+              e.withNewPlan(substituteCTE(e.plan, cteRelations))
           }
       }
     }
@@ -1091,7 +1091,7 @@ class Analyzer(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       // Step 1: Resolve the outer expressions.
       var previous: LogicalPlan = null
-      var current = e.query
+      var current = e.plan
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
