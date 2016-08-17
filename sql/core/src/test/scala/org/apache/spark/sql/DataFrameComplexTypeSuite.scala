@@ -92,7 +92,7 @@ class S100(
   val s89: String = "89", val s90: String = "90", val s91: String = "91", val s92: String = "92",
   val s93: String = "93", val s94: String = "94", val s95: String = "95", val s96: String = "96",
   val s97: String = "97", val s98: String = "98", val s99: String = "99", val s100: String = "100")
-extends DefinedByConstructorParams {}
+extends DefinedByConstructorParams
 
 case class S100_5(
   s1: S100 = new S100(), s2: S100 = new S100(), s3: S100 = new S100(),
