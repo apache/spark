@@ -264,10 +264,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       .toDF("N", "L")
       .createOrReplaceTempView("upperCaseData")
 
-    val srcSchema = new StructType().add("key", IntegerType).add("value", StringType)
-    session.read.schema(srcSchema).json(getFilePath("test-data/kv1.json"))
-      .createOrReplaceTempView("src")
-
     Seq((251, "val_251"), (86, "val_86"), (165, "val_165"), (330, "val_330"), (165, "val_165"))
       .toDF("key", "value")
       .createOrReplaceTempView("src")
@@ -283,9 +279,27 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       .toDF("key", "value")
       .createOrReplaceTempView("src1")
 
-    val srcpartSchema = new StructType().add("key", IntegerType).add("value", StringType)
-      .add("ds", StringType).add("hr", StringType)
-    session.read.schema(srcpartSchema).json(getFilePath("test-data/srcpart.json"))
+    Seq((251, "val_251", "2008-04-08", "11"),
+      (251, "val_251", "2008-04-09", "11"),
+      (251, "val_251", "2008-04-08", "12"),
+      (251, "val_251", "2008-04-09", "12"),
+      (86, "val_86", "2008-04-08", "11"),
+      (86, "val_86", "2008-04-09", "11"),
+      (86, "val_86", "2008-04-08", "12"),
+      (86, "val_86", "2008-04-09", "12"),
+      (165, "val_165", "2008-04-08", "11"),
+      (165, "val_165", "2008-04-09", "11"),
+      (165, "val_165", "2008-04-08", "12"),
+      (165, "val_165", "2008-04-09", "12"),
+      (330, "val_330", "2008-04-08", "11"),
+      (330, "val_330", "2008-04-09", "11"),
+      (330, "val_330", "2008-04-08", "12"),
+      (330, "val_330", "2008-04-09", "12"),
+      (165, "val_165", "2008-04-08", "11"),
+      (165, "val_165", "2008-04-09", "11"),
+      (165, "val_165", "2008-04-08", "12"),
+      (165, "val_165", "2008-04-09", "12"))
+      .toDF("key", "value", "ds", "hr")
       .createOrReplaceTempView("srcpart")
   }
 
