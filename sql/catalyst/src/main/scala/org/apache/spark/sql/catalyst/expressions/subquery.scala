@@ -72,7 +72,7 @@ case class ScalarSubquery(
   override def dataType: DataType = query.schema.fields.head.dataType
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query, None)
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = copy(query = plan)
   override def toString: String = s"scalar-subquery#${exprId.id} $conditionString"
 }
@@ -100,7 +100,7 @@ case class PredicateSubquery(
   override lazy val resolved = childrenResolved && query.resolved
   override lazy val references: AttributeSet = super.references -- query.outputSet
   override def nullable: Boolean = nullAware
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query, None)
   override def withNewPlan(plan: LogicalPlan): PredicateSubquery = copy(query = plan)
   override def semanticEquals(o: Expression): Boolean = o match {
     case p: PredicateSubquery =>
@@ -153,7 +153,7 @@ case class ListQuery(query: LogicalPlan, exprId: ExprId = NamedExpression.newExp
   override def dataType: DataType = ArrayType(NullType)
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(query = plan)
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query, None)
   override def toString: String = s"list#${exprId.id}"
 }
 
@@ -174,6 +174,6 @@ case class Exists(query: LogicalPlan, exprId: ExprId = NamedExpression.newExprId
   override def children: Seq[Expression] = Seq.empty
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = copy(query = plan)
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query, None)
   override def toString: String = s"exists#${exprId.id}"
 }
