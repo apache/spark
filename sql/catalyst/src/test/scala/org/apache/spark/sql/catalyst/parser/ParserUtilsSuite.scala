@@ -163,15 +163,15 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(position(emptyContext.stop) == Origin(None, None))
   }
 
-  test("assert") {
+  test("validate") {
     val f1 = { ctx: ParserRuleContext =>
       ctx.children != null && !ctx.children.isEmpty
     }
     val message = "ParserRuleContext should not be empty."
-    ParserUtils.assert(f1(showFuncContext), message, showFuncContext)
+    validate(f1(showFuncContext), message, showFuncContext)
 
     val e = intercept[ParseException] {
-      ParserUtils.assert(f1(emptyContext), message, emptyContext)
+      validate(f1(emptyContext), message, emptyContext)
     }.getMessage
     assert(e.contains(message))
   }
