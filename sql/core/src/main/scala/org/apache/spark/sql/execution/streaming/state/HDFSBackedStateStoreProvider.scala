@@ -279,14 +279,11 @@ private[state] class HDFSBackedStateStoreProvider(
   /** Initialize the store provider */
   private def initialize(): Unit = {
     try {
-      if (!fs.getFileStatus(baseDir).isDirectory()) {
-        throw new IllegalStateException(
-          s"Cannot use ${id.checkpointLocation} for storing state data for $this as " +
-            s"$baseDir already exists and is not a directory")
-      }
+      fs.mkdirs(baseDir)
     } catch {
-      case _: FileNotFoundException =>
-        fs.mkdirs(baseDir)
+      case e: IOException =>
+        throw new IllegalStateException(
+          s"Cannot use ${id.checkpointLocation} for storing state data for $this: $e ", e)
     }
   }
 
@@ -447,7 +444,7 @@ private[state] class HDFSBackedStateStoreProvider(
       Some(map)
     } catch {
       case _: FileNotFoundException =>
-        return None
+        None
     } finally {
       if (input != null) input.close()
     }
