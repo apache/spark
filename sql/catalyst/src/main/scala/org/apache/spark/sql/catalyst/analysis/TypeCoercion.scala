@@ -150,7 +150,7 @@ object TypeCoercion {
    * [[findTightestCommonType]], but can handle decimal types. If the wider decimal type exceeds
    * system limitation, this rule will truncate the decimal type before return it.
    */
-  private def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
+  def findWiderTypeWithoutStringPromotion(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case Some(d) => findTightestCommonTypeOfTwo(d, c).orElse((d, c) match {
         case (t1: DecimalType, t2: DecimalType) =>

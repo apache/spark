@@ -50,6 +50,23 @@ case class UnresolvedRelation(
 }
 
 /**
+ * An inline table that has not been resolved yet. Once resolved, it is turned by the analyzer into
+ * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]].
+ *
+ * @param names list of column names
+ * @param rows expressions for the data
+ */
+case class UnresolvedInlineTable(
+    names: Seq[String],
+    rows: Seq[Seq[Expression]])
+  extends LeafNode {
+
+  lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
+  override def output: Seq[Attribute] = Nil
+  override lazy val resolved = false
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
