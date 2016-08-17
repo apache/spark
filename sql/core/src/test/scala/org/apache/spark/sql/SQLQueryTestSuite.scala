@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData.NullKeyValuePairs
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
@@ -267,8 +268,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     session.read.schema(srcSchema).json(getFilePath("test-data/kv1.json"))
       .createOrReplaceTempView("src")
 
-    val src1Schema = new StructType().add("key", IntegerType).add("value", StringType)
-    session.read.schema(src1Schema).json(getFilePath("test-data/kv3.json"))
+    Seq((251, "val_251"), (86, "val_86"), (165, "val_165"), (330, "val_330"), (165, "val_165"))
+      .toDF("key", "value")
+      .createOrReplaceTempView("src")
+
+    spark.sparkContext.parallelize(
+      Seq(NullKeyValuePairs(201, null),
+        NullKeyValuePairs(86, "val_86"),
+        NullKeyValuePairs(null, "val_null"),
+        NullKeyValuePairs(165, "val_165"),
+        NullKeyValuePairs(null, null),
+        NullKeyValuePairs(330, "val_330"),
+        NullKeyValuePairs(165, null)), 2)
+      .toDF("key", "value")
       .createOrReplaceTempView("src1")
 
     val srcpartSchema = new StructType().add("key", IntegerType).add("value", StringType)

@@ -305,6 +305,7 @@ private[sql] object SQLTestData {
   case class IntField(i: Int)
   case class NullInts(a: Integer)
   case class NullStrings(n: Int, s: String)
+  case class NullKeyValuePairs(key: Integer, value: String)
   case class TableName(tableName: String)
   case class Person(id: Int, name: String, age: Int)
   case class Salary(personId: Int, salary: Double)

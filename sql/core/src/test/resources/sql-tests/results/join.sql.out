@@ -895,7 +895,7 @@ struct<key:int,value:string>
 -- !query 46
 SELECT x.key, x.value, subq1.value
 FROM
-( SELECT x.key as key, x.value as value from src x where x.key < 20
+( SELECT x.key as key, x.value as value from src x where x.key < 200
      UNION ALL
   SELECT x1.key as key, x1.value as value from src x1 where x1.key > 100
 ) subq1
@@ -905,9 +905,14 @@ struct<key:int,value:string,value:string>
 -- !query 46 output
 165	NULL	val_165
 165	NULL	val_165
+165	NULL	val_165
+165	NULL	val_165
+165	val_165	val_165
+165	val_165	val_165
 165	val_165	val_165
 165	val_165	val_165
 330	val_330	val_330
+86	val_86	val_86
 
 
 -- !query 47
