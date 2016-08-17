@@ -161,7 +161,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // Make sure that the exception message reported through listener
           // contains the actual exception and relevant stack trace
           assert(!listener.terminationException.get.contains("StreamingQueryException"))
-          assert(listener.terminationException.get.contains("terminated with exception"))
           assert(listener.terminationException.get.contains("java.lang.ArithmeticException"))
           assert(listener.terminationException.get.contains("StreamingQueryListenerSuite"))
         }
