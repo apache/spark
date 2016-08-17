@@ -27,7 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.feature.SelectorType
+import org.apache.spark.mllib.feature.ChiSqSelectorType
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.rdd.RDD
@@ -62,7 +62,7 @@ private[feature] trait ChiSqSelectorParams extends Params
     ParamValidators.gtEq(0))
   setDefault(alpha -> 0.05)
 
-  final val selectorType = SelectorType.KBest
+  final val selectorType = ChiSqSelectorType.KBest
 
   /** @group getParam */
   def getNumTopFeatures: Int = $(numTopFeatures)
@@ -71,7 +71,7 @@ private[feature] trait ChiSqSelectorParams extends Params
 
   def getAlpha: Double = $(alpha)
 
-  def getSelectorType: SelectorType.Value = selectorType
+  def getChiSqSelectorType: ChiSqSelectorType.Value = selectorType
 }
 
 
@@ -90,19 +90,19 @@ final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: Str
   @Since("1.6.0")
   def setNumTopFeatures(value: Int): this.type = {
     chiSqSelector.setNumTopFeatures(value)
-    chiSqSelector.setSelectorType(SelectorType.KBest)
+    chiSqSelector.setChiSqSelectorType(ChiSqSelectorType.KBest)
     set(numTopFeatures, value)
   }
 
   def setPercentile(value: Int): this.type = {
     chiSqSelector.setPercentile(value)
-    chiSqSelector.setSelectorType(SelectorType.Percentile)
+    chiSqSelector.setChiSqSelectorType(ChiSqSelectorType.Percentile)
     set(percentile, value)
   }
 
   def setAlpha(value: Double): this.type = {
     chiSqSelector.setAlpha(value)
-    chiSqSelector.setSelectorType(SelectorType.Fpr)
+    chiSqSelector.setChiSqSelectorType(ChiSqSelectorType.Fpr)
     set(alpha, value)
   }
 

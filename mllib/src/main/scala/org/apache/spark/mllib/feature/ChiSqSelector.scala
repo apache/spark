@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 
-object SelectorType extends Enumeration {
+object ChiSqSelectorType extends Enumeration {
   type SelectorType = Value
   val KBest, Percentile, Fpr = Value
 }
@@ -77,7 +77,6 @@ class ChiSqSelectorModel @Since("1.3.0") (
    */
   private def compress(features: Vector, filterIndices: Array[Int]): Vector = {
     val orderedIndices = filterIndices.sorted
-    require(isSorted(orderedIndices), "Array has to be sorted asc")
     features match {
       case SparseVector(size, indices, values) =>
         val newSize = orderedIndices.length
@@ -178,30 +177,34 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 /**
  * Creates a ChiSquared feature selector.
  */
-@Since("1.3.0")
-class ChiSqSelector @Since("1.3.0") () extends Serializable {
-  var numTopFeatures: Int = 1
-  var percentile: Int = 10
-  var alpha: Double = 0.05
-  var selectorType = SelectorType.KBest
-  var chiSqTestResult: Array[ChiSqTestResult] = new Array[ChiSqTestResult](0)
+@Since("2.1.0")
+class ChiSqSelector @Since("2.1.0") () extends Serializable {
+  private var numTopFeatures: Int = 1
+  private var percentile: Int = 10
+  private var alpha: Double = 0.05
+  private var selectorType = ChiSqSelectorType.KBest
+  private var chiSqTestResult: Array[ChiSqTestResult] = _
 
+  def this(numTopFeatures: Int) {
+    this()
+    this.numTopFeatures = numTopFeatures
+  }
   def setNumTopFeatures(value: Int): this.type = {
     numTopFeatures = value
-    selectorType = SelectorType.KBest
+    selectorType = ChiSqSelectorType.KBest
     this
   }
   def setPercentile(value: Int): this.type = {
     percentile = value
-    selectorType = SelectorType.Percentile
+    selectorType = ChiSqSelectorType.Percentile
     this
   }
   def setAlpha(value: Double): this.type = {
     alpha = value
-    selectorType = SelectorType.Fpr
+    selectorType = ChiSqSelectorType.Fpr
     this
   }
-  def setSelectorType(value: SelectorType.Value): this.type = {
+  def setChiSqSelectorType(value: ChiSqSelectorType.Value): this.type = {
     selectorType = value
     this
   }
@@ -217,9 +220,10 @@ class ChiSqSelector @Since("1.3.0") () extends Serializable {
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
     chiSqTestResult = Statistics.chiSqTest(data)
       selectorType match {
-        case SelectorType.KBest => selectKBest(numTopFeatures)
-        case SelectorType.Percentile => selectPercentile(percentile)
-        case SelectorType.Fpr => selectFpr(alpha)
+        case ChiSqSelectorType.KBest => selectKBest(numTopFeatures)
+        case ChiSqSelectorType.Percentile => selectPercentile(percentile)
+        case ChiSqSelectorType.Fpr => selectFpr(alpha)
+        case _ => throw new Exception
       }
   }
 

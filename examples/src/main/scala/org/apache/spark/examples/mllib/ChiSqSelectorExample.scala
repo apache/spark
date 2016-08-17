@@ -43,8 +43,7 @@ object ChiSqSelectorExample {
       LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => (x / 16).floor }))
     }
     // Create ChiSqSelector that will select top 50 of 692 features
-    val selector = new ChiSqSelector()
-    selector.setNumTopFeatures(50)
+    val selector = new ChiSqSelector(50)
     // Create ChiSqSelector model (selecting features)
     val transformer = selector.fit(discretizedData)
     // Filter the top 50 features from each feature vector
