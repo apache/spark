@@ -364,17 +364,6 @@ object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         p
       }
-
-    // Push down filter into union
-    case Filter(condition, Union(children)) =>
-      assert(children.nonEmpty)
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val newFirstChild = Filter(deterministic, children.head)
-      val newOtherChildren = children.tail.map { child =>
-        val rewrites = buildRewrites(children.head, child)
-        Filter(pushToRight(deterministic, rewrites), child)
-      }
-      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
   }
 }
 
