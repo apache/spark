@@ -29,7 +29,7 @@ import org.apache.spark.util.Benchmark
  */
 class BenchmarkWideTable extends BenchmarkBase {
 
-  test("project on wide table") {
+  ignore("project on wide table") {
     val N = 1 << 20
     val df = sparkSession.range(N)
     val columns = (0 until 400).map{ i => s"id as id$i"}

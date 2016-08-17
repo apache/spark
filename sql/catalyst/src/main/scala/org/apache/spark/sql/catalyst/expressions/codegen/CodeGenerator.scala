@@ -584,7 +584,7 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
-    if (row == null) {
+    if (row == null || currentVars != null) {
       // Cannot split these expressions because they are not created from a row object.
       return expressions.mkString("\n")
     }
