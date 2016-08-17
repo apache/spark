@@ -19,7 +19,9 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.StreamSinkProvider
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.sources.StreamSinkProvider
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -34,9 +36,7 @@ class CustomSinkSuite extends StreamTest {
    * will allow for more transformations beyond `foreach` and `collect` while preserving the
    * incremental planning.
    */
-  abstract class ForeachDatasetSinkProvider extends StreamSinkProvider {
-    def func(df: DataFrame): Unit
-
+  class ForeachDatasetSinkProvider(func: DataFrame => Unit) extends StreamSinkProvider {
     def createSink(
       sqlContext: SQLContext,
       parameters: Map[String, String],
@@ -50,13 +50,11 @@ class CustomSinkSuite extends StreamTest {
    * Custom sink similar to the old foreachRDD.
    * To use with the stream writer - do not construct directly, instead subclass
    * [[ForeachDatasetSinkProvider]] and provide to Spark's DataStreamWriter format.
-   *  This can also be used directly as in StreamingNaiveBayes.scala
+   * Note: As with all sinks, `func` must not directly perform an DataFrame operations on
+   * its input, instead it may convert the input to an RDD first or directly write the results out.
    */
   case class ForeachDatasetSink(func: DataFrame => Unit)
       extends Sink {
-
-    val estimator = new StreamingNaiveBayes()
-
     override def addBatch(batchId: Long, data: DataFrame): Unit = {
       func(data)
     }
@@ -64,21 +62,37 @@ class CustomSinkSuite extends StreamTest {
 
 
   test("Simple custom foreach") {
-    implicit val e = ExpressionEncoder[java.lang.Long]
+    withTempDir { checkpointDir =>
+      val start = 0
+      val end = 25
 
-    val start = 0
-    val end = 200
-    val numPartitions = 100
+      val inputData = MemoryStream[Int]
+      inputData.addData(start.to(end))
 
-    val df = spark
-      .range(start, end, 1, numPartitions)
-      .flatMap(x => Iterator(x, x, x)).toDF("id")
-      .select($"id", lit(100).as("data1"), lit(1000).as("data2"))
+      val df = inputData.toDS()
+        .flatMap(x => Iterator(x, x, x)).toDF("id")
+        .select($"id", lit(100).as("data1"))
 
-    var count = 0
+      var count = 0L
+      var sum = 0L
 
-    val foreachSink = new ForeachDatasetSink(df => count += df.rdd.count())
+      val foreachSink = new ForeachDatasetSinkProvider({df =>
+        val rdd = df.rdd
+        count += rdd.count()
+        sum += rdd.collect().map(_.getInt(0)).sum
+      })
 
-    val query = df.writeStream().format(foreachSink)
+      val writer = df.writeStream.format(foreachSink)
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+      val query = writer.start()
+      assert(query.isActive === true)
+      query.processAllAvailable()
+      assert(0.to(end).sum * 3 === sum)
+      assert(count === (end + 1) * 3)
+
+      inputData.addData(start.to(end))
+      query.processAllAvailable()
+      assert(0.to(end).sum * 3 * 2 === sum)
+    }
   }
 }
