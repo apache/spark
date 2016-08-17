@@ -22,9 +22,6 @@ import java.math.MathContext
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
@@ -124,16 +121,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
         Row(0) :: Row(81) :: Nil)
     }
-  }
-
-  test("support table.star") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.*
-          |FROM testData l join testData2 r on (l.key = r.a)
-        """.stripMargin),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
   }
 
   test("self join with alias in agg") {
@@ -636,35 +623,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("big inner join, 4 matches per row") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT * FROM
-          |  (SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData) x JOIN
-          |  (SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData UNION ALL
-          |   SELECT * FROM testData) y
-          |WHERE x.key = y.key""".stripMargin),
-      testData.rdd.flatMap(
-        row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
-  }
-
-  test("cartesian product join") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      checkAnswer(
-        testData3.join(testData3),
-        Row(1, null, 1, null) ::
-          Row(1, null, 2, 2) ::
-          Row(2, 2, 1, null) ::
-          Row(2, 2, 2, 2) :: Nil)
-    }
-  }
-
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {
@@ -694,23 +652,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM lowerCaseData INNER JOIN subset2 ON subset2.n = lowerCaseData.n"),
       Row(1, "a", 1) ::
       Row(2, "b", 2) :: Nil)
-  }
-
-  test("mixed-case keywords") {
-    checkAnswer(
-      sql(
-        """
-          |SeleCT * from
-          |  (select * from upperCaseData WherE N <= 4) leftTable fuLL OUtER joiN
-          |  (sElEcT * FROM upperCaseData whERe N >= 3) rightTable
-          |    oN leftTable.N = rightTable.N
-        """.stripMargin),
-      Row(1, "A", null, null) ::
-      Row(2, "B", null, null) ::
-      Row(3, "C", 3, "C") ::
-      Row(4, "D", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
   }
 
   test("select with table name as qualifier") {
@@ -1112,18 +1053,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("Supporting relational operator '<=>' in Spark SQL") {
-    val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.toDF().createOrReplaceTempView("nulldata1")
-    val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
-    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.toDF().createOrReplaceTempView("nulldata2")
-    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
-      "nulldata2 on nulldata1.value <=> nulldata2.value"),
-        (1 to 2).map(i => Row(i)))
-  }
-
   test("Multi-column COUNT(DISTINCT ...)") {
     val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
@@ -1523,31 +1452,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: " +
       "org.apache.spark.sql.execution.datasources.jdbc"))
-  }
-
-  test("SortMergeJoin returns wrong results when using UnsafeRows") {
-    // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
-    // This bug will be triggered when Tungsten is enabled and there are multiple
-    // SortMergeJoin operators executed in the same task.
-    val confs = SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" :: Nil
-    withSQLConf(confs: _*) {
-      val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
-      val df2 =
-        df1
-          .join(df1.select(df1("i")), "i")
-          .select(df1("i"), df1("j"))
-
-      val df3 = df2.withColumnRenamed("i", "i1").withColumnRenamed("j", "j1")
-      val df4 =
-        df2
-          .join(df3, df2("i") === df3("i1"))
-          .withColumn("diff", $"j" - $"j1")
-          .select(df2("i"), df2("j"), $"diff")
-
-      checkAnswer(
-        df4,
-        df1.withColumn("diff", lit(0)))
-    }
   }
 
   test("SPARK-11303: filter should not be pushed down into sample") {

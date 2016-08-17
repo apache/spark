@@ -202,3 +202,24 @@ SELECT upperCaseData.N, upperCaseData.L FROM upperCaseData JOIN lowerCaseData
 SELECT a.key, b.key, c.key
 FROM testData a,testData b,testData c
 where a.key = b.key and a.key = c.key and a.key < 5;
+
+-- big inner join, 4 matches per row
+SELECT x.key, x.value, y.key, y.value, count(1) FROM
+  (SELECT * FROM testData UNION ALL
+   SELECT * FROM testData UNION ALL
+   SELECT * FROM testData UNION ALL
+   SELECT * FROM testData) x JOIN
+  (SELECT * FROM testData UNION ALL
+   SELECT * FROM testData UNION ALL
+   SELECT * FROM testData UNION ALL
+   SELECT * FROM testData) y
+WHERE x.key = y.key group by x.key, x.value, y.key, y.value;
+
+-- mixed-case keywords
+SeleCT * from
+  (select * from upperCaseData WherE N <= 4) leftTable fuLL OUtER joiN
+  (sElEcT * FROM upperCaseData whERe N >= 3) rightTable
+    oN leftTable.N = rightTable.N;
+
+-- Supporting relational operator '<=>' in Spark SQL
+SELECT * FROM src1 as a JOIN src1 as b on a.value <=> b.value;

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
@@ -225,4 +226,43 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, null) :: Row(null, 2) :: Nil
     )
   }
+
+  test("cartesian product join") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        testData3.join(testData3),
+        Row(1, null, 1, null) ::
+          Row(1, null, 2, 2) ::
+          Row(2, 2, 1, null) ::
+          Row(2, 2, 2, 2) :: Nil)
+    }
+  }
+
+
+  test("SortMergeJoin returns wrong results when using UnsafeRows") {
+    // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
+    // This bug will be triggered when Tungsten is enabled and there are multiple
+    // SortMergeJoin operators executed in the same task.
+    val confs = SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" :: Nil
+    withSQLConf(confs: _*) {
+      val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
+      val df2 =
+        df1
+          .join(df1.select(df1("i")), "i")
+          .select(df1("i"), df1("j"))
+
+      val df3 = df2.withColumnRenamed("i", "i1").withColumnRenamed("j", "j1")
+      val df4 =
+        df2
+          .join(df3, df2("i") === df3("i1"))
+          .withColumn("diff", $"j" - $"j1")
+          .select(df2("i"), df2("j"), $"diff")
+
+      checkAnswer(
+        df4,
+        df1.withColumn("diff", lit(0)))
+    }
+  }
+
+
 }
