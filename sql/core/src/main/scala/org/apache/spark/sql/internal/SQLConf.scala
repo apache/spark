@@ -310,6 +310,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val GATHER_FASTSTAT = SQLConfigBuilder("spark.sql.hive.gatherFastStats")
+      .internal()
+      .doc("When true, fast stats (number of files and total size of all files) will be gathered" +
+        "while reparing table partitions.")
+      .booleanConf
+      .createWithDefault(false)
+
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
   // a length restriction of 4000 characters). We will split the JSON string of a schema
@@ -604,6 +611,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 

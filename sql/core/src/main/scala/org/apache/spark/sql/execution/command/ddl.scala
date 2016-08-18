@@ -449,7 +449,7 @@ case class AlterTableRecoverPartitionsCommand(
 
   // These are two fast stats in Hive Metastore
   // see https://github.com/apache/hive/blob/master/
-  //   common/src/java/org/apache/hadoop/hive/common/StatsSetupConst.java#L88
+  //   common/src/java/org/apache/hadoop/hive/common/StatsSetupConst.java
   val NUM_FILES = "numFiles"
   val TOTAL_SIZE = "totalSize"
   val DDL_TIME = "transient_lastDdlTime"
@@ -506,8 +506,11 @@ case class AlterTableRecoverPartitionsCommand(
     val total = partitionSpecsAndLocs.length
     logInfo(s"Found $total partitions in $root")
 
-    val partitionStats = gatherPartitionStats(
-      spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
+    val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+      gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
+    } else {
+      GenMap.empty[String, (Int, Long)]
+    }
     logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
     addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
@@ -574,7 +577,8 @@ case class AlterTableRecoverPartitionsCommand(
 
       // Set the number of parallelism to prevent following file listing from generating many tasks
       // in case of large #defaultParallelism.
-      val numParallelism = Math.min(serializedPaths.length, 10000)
+      val numParallelism = Math.min(serializedPaths.length,
+        Math.min(spark.sparkContext.defaultParallelism, 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
       logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")
@@ -603,20 +607,20 @@ case class AlterTableRecoverPartitionsCommand(
     val total = partitionSpecsAndLocs.length
     var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
-    // we should split them into smaller batches.
-    val parArray = partitionSpecsAndLocs.toArray.grouped(100).toArray.par
-    parArray.tasksupport = evalTaskSupport
-    parArray.foreach { batch =>
+    // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
+    // do this in parallel.
+    partitionSpecsAndLocs.toIterator.grouped(1000).foreach { batch =>
       val now = System.currentTimeMillis() / 1000
       val parts = batch.map { case (spec, location) =>
+        val params = partitionStats.get(location.toString).map { case (numFiles, totalSize) =>
+          // This two fast stat could prevent Hive metastore to list the files again.
+          Map(NUM_FILES -> numFiles.toString,
+            TOTAL_SIZE -> totalSize.toString,
+            // Workaround a bug in HiveMetastore that try to mutate a read-only parameters.
+            // see metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java
+            DDL_TIME -> now.toString)
+        }.getOrElse(Map.empty)
         // inherit table storage format (possibly except for location)
-        val (numFiles, totalSize) = partitionStats(location.toString)
-        // This two fast stat could prevent Hive metastore to list the files again.
-        val params = Map(NUM_FILES -> numFiles.toString,
-          TOTAL_SIZE -> totalSize.toString,
-          // Workaround a bug in HiveMetastore that try to mutate a read-only parameters.
-          // see metastore/src/java/org/apache/hadoop/hive/metastore/HiveMetaStore.java:L2394
-          DDL_TIME -> now.toString)
         CatalogTablePartition(
           spec,
           table.storage.copy(locationUri = Some(location.toUri.toString)),
