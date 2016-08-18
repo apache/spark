@@ -48,7 +48,6 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 private[r] object MultilayerPerceptronClassifierWrapper
   extends MLReadable[MultilayerPerceptronClassifierWrapper] {
 
-  val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
   def fit(

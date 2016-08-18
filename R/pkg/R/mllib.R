@@ -636,7 +636,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #'                  which means throw exception if the output path exists.
 #'
 #' @rdname spark.mlp
-#' @aliases write.ml,MultilayerPerceptronClassificationModel,path-method
+#' @aliases write.ml,MultilayerPerceptronClassificationModel,character-method
 #' @export
 #' @seealso \link{write.ml}
 #' @note write.ml(MultilayerPerceptronClassificationModel, character) since 2.1.0
