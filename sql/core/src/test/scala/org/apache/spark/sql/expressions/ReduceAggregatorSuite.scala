@@ -60,4 +60,14 @@ class ReduceAggregatorSuite extends SparkFunSuite {
     assert(aggregator.finish(mergeWithZero2) == 3)
     assert(aggregator.finish(mergeTwoReduced) == 4)
   }
+
+  test("requires at least one input row") {
+    val encoder: ExpressionEncoder[Int] = ExpressionEncoder()
+    val func = (v1: Int, v2: Int) => v1 + v2
+    val aggregator: ReduceAggregator[Int] = new ReduceAggregator(func)(Encoders.scalaInt)
+
+    intercept[IllegalStateException] {
+      aggregator.finish(aggregator.zero)
+    }
+  }
 }

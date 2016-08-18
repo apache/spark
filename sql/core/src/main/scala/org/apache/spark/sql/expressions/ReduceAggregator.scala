@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
  * function can be used to go through all input values and reduces them to a single value.
  * If there is no input, a null value is returned.
  *
- * @since 2.1.0
+ * This class currently assumes there is at least one input row.
  */
 private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
   extends Aggregator[T, (Boolean, T), T] {
@@ -59,5 +59,10 @@ private[sql] class ReduceAggregator[T: Encoder](func: (T, T) => T)
     }
   }
 
-  override def finish(reduction: (Boolean, T)): T = reduction._2
+  override def finish(reduction: (Boolean, T)): T = {
+    if (!reduction._1) {
+      throw new IllegalStateException("ReduceAggregator requires at least one input row")
+    }
+    reduction._2
+  }
 }
