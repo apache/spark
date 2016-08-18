@@ -252,7 +252,7 @@ private[sql] object InferSchema {
    * Returns the most general data type for two given data types.
    */
   def compatibleType(t1: DataType, t2: DataType): DataType = {
-    TypeCoercion.findTightestCommonTypeOfTwo(t1, t2).getOrElse {
+    TypeCoercion.findWiderType(t1, t2).getOrElse {
       // t1 or t2 is a StructType, ArrayType, or an unexpected type.
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
