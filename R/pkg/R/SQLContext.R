@@ -205,6 +205,7 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
       lapply(data, getInternalType)
 
       # convert to rows
+      # TODO Clark: data <- split(data, 1:nrow(df))
       args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
       data <- do.call(mapply, append(args, data))
   }

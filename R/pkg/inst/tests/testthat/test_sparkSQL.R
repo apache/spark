@@ -2246,6 +2246,17 @@ test_that("dapply() and dapplyCollect() on a DataFrame", {
                x[, c("a", "b", "c")]
               })
   expect_identical(expected, result)
+
+  # Ensure UDF's can return columns containing arrays and bytes
+  add_list_columns <- function(x){
+    bytes <- serialize(1:5, NULL)
+    x$bytecolumn <- rep(list(bytes), nrow(x))
+    x$arraycolumn <- rep(list(1:5), nrow(x))
+    x
+  }
+  expected <- add_list_columns(ldf)
+  result <- dapplyCollect(df, add_list_columns)
+  expect_equal(expected, result)
 })
 
 test_that("repartition by columns on DataFrame", {
