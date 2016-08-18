@@ -142,7 +142,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("repeatedly failing task that crashes JVM with a zero exit code (SPARK-16925)") {
     // Ensures that if a task which causes the JVM to exit with a zero exit code will cause the
     // Spark job to eventually fail.
-    sc = new SparkContext(clusterUrl, "test")
+    val conf = new SparkConf().setAppName("test").setMaster(clusterUrl)
+      .set(BLACKLIST_ENABLED, false)
+    sc = new SparkContext(conf)
     failAfter(Span(100000, Millis)) {
       val thrown = intercept[SparkException] {
         sc.parallelize(1 to 1, 1).foreachPartition { _ => System.exit(0) }
