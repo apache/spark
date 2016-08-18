@@ -21,7 +21,7 @@ import time
 import threading
 import Queue
 
-from pyspark.sql import SparkSession
+from pyspark import SparkConf, SparkContext
 
 
 def delayed(seconds):
@@ -39,20 +39,17 @@ def call_in_background(f, *args):
     return result
 
 
-if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("PythonStatusAPIDemo") \
-        .config("spark.ui.showConsoleProgress", "false") \
-        .getOrCreate()
+def main():
+    conf = SparkConf().set("spark.ui.showConsoleProgress", "false")
+    sc = SparkContext(appName="PythonStatusAPIDemo", conf=conf)
 
     def run():
-        rdd = spark.sparkContext.parallelize(range(10), 10).map(delayed(2))
+        rdd = sc.parallelize(range(10), 10).map(delayed(2))
         reduced = rdd.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
         return reduced.map(delayed(2)).collect()
 
     result = call_in_background(run)
-    status = spark.sparkContext.statusTracker()
+    status = sc.statusTracker()
     while result.empty():
         ids = status.getJobIdsForGroup()
         for id in ids:
@@ -66,5 +63,7 @@ if __name__ == "__main__":
         time.sleep(1)
 
     print("Job results are:", result.get())
+    sc.stop()
 
-    spark.stop()
+if __name__ == "__main__":
+    main()
