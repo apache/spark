@@ -189,7 +189,7 @@ class TimestampType(AtomicType):
         if dt is not None:
             seconds = (calendar.timegm(dt.utctimetuple()) if dt.tzinfo
                        else time.mktime(dt.timetuple()))
-            return int(seconds * 1e6 + dt.microsecond)
+            return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts):
         if ts is not None:

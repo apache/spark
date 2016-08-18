@@ -127,7 +127,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.query))
+        s.withNewPlan(Optimizer.this.execute(s.plan))
     }
   }
 }
@@ -1814,7 +1814,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val newExpression = expression transform {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.query.output.head
+        s.plan.output.head
     }
     newExpression.asInstanceOf[E]
   }
@@ -1862,7 +1862,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
-      case SubqueryAlias(_, child) => evalPlan(child)
+      case SubqueryAlias(_, child, _) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
         if (bindings.isEmpty) bindings
@@ -1920,7 +1920,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           topPart += p
           bottomPart = child
 
-        case s @ SubqueryAlias(_, child) =>
+        case s @ SubqueryAlias(_, child, _) =>
           topPart += s
           bottomPart = child
 
@@ -1991,8 +1991,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
             topPart.reverse.foreach {
               case Project(projList, _) =>
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-              case s @ SubqueryAlias(alias, _) =>
-                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+              case s @ SubqueryAlias(alias, _, None) =>
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot, None)
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
@@ -2029,7 +2029,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // grouping expressions. As a result we need to replace all the scalar subqueries in the
         // grouping expressions by their result.
         val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.query.output.head).getOrElse(e)
+          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
         }
         Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
       } else {
