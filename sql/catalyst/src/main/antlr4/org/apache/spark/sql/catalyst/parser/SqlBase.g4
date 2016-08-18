@@ -324,7 +324,7 @@ queryPrimary
     ;
 
 sortItem
-    : expression ordering=(ASC | DESC)? (NULLS nullOrder=LAST | FIRST)?
+    : expression ordering=(ASC | DESC)? (NULLS nullOrder=(LAST | FIRST))?
     ;
 
 querySpecification

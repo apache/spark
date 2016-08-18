@@ -28,6 +28,10 @@ abstract sealed class SortDirection {
   def sql: String
 }
 
+abstract sealed class NullOrdering {
+def sql: String
+}
+
 case object Ascending extends SortDirection {
   override def sql: String = "ASC"
 }
@@ -36,11 +40,19 @@ case object Descending extends SortDirection {
   override def sql: String = "DESC"
 }
 
+case object NullFirst extends NullOrdering{
+  override def sql: String = "NULLS FIRST"
+}
+
+case object NullLast extends NullOrdering{
+  override def sql: String = "NULLS LAST"
+}
+
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection, nullFirst: Boolean = true)
+case class SortOrder(child: Expression, direction: SortDirection, nullOrder: NullOrdering = null)
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */
@@ -58,7 +70,7 @@ case class SortOrder(child: Expression, direction: SortDirection, nullFirst: Boo
   override def nullable: Boolean = child.nullable
 
   override def toString: String = s"$child ${direction.sql}"
-  override def sql: String = child.sql + " " + direction.sql
+  override def sql: String = child.sql + " " + direction.sql + " " + nullOrder.sql
 
   def isAscending: Boolean = direction == Ascending
 }

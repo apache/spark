@@ -145,7 +145,7 @@ case class WindowExec(
         // to the result of bound value projection. This is done manually because we want to use
         // Code Generation (if it is enabled).
         val sortExprs = exprs.zipWithIndex.map { case (e, i) =>
-          SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction, e.nullFirst)
+          SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction, e.nullOrder)
         }
         val ordering = newOrdering(sortExprs, Nil)
         RangeBoundOrdering(ordering, current, bound)
