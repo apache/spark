@@ -368,6 +368,30 @@ sparkR.session <- function(
     }
     overrideEnvs(sparkConfigMap, paramMap)
   }
+<<<<<<< 8f0c35a4d0dd458719627be5f524792bf244d70a
+=======
+  if (nzchar(master)) {
+    assign("spark.master", master, envir = sparkConfigMap)
+  }
+
+  # do not download if it is run in the sparkR shell
+  if (!nzchar(master) || is_master_local(master)) {
+    if (!is_sparkR_shell()) {
+      if (is.na(file.info(sparkHome)$isdir)) {
+        msg <- paste0("Spark not found in SPARK_HOME: ",
+                      sparkHome,
+                      " .\nTo search in the cache directory. ",
+                      "Installation will start if not found.")
+        message(msg)
+        packageLocalDir <- install.spark()
+        sparkHome <- packageLocalDir
+      } else {
+        msg <- paste0("Spark package is found in SPARK_HOME: ", sparkHome)
+        message(msg)
+      }
+    }
+  }
+>>>>>>> [SPARK-17210][SPARKR] sparkr.zip is not distributed to executors when run sparkr in RStudio
 
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     retHome <- sparkCheckInstall(sparkHome, master)
@@ -491,6 +515,10 @@ sparkConfToSubmitOps[["spark.driver.memory"]]           <- "--driver-memory"
 sparkConfToSubmitOps[["spark.driver.extraClassPath"]]   <- "--driver-class-path"
 sparkConfToSubmitOps[["spark.driver.extraJavaOptions"]] <- "--driver-java-options"
 sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-path"
+sparkConfToSubmitOps[["spark.master"]] <- "--master"
+sparkConfToSubmitOps[["spark.yarn.keytab"]] <- "--keytab"
+sparkConfToSubmitOps[["spark.yarn.principal"]] <- "--principal"
+
 
 # Utility function that returns Spark Submit arguments as a string
 #
@@ -566,3 +594,12 @@ sparkCheckInstall <- function(sparkHome, master) {
     NULL
   }
 }
+
+# Utility function for print enviroment
+printEnvs <- function(env) {
+  envNames <- names(env)
+  for (envName in envNames) {
+    cat(paste0(envName, "=",env[[envName]], "\n"))
+  }
+}
+
