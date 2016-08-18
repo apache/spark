@@ -884,14 +884,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     import df.sparkSession.implicits._
 
-    assertResult(Seq()) {
+    checkDataset(
       df.withColumn("b", lit(0)).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() }.collect().toSeq
-    }
-    assertResult(Seq()) {
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
+    checkDataset(
       df.withColumn("b", expr("0")).as[ClassData]
-        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() }.collect().toSeq
-    }
+        .groupByKey(_.a).flatMapGroups { case (x, iter) => List[Int]() })
   }
 }
 

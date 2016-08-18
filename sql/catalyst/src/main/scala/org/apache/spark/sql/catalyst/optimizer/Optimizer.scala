@@ -728,8 +728,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           stop = true
           j
 
-        // Operators that operate on objects should only have expressions from encoders, which
-        // should never have foldable expressions.
+        // These 3 operators take attributes as constructor parameters, and these attributes
+        // can't be replaced by alias.
         case m: MapGroups =>
           stop = true
           m
