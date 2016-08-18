@@ -324,7 +324,7 @@ private[spark] class TaskSchedulerImpl private[scheduler](
     // Before making any offers, remove any nodes from the blacklist whose blacklist has expired. Do
     // this here to avoid a separate thread and added synchronization overhead, and also because
     // updating the blacklist is only relevant when task offers are being made.
-    blacklistTracker.foreach(_.expireExecutorsInBlacklist())
+    blacklistTracker.foreach(_.applyBlacklistTimeout())
 
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     val filteredOffers = blacklistTracker.map { bl =>

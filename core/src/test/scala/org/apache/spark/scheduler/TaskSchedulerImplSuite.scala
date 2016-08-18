@@ -439,9 +439,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // the tasksSets complete, so the tracker should be notified
     verify(blacklist, times(1)).updateBlacklistForSuccessfulTaskSet(
-      stageToMockTsm(0).execToFailures)
+      0, 0, stageToMockTsm(0).execToFailures)
     verify(blacklist, times(1)).updateBlacklistForSuccessfulTaskSet(
-      stageToMockTsm(1).execToFailures)
+      1, 0, stageToMockTsm(1).execToFailures)
   }
 
   test("scheduled tasks obey node and executor blacklists") {
@@ -661,7 +661,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       new WorkerOffer("executor0", "host0", 1)
     )).flatten
 
-    verify(blacklist).expireExecutorsInBlacklist()
+    verify(blacklist).applyBlacklistTimeout()
   }
 
   test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +

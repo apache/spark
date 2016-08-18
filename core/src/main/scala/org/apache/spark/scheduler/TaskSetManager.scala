@@ -507,7 +507,8 @@ private[spark] class TaskSetManager(
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
-        blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(execToFailures))
+        blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(taskSet.stageId,
+          taskSet.stageAttemptId, execToFailures))
       }
     }
   }
@@ -845,7 +846,8 @@ private[spark] class TaskSetManager(
       exec: String,
       index: Int): Unit = {
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
-    execFailures.taskToFailureCount(index) = execFailures.taskToFailureCount.getOrElse(index, 0) + 1
+    execFailures.updateWithFailure(index, clock.getTimeMillis() +
+      blacklistTracker.get.BLACKLIST_TIMEOUT_MILLIS)
 
     // check if this task has also failed on other executors on the same host -- if its gone
     // over the limit, blacklist it from the entire host
@@ -854,10 +856,10 @@ private[spark] class TaskSetManager(
     val failuresOnHost = execsWithFailuresOnNode.toIterator.map { exec =>
       execToFailures.get(exec).map { failures =>
         // We count task attempts here, not the number of unique executors with failures.  This is
-        // because jobs are aborted based on the number task attempts, and we want to make sure
-        // it's easy to setup the configs so that you can ensure that you always try another node
-        // before hitting the max number of task failures.
-        failures.taskToFailureCount.getOrElse(index, 0)
+        // because jobs are aborted based on the number task attempts; if we counted unique
+        // executors, it would be hard to config to ensure that you try another
+        // node before hitting the max number of task failures.
+        failures.taskToFailureCountAndExpiryTime.getOrElse(index, (0, 0))._1
       }.getOrElse(0)
     }.sum
     if (failuresOnHost >= MAX_TASK_ATTEMPTS_PER_NODE) {
@@ -889,7 +891,10 @@ private[spark] class TaskSetManager(
       executorId: String,
       index: Int): Boolean = {
     execToFailures.get(executorId)
-      .map(_.taskToFailureCount.getOrElse(index, 0) >= MAX_TASK_ATTEMPTS_PER_EXECUTOR)
+      .map { execFailures =>
+        val count = execFailures.taskToFailureCountAndExpiryTime.getOrElse(index, (0, 0))._1
+        count >= MAX_TASK_ATTEMPTS_PER_EXECUTOR
+      }
       .getOrElse(false)
   }
 
