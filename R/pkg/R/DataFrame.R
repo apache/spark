@@ -120,7 +120,9 @@ setMethod("schema",
 #'
 #' Print the logical and physical Catalyst plans to the console for debugging.
 #'
+#' @param x a SparkDataFrame.
 #' @param extended Logical. If extended is FALSE, explain() only prints the physical plan.
+#' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
 #' @aliases explain,SparkDataFrame-method
 #' @rdname explain
@@ -136,7 +138,7 @@ setMethod("schema",
 #' @note explain since 1.4.0
 setMethod("explain",
           signature(x = "SparkDataFrame"),
-          function(x, extended = FALSE) {
+          function(x, extended = FALSE, ...) {
             queryExec <- callJMethod(x@sdf, "queryExecution")
             if (extended) {
               cat(callJMethod(queryExec, "toString"))
@@ -176,11 +178,13 @@ setMethod("isLocal",
 #'
 #' Print the first numRows rows of a SparkDataFrame
 #'
+#' @param x a SparkDataFrame.
 #' @param numRows the number of rows to print. Defaults to 20.
 #' @param truncate whether truncate long strings. If \code{TRUE}, strings more than
 #'                 20 characters will be truncated. However, if set greater than zero,
 #'                 truncates strings longer than `truncate` characters and all cells
 #'                 will be aligned right.
+#' @param ... further arguments to be passed to or from other methods.
 #' @family SparkDataFrame functions
 #' @aliases showDF,SparkDataFrame-method
 #' @rdname showDF
@@ -510,7 +514,10 @@ setMethod("registerTempTable",
 #'
 #' Insert the contents of a SparkDataFrame into a table registered in the current SparkSession.
 #'
+#' @param x a SparkDataFrame.
+#' @param tableName a character vector containing the name of the table.
 #' @param overwrite a logical argument indicating whether or not to overwrite.
+#' @param ... further arguments to be passed to or from other methods.
 #' the existing rows in the table.
 #'
 #' @family SparkDataFrame functions
@@ -529,7 +536,7 @@ setMethod("registerTempTable",
 #' @note insertInto since 1.4.0
 setMethod("insertInto",
           signature(x = "SparkDataFrame", tableName = "character"),
-          function(x, tableName, overwrite = FALSE) {
+          function(x, tableName, overwrite = FALSE, ...) {
             jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
             write <- callJMethod(x@sdf, "write")
             write <- callJMethod(write, "mode", jmode)
@@ -1891,6 +1898,8 @@ setMethod("withColumn",
 #'
 #' Return a new SparkDataFrame with the specified columns added or replaced.
 #'
+#' @param .data a SparkDataFrame.
+#' @param ... additional column argument(s) each in the form name = col.
 #' @return A new SparkDataFrame with the new columns added or replaced.
 #' @family SparkDataFrame functions
 #' @aliases mutate,SparkDataFrame-method
@@ -2777,6 +2786,8 @@ setMethod("dropna",
             dataFrame(sdf)
           })
 
+#' @param object a SparkDataFrame.
+#' @param ... further arguments to be passed to or from other methods.
 #' @rdname nafunctions
 #' @name na.omit
 #' @aliases na.omit,SparkDataFrame-method
@@ -2784,7 +2795,7 @@ setMethod("dropna",
 #' @note na.omit since 1.5.0
 setMethod("na.omit",
           signature(object = "SparkDataFrame"),
-          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL, ...) {
             dropna(object, how, minNonNulls, cols)
           })
 
@@ -3018,6 +3029,8 @@ setMethod("str",
 #' Returns a new SparkDataFrame with columns dropped.
 #' This is a no-op if schema doesn't contain column name(s).
 #'
+#' @param x a SparkDataFrame.
+#' @param ... further arguments to be passed to or from other methods.
 #' @param col a character vector of column names or a Column.
 #' @return A SparkDataFrame.
 #'

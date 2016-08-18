@@ -827,8 +827,10 @@ setMethod("kurtosis",
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
+#' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
+#' @param ... further arguments to be passed to or from other methods.
 #'
 #' @rdname last
 #' @name last
@@ -843,7 +845,7 @@ setMethod("kurtosis",
 #' @note last since 1.4.0
 setMethod("last",
           signature(x = "characterOrColumn"),
-          function(x, na.rm = FALSE) {
+          function(x, na.rm = FALSE, ...) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
@@ -1277,6 +1279,7 @@ setMethod("round",
 #' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
 #'        the nearest even number when \code{scale} = 0, and `scale` digits to the left
 #'        of the decimal point when \code{scale} < 0.
+#' @param ... further arguments to be passed to or from other methods.
 #' @rdname bround
 #' @name bround
 #' @family math_funcs
@@ -1286,7 +1289,7 @@ setMethod("round",
 #' @note bround since 2.0.0
 setMethod("bround",
           signature(x = "Column"),
-          function(x, scale = 0) {
+          function(x, scale = 0, ...) {
             jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
             column(jc)
           })
@@ -1316,6 +1319,8 @@ setMethod("rtrim",
 #'
 #' Aggregate function: alias for \link{stddev_samp}
 #'
+#' @param x Column to compute on.
+#' @param na.rm currently not used.
 #' @rdname sd
 #' @name sd
 #' @family agg_funcs
@@ -1331,7 +1336,7 @@ setMethod("rtrim",
 #' @note sd since 1.6.0
 setMethod("sd",
           signature(x = "Column"),
-          function(x) {
+          function(x, na.rm) {
             # In R, sample standard deviation is calculated with the sd() function.
             stddev_samp(x)
           })
@@ -1828,6 +1833,8 @@ setMethod("upper",
 #'
 #' Aggregate function: alias for \link{var_samp}.
 #'
+#' @param x a Column to compute on.
+#' @param y,na.rm,use currently not used.
 #' @rdname var
 #' @name var
 #' @family agg_funcs
@@ -1843,7 +1850,7 @@ setMethod("upper",
 #' @note var since 1.6.0
 setMethod("var",
           signature(x = "Column"),
-          function(x) {
+          function(x, y, na.rm, use) {
             # In R, sample variance is calculated with the var() function.
             var_samp(x)
           })
@@ -2109,7 +2116,9 @@ setMethod("pmod", signature(y = "Column"),
 #' @rdname approxCountDistinct
 #' @name approxCountDistinct
 #'
+#' @param x Column to compute on.
 #' @param rsd maximum estimation error allowed (default = 0.05)
+#' @param ... further arguments to be passed to or from other methods.
 #'
 #' @aliases approxCountDistinct,Column-method
 #' @export
@@ -2117,7 +2126,7 @@ setMethod("pmod", signature(y = "Column"),
 #' @note approxCountDistinct(Column, numeric) since 1.4.0
 setMethod("approxCountDistinct",
           signature(x = "Column"),
-          function(x, rsd = 0.05) {
+          function(x, rsd = 0.05, ...) {
             jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
             column(jc)
           })
@@ -2670,9 +2679,11 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' representing the timestamp of that moment in the current system time zone in the given
 #' format.
 #'
+#' @param x a Column of unix timestamp.
 #' @param format the target format. See
 #'               \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
 #'               Customizing Formats} for available options.
+#' @param ... further arguments to be passed to or from other methods.
 #' @family datetime_funcs
 #' @rdname from_unixtime
 #' @name from_unixtime
@@ -2685,7 +2696,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #'}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
-          function(x, format = "yyyy-MM-dd HH:mm:ss") {
+          function(x, format = "yyyy-MM-dd HH:mm:ss", ...) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_unixtime",
                               x@jc, format)
@@ -2699,6 +2710,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
 #' the order of months are not supported.
 #'
+#' @param x a time Column. Must be of TimestampType.
 #' @param windowDuration a string specifying the width of the window, e.g. '1 second',
 #'                       '1 day 12 hours', '2 minutes'. Valid interval strings are 'week',
 #'                       'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
@@ -2710,6 +2722,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'                  window intervals. For example, in order to have hourly tumbling windows
 #'                  that start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
 #'                  \code{startTime} as \code{"15 minutes"}.
+#' @param ... further arguments to be passed to or from other methods.
 #' @return An output column of struct called 'window' by default with the nested columns 'start'
 #'         and 'end'.
 #' @family datetime_funcs
@@ -2732,7 +2745,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #'}
 #' @note window since 2.0.0
 setMethod("window", signature(x = "Column"),
-          function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
+          function(x, windowDuration, slideDuration = NULL, startTime = NULL, ...) {
             stopifnot(is.character(windowDuration))
             if (!is.null(slideDuration) && !is.null(startTime)) {
               stopifnot(is.character(slideDuration) && is.character(startTime))
@@ -2763,7 +2776,10 @@ setMethod("window", signature(x = "Column"),
 #' NOTE: The position is not zero based, but 1 based index, returns 0 if substr
 #' could not be found in str.
 #'
+#' @param substr a character string to be matched.
+#' @param str a Column where matches are sought for each entry.
 #' @param pos start position of search.
+#' @param ... further arguments to be passed to or from other methods.
 #' @family string_funcs
 #' @rdname locate
 #' @aliases locate,character,Column-method
@@ -2772,7 +2788,7 @@ setMethod("window", signature(x = "Column"),
 #' @examples \dontrun{locate('b', df$c, 1)}
 #' @note locate since 1.5.0
 setMethod("locate", signature(substr = "character", str = "Column"),
-          function(substr, str, pos = 1) {
+          function(substr, str, pos = 1, ...) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "locate",
                               substr, str@jc, as.integer(pos))
@@ -3150,9 +3166,11 @@ setMethod("dense_rank",
 #'
 #' This is equivalent to the LAG function in SQL.
 #'
+#' @param x the column as a character string or a Column to compute on.
 #' @param offset the number of rows back from the current row from which to obtain a value.
 #'               If not specified, the default is 1.
 #' @param defaultValue default to use when the offset row does not exist.
+#' @param ... further arguments to be passed to or from other methods.
 #' @rdname lag
 #' @name lag
 #' @aliases lag,characterOrColumn-method
@@ -3162,7 +3180,7 @@ setMethod("dense_rank",
 #' @note lag since 1.6.0
 setMethod("lag",
           signature(x = "characterOrColumn"),
-          function(x, offset, defaultValue = NULL) {
+          function(x, offset, defaultValue = NULL, ...) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {

@@ -496,8 +496,6 @@ setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") 
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
 #' @rdname drop
-#' @param x a SparkDataFrame.
-#' @param ... additional argument(s) passed to the method. Currently only `col`.
 #' @export
 setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
@@ -512,8 +510,6 @@ setGeneric("dropna",
              standardGeneric("dropna")
            })
 
-#' @param object a SparkDataFrame.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname nafunctions
 #' @export
 setGeneric("na.omit",
@@ -526,8 +522,6 @@ setGeneric("na.omit",
 setGeneric("dtypes", function(x) { standardGeneric("dtypes") })
 
 #' @rdname explain
-#' @param x a SparkDataFrame.
-#' @param ... additional arguments passed to the method. Currently only `extended`.
 #' @export
 setGeneric("explain", function(x, ...) { standardGeneric("explain") })
 
@@ -551,9 +545,6 @@ setGeneric("group_by", function(x, ...) { standardGeneric("group_by") })
 #' @export
 setGeneric("groupBy", function(x, ...) { standardGeneric("groupBy") })
 
-#' @param x a SparkDataFrame.
-#' @param tableName a character vector containing the name of the table.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname insertInto
 #' @export
 setGeneric("insertInto", function(x, tableName, ...) { standardGeneric("insertInto") })
@@ -574,8 +565,6 @@ setGeneric("limit", function(x, num) {standardGeneric("limit") })
 #' @export
 setGeneric("merge")
 
-#' @param .data a SparkDataFrame.
-#' @param ... additional column argument(s) each in the form name = col.
 #' @rdname mutate
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
@@ -675,9 +664,6 @@ setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
 #' @export
 setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") })
 
-#' @param x a SparkDataFrame.
-#' @param ... additional parameters passed to the method. Currently `numRows` and
-#'        `truncate`.
 #' @rdname showDF
 #' @export
 setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
@@ -734,7 +720,6 @@ setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSp
 ###################### Column Methods ##########################
 
 #' @rdname columnfunctions
-#' @param x a Column object.
 #' @export
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
@@ -747,6 +732,7 @@ setGeneric("between", function(x, bounds) { standardGeneric("between") })
 setGeneric("cast", function(x, dataType) { standardGeneric("cast") })
 
 #' @rdname columnfunctions
+#' @param x a Column object.
 #' @param ... additional argument(s).
 #' @export
 setGeneric("contains", function(x, ...) { standardGeneric("contains") })
@@ -828,8 +814,6 @@ setGeneric("windowOrderBy", function(col, ...) { standardGeneric("windowOrderBy"
 setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 
 #' @rdname approxCountDistinct
-#' @param x Column to compute on.
-#' @param ... additional argument(s) passed to the method.
 #' @export
 setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
 
@@ -860,7 +844,6 @@ setGeneric("bin", function(x) { standardGeneric("bin") })
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
 #' @rdname bround
-#' @param ... additional argument(s).
 #' @export
 setGeneric("bround", function(x, ...) { standardGeneric("bround") })
 
@@ -962,8 +945,6 @@ setGeneric("format_number", function(y, x) { standardGeneric("format_number") })
 #' @export
 setGeneric("format_string", function(format, x, ...) { standardGeneric("format_string") })
 
-#' @param x a Column of unix timestamp.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname from_unixtime
 #' @export
 setGeneric("from_unixtime", function(x, ...) { standardGeneric("from_unixtime") })
@@ -1000,14 +981,10 @@ setGeneric("isnan", function(x) { standardGeneric("isnan") })
 #' @export
 setGeneric("kurtosis", function(x) { standardGeneric("kurtosis") })
 
-#' @param x the column as a character string or a Column to compute on.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname lag
 #' @export
 setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 
-#' @param x column to compute on.
-#' @param ... additional argument(s) passed to the method. Currently only `na.rm`.
 #' @rdname last
 #' @export
 setGeneric("last", function(x, ...) { standardGeneric("last") })
@@ -1032,9 +1009,6 @@ setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 #' @export
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
-#' @param substr a character string to be matched.
-#' @param str a Column where matches are sought for each entry.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname locate
 #' @export
 setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
@@ -1156,8 +1130,6 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 
-#' @param x Column to compute on.
-#' @param na.rm currently not used.
 #' @rdname sd
 #' @export
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
@@ -1275,8 +1247,6 @@ setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timesta
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
-#' @param x a Column to compute on.
-#' @param y,na.rm,use currently not used.
 #' @rdname var
 #' @export
 setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
@@ -1297,8 +1267,6 @@ setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 #' @export
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
-#' @param x a time Column. Must be of TimestampType.
-#' @param ... additional argument(s) passed to the method.
 #' @rdname window
 #' @export
 setGeneric("window", function(x, ...) { standardGeneric("window") })
