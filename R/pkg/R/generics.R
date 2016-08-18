@@ -47,9 +47,15 @@ setGeneric("collectPartition",
              standardGeneric("collectPartition")
            })
 
+<<<<<<< HEAD
 setGeneric("countRDD", function(x) { standardGeneric("countRDD") })
 
 setGeneric("lengthRDD", function(x) { standardGeneric("lengthRDD") })
+=======
+# @rdname count
+# @export
+setGeneric("count", function(x) { standardGeneric("count") })
+>>>>>>> SPARK-16508-branch-2.0-template
 
 # @rdname countByValue
 # @export
@@ -76,7 +82,14 @@ setGeneric("distinctRDD", function(x, numPartitions = 1) { standardGeneric("dist
 # @export
 setGeneric("filterRDD", function(x, f) { standardGeneric("filterRDD") })
 
+<<<<<<< HEAD
 setGeneric("firstRDD", function(x, ...) { standardGeneric("firstRDD") })
+=======
+
+# @rdname first
+# @export
+setGeneric("first", function(x, ...) { standardGeneric("first") })
+>>>>>>> SPARK-16508-branch-2.0-template
 
 # @rdname flatMap
 # @export
