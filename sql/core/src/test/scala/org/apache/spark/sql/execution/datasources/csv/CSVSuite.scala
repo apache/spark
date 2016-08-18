@@ -814,31 +814,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("Write timestamps correctly with dateFormat option") {
     withTempDir { dir =>
       // With dateFormat option.
-      val datesWithFormatPath = s"${dir.getCanonicalPath}/datesWithFormat.csv"
-      val datesWithFormat = spark.read
+      val timestampsWithFormatPath = s"${dir.getCanonicalPath}/timestampsWithFormat.csv"
+      val timestampsWithFormat = spark.read
         .format("csv")
         .option("header", "true")
         .option("inferSchema", "true")
         .option("dateFormat", "dd/MM/yyyy HH:mm")
         .load(testFile(datesFile))
-      datesWithFormat.write
+      timestampsWithFormat.write
         .format("csv")
         .option("header", "true")
         .option("dateFormat", "yyyy/MM/dd HH:mm")
-        .save(datesWithFormatPath)
+        .save(timestampsWithFormatPath)
 
-      // This will load back the dates as string.
-      val stringDatesWithFormat = spark.read
+      // This will load back the timestamps as string.
+      val stringTimestampsWithFormat = spark.read
         .format("csv")
         .option("header", "true")
         .option("inferSchema", "false")
-        .load(datesWithFormatPath)
-      val expectedStringDatesWithFormat = Seq(
+        .load(timestampsWithFormatPath)
+      val expectedStringTimestampsWithFormat = Seq(
         Row("2015/08/26 18:00"),
         Row("2014/10/27 18:30"),
         Row("2016/01/28 20:00"))
 
-      checkAnswer(stringDatesWithFormat, expectedStringDatesWithFormat)
+      checkAnswer(stringTimestampsWithFormat, expectedStringTimestampsWithFormat)
     }
   }
 }

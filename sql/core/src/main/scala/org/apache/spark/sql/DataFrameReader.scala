@@ -285,7 +285,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * and timestamp type. By default, it is `null` which means trying to read times and date by
    * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()` or ISO 8601 format.</li>
    * </ul>
-
+   *
    * @since 2.0.0
    */
   @scala.annotation.varargs

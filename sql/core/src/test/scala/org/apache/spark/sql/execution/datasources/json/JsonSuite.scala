@@ -1673,7 +1673,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val datesWithFormat = spark.read
         .schema(customSchema)
         .option("dateFormat", "dd/MM/yyyy HH:mm")
-        .json(datesRecord)
+        .json(datesRecords)
 
       datesWithFormat.write
         .format("json")
@@ -1702,7 +1702,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val timestampsWithFormat = spark.read
         .schema(customSchema)
         .option("dateFormat", "dd/MM/yyyy HH:mm")
-        .json(datesRecord)
+        .json(datesRecords)
       timestampsWithFormat.write
         .format("json")
         .option("dateFormat", "yyyy/MM/dd HH:mm")

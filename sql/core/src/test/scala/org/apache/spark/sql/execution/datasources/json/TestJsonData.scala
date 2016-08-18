@@ -222,7 +222,7 @@ private[json] trait TestJsonData {
     spark.sparkContext.parallelize(
       s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil)
 
-  def datesRecord: RDD[String] =
+  def datesRecords: RDD[String] =
     spark.sparkContext.parallelize(
       """{"date": "26/08/2015 18:00"}""" ::
       """{"date": "27/10/2014 18:30"}""" ::
