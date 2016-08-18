@@ -84,7 +84,7 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions,
-      new UnresolvedOrdinalSubstitution(conf)),
+      new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
