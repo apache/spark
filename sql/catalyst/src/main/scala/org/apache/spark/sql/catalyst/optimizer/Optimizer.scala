@@ -75,7 +75,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
-      PushThroughSetOperations,
+      PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
@@ -302,14 +302,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union operator.
+ * Pushes Project operator to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
- * we will not be able to pushdown Projections.
+ * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
+ * rule PushDownPredicate. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
  */
-object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
+object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -364,17 +364,6 @@ object PushThroughSetOperations extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         p
       }
-
-    // Push down filter into union
-    case Filter(condition, Union(children)) =>
-      assert(children.nonEmpty)
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val newFirstChild = Filter(deterministic, children.head)
-      val newOtherChildren = children.tail.map { child =>
-        val rewrites = buildRewrites(children.head, child)
-        Filter(pushToRight(deterministic, rewrites), child)
-      }
-      Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
   }
 }
 
