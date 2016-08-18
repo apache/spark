@@ -369,8 +369,10 @@ object SQLConf {
 
   val PARALLEL_PARTITION_DISCOVERY_THRESHOLD =
     SQLConfigBuilder("spark.sql.sources.parallelPartitionDiscovery.threshold")
-      .doc("The degree of parallelism for schema merging and partition discovery of " +
-        "Parquet data sources.")
+      .doc("The maximum number of files allowed for listing files at driver side. If the number " +
+        "of detected files exceeds this value during partition discovery, it tries to list the " +
+        "files with another Spark distributed job. This applies to Parquet, ORC, CSV, JSON and " +
+        "LibSVM data sources.")
       .intConf
       .createWithDefault(32)
 
