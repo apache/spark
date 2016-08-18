@@ -40,7 +40,7 @@ case object Descending extends SortDirection {
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
  */
-case class SortOrder(child: Expression, direction: SortDirection)
+case class SortOrder(child: Expression, direction: SortDirection, nullFirst: Boolean = true)
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */

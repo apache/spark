@@ -1206,10 +1206,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a [[SortOrder]] expression.
    */
   override def visitSortItem(ctx: SortItemContext): SortOrder = withOrigin(ctx) {
-    if (ctx.DESC != null) {
-      SortOrder(expression(ctx.expression), Descending)
+    val nullFirst = if (ctx.nullOrder != null) {
+      ctx.nullOrder.getType == SqlBaseParser.FIRST
     } else {
-      SortOrder(expression(ctx.expression), Ascending)
+      false
+    }
+
+    if (ctx.DESC != null) {
+      SortOrder(expression(ctx.expression), Descending, nullFirst )
+    } else {
+      SortOrder(expression(ctx.expression), Ascending, nullFirst)
     }
   }
 
