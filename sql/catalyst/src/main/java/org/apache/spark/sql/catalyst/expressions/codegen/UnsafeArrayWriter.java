@@ -55,22 +55,41 @@ public class UnsafeArrayWriter {
     this.startingOffset = holder.cursor;
 
     // Grows the global buffer ahead for header and fixed size data.
-    holder.grow(headerInBytes + elementSize * numElements);
+    int fixedPartLength = ((elementSize * numElements + 7) / 8) * 8;
+    holder.grow(headerInBytes + fixedPartLength);
 
     // Write numElements and clear out null bits to header
     Platform.putLong(holder.buffer, startingOffset, numElements);
     for (int i = 8; i < headerInBytes; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
-    holder.cursor += (headerInBytes + elementSize * numElements);
+    holder.cursor += (headerInBytes + fixedPartLength);
   }
 
   private long getElementOffset(int ordinal, int elementSize) {
     return startingOffset + headerInBytes + ordinal * elementSize;
   }
 
-  public void setOffset(int ordinal) {
-    write(ordinal, holder.cursor - startingOffset);
+  public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
+    final long relativeOffset = currentCursor - startingOffset;
+    final long offsetAndSize = (relativeOffset << 32) | size;
+
+    write(ordinal, offsetAndSize);
+  }
+
+  // Do word alignment for this row and grow the row buffer if needed.
+  public void alignToEightBytes(int numBytes) {
+    final int remainder = numBytes & 0x07;
+
+    if (remainder > 0) {
+      final int paddingBytes = 8 - remainder;
+      holder.grow(paddingBytes);
+
+      for (int i = 0; i < paddingBytes; i++) {
+        Platform.putByte(holder.buffer, holder.cursor, (byte) 0);
+        holder.cursor++;
+      }
+    }
   }
 
   private void setNullBit(int ordinal) {
@@ -182,10 +201,10 @@ public class UnsafeArrayWriter {
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
           bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
-        setOffset(ordinal);
+        write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) bytes.length));
 
-        // move the cursor forward.
-        holder.cursor += bytes.length;
+        // move the cursor forward with 8-bytes boundary
+        holder.cursor += ((bytes.length + 7) / 8) * 8;
       }
     } else {
       setNull(ordinal);
@@ -194,31 +213,34 @@ public class UnsafeArrayWriter {
 
   public void write(int ordinal, UTF8String input) {
     final int numBytes = input.numBytes();
+    final int bufferLength = ((numBytes + 7) / 8) * 8;  // 8-bytes boundary
 
     // grow the global buffer before writing data.
-    holder.grow(numBytes);
+    holder.grow(bufferLength);
 
     // Write the bytes to the variable length portion.
     input.writeToMemory(holder.buffer, holder.cursor);
 
-    setOffset(ordinal);
+    write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) numBytes));
 
     // move the cursor forward.
-    holder.cursor += numBytes;
+    holder.cursor += bufferLength;
   }
 
   public void write(int ordinal, byte[] input) {
+    final int bufferLength = ((input.length + 7) / 8) * 8;  // 8-bytes boundary
+
     // grow the global buffer before writing data.
-    holder.grow(input.length);
+    holder.grow(bufferLength);
 
     // Write the bytes to the variable length portion.
     Platform.copyMemory(
       input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, input.length);
 
-    setOffset(ordinal);
+    write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) input.length));
 
     // move the cursor forward.
-    holder.cursor += input.length;
+    holder.cursor += bufferLength;
   }
 
   public void write(int ordinal, CalendarInterval input) {
@@ -229,7 +251,7 @@ public class UnsafeArrayWriter {
     Platform.putLong(holder.buffer, holder.cursor, input.months);
     Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
 
-    setOffset(ordinal);
+    write(ordinal, ((long)(holder.cursor - startingOffset) << 32) | ((long) 16));
 
     // move the cursor forward.
     holder.cursor += 16;

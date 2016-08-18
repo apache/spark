@@ -33,19 +33,20 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * An Unsafe implementation of Array which is backed by raw memory instead of Java objects.
  *
- * Each array has four parts: [numElements][null bits][values or offset][variable length portion]
+ * Each array has four parts:
+ *   [numElements][null bits][values or offset&length][variable length portion]
  *
  * The `numElements` is 8 bytes storing the number of elements of this array.
  *
  * In the `null bits` region, we store 1 bit per element, represents whether a element has null
- * Its total size is ceil(numElements / 8) bytes, and  it is aligned to 8-byte word boundaries.
+ * Its total size is ceil(numElements / 8) bytes, and  it is aligned to 8-byte boundaries.
  *
- * In the `values or offset` region, we store the content of elements. For fields that hold
+ * In the `values or offset&length` region, we store the content of elements. For fields that hold
  * fixed-length primitive types, such as long, double, or int, we store the value directly
  * in the field. For fields with non-primitive or variable-length values, we store a relative
  * offset (w.r.t. the base address of the array) that points to the beginning of
- * the variable-length field into int. It can only be calculated by knowing the total bytes of
- * the array. Its length can be got by subtracting 2 adjacent offsets,
+ * the variable-length field and length (they are combined into a long). For variable length
+ * portion, each is aligned to 8-byte boundaries.
  *
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
@@ -114,14 +115,6 @@ public final class UnsafeArrayData extends ArrayData {
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
     this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
-  }
-
-  private int getSize(int ordinal) {
-    if (ordinal != numElements - 1) {
-      return getInt(ordinal + 1) - getInt(ordinal);
-    } else {
-      return sizeInBytes - getInt(ordinal);
-    }
   }
 
   @Override
@@ -232,16 +225,18 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UTF8String getUTF8String(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final int offset = getInt(ordinal);
-    final int size = getSize(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
     return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final int offset = getInt(ordinal);
-    final int size = getSize(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
     final byte[] bytes = new byte[size];
     Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
     return bytes;
@@ -250,7 +245,8 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final int offset = getInt(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
     final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, microseconds);
@@ -259,8 +255,9 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeRow getStruct(int ordinal, int numFields) {
     if (isNullAt(ordinal)) return null;
-    final int offset = getInt(ordinal);
-    final int size = getSize(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
     final UnsafeRow row = new UnsafeRow(numFields);
     row.pointTo(baseObject, baseOffset + offset, size);
     return row;
@@ -269,8 +266,9 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeArrayData getArray(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final int offset = getInt(ordinal);
-    final int size = getSize(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
     final UnsafeArrayData array = new UnsafeArrayData();
     array.pointTo(baseObject, baseOffset + offset, size);
     return array;
@@ -279,8 +277,9 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeMapData getMap(int ordinal) {
     if (isNullAt(ordinal)) return null;
-    final int offset = getInt(ordinal);
-    final int size = getSize(ordinal);
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
     final UnsafeMapData map = new UnsafeMapData();
     map.pointTo(baseObject, baseOffset + offset, size);
     return map;

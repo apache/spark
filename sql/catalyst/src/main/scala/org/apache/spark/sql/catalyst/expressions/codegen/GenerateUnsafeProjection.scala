@@ -192,26 +192,33 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val elementOrOffsetSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
       case _ if ctx.isPrimitiveType(jt) => et.defaultSize
-      case _ => 4  // we need 4 bytes to store offset
+      case _ => 8  // we need 8 bytes to store offset and length
     }
 
+    val tmpCursor = ctx.freshName("tmpCursor")
     val writeElement = et match {
       case t: StructType =>
         s"""
-          $arrayWriter.setOffset($index);
+          final int $tmpCursor = $bufferHolder.cursor;
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
+          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $arrayWriter.alignToEightBytes($bufferHolder.cursor - $tmpCursor);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          $arrayWriter.setOffset($index);
+          final int $tmpCursor = $bufferHolder.cursor;
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
+          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $arrayWriter.alignToEightBytes($bufferHolder.cursor - $tmpCursor);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          $arrayWriter.setOffset($index);
+          final int $tmpCursor = $bufferHolder.cursor;
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
+          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $arrayWriter.alignToEightBytes($bufferHolder.cursor - $tmpCursor);
         """
 
       case t: DecimalType =>
