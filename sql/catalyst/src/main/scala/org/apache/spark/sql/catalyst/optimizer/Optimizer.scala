@@ -127,7 +127,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case s: SubqueryExpression =>
-        s.withNewPlan(Optimizer.this.execute(s.query))
+        s.withNewPlan(Optimizer.this.execute(s.plan))
     }
   }
 }
@@ -214,7 +214,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       val objAttr = Alias(s.inputObjAttr, s.inputObjAttr.name)(exprId = d.outputObjAttr.exprId)
       Project(objAttr :: Nil, s.child)
 
-    case a @ AppendColumns(_, _, _, s: SerializeFromObject)
+    case a @ AppendColumns(_, _, _, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjAttr.dataType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
 
@@ -223,7 +223,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
     // deserialization in condition, and push it down through `SerializeFromObject`.
     // e.g. `ds.map(...).filter(...)` can be optimized by this rule to save extra deserialization,
     // but `ds.map(...).as[AnotherType].filter(...)` can not be optimized.
-    case f @ TypedFilter(_, _, s: SerializeFromObject)
+    case f @ TypedFilter(_, _, _, _, s: SerializeFromObject)
         if f.deserializer.dataType == s.inputObjAttr.dataType =>
       s.copy(child = f.withObjectProducerChild(s.child))
 
@@ -727,6 +727,19 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         case j @ Join(_, _, LeftOuter | RightOuter | FullOuter, _) =>
           stop = true
           j
+
+        // These 3 operators take attributes as constructor parameters, and these attributes
+        // can't be replaced by alias.
+        case m: MapGroups =>
+          stop = true
+          m
+        case f: FlatMapGroupsInR =>
+          stop = true
+          f
+        case c: CoGroup =>
+          stop = true
+          c
+
         case p: LogicalPlan if !stop => p.transformExpressions {
           case a: AttributeReference if foldableMap.contains(a) =>
             foldableMap(a)
@@ -1703,9 +1716,14 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case t1 @ TypedFilter(_, _, t2 @ TypedFilter(_, _, child))
+    case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
         if t1.deserializer.dataType == t2.deserializer.dataType =>
-      TypedFilter(combineFilterFunction(t2.func, t1.func), t1.deserializer, child)
+      TypedFilter(
+        combineFilterFunction(t2.func, t1.func),
+        t1.argumentClass,
+        t1.argumentSchema,
+        t1.deserializer,
+        child)
   }
 
   private def combineFilterFunction(func1: AnyRef, func2: AnyRef): Any => Boolean = {
@@ -1809,7 +1827,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val newExpression = expression transform {
       case s: ScalarSubquery if s.children.nonEmpty =>
         subqueries += s
-        s.query.output.head
+        s.plan.output.head
     }
     newExpression.asInstanceOf[E]
   }
@@ -1857,7 +1875,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
-      case SubqueryAlias(_, child) => evalPlan(child)
+      case SubqueryAlias(_, child, _) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
         if (bindings.isEmpty) bindings
@@ -1915,7 +1933,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           topPart += p
           bottomPart = child
 
-        case s @ SubqueryAlias(_, child) =>
+        case s @ SubqueryAlias(_, child, _) =>
           topPart += s
           bottomPart = child
 
@@ -1986,8 +2004,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
             topPart.reverse.foreach {
               case Project(projList, _) =>
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-              case s @ SubqueryAlias(alias, _) =>
-                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+              case s @ SubqueryAlias(alias, _, None) =>
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot, None)
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
@@ -2024,7 +2042,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // grouping expressions. As a result we need to replace all the scalar subqueries in the
         // grouping expressions by their result.
         val newGrouping = grouping.map { e =>
-          subqueries.find(_.semanticEquals(e)).map(_.query.output.head).getOrElse(e)
+          subqueries.find(_.semanticEquals(e)).map(_.plan.output.head).getOrElse(e)
         }
         Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
       } else {

@@ -23,7 +23,7 @@ import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, Map => SMap}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -45,12 +45,13 @@ private[hive] class SparkExecuteStatementOperation(
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)
-    (sqlContext: SQLContext, sessionToActivePool: SMap[SessionHandle, String])
+    (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
   with Logging {
 
   private var result: DataFrame = _
   private var iter: Iterator[SparkRow] = _
+  private var iterHeader: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
@@ -110,6 +111,14 @@ private[hive] class SparkExecuteStatementOperation(
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+
+    // Reset iter to header when fetching start from first row
+    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+      val (ita, itb) = iterHeader.duplicate
+      iter = ita
+      iterHeader = itb
+    }
+
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -206,7 +215,8 @@ private[hive] class SparkExecuteStatementOperation(
       statementId,
       parentSession.getUsername)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
-    sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
+    if (pool != null) {
       sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
@@ -214,7 +224,7 @@ private[hive] class SparkExecuteStatementOperation(
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
-          sessionToActivePool(parentSession.getSessionHandle) = value
+          sessionToActivePool.put(parentSession.getSessionHandle, value)
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
@@ -228,6 +238,9 @@ private[hive] class SparkExecuteStatementOperation(
           result.collect().iterator
         }
       }
+      val (itra, itrb) = iter.duplicate
+      iterHeader = itra
+      iter = itrb
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>

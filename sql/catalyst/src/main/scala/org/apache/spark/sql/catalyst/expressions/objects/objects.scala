@@ -245,27 +245,47 @@ case class NewInstance(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+    val argIsNulls = ctx.freshName("argIsNulls")
+    ctx.addMutableState("boolean[]", argIsNulls,
+      s"$argIsNulls = new boolean[${arguments.size}];")
+    val argValues = arguments.zipWithIndex.map { case (e, i) =>
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
+      argValue
+    }
+
+    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+      val expr = e.genCode(ctx)
+      expr.code + s"""
+       $argIsNulls[$i] = ${expr.isNull};
+       ${argValues(i)} = ${expr.value};
+     """
+    }
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"final boolean $isNull = ${argGen.map(_.isNull).mkString(" || ")};"
+      s"""
+       boolean $isNull = false;
+       for (int idx = 0; idx < ${arguments.length}; idx++) {
+         if ($argIsNulls[idx]) { $isNull = true; break; }
+       }
+     """
     } else {
       isNull = "false"
       ""
     }
 
     val constructorCall = outer.map { gen =>
-      s"""${gen.value}.new ${cls.getSimpleName}($argString)"""
+      s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
     }.getOrElse {
-      s"new $className($argString)"
+      s"new $className(${argValues.mkString(", ")})"
     }
 
     val code = s"""
-      ${argGen.map(_.code).mkString("\n")}
+      $argCode
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
@@ -859,17 +879,23 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def foldable: Boolean = false
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  private val errMsg = "Null value appeared in non-nullable field:" +
+    walkedTypePath.mkString("\n", "\n", "\n") +
+    "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
+    "please try to use scala.Option[_] or other nullable types " +
+    "(e.g. java.lang.Integer instead of int/scala.Int)."
+
+  override def eval(input: InternalRow): Any = {
+    val result = child.eval(input)
+    if (result == null) {
+      throw new RuntimeException(errMsg);
+    }
+    result
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
 
-    val errMsg = "Null value appeared in non-nullable field:" +
-      walkedTypePath.mkString("\n", "\n", "\n") +
-      "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
-      "please try to use scala.Option[_] or other nullable types " +
-      "(e.g. java.lang.Integer instead of int/scala.Int)."
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
 
     val code = s"""

@@ -19,15 +19,21 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.Collections
 
+import scala.collection.JavaConverters._
+
 import org.apache.mesos.Protos._
-import org.apache.mesos.Protos.Value.Scalar
+import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
-import scala.collection.JavaConverters._
 
 object Utils {
-  def createOffer(offerId: String, slaveId: String, mem: Int, cpu: Int): Offer = {
+  def createOffer(
+      offerId: String,
+      slaveId: String,
+      mem: Int,
+      cpu: Int,
+      ports: Option[(Long, Long)] = None): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -37,6 +43,13 @@ object Utils {
       .setName("cpus")
       .setType(Value.Type.SCALAR)
       .setScalar(Scalar.newBuilder().setValue(cpu))
+    ports.foreach { resourcePorts =>
+      builder.addResourcesBuilder()
+        .setName("ports")
+        .setType(Value.Type.RANGES)
+        .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
+          .setBegin(resourcePorts._1).setEnd(resourcePorts._2).build()))
+    }
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
         .setValue("f1"))
@@ -69,3 +82,4 @@ object Utils {
     TaskID.newBuilder().setValue(taskId).build()
   }
 }
+
