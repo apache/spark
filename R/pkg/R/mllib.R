@@ -1150,7 +1150,8 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 # Returns a summary of the ALS model produced by spark.als.
 
 #' @param object a fitted ALS model.
-#' @return \code{summary} returns a list containing the estimated user and item factors,
+#' @return \code{summary} returns a list containing the names of the user column,
+#'         the item column and the rating column, the estimated user and item factors,
 #'         rank, regularization parameter and maximum number of iterations used in training.
 #' @rdname spark.als
 #' @aliases summary,ALSModel-method
@@ -1159,10 +1160,14 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 setMethod("summary", signature(object = "ALSModel"),
 function(object, ...) {
     jobj <- object@jobj
+    user <- callJMethod(jobj, "userCol")
+    item <- callJMethod(jobj, "itemCol")
+    rating <- callJMethod(jobj, "ratingCol")
     userFactors <- dataFrame(callJMethod(jobj, "userFactors"))
     itemFactors <- dataFrame(callJMethod(jobj, "itemFactors"))
     rank <- callJMethod(jobj, "rank")
-    return(list(userFactors = userFactors, itemFactors = itemFactors, rank = rank))
+    return(list(user = user, item = item, rating = rating, userFactors = userFactors,
+                itemFactors = itemFactors, rank = rank))
 })
 
 

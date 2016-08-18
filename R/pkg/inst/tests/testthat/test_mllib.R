@@ -643,8 +643,8 @@ test_that("spark.lda with text input", {
 test_that("spark.als", {
   data <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
                list(2, 1, 1.0), list(2, 2, 5.0))
-  df <- createDataFrame(data, c("user", "item", "rating"))
-  model <- spark.als(df, ratingCol = "rating", userCol = "user", itemCol = "item",
+  df <- createDataFrame(data, c("user", "item", "score"))
+  model <- spark.als(df, ratingCol = "score", userCol = "user", itemCol = "item",
                      rank = 10, maxIter = 5, seed = 0, reg = 0.1)
   stats <- summary(model)
   expect_equal(stats$rank, 10)

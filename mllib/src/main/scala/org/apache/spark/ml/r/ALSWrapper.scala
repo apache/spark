@@ -27,7 +27,8 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class ALSWrapper private (
-    val alsModel: ALSModel) extends MLWritable {
+    val alsModel: ALSModel,
+    val ratingCol: String) extends MLWritable {
 
   lazy val userCol: String = alsModel.getUserCol
   lazy val itemCol: String = alsModel.getItemCol
@@ -77,7 +78,7 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
     val alsModel: ALSModel = als.fit(data)
 
-    new ALSWrapper(alsModel)
+    new ALSWrapper(alsModel, ratingCol)
   }
 
   override def read: MLReader[ALSWrapper] = new ALSWrapperReader
@@ -90,7 +91,8 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString
 
-      val rMetadata = ("class" -> instance.getClass.getName)
+      val rMetadata = ("class" -> instance.getClass.getName) ~
+        ("ratingCol" -> instance.ratingCol)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
@@ -102,11 +104,15 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
 
     override def load(path: String): ALSWrapper = {
       implicit val format = DefaultFormats
+      val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString
 
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadata = parse(rMetadataStr)
+      val ratingCol = (rMetadata \ "ratingCol").extract[String]
       val alsModel = ALSModel.load(modelPath)
 
-      new ALSWrapper(alsModel)
+      new ALSWrapper(alsModel, ratingCol)
     }
   }
 
