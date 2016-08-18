@@ -80,7 +80,7 @@ class PlanParserSuite extends PlanTest {
     def cte(plan: LogicalPlan, namedPlans: (String, LogicalPlan)*): With = {
       val ctes = namedPlans.map {
         case (name, cte) =>
-          name -> SubqueryAlias(name, cte)
+          name -> SubqueryAlias(name, cte, None)
       }
       With(plan, ctes)
     }
