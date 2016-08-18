@@ -474,6 +474,20 @@ case class MapObjects private(
           s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
     }
 
+    // Make a copy of the data if it's unsafe-backed
+    val genFunctionValue = lambdaFunction.dataType match {
+      case StructType(_) =>
+        s"(${genFunction.value} instanceof ${classOf[MutableRow].getName}? " +
+          s"${genFunction.value}.copy() : ${genFunction.value})"
+      case ArrayType(_, _) =>
+        s"(${genFunction.value} instanceof ${classOf[UnsafeArrayData].getName}? " +
+          s"${genFunction.value}.copy() : ${genFunction.value})"
+      case MapType(_, _, _) =>
+        s"(${genFunction.value} instanceof ${classOf[UnsafeMapData].getName}? " +
+          s"${genFunction.value}.copy() : ${genFunction.value})"
+      case _ => genFunction.value
+    }
+
     val loopNullCheck = inputDataType match {
       case _: ArrayType => s"$loopIsNull = ${genInputData.value}.isNullAt($loopIndex);"
       // The element of primitive array will never be null.
@@ -501,7 +515,7 @@ case class MapObjects private(
           if (${genFunction.isNull}) {
             $convertedArray[$loopIndex] = null;
           } else {
-            $convertedArray[$loopIndex] = ${genFunction.value};
+            $convertedArray[$loopIndex] = $genFunctionValue;
           }
 
           $loopIndex += 1;
