@@ -1921,6 +1921,14 @@ class ContextTests(unittest.TestCase):
             post_parallalize_temp_files = os.listdir(sc._temp_dir)
             self.assertEqual(temp_files, post_parallalize_temp_files)
 
+    def test_set_conf(self):
+        # This is for an internal use case. When there is an existing SparkContext,
+        # SparkSession's builder needs to set configs into SparkContext's conf.
+        sc = SparkContext()
+        sc._conf.set("spark.test.SPARK16224", "SPARK16224")
+        self.assertEqual(sc._jsc.sc().conf().get("spark.test.SPARK16224"), "SPARK16224")
+        sc.stop()
+
     def test_stop(self):
         sc = SparkContext()
         self.assertNotEqual(SparkContext._active_spark_context, None)

@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -43,7 +43,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.
  */
-private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
+case class DataSourceAnalysis(conf: CatalystConf) extends Rule[LogicalPlan] {
 
   def resolver: Resolver = {
     if (conf.caseSensitiveAnalysis) {
@@ -53,12 +53,12 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
     }
   }
 
-  // The access modifier is used to expose this method to tests.
-  private[sql] def convertStaticPartitions(
-    sourceAttributes: Seq[Attribute],
-    providedPartitions: Map[String, Option[String]],
-    targetAttributes: Seq[Attribute],
-    targetPartitionSchema: StructType): Seq[NamedExpression] = {
+  // Visible for testing.
+  def convertStaticPartitions(
+      sourceAttributes: Seq[Attribute],
+      providedPartitions: Map[String, Option[String]],
+      targetAttributes: Seq[Attribute],
+      targetPartitionSchema: StructType): Seq[NamedExpression] = {
 
     assert(providedPartitions.exists(_._2.isDefined))
 
@@ -202,9 +202,9 @@ private[sql] case class DataSourceAnalysis(conf: CatalystConf) extends Rule[Logi
  * Replaces [[SimpleCatalogRelation]] with data source table if its table property contains data
  * source information.
  */
-private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
-    val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
+    val schema = DDLUtils.getSchemaFromTableProperties(table)
 
     // We only need names at here since userSpecifiedSchema we loaded from the metastore
     // contains partition columns. We can always get datatypes of partitioning columns
@@ -213,11 +213,11 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 
     val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
 
-    val options = table.storage.serdeProperties
+    val options = table.storage.properties
     val dataSource =
       DataSource(
         sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
+        userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         className = table.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
@@ -242,7 +242,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-private[sql] object DataSourceStrategy extends Strategy with Logging {
+object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
@@ -267,8 +267,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
-      execution.DataSourceScanExec.create(
-        l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
+      RowDataSourceScanExec(
+        l.output,
+        toCatalystRDD(l, baseRelation.buildScan()),
+        baseRelation,
+        UnknownPartitioning(0),
+        Map.empty,
+        None) :: Nil
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
@@ -290,7 +295,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   }
 
   // Based on Public API.
-  protected def pruneFilterProject(
+  private def pruneFilterProject(
       relation: LogicalRelation,
       projects: Seq[NamedExpression],
       filterPredicates: Seq[Expression],
@@ -318,11 +323,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   //     `PrunedFilteredScan` and `HadoopFsRelation`).
   //
   // Note that 2 and 3 shouldn't be used together.
-  protected def pruneFilterProjectRaw(
+  private def pruneFilterProjectRaw(
     relation: LogicalRelation,
     projects: Seq[NamedExpression],
     filterPredicates: Seq[Expression],
-    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]) = {
+    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]): SparkPlan = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
@@ -331,7 +336,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
     }}
 
-    val (unhandledPredicates, pushedFilters) =
+    val (unhandledPredicates, pushedFilters, handledFilters) =
       selectFilters(relation.relation, candidatePredicates)
 
     // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
@@ -350,10 +355,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val metadata: Map[String, String] = {
       val pairs = ArrayBuffer.empty[(String, String)]
 
+      // Mark filters which are handled by the underlying DataSource with an Astrisk
       if (pushedFilters.nonEmpty) {
-        pairs += (PUSHED_FILTERS -> pushedFilters.mkString("[", ", ", "]"))
+        val markedFilters = for (filter <- pushedFilters) yield {
+            if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+        }
+        pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
       }
-
       pairs.toMap
     }
 
@@ -371,20 +379,20 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // Don't request columns that are only referenced by pushed filters.
         .filterNot(handledSet.contains)
 
-      val scan = execution.DataSourceScanExec.create(
+      val scan = RowDataSourceScanExec(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata, relation.metastoreTableIdentifier)
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.DataSourceScanExec.create(
+      val scan = RowDataSourceScanExec(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata, relation.metastoreTableIdentifier)
+        relation.relation, UnknownPartitioning(0), metadata, relation.metastoreTableIdentifier)
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }
@@ -494,53 +502,40 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s
    * and can be handled by `relation`.
    *
-   * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
-   *         predicate [[Expression]]s that are either not convertible or cannot be handled by
-   *         `relation`. The second element contains all converted data source [[Filter]]s that
-   *         will be pushed down to the data source.
+   * @return A triplet of `Seq[Expression]`, `Seq[Filter]`, and `Seq[Filter]` . The first element
+   *         contains all Catalyst predicate [[Expression]]s that are either not convertible or
+   *         cannot be handled by `relation`. The second element contains all converted data source
+   *         [[Filter]]s that will be pushed down to the data source. The third element contains
+   *         all [[Filter]]s that are completely filtered at the DataSource.
    */
   protected[sql] def selectFilters(
     relation: BaseRelation,
-    predicates: Seq[Expression]): (Seq[Expression], Seq[Filter]) = {
+    predicates: Seq[Expression]): (Seq[Expression], Seq[Filter], Set[Filter]) = {
 
     // For conciseness, all Catalyst filter expressions of type `expressions.Expression` below are
     // called `predicate`s, while all data source filters of type `sources.Filter` are simply called
     // `filter`s.
 
-    val translated: Seq[(Expression, Filter)] =
-      for {
-        predicate <- predicates
-        filter <- translateFilter(predicate)
-      } yield predicate -> filter
-
     // A map from original Catalyst expressions to corresponding translated data source filters.
-    val translatedMap: Map[Expression, Filter] = translated.toMap
+    // If a predicate is not in this map, it means it cannot be pushed down.
+    val translatedMap: Map[Expression, Filter] = predicates.flatMap { p =>
+      translateFilter(p).map(f => p -> f)
+    }.toMap
 
-    // Catalyst predicate expressions that cannot be translated to data source filters.
-    val unrecognizedPredicates = predicates.filterNot(translatedMap.contains)
+    val pushedFilters: Seq[Filter] = translatedMap.values.toSeq
 
-    // Data source filters that cannot be handled by `relation`. The semantic of a unhandled filter
-    // at here is that a data source may not be able to apply this filter to every row
-    // of the underlying dataset.
+    // Catalyst predicate expressions that cannot be converted to data source filters.
+    val nonconvertiblePredicates = predicates.filterNot(translatedMap.contains)
+
+    // Data source filters that cannot be handled by `relation`. An unhandled filter means
+    // the data source cannot guarantee the rows returned can pass the filter.
+    // As a result we must return it so Spark can plan an extra filter operator.
     val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
+    val unhandledPredicates = translatedMap.filter { case (p, f) =>
+      unhandledFilters.contains(f)
+    }.keys
+    val handledFilters = pushedFilters.toSet -- unhandledFilters
 
-    val (unhandled, handled) = translated.partition {
-      case (predicate, filter) =>
-        unhandledFilters.contains(filter)
-    }
-
-    // Catalyst predicate expressions that can be translated to data source filters, but cannot be
-    // handled by `relation`.
-    val (unhandledPredicates, _) = unhandled.unzip
-
-    // Translated data source filters that can be handled by `relation`
-    val (_, handledFilters) = handled.unzip
-
-    // translated contains all filters that have been converted to the public Filter interface.
-    // We should always push them to the data source no matter whether the data source can apply
-    // a filter to every row or not.
-    val (_, translatedFilters) = translated.unzip
-
-    (unrecognizedPredicates ++ unhandledPredicates, translatedFilters)
+    (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 }

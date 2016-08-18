@@ -68,6 +68,14 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     }
   }
 
+  test("quoted identifiers") {
+    assert(TableIdentifier("z", Some("x.y")) === parseTableIdentifier("`x.y`.z"))
+    assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("x.`y.z`"))
+    assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
+    assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
+    assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+  }
+
   test("table identifier - strict keywords") {
     // SQL Keywords.
     hiveStrictNonReservedKeyword.foreach { keyword =>

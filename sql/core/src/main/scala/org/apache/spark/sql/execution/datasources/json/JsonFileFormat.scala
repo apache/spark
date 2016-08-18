@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.CharArrayWriter
 
-import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
@@ -55,7 +54,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
           .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
-        name.startsWith("_") || name.startsWith(".")
+        (name.startsWith("_") && !name.contains("=")) || name.startsWith(".")
       }.toArray
 
       val jsonSchema = InferSchema.infer(
@@ -107,12 +106,8 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     (file: PartitionedFile) => {
       val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
-
-      JacksonParser.parseJson(
-        lines,
-        requiredSchema,
-        columnNameOfCorruptRecord,
-        parsedOptions)
+      val parser = new JacksonParser(requiredSchema, columnNameOfCorruptRecord, parsedOptions)
+      lines.flatMap(parser.parse)
     }
   }
 
@@ -162,7 +157,7 @@ private[json] class JsonOutputWriter(
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
-  private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+  private[this] val gen = new JacksonGenerator(dataSchema, writer)
   private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
@@ -181,7 +176,7 @@ private[json] class JsonOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    JacksonGenerator(dataSchema, gen)(row)
+    gen.write(row)
     gen.flush()
 
     result.set(writer.toString)

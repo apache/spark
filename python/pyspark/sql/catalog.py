@@ -193,7 +193,7 @@ class Catalog(object):
 
         :param name: name of the UDF
         :param f: python function
-        :param returnType: a :class:`DataType` object
+        :param returnType: a :class:`pyspark.sql.types.DataType` object
 
         >>> spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
         >>> spark.sql("SELECT stringLengthString('test')").collect()
@@ -231,6 +231,11 @@ class Catalog(object):
     def clearCache(self):
         """Removes all cached tables from the in-memory cache."""
         self._jcatalog.clearCache()
+
+    @since(2.0)
+    def refreshTable(self, tableName):
+        """Invalidate and refresh all the cached metadata of the given table."""
+        self._jcatalog.refreshTable(tableName)
 
     def _reset(self):
         """(Internal use only) Drop all existing databases (except "default"), tables,

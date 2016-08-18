@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.Matchers._
@@ -651,44 +650,44 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       ("Amy", 24, 180)).toDF("name", "age", "height")
 
     val describeResult = Seq(
-      Row("count", "4", "4"),
-      Row("mean", "33.0", "178.0"),
-      Row("stddev", "19.148542155126762", "11.547005383792516"),
-      Row("min", "16", "164"),
-      Row("max", "60", "192"))
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("max", "David", "60", "192"))
 
     val emptyDescribeResult = Seq(
-      Row("count", "0", "0"),
-      Row("mean", null, null),
-      Row("stddev", null, null),
-      Row("min", null, null),
-      Row("max", null, null))
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("max", null, null, null))
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("age", "height")
-    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "age", "height"))
+    val describeTwoCols = describeTestData.describe("name", "age", "height")
+    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeTwoCols, describeResult)
     // All aggregate value should have been cast to string
     describeTwoCols.collect().foreach { row =>
-      assert(row.get(1).isInstanceOf[String], "expected string but found " + row.get(1).getClass)
       assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
+      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
     }
 
     val describeAllCols = describeTestData.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
 
     val describeOneCol = describeTestData.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, d, _) => Row(s, d)} )
+    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
     val describeNoCol = describeTestData.select("name").describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _) => Row(s)} )
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
 
     val emptyDescription = describeTestData.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "age", "height"))
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
@@ -723,7 +722,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     testData.select($"*").show(1000)
   }
 
-  test("showString: truncate = [true, false]") {
+  test("showString: truncate = [0, 20]") {
     val longString = Array.fill(21)("1").mkString
     val df = sparkContext.parallelize(Seq("1", longString)).toDF()
     val expectedAnswerForFalse = """+---------------------+
@@ -733,7 +732,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                    ||111111111111111111111|
                                    |+---------------------+
                                    |""".stripMargin
-    assert(df.showString(10, false) === expectedAnswerForFalse)
+    assert(df.showString(10, truncate = 0) === expectedAnswerForFalse)
     val expectedAnswerForTrue = """+--------------------+
                                   ||               value|
                                   |+--------------------+
@@ -741,7 +740,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                                   ||11111111111111111...|
                                   |+--------------------+
                                   |""".stripMargin
-    assert(df.showString(10, true) === expectedAnswerForTrue)
+    assert(df.showString(10, truncate = 20) === expectedAnswerForTrue)
+  }
+
+  test("showString: truncate = [3, 17]") {
+    val longString = Array.fill(21)("1").mkString
+    val df = sparkContext.parallelize(Seq("1", longString)).toDF()
+    val expectedAnswerForFalse = """+-----+
+                                   ||value|
+                                   |+-----+
+                                   ||    1|
+                                   ||  111|
+                                   |+-----+
+                                   |""".stripMargin
+    assert(df.showString(10, truncate = 3) === expectedAnswerForFalse)
+    val expectedAnswerForTrue = """+-----------------+
+                                  ||            value|
+                                  |+-----------------+
+                                  ||                1|
+                                  ||11111111111111...|
+                                  |+-----------------+
+                                  |""".stripMargin
+    assert(df.showString(10, truncate = 17) === expectedAnswerForTrue)
   }
 
   test("showString(negative)") {
@@ -1540,5 +1560,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-15230: distinct() does not handle column name with dot properly") {
     val df = Seq(1, 1, 2).toDF("column.with.dot")
     checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
+  }
+
+  test("SPARK-16181: outer join with isNull filter") {
+    val left = Seq("x").toDF("col")
+    val right = Seq("y").toDF("col").withColumn("new", lit(true))
+    val joined = left.join(right, left("col") === right("col"), "left_outer")
+
+    checkAnswer(joined, Row("x", null, null))
+    checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
+  }
+
+  test("SPARK-16664: persist with more than 200 columns") {
+    val size = 201L
+    val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
+    val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
+    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 }

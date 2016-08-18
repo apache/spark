@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -82,6 +82,29 @@ class DefaultSource
   }
 }
 
+/** Dummy provider with only RelationProvider and CreatableRelationProvider. */
+class DefaultSourceWithoutUserSpecifiedSchema
+  extends RelationProvider
+  with CreatableRelationProvider {
+
+  case class FakeRelation(sqlContext: SQLContext) extends BaseRelation {
+    override def schema: StructType = StructType(Seq(StructField("a", StringType)))
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    FakeRelation(sqlContext)
+  }
+}
 
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -117,6 +140,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       .load()
       .write
       .format("org.apache.spark.sql.test")
+      .save()
+  }
+
+  test("resolve default source without extending SchemaRelationProvider") {
+    spark.read
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
+      .load()
+      .write
+      .format("org.apache.spark.sql.test.DefaultSourceWithoutUserSpecifiedSchema")
       .save()
   }
 
@@ -170,6 +202,34 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     assert(LastOptions.saveMode === SaveMode.ErrorIfExists)
   }
 
+  test("test path option in load") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("intOpt", 56)
+      .load("/test")
+
+    assert(LastOptions.parameters("intOpt") == "56")
+    assert(LastOptions.parameters("path") == "/test")
+
+    LastOptions.clear()
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("intOpt", 55)
+      .load()
+
+    assert(LastOptions.parameters("intOpt") == "55")
+    assert(!LastOptions.parameters.contains("path"))
+
+    LastOptions.clear()
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("intOpt", 54)
+      .load("/test", "/test1", "/test2")
+
+    assert(LastOptions.parameters("intOpt") == "54")
+    assert(!LastOptions.parameters.contains("path"))
+  }
+
   test("test different data types for options") {
     val df = spark.read
       .format("org.apache.spark.sql.test")
@@ -218,8 +278,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
       }
       intercept[AnalysisException] {
-        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
+        spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
       }
+      spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
 
@@ -361,6 +422,31 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     // Writer
     spark.range(10).write.orc(dir)
+  }
+
+  test("column nullability and comment - write and then read") {
+    import testImplicits._
+
+    Seq("json", "parquet", "csv").foreach { format =>
+      val schema = StructType(
+        StructField("cl1", IntegerType, nullable = false).withComment("test") ::
+          StructField("cl2", IntegerType, nullable = true) ::
+          StructField("cl3", IntegerType, nullable = true) :: Nil)
+      val row = Row(3, null, 4)
+      val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+
+      val tableName = "tab"
+      withTable(tableName) {
+        df.write.format(format).mode("overwrite").saveAsTable(tableName)
+        // Verify the DDL command result: DESCRIBE TABLE
+        checkAnswer(
+          sql(s"desc $tableName").select("col_name", "comment").where($"comment" === "test"),
+          Row("cl1", "test") :: Nil)
+        // Verify the schema
+        val expectedFields = schema.fields.map(f => f.copy(nullable = true))
+        assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
+      }
+    }
   }
 
   private def testRead(

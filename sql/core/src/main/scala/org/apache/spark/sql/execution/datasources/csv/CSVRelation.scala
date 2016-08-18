@@ -38,15 +38,24 @@ object CSVRelation extends Logging {
 
   def univocityTokenizer(
       file: RDD[String],
-      header: Seq[String],
       firstLine: String,
       params: CSVOptions): RDD[Array[String]] = {
     // If header is set, make sure firstLine is materialized before sending to executors.
+    val commentPrefix = params.comment.toString
     file.mapPartitions { iter =>
-      new BulkCsvReader(
-        if (params.headerFlag) iter.filterNot(_ == firstLine) else iter,
-        params,
-        headers = header)
+      val parser = new CsvReader(params)
+      val filteredIter = iter.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(commentPrefix)
+      }
+      if (params.headerFlag) {
+        filteredIter.filterNot(_ == firstLine).map { item =>
+          parser.parseLine(item)
+        }
+      } else {
+        filteredIter.map { item =>
+          parser.parseLine(item)
+        }
+      }
     }
   }
 
@@ -159,7 +168,7 @@ object CSVRelation extends Logging {
   }
 }
 
-private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
+private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       bucketId: Option[Int],
@@ -170,7 +179,7 @@ private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWrit
   }
 }
 
-private[sql] class CsvOutputWriter(
+private[csv] class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,

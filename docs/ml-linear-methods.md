@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear methods - spark.ml
-displayTitle: Linear methods - spark.ml
+title: Linear methods
+displayTitle: Linear methods
 ---
 
   > This section has been moved into the

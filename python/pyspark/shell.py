@@ -49,6 +49,7 @@ except TypeError:
     spark = SparkSession.builder.getOrCreate()
 
 sc = spark.sparkContext
+sql = spark.sql
 atexit.register(lambda: sc.stop())
 
 # for compatibility

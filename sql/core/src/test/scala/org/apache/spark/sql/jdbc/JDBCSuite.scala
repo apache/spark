@@ -24,12 +24,13 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -83,7 +84,7 @@ class JDBCSuite extends SparkFunSuite
         |CREATE TEMPORARY TABLE fetchtwo
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
-        |         fetchSize '2')
+        |         ${JdbcUtils.JDBC_BATCH_FETCH_SIZE} '2')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
@@ -348,38 +349,49 @@ class JDBCSuite extends SparkFunSuite
 
   test("Basic API") {
     assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties()).collect().length === 3)
+  }
+
+  test("Basic API with illegal FetchSize") {
+    val properties = new Properties()
+    properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, "-1")
+    val e = intercept[SparkException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
+    }.getMessage
+    assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
   }
 
   test("Basic API with FetchSize") {
-    val properties = new Properties
-    properties.setProperty("fetchSize", "2")
-    assert(spark.read.jdbc(
-      urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+    (0 to 4).foreach { size =>
+      val properties = new Properties()
+      properties.setProperty(JdbcUtils.JDBC_BATCH_FETCH_SIZE, size.toString)
+      assert(spark.read.jdbc(
+        urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+    }
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
     assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
+      spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties())
       .collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
+    assert(spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
       .collect().length === 3)
   }
 
   test("Partitioning on column that might have null values.") {
     assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties)
+      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties())
         .collect().length === 4)
     assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties)
+      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
         .collect().length === 4)
     // partitioning on a nullable quoted column
     assert(
-      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties)
+      spark.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties())
         .collect().length === 4)
   }
 
@@ -391,7 +403,7 @@ class JDBCSuite extends SparkFunSuite
       lowerBound = 0,
       upperBound = 4,
       numPartitions = 0,
-      connectionProperties = new Properties
+      connectionProperties = new Properties()
     )
     assert(res.count() === 8)
   }
@@ -404,7 +416,7 @@ class JDBCSuite extends SparkFunSuite
       lowerBound = 1,
       upperBound = 5,
       numPartitions = 10,
-      connectionProperties = new Properties
+      connectionProperties = new Properties()
     )
     assert(res.count() === 8)
   }
@@ -417,7 +429,7 @@ class JDBCSuite extends SparkFunSuite
       lowerBound = 5,
       upperBound = 5,
       numPartitions = 4,
-      connectionProperties = new Properties
+      connectionProperties = new Properties()
     )
     assert(res.count() === 8)
   }
@@ -431,7 +443,7 @@ class JDBCSuite extends SparkFunSuite
         lowerBound = 5,
         upperBound = 1,
         numPartitions = 3,
-        connectionProperties = new Properties
+        connectionProperties = new Properties()
       )
     }.getMessage
     assert(e.contains("Operation not allowed: the lower bound of partitioning column " +
@@ -495,8 +507,8 @@ class JDBCSuite extends SparkFunSuite
 
   test("test DATE types") {
     val rows = spark.read.jdbc(
-      urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
       .cache().collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(1).getAs[java.sql.Date](1) === null)
@@ -504,8 +516,8 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("test DATE types in cache") {
-    val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
-    spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+    spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
       .cache().createOrReplaceTempView("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
@@ -514,7 +526,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("test types for null value") {
     val rows = spark.read.jdbc(
-      urlWithUserAndPass, "TEST.NULLTYPES", new Properties).collect()
+      urlWithUserAndPass, "TEST.NULLTYPES", new Properties()).collect()
     assert((0 to 14).forall(i => rows(0).isNullAt(i)))
   }
 
@@ -560,7 +572,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
-    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
     assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
@@ -694,7 +706,7 @@ class JDBCSuite extends SparkFunSuite
     // Regression test for bug SPARK-11788
     val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
     val date = java.sql.Date.valueOf("1995-01-01")
-    val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
     val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(0).getAs[java.sql.Timestamp](2)
@@ -714,7 +726,7 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("test credentials in the connection url are not in the plan output") {
-    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
     spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
@@ -725,6 +737,27 @@ class JDBCSuite extends SparkFunSuite
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
+
+  test("SPARK-16625: General data types to be mapped to Oracle") {
+
+    def getJdbcType(dialect: JdbcDialect, dt: DataType): String = {
+      dialect.getJDBCType(dt).orElse(JdbcUtils.getCommonJDBCType(dt)).
+        map(_.databaseTypeDefinition).get
+    }
+
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(getJdbcType(oracleDialect, BooleanType) == "NUMBER(1)")
+    assert(getJdbcType(oracleDialect, IntegerType) == "NUMBER(10)")
+    assert(getJdbcType(oracleDialect, LongType) == "NUMBER(19)")
+    assert(getJdbcType(oracleDialect, FloatType) == "NUMBER(19, 4)")
+    assert(getJdbcType(oracleDialect, DoubleType) == "NUMBER(19, 4)")
+    assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
+    assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
+    assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
+    assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
+    assert(getJdbcType(oracleDialect, DateType) == "DATE")
+    assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
@@ -740,16 +773,22 @@ class JDBCSuite extends SparkFunSuite
     assertEmptyQuery(s"SELECT * FROM foobar WHERE $FALSE1 AND ($FALSE2 OR $TRUE)")
 
     // Tests JDBCPartition whereClause clause push down.
-    withTempTable("tempFrame") {
+    withTempView("tempFrame") {
       val jdbcPartitionWhereClause = s"$FALSE1 OR $TRUE"
       val df = spark.read.jdbc(
         urlWithUserAndPass,
         "TEST.PEOPLE",
         predicates = Array[String](jdbcPartitionWhereClause),
-        new Properties)
+        new Properties())
 
       df.createOrReplaceTempView("tempFrame")
       assertEmptyQuery(s"SELECT * FROM tempFrame where $FALSE2")
     }
+  }
+
+  test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
+    val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
+    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    assert(schema.contains("`order` TEXT"))
   }
 }
