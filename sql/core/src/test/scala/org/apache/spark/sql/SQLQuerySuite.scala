@@ -2647,11 +2647,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-17098 COUNT(NULL) on window should be 0") {
-    checkAnswer(sql("SELECT COUNT(NULL) OVER ()"), Row(0) :: Nil)
-    checkAnswer(sql("SELECT COUNT(1 + NULL) OVER ()"), Row(0) :: Nil)
-  }
-
   test("SPARK-16674: field names containing dots for both fields and partitioned fields") {
     withTempPath { path =>
       val data = (1 to 10).map(i => (i, s"data-$i", i % 2, if ((i % 2) == 0) "a" else "b"))
