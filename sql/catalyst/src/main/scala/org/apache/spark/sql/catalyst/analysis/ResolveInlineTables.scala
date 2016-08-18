@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, InterpretedProjection}
+import org.apache.spark.sql.catalyst.expressions.{Cast, InterpretedProjection, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -30,7 +30,7 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
-      // validateInputFoldable(table)
+      validateInputEvaluable(table)
       convert(table)
   }
 
@@ -39,10 +39,10 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    *
    * This is package visible for unit testing.
    */
-  private[analysis] def validateInputFoldable(table: UnresolvedInlineTable): Unit = {
+  private[analysis] def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
-        if (!e.resolved || !e.foldable) {
+        if (!e.resolved || e.isInstanceOf[Unevaluable]) {
           e.failAnalysis(s"cannot evaluate expression ${e.sql} in inline table definition")
         }
       }

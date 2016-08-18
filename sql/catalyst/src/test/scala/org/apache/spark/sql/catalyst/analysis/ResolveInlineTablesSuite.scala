@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types.LongType
 
@@ -34,18 +35,22 @@ class ResolveInlineTablesSuite extends PlanTest with BeforeAndAfter {
   private def lit(v: Any): Literal = Literal(v)
 
   test("validate inputs are foldable") {
-    ResolveInlineTables.validateInputFoldable(
+    ResolveInlineTables.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
 
-    // nondeterministic (rand)
+    // nondeterministic (rand) should be fine
+    ResolveInlineTables.validateInputEvaluable(
+      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Rand(1)))))
+
+    // aggregate should not work
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputFoldable(
-        UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Rand(1)))))
+      ResolveInlineTables.validateInputEvaluable(
+        UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Count(lit(1))))))
     }
 
-    // unresolved attribute
+    // unresolved attribute should not work
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputFoldable(
+      ResolveInlineTables.validateInputEvaluable(
         UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(UnresolvedAttribute("A")))))
     }
   }

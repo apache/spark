@@ -664,8 +664,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     // Get the backing expressions.
     val rows = ctx.expression.asScala.map { e =>
       expression(e) match {
-        case CreateStruct(children) => children
-        case child => Seq(child)
+        // inline table comes in two styles:
+        // style 1: values (1), (2), (3)  -- multiple columns are supported
+        // style 2: values 1, 2, 3  -- only a single column is supported here
+        case CreateStruct(children) => children  // style 1
+        case child => Seq(child)  // style 2
       }
     }
 

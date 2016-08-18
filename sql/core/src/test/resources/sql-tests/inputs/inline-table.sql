@@ -8,6 +8,9 @@ select * from values ("one", 1) as data;
 -- single row
 select * from values ("one", 1) as data(a, b);
 
+-- single column multiple rows
+select * from values 1, 2, 3 as data(a);
+
 -- two rows
 select * from values ("one", 1), ("two", 2), ("three", null) as data(a, b);
 
