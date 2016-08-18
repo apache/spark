@@ -25,6 +25,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
@@ -93,7 +94,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val retainedStages = conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
-  val retainedTasks = conf.getInt("spark.ui.retainedTasks", SparkUI.DEFAULT_RETAINED_TASKS)
+  val retainedTasks = conf.get(UI_RETAINED_TASKS)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -136,14 +137,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       // Since jobGroupToJobIds is map of sets, check that we don't leak keys with empty values:
       "jobGroupToJobIds keySet" -> jobGroupToJobIds.keys.size
     )
-  }
-
-  /** If Tasks is too large, remove and garbage collect old tasks */
-  private def trimTasksIfNecessary(taskData: LinkedHashMap[Long, TaskUIData]) = synchronized {
-    if (taskData.size > retainedTasks) {
-      val toRemove = (taskData.size - retainedTasks)
-      taskData.drop(toRemove)
-    }
   }
 
   /** If stages is too large, remove and garbage collect old stages */
@@ -413,7 +406,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskData.updateTaskInfo(info)
       taskData.updateTaskMetrics(taskMetrics)
       taskData.errorMessage = errorMessage
-      trimTasksIfNecessary(stageData.taskData)
+
+      // If Tasks is too large, remove and garbage collect old tasks
+      if (stageData.taskData.size > retainedTasks) {
+        stageData.taskData = stageData.taskData.drop(stageData.taskData.size - retainedTasks)
+      }
 
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
