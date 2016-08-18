@@ -236,8 +236,10 @@ class PipelineTests(PySparkTestCase):
         def doTransform(pipeline):
             pipeline_model = pipeline.fit(dataset)
             return pipeline_model.transform(dataset)
-        self.assertEqual(dataset.index, doTransform(Pipeline()).index)
+        # check that empty pipeline did not perform any transformation
         self.assertEqual(dataset.index, doTransform(Pipeline(stages=[])).index)
+        # check that failure to set stages param will raise KeyError for missing param
+        self.assertRaises(KeyError, lambda: doTransform(Pipeline()))
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
