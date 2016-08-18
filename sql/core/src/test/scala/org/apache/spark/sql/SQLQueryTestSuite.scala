@@ -229,10 +229,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     files ++ dirs.flatMap(listFilesRecursively)
   }
 
-  private def getFilePath(path: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(path).toString
-  }
-
   /** Load built-in test tables into the SparkSession. */
   private def loadTestData(session: SparkSession): Unit = {
     import session.implicits._

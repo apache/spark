@@ -238,7 +238,6 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
     // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
     // This bug will be triggered when Tungsten is enabled and there are multiple
@@ -263,6 +262,4 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
         df1.withColumn("diff", lit(0)))
     }
   }
-
-
 }
