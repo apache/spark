@@ -661,6 +661,7 @@ test_that("spark.als", {
   write.ml(model, modelPath, overwrite = TRUE)
   model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
+  expect_equal(stats2$rating, "score")
   userFactors <- collect(stats$userFactors)
   itemFactors <- collect(stats$itemFactors)
   userFactors2 <- collect(stats2$userFactors)
