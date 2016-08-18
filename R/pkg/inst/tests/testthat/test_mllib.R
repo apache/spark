@@ -546,7 +546,7 @@ test_that("spark.gaussianMixture", {
   df <- createDataFrame(data, c("x1", "x2"))
   model <- spark.gaussianMixture(df, ~ x1 + x2, k = 2)
   stats <- summary(model)
-  rLambda <- c(0.509, 0.491)
+  rLambda <- c(0.50861, 0.49139)
   rMu <- c(0.267, 1.195, 2.743, 4.730)
   rSigma <- c(1.099, 1.339, 1.339, 1.798,
               0.145, -0.309, -0.309, 0.716)
