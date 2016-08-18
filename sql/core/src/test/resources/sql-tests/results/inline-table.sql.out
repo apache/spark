@@ -94,10 +94,10 @@ two	3.0
 -- !query 10
 select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 -- !query 10 schema
-struct<a:string,b:double>
+struct<>
 -- !query 10 output
-one	0.087440518337355
-two	3.0
+org.apache.spark.sql.AnalysisException
+cannot evaluate expression rand(5) in inline table definition; line 1 pos 29
 
 
 -- !query 11

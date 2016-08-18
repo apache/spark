@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, InterpretedProjection, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -32,26 +34,6 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
       validateInputDimension(table)
       validateInputEvaluable(table)
       convert(table)
-  }
-
-  /**
-   * Validates that all inline table data are valid expressions that can be evaluated.
-   *
-   * This is package visible for unit testing.
-   */
-  private[analysis] def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
-    table.rows.foreach { row =>
-      row.foreach { e =>
-        // We want to support foldable expressions and nondeterministic expressions (e.g. rand)
-        // that are evaluable.
-        // Note that there are expressions that are evaluable but not actually valid for inline
-        // tables. One example is AttributeReference. However, since UnresolvedInlineTable is a
-        // leaf node, the analyzer would not resolve UnresolvedAttribute into AttributeReference.
-        if (!e.resolved || e.isInstanceOf[Unevaluable]) {
-          e.failAnalysis(s"cannot evaluate expression ${e.sql} in inline table definition")
-        }
-      }
-    }
   }
 
   /**
@@ -73,6 +55,23 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
   }
 
   /**
+   * Validates that all inline table data are valid expressions that can be evaluated
+   * (in this they must be foldable).
+   *
+   * This is package visible for unit testing.
+   */
+  private[analysis] def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
+    table.rows.foreach { row =>
+      row.foreach { e =>
+        // Note that nondeterministic expressions are not supported since they are not foldable.
+        if (!e.resolved || !e.foldable) {
+          e.failAnalysis(s"cannot evaluate expression ${e.sql} in inline table definition")
+        }
+      }
+    }
+  }
+
+  /**
    * Convert a valid (with right shape and foldable inputs) [[UnresolvedInlineTable]]
    * into a [[LocalRelation]].
    *
@@ -81,24 +80,33 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
    * This is package visible for unit testing.
    */
   private[analysis] def convert(table: UnresolvedInlineTable): LocalRelation = {
-    // For each column, traverse all the values and find a common data type.
-    val targetTypes = table.rows.transpose.zip(table.names).map { case (column, name) =>
+    // For each column, traverse all the values and find a common data type and nullability.
+    val fields = table.rows.transpose.zip(table.names).map { case (column, name) =>
       val inputTypes = column.map(_.dataType)
-      TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
+      val tpe = TypeCoercion.findWiderTypeWithoutStringPromotion(inputTypes).getOrElse {
         table.failAnalysis(s"incompatible types found in column $name for inline table")
       }
+      StructField(name, tpe, nullable = column.exists(_.nullable))
     }
-    assert(targetTypes.size == table.names.size)
+    val attributes = StructType(fields).toAttributes
+    assert(fields.size == table.names.size)
 
     val newRows: Seq[InternalRow] = table.rows.map { row =>
-      new InterpretedProjection(row.zipWithIndex.map { case (e, ci) =>
-        val targetType = targetTypes(ci)
-        if (e.dataType.sameType(targetType)) e else Cast(e, targetType)
-      }).apply(null)
+      InternalRow.fromSeq(row.zipWithIndex.map { case (e, ci) =>
+        val targetType = fields(ci).dataType
+        try {
+          if (e.dataType.sameType(targetType)) {
+            e.eval()
+          } else {
+            Cast(e, targetType).eval()
+          }
+        } catch {
+          case NonFatal(ex) =>
+            table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}")
+        }
+      })
     }
 
-    val attributes = StructType(targetTypes.zip(table.names)
-      .map { case (typ, name) => StructField(name, typ) }).toAttributes
     LocalRelation(attributes, newRows)
   }
 }

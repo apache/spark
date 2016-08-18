@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, NullType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -38,20 +38,22 @@ class ResolveInlineTablesSuite extends PlanTest with BeforeAndAfter {
     ResolveInlineTables.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
 
-    // nondeterministic (rand) should be fine
-    ResolveInlineTables.validateInputEvaluable(
-      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Rand(1)))))
+    // nondeterministic (rand) should not work
+    intercept[AnalysisException] {
+      ResolveInlineTables.validateInputEvaluable(
+        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
+    }
 
     // aggregate should not work
     intercept[AnalysisException] {
       ResolveInlineTables.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Count(lit(1))))))
+        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Count(lit(1))))))
     }
 
     // unresolved attribute should not work
     intercept[AnalysisException] {
       ResolveInlineTables.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(UnresolvedAttribute("A")))))
+        UnresolvedInlineTable(Seq("c1"), Seq(Seq(UnresolvedAttribute("A")))))
     }
   }
 
@@ -85,5 +87,15 @@ class ResolveInlineTablesSuite extends PlanTest with BeforeAndAfter {
     assert(converted.data.size == 2)
     assert(converted.data(0).getLong(0) == 1L)
     assert(converted.data(1).getLong(0) == 2L)
+  }
+
+  test("nullability inference in convert") {
+    val table1 = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2L))))
+    val converted1 = ResolveInlineTables.convert(table1)
+    assert(!converted1.schema.fields(0).nullable)
+
+    val table2 = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(Literal(null, NullType))))
+    val converted2 = ResolveInlineTables.convert(table2)
+    assert(converted2.schema.fields(0).nullable)
   }
 }
