@@ -184,30 +184,23 @@ getDefaultSqlSource <- function() {
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   sparkSession <- getSparkSession()
   if (is.data.frame(data)) {
-      # get the names of columns, they will be put into RDD
-      if (is.null(schema)) {
-        schema <- names(data)
-      }
+    # get the names of columns, they will be put into RDD
+    if (is.null(schema)) {
+      schema <- names(data)
+    }
 
-      # get rid of factor type
-      cleanCols <- function(x) {
-        if (is.factor(x)) {
-          as.character(x)
-        } else {
-          x
-        }
-      }
+    # convert factors to character
+    factor_columns <- sapply(data, is.factor)
+    data[factor_columns] <- lapply(data[factor_columns], as.character)
 
-      # drop factors and wrap lists
-      data <- setNames(lapply(data, cleanCols), NULL)
+    colnames(data) <- NULL
 
-      # check if all columns have supported type
-      lapply(data, getInternalType)
+    # check if all columns have supported type
+    lapply(data, getInternalType)
 
-      # convert to rows
-      # TODO Clark: data <- split(data, 1:nrow(df))
-      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
-      data <- do.call(mapply, append(args, data))
+    # data is now a list of rows, and each row is a data.frame
+    data <- split(data, seq_len(nrow(data)))
+    names(data) <- NULL
   }
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
