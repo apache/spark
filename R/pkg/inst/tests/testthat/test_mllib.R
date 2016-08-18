@@ -550,7 +550,7 @@ test_that("spark.gaussianMixture", {
   rMu <- c(0.267, 1.195, 2.743, 4.730)
   rSigma <- c(1.099, 1.339, 1.339, 1.798,
               0.145, -0.309, -0.309, 0.716)
-  expect_equal(stats$lambda, rLambda)
+  expect_equal(stats$lambda, rLambda, tolerance = 1e-3)
   expect_equal(unlist(stats$mu), rMu, tolerance = 1e-3)
   expect_equal(unlist(stats$sigma), rSigma, tolerance = 1e-3)
   p <- collect(select(predict(model, df), "prediction"))
