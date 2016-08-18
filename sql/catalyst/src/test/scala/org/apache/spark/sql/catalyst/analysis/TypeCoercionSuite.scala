@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{Division, FunctionArgumentConversion}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -729,6 +729,13 @@ class TypeCoercionSuite extends PlanTest {
     // Left expression is Decimal, right expression is Int. Another rule DecimalPrecision will cast
     // the right expression to Decimal.
     ruleTest(rules, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
+  }
+
+  test("SPARK-17117 null type coercion in divide") {
+    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val nullLit = Literal.create(null, NullType)
+    ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
+    ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
   }
 }
 

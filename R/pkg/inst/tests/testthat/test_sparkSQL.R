@@ -490,7 +490,7 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
-  expect_equal(count(rdd), 3)
+  expect_equal(countRDD(rdd), 3)
   df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
@@ -582,7 +582,7 @@ test_that("toRDD() returns an RRDD", {
   df <- read.json(jsonPath)
   testRDD <- toRDD(df)
   expect_is(testRDD, "RDD")
-  expect_equal(count(testRDD), 3)
+  expect_equal(countRDD(testRDD), 3)
 })
 
 test_that("union on two RDDs created from DataFrames returns an RRDD", {
@@ -592,7 +592,7 @@ test_that("union on two RDDs created from DataFrames returns an RRDD", {
   unioned <- unionRDD(RDD1, RDD2)
   expect_is(unioned, "RDD")
   expect_equal(getSerializedMode(unioned), "byte")
-  expect_equal(collect(unioned)[[2]]$name, "Andy")
+  expect_equal(collectRDD(unioned)[[2]]$name, "Andy")
 })
 
 test_that("union on mixed serialization types correctly returns a byte RRDD", {
@@ -614,14 +614,14 @@ test_that("union on mixed serialization types correctly returns a byte RRDD", {
   unionByte <- unionRDD(rdd, dfRDD)
   expect_is(unionByte, "RDD")
   expect_equal(getSerializedMode(unionByte), "byte")
-  expect_equal(collect(unionByte)[[1]], 1)
-  expect_equal(collect(unionByte)[[12]]$name, "Andy")
+  expect_equal(collectRDD(unionByte)[[1]], 1)
+  expect_equal(collectRDD(unionByte)[[12]]$name, "Andy")
 
   unionString <- unionRDD(textRDD, dfRDD)
   expect_is(unionString, "RDD")
   expect_equal(getSerializedMode(unionString), "byte")
-  expect_equal(collect(unionString)[[1]], "Michael")
-  expect_equal(collect(unionString)[[5]]$name, "Andy")
+  expect_equal(collectRDD(unionString)[[1]], "Michael")
+  expect_equal(collectRDD(unionString)[[5]]$name, "Andy")
 })
 
 test_that("objectFile() works with row serialization", {
@@ -633,7 +633,7 @@ test_that("objectFile() works with row serialization", {
 
   expect_is(objectIn, "RDD")
   expect_equal(getSerializedMode(objectIn), "byte")
-  expect_equal(collect(objectIn)[[2]]$age, 30)
+  expect_equal(collectRDD(objectIn)[[2]]$age, 30)
 })
 
 test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
@@ -643,7 +643,7 @@ test_that("lapply() on a DataFrame returns an RDD with the correct columns", {
     row
     })
   expect_is(testRDD, "RDD")
-  collected <- collect(testRDD)
+  collected <- collectRDD(testRDD)
   expect_equal(collected[[1]]$name, "Michael")
   expect_equal(collected[[2]]$newCol, 35)
 })
@@ -715,10 +715,10 @@ test_that("multiple pipeline transformations result in an RDD with the correct v
     row
   })
   expect_is(second, "RDD")
-  expect_equal(count(second), 3)
-  expect_equal(collect(second)[[2]]$age, 35)
-  expect_true(collect(second)[[2]]$testCol)
-  expect_false(collect(second)[[3]]$testCol)
+  expect_equal(countRDD(second), 3)
+  expect_equal(collectRDD(second)[[2]]$age, 35)
+  expect_true(collectRDD(second)[[2]]$testCol)
+  expect_false(collectRDD(second)[[3]]$testCol)
 })
 
 test_that("cache(), persist(), and unpersist() on a DataFrame", {
@@ -1608,7 +1608,7 @@ test_that("toJSON() returns an RDD of the correct values", {
   testRDD <- toJSON(df)
   expect_is(testRDD, "RDD")
   expect_equal(getSerializedMode(testRDD), "string")
-  expect_equal(collect(testRDD)[[1]], mockLines[1])
+  expect_equal(collectRDD(testRDD)[[1]], mockLines[1])
 })
 
 test_that("showDF()", {
@@ -1824,11 +1824,11 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[2, "age"], "24.5")
   expect_equal(collect(stats)[3, "age"], "7.7781745930520225")
   stats <- describe(df)
-  expect_equal(collect(stats)[4, "name"], "Andy")
+  expect_equal(collect(stats)[4, "summary"], "min")
   expect_equal(collect(stats)[5, "age"], "30")
 
   stats2 <- summary(df)
-  expect_equal(collect(stats2)[4, "name"], "Andy")
+  expect_equal(collect(stats2)[4, "summary"], "min")
   expect_equal(collect(stats2)[5, "age"], "30")
 
   # SPARK-16425: SparkR summary() fails on column of type logical

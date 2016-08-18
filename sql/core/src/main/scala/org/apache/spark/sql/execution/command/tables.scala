@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.{PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -120,7 +120,6 @@ case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.properties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }

@@ -76,7 +76,7 @@ abstract class OutputWriterFactory extends Serializable {
    * through the [[OutputWriterFactory]] implementation.
    * @since 2.0.0
    */
-  private[sql] def newWriter(path: String): OutputWriter = {
+  def newWriter(path: String): OutputWriter = {
     throw new UnsupportedOperationException("newInstance with just path not supported")
   }
 }
@@ -263,7 +263,7 @@ trait FileFormat {
    * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
    * returns.
    */
-  private[sql] def buildReaderWithPartitionValues(
+  def buildReaderWithPartitionValues(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -357,14 +357,14 @@ trait FileCatalog {
 /**
  * Helper methods for gathering metadata from HDFS.
  */
-private[sql] object HadoopFsRelation extends Logging {
+object HadoopFsRelation extends Logging {
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
     // We filter everything that starts with _ and ., except _common_metadata and _metadata
     // because Parquet needs to find those metadata files from leaf files returned by this method.
     // We should refactor this logic to not mix metadata files with data files.
-    (pathName.startsWith("_") || pathName.startsWith(".")) &&
+    ((pathName.startsWith("_") && !pathName.contains("=")) || pathName.startsWith(".")) &&
       !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
 
