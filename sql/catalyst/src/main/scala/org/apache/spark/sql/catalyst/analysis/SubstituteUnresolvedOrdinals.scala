@@ -18,22 +18,25 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
-import org.apache.spark.sql.catalyst.planning.IntegerIndex
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Replaces ordinal in 'order by' or 'group by' with UnresolvedOrdinal expression.
  */
 class SubstituteUnresolvedOrdinals(conf: CatalystConf) extends Rule[LogicalPlan] {
-  private def isIntLiteral(sorter: Expression) = IntegerIndex.unapply(sorter).nonEmpty
+  private def isIntLiteral(e: Expression) = e match {
+    case Literal(_, IntegerType) => true
+    case _ => false
+  }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case s: Sort if conf.orderByOrdinal && s.order.exists(o => isIntLiteral(o.child)) =>
       val newOrders = s.order.map {
-        case order @ SortOrder(ordinal @ IntegerIndex(index: Int), _) =>
+        case order @ SortOrder(ordinal @ Literal(index: Int, IntegerType), _) =>
           val newOrdinal = withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
           withOrigin(order.origin)(order.copy(child = newOrdinal))
         case other => other
@@ -42,7 +45,7 @@ class SubstituteUnresolvedOrdinals(conf: CatalystConf) extends Rule[LogicalPlan]
 
     case a: Aggregate if conf.groupByOrdinal && a.groupingExpressions.exists(isIntLiteral) =>
       val newGroups = a.groupingExpressions.map {
-        case ordinal @ IntegerIndex(index) =>
+        case ordinal @ Literal(index: Int, IntegerType) =>
           withOrigin(ordinal.origin)(UnresolvedOrdinal(index))
         case other => other
       }
