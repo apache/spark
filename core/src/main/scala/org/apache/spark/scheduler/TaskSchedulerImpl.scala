@@ -58,12 +58,17 @@ private[spark] class TaskSchedulerImpl private[scheduler](
   extends TaskScheduler with Logging
 {
   def this(sc: SparkContext) = {
-    this(sc, sc.conf.getInt("spark.task.maxFailures", 4),
+    this(
+      sc,
+      sc.conf.getInt("spark.task.maxFailures", 4),
       TaskSchedulerImpl.createBlacklistTracker(sc.conf))
   }
 
   def this(sc: SparkContext, maxTaskFailures: Int, isLocal: Boolean) = {
-    this(sc, maxTaskFailures, TaskSchedulerImpl.createBlacklistTracker(sc.conf),
+    this(
+      sc,
+      maxTaskFailures,
+      TaskSchedulerImpl.createBlacklistTracker(sc.conf),
       isLocal = isLocal)
   }
 
