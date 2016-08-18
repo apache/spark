@@ -978,11 +978,11 @@ private[spark] class BlockManager(
           // NettyBlockRpcServer crashes when deserializing repl-defined classes.
           // TODO(ekl) remove this once the classloader issue on the remote end is fixed.
           val remoteClassTag = classTag
-//          if (!serializerManager.canUseKryo(classTag)) {
-//            scala.reflect.classTag[Any]
-//          } else {
-//            classTag
-//          }
+          if (!serializerManager.canUseKryo(classTag)) {
+            scala.reflect.classTag[Any]
+          } else {
+            classTag
+          }
           try {
             replicate(blockId, bytesToReplicate, level, remoteClassTag)
           } finally {
