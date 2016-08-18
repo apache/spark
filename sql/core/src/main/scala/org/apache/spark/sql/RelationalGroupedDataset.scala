@@ -143,7 +143,9 @@ class RelationalGroupedDataset protected[sql](
    * @since 1.3.0
    */
   def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
-    agg((aggExpr +: aggExprs).toMap)
+    toDF((aggExpr +: aggExprs).map { case (colName, expr) =>
+      strToExpr(expr)(df(colName).expr)
+    })
   }
 
   /**
