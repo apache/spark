@@ -233,7 +233,7 @@ sparkR.sparkContext <- function(
     connectBackend(host, backendPort)
   },
   error = function(err) {
-    stop(paste0("Failed to connect JVM\n", existingPort))
+    stop("Failed to connect JVM\n")
   })
 
   if (nchar(sparkHome) != 0) {
