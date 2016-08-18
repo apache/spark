@@ -138,28 +138,28 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.1.0")
+  @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(e: Column): Column = approx_count_distinct(e)
 
   /**
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.1.0")
+  @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(columnName: String): Column = approx_count_distinct(columnName)
 
   /**
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.1.0")
+  @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(e: Column, rsd: Double): Column = approx_count_distinct(e, rsd)
 
   /**
    * @group agg_funcs
    * @since 1.3.0
    */
-  @deprecated("Use approx_count_distinct()", "2.1.0")
+  @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(columnName: String, rsd: Double): Column = {
     approx_count_distinct(Column(columnName), rsd)
   }
@@ -1935,14 +1935,14 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use degrees()", "2.1.0")
+  @deprecated("Use degrees", "2.1.0")
   def toDegrees(e: Column): Column = degrees(e)
 
   /**
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use degrees()", "2.1.0")
+  @deprecated("Use degrees", "2.1.0")
   def toDegrees(columnName: String): Column = degrees(Column(columnName))
 
   /**
@@ -1965,14 +1965,14 @@ object functions {
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use radians()", "2.1.0")
+  @deprecated("Use radians", "2.1.0")
   def toRadians(e: Column): Column = radians(e)
 
   /**
    * @group math_funcs
    * @since 1.4.0
    */
-  @deprecated("Use radians()", "2.1.0")
+  @deprecated("Use radians", "2.1.0")
   def toRadians(columnName: String): Column = radians(Column(columnName))
 
   /**
