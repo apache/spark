@@ -408,6 +408,7 @@ setMethod("write.ml", signature(object = "LDAModel", path = "character"),
               writer <- callJMethod(writer, "overwrite")
             }
             invisible(callJMethod(writer, "save", path))
+          })
 
 #' Isotonic Regression Model
 #'
