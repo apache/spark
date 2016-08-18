@@ -17,6 +17,7 @@
 .idea/
 .idea_modules/
 .project
+.pydevproject
 .scala_dependencies
 .settings
 /lib/
